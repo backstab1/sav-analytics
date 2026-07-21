@@ -1,0 +1,49 @@
+# Research data and generated reports
+*.sav
+*.zsav
+*.por
+*.xlsx
+*.xls
+*.csv
+*.tsv
+
+# Local application data
+/uploads/
+/storage/
+/reports/
+/exports/
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies and build output
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+coverage/
+
+# IDE, OS and local agent files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.codex/
+.agents/
+.codex_work/
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
