@@ -36,7 +36,7 @@
       <section id="workspace" class="workspace" hidden>
         <div class="workspace-head">
           <div><p class="eyebrow">СТРУКТУРА МАССИВА</p><h1 id="project-name"></h1></div>
-          <div class="head-actions"><a id="download-source" class="secondary link-button" href="#">Скачать исходный SAV</a><button id="new-project" class="secondary">Новый проект</button></div>
+          <div class="head-actions"><button id="refresh-structure" class="secondary" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button><a id="download-source" class="secondary link-button" href="#">Скачать SAV</a><button id="new-project" class="secondary">Новый проект</button></div>
         </div>
         <div id="summary" class="summary"></div>
         <div id="warnings" class="warnings" hidden></div>
@@ -72,6 +72,8 @@
                 <option value="technical">Техническая</option>
               </select></label>
               <label class="checkbox"><input id="question-included" type="checkbox" /> Включить в отчёт</label>
+              <section id="question-members" class="question-members" hidden></section>
+              <section id="special-answers" class="special-answers" hidden><div><strong>Специальные ответы</strong><small>Показываются в распределении, но исключаются из средних. Для multiple проверяется совместный выбор.</small></div><div id="special-answer-list"></div></section>
               <button id="save-question" type="submit">Сохранить изменения</button>
               <p id="editor-error" class="error" hidden></p>
             </form>

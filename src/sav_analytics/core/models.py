@@ -60,6 +60,9 @@ class QuestionInspection:
     included_in_report: bool
     recognition: str = "auto"
     warnings: list[str] = field(default_factory=list)
+    items: list[dict[str, str]] = field(default_factory=list)
+    special_values: list[Any] = field(default_factory=list)
+    special_items: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

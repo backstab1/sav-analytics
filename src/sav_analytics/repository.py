@@ -173,6 +173,42 @@ class ProjectRepository:
             raise ProjectNotFoundError(str(recoding_id)) from exc
         return project, recoding
 
+    def refresh_structure(self, project_id: UUID) -> dict:
+        project = self.get(project_id)
+        refreshed = inspect_sav(self.source_path(project_id)).to_dict()
+        previous = project["configuration"]["questions"]
+        previous_by_code = {item["code"]: item for item in previous}
+        merged = []
+        editable_fields = {
+            "label",
+            "question_type",
+            "role",
+            "included_in_report",
+            "special_values",
+            "special_items",
+        }
+        for detected in refreshed["questions"]:
+            configured = dict(detected)
+            if detected["code"] in previous_by_code:
+                old = previous_by_code[detected["code"]]
+                configured.update({key: old[key] for key in editable_fields if key in old})
+            else:
+                children = [
+                    previous_by_code[name]
+                    for name in detected["source_variables"]
+                    if name in previous_by_code
+                ]
+                if children:
+                    configured["included_in_report"] = all(
+                        child["included_in_report"] for child in children
+                    )
+            merged.append(configured)
+        project["inspection"] = refreshed
+        project["configuration"]["questions"] = merged
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
         return self.root / str(project_id) / "source.sav"

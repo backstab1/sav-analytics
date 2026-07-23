@@ -10,7 +10,13 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
-from .inference import group_prefix, infer_question_type, infer_role, is_dichotomy
+from .inference import (
+    group_prefix,
+    infer_question_type,
+    infer_role,
+    is_dichotomy,
+    is_special_label,
+)
 from .models import (
     QuestionInspection,
     QuestionType,
@@ -139,14 +145,18 @@ def _build_questions(
     explicit_sets: list[dict[str, Any]],
 ) -> tuple[list[QuestionInspection], list[str]]:
     by_name = {variable.name: variable for variable in variables}
-    grouped: dict[str, tuple[list[str], str]] = {}
+    grouped: dict[str, tuple[list[str], str, QuestionType]] = {}
     consumed: set[str] = set()
     warnings: list[str] = []
 
     for response_set in explicit_sets:
         members = [name for name in response_set["variables"] if name in by_name]
         if len(members) >= 2:
-            grouped[response_set["name"].lstrip("$")] = (members, "metadata")
+            grouped[response_set["name"].lstrip("$")] = (
+                members,
+                "metadata",
+                QuestionType.MULTIPLE_DICHOTOMY,
+            )
             consumed.update(members)
 
     candidates: dict[str, list[str]] = defaultdict(list)
@@ -161,23 +171,33 @@ def _build_questions(
         all_dichotomies = all(
             is_dichotomy(frame[name].dropna().unique()) for name in members
         )
-        if len(members) < 2 or not all_dichotomies:
+        if len(members) < 2:
             continue
-        grouped[prefix] = (members, "name_pattern")
+        if all_dichotomies:
+            group_type = QuestionType.MULTIPLE_DICHOTOMY
+        elif _matrix_compatible(members, by_name):
+            group_type = QuestionType.MATRIX
+        else:
+            continue
+        grouped[prefix] = (members, "name_pattern", group_type)
         consumed.update(members)
-        warnings.append(f"Группа {prefix} распознана по именам и дихотомиям; проверьте её состав.")
+        group_label = "множественный вопрос" if all_dichotomies else "матрица"
+        warnings.append(
+            f"Группа {prefix} распознана как {group_label} по именам и структуре; "
+            "проверьте её состав."
+        )
 
     questions: list[QuestionInspection] = []
     emitted_groups: set[str] = set()
     group_by_member = {
-        member: (code, members, source)
-        for code, (members, source) in grouped.items()
+        member: (code, members, source, group_type)
+        for code, (members, source, group_type) in grouped.items()
         for member in members
     }
     for variable in variables:
         group = group_by_member.get(variable.name)
         if group:
-            code, members, source = group
+            code, members, source, group_type = group
             if code in emitted_groups:
                 continue
             emitted_groups.add(code)
@@ -185,7 +205,7 @@ def _build_questions(
                 QuestionInspection(
                     code=code,
                     label=_common_label([by_name[name].label for name in members]) or code,
-                    question_type=QuestionType.MULTIPLE_DICHOTOMY,
+                    question_type=group_type,
                     role=VariableRole.QUESTION,
                     source_variables=members,
                     valid_count=max(by_name[name].valid_count for name in members),
@@ -193,6 +213,13 @@ def _build_questions(
                     included_in_report=True,
                     recognition="metadata" if source == "metadata" else "auto_review",
                     warnings=[] if source == "metadata" else ["Автоматически собранная группа."],
+                    items=[
+                        {"variable": name, "label": by_name[name].label} for name in members
+                    ],
+                    special_values=_special_values(members, by_name),
+                    special_items=[
+                        name for name in members if is_special_label(by_name[name].label)
+                    ],
                 )
             )
             continue
@@ -212,6 +239,12 @@ def _build_questions(
                 missing_count=variable.missing_count,
                 included_in_report=included,
                 warnings=list(variable.warnings),
+                items=[{"variable": variable.name, "label": variable.label}],
+                special_values=[
+                    label.value
+                    for label in variable.value_labels
+                    if is_special_label(label.label)
+                ],
             )
         )
     return questions, warnings
@@ -227,6 +260,36 @@ def _common_label(labels: list[str]) -> str | None:
             break
         common.append(group[0])
     return " ".join(common).rstrip(" :-–—") or None
+
+
+def _matrix_compatible(
+    members: list[str], variables: dict[str, VariableInspection]
+) -> bool:
+    inspected = [variables[name] for name in members]
+    if not all(variable.storage_type == "numeric" for variable in inspected):
+        return False
+    signatures = [
+        tuple((str(label.value), label.label.casefold()) for label in variable.value_labels)
+        for variable in inspected
+    ]
+    if signatures[0] and all(signature == signatures[0] for signature in signatures[1:]):
+        return True
+    return all(
+        (variable.measurement_level or "").lower() == "scale"
+        and 2 <= variable.unique_count <= 12
+        for variable in inspected
+    )
+
+
+def _special_values(
+    members: list[str], variables: dict[str, VariableInspection]
+) -> list[Any]:
+    values: list[Any] = []
+    for name in members:
+        for label in variables[name].value_labels:
+            if is_special_label(label.label) and label.value not in values:
+                values.append(label.value)
+    return values
 
 
 def _json_scalar(value: Any) -> Any:

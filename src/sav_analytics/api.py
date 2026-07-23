@@ -36,6 +36,8 @@ class QuestionUpdate(BaseModel):
     question_type: QuestionType | None = None
     role: VariableRole | None = None
     included_in_report: bool | None = None
+    special_values: list[str | int | float] | None = None
+    special_items: list[str] | None = None
 
 
 class QuestionOrder(BaseModel):
@@ -113,6 +115,23 @@ def get_project(
     except ProjectNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден."
+        ) from exc
+
+
+@app.post("/api/projects/{project_id}/structure/refresh")
+def refresh_structure(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.refresh_structure(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден."
+        ) from exc
+    except SavReadError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
 

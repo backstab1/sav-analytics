@@ -14,6 +14,11 @@ _TECHNICAL_NAMES = re.compile(
     r"^(start|end|duration|status|date|time|timestamp|sys_|technical_)", re.IGNORECASE
 )
 _DATE_FORMAT = re.compile(r"(DATE|TIME|DATETIME|WKDAY|MONTH|QYR)", re.IGNORECASE)
+_SPECIAL_LABEL = re.compile(
+    r"(затрудн|не\s*знаю|нет\s*ответа|без\s*ответа|отказ|"
+    r"ничего\s*(из|не)|ни\s*один|другое\s*затруд)",
+    re.IGNORECASE,
+)
 
 
 def infer_role(name: str, original_format: str | None) -> VariableRole:
@@ -84,3 +89,7 @@ def is_dichotomy(values: Iterable[Any]) -> bool:
     except (TypeError, ValueError):
         return False
     return bool(normalized) and normalized <= {0.0, 1.0}
+
+
+def is_special_label(label: str) -> bool:
+    return bool(_SPECIAL_LABEL.search(label))

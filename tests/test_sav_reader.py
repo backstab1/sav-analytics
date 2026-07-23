@@ -34,6 +34,32 @@ def write_fixture(path: Path) -> None:
     )
 
 
+def write_grouped_fixture(path: Path) -> None:
+    frame = pd.DataFrame(
+        {
+            "Q5_1": [1, 2, 99, 2],
+            "Q5_2": [2, 1, 2, 99],
+            "Q6_1": [1, 0, 1, 0],
+            "Q6_2": [0, 1, 0, 0],
+            "Q6_99": [0, 0, 1, 1],
+        }
+    )
+    scale_labels = {1: "Плохо", 2: "Хорошо", 99: "Затрудняюсь ответить"}
+    pyreadstat.write_sav(
+        frame,
+        path,
+        column_labels={
+            "Q5_1": "Оцените сервис: Скорость",
+            "Q5_2": "Оцените сервис: Удобство",
+            "Q6_1": "Что понравилось: Скорость",
+            "Q6_2": "Что понравилось: Удобство",
+            "Q6_99": "Что понравилось: Затрудняюсь ответить",
+        },
+        variable_value_labels={"Q5_1": scale_labels, "Q5_2": scale_labels},
+        variable_measure={"Q5_1": "scale", "Q5_2": "scale"},
+    )
+
+
 def test_inspection_reads_metadata_and_builds_questions(tmp_path: Path) -> None:
     source = tmp_path / "fixture.sav"
     write_fixture(source)
@@ -73,3 +99,20 @@ def test_string_variables_with_numbered_suffix_are_not_forced_into_multiple(
     assert all(
         question.question_type is QuestionType.OPEN_TEXT for question in result.questions
     )
+
+
+def test_numbered_scales_become_matrix_and_detect_special_answers(tmp_path: Path) -> None:
+    source = tmp_path / "grouped.sav"
+    write_grouped_fixture(source)
+
+    result = inspect_sav(source)
+
+    matrix = next(question for question in result.questions if question.code == "Q5")
+    assert matrix.question_type is QuestionType.MATRIX
+    assert matrix.source_variables == ["Q5_1", "Q5_2"]
+    assert matrix.special_values == [99.0]
+    assert len(matrix.items) == 2
+
+    multiple = next(question for question in result.questions if question.code == "Q6")
+    assert multiple.question_type is QuestionType.MULTIPLE_DICHOTOMY
+    assert multiple.special_items == ["Q6_99"]

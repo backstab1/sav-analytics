@@ -39,15 +39,33 @@ def calculate_preview(
     if question_type is QuestionType.MULTIPLE_DICHOTOMY:
         return {
             **base,
-            **_multiple_preview(frame, source_variables, variable_by_name),
+            **_multiple_preview(
+                frame,
+                source_variables,
+                variable_by_name,
+                question.get("special_items", []),
+            ),
+        }
+    if question_type is QuestionType.MATRIX:
+        return {
+            **base,
+            **_matrix_preview(
+                frame,
+                source_variables,
+                variable_by_name,
+                question.get("special_values", []),
+            ),
         }
     if len(source_variables) != 1:
         raise ToplineError("Для этого типа вопроса ожидается одна исходная переменная.")
     series = frame[source_variables[0]]
     if question_type in {QuestionType.SINGLE_CHOICE, QuestionType.SCALE}:
-        result = _categorical_preview(series, variable_by_name[source_variables[0]], len(frame))
+        special_values = question.get("special_values", [])
+        result = _categorical_preview(
+            series, variable_by_name[source_variables[0]], len(frame), special_values
+        )
         if question_type is QuestionType.SCALE:
-            result["statistics"] = _numeric_statistics(series)
+            result["statistics"] = _numeric_statistics(series, special_values)
         return {**base, **result}
     if question_type is QuestionType.NUMERIC:
         return {
@@ -60,7 +78,10 @@ def calculate_preview(
 
 
 def _categorical_preview(
-    series: pd.Series, variable: dict[str, Any], total_base: int
+    series: pd.Series,
+    variable: dict[str, Any],
+    total_base: int,
+    special_values: list[Any] | None = None,
 ) -> dict[str, Any]:
     valid = series.dropna()
     valid_base = len(valid)
@@ -80,6 +101,7 @@ def _categorical_preview(
                 "count": count,
                 "percent_main": _ratio(count, total_base),
                 "percent_filter": _ratio(count, valid_base),
+                "is_special": _contains_value(special_values or [], value),
             }
         )
     return {"valid_base": valid_base, "rows": rows, "statistics": None}
@@ -89,6 +111,7 @@ def _multiple_preview(
     frame: pd.DataFrame,
     source_variables: list[str],
     variable_by_name: dict[str, dict[str, Any]],
+    special_items: list[str],
 ) -> dict[str, Any]:
     answered = frame[source_variables].notna().any(axis=1)
     valid_base = int(answered.sum())
@@ -104,18 +127,65 @@ def _multiple_preview(
                 "count": count,
                 "percent_main": _ratio(count, len(frame)),
                 "percent_filter": _ratio(count, valid_base),
+                "is_special": name in special_items,
             }
         )
+    warnings = ["Для автоматически найденной дихотомии выбранным считается код 1."]
+    special = [name for name in special_items if name in source_variables]
+    ordinary = [name for name in source_variables if name not in special]
+    if special and ordinary:
+        conflicting = frame[special].eq(1).any(axis=1) & frame[ordinary].eq(1).any(axis=1)
+        conflict_count = int(conflicting.sum())
+        if conflict_count:
+            warnings.append(
+                f"У {conflict_count} респондентов спецответ выбран вместе с обычным вариантом."
+            )
     return {
         "valid_base": valid_base,
         "rows": rows,
         "statistics": None,
-        "warnings": ["Для автоматически найденной дихотомии выбранным считается код 1."],
+        "warnings": warnings,
     }
 
 
-def _numeric_statistics(series: pd.Series) -> dict[str, float | int | None]:
-    numeric = pd.to_numeric(series, errors="coerce").dropna()
+def _matrix_preview(
+    frame: pd.DataFrame,
+    source_variables: list[str],
+    variable_by_name: dict[str, dict[str, Any]],
+    special_values: list[Any],
+) -> dict[str, Any]:
+    items = []
+    for name in source_variables:
+        series = frame[name]
+        distribution = _categorical_preview(
+            series, variable_by_name[name], len(frame), special_values
+        )
+        items.append(
+            {
+                "variable": name,
+                "label": variable_by_name[name]["label"],
+                "valid_base": distribution["valid_base"],
+                "rows": distribution["rows"],
+                "statistics": _numeric_statistics(series, special_values),
+            }
+        )
+    return {
+        "valid_base": max((item["valid_base"] for item in items), default=0),
+        "rows": [],
+        "statistics": None,
+        "items": items,
+    }
+
+
+def _numeric_statistics(
+    series: pd.Series, special_values: list[Any] | None = None
+) -> dict[str, float | int | None]:
+    working = series.copy()
+    for value in special_values or []:
+        working = working.mask(
+            working.map(lambda item, expected=value: _values_equal(item, expected))
+        )
+    numeric = pd.to_numeric(working, errors="coerce").dropna()
     count = len(numeric)
     if not count:
         return {
@@ -162,4 +232,3 @@ def _scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
-

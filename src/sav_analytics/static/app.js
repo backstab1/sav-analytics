@@ -76,6 +76,14 @@ document.querySelector("#close-editor").addEventListener("click", () => {
   currentQuestionCode = null;
 });
 document.querySelector("#refresh-preview").addEventListener("click", loadPreview);
+document.querySelector("#refresh-structure").addEventListener("click", refreshStructure);
+document.querySelector("#question-type").addEventListener("change", () => {
+  const question = findQuestion(currentQuestionCode);
+  if (question) renderSpecialAnswers({
+    ...question,
+    question_type: document.querySelector("#question-type").value,
+  });
+});
 document.querySelector("#new-recoding").addEventListener("click", () => openRecoding());
 document.querySelector("#close-recode-editor").addEventListener("click", closeRecoding);
 document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
@@ -175,6 +183,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
           question_type: document.querySelector("#question-type").value,
           role: document.querySelector("#question-role").value,
           included_in_report: document.querySelector("#question-included").checked,
+          ...collectSpecialAnswers(),
         }),
       },
     );
@@ -423,6 +432,89 @@ function fillEditor(question) {
   document.querySelector("#question-role").value = question.role;
   document.querySelector("#question-included").checked = question.included_in_report;
   document.querySelector("#editor-error").hidden = true;
+  renderQuestionMembers(question);
+  renderSpecialAnswers(question);
+}
+
+function renderQuestionMembers(question) {
+  const container = document.querySelector("#question-members");
+  const items = question.items?.length
+    ? question.items
+    : question.source_variables.map(name => ({
+      variable: name,
+      label: currentProject.inspection.variables.find(item => item.name === name)?.label || name,
+    }));
+  container.hidden = items.length < 2;
+  container.innerHTML = items.length < 2 ? "" : `<div><strong>Состав блока · ${items.length}</strong><small>Общие настройки выше применяются ко всем пунктам.</small></div><div class="member-list">${items.map(item => `<p><code>${escapeHtml(item.variable)}</code><span>${escapeHtml(item.label)}</span></p>`).join("")}</div>`;
+}
+
+function renderSpecialAnswers(question) {
+  const section = document.querySelector("#special-answers");
+  const list = document.querySelector("#special-answer-list");
+  if (question.question_type === "multiple_choice_dichotomy") {
+    const items = question.items || [];
+    section.hidden = items.length === 0;
+    list.innerHTML = items.map(item => `<label class="checkbox"><input type="checkbox" data-special-item="${escapeAttribute(item.variable)}" ${(question.special_items || []).includes(item.variable) ? "checked" : ""} /> ${escapeHtml(item.label)}</label>`).join("");
+    return;
+  }
+  if (!["scale", "matrix", "single_choice"].includes(question.question_type)) {
+    section.hidden = true;
+    list.innerHTML = "";
+    return;
+  }
+  const labels = valueLabelsForQuestion(question);
+  section.hidden = labels.length === 0;
+  list.innerHTML = labels.map(item => `<label class="checkbox"><input type="checkbox" data-special-value="${escapeAttribute(JSON.stringify(item.value))}" ${containsComparable(question.special_values || [], item.value) ? "checked" : ""} /> <code>${escapeHtml(item.value)}</code> ${escapeHtml(item.label)}</label>`).join("");
+}
+
+function collectSpecialAnswers() {
+  const type = document.querySelector("#question-type").value;
+  if (type === "multiple_choice_dichotomy") {
+    return {
+      special_items: [...document.querySelectorAll("[data-special-item]:checked")].map(item => item.dataset.specialItem),
+      special_values: [],
+    };
+  }
+  return {
+    special_values: [...document.querySelectorAll("[data-special-value]:checked")].map(item => JSON.parse(item.dataset.specialValue)),
+    special_items: [],
+  };
+}
+
+function valueLabelsForQuestion(question) {
+  const seen = new Set();
+  const labels = [];
+  question.source_variables.forEach(name => {
+    const variable = currentProject.inspection.variables.find(item => item.name === name);
+    (variable?.value_labels || []).forEach(item => {
+      const key = JSON.stringify(item.value);
+      if (!seen.has(key)) {
+        seen.add(key);
+        labels.push(item);
+      }
+    });
+  });
+  return labels;
+}
+
+function containsComparable(values, expected) {
+  return values.some(value => String(value) === String(expected));
+}
+
+async function refreshStructure() {
+  if (!currentProject || !confirm("Заново распознать multiple и matrix? Названия и настройки существующих блоков будут сохранены, где это возможно.")) return;
+  const button = document.querySelector("#refresh-structure");
+  setBusy(button, true, "Распознаём…");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/structure/refresh`, { method: "POST" });
+    currentQuestionCode = null;
+    editor.hidden = true;
+    renderProject();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    setBusy(button, false, "Перераспознать структуру");
+  }
 }
 
 async function loadPreview() {
@@ -439,14 +531,18 @@ async function loadPreview() {
 
 function renderPreview(preview) {
   const base = `<div class="base-line"><span>Total <strong>${preview.total_base.toLocaleString("ru-RU")}</strong></span><span>Валидная база <strong>${preview.valid_base.toLocaleString("ru-RU")}</strong></span></div>`;
+  if (preview.items?.length) {
+    return base + `<div class="matrix-preview">${preview.items.map(item => `<details><summary><span><code>${escapeHtml(item.variable)}</code> ${escapeHtml(item.label)}</span><strong>Среднее ${item.statistics.mean == null ? "—" : Number(item.statistics.mean).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</strong></summary><div class="preview-rows">${item.rows.map(row => `<div class="${row.is_special ? "special-row" : ""}"><span>${escapeHtml(row.label)}${row.is_special ? " · спецответ" : ""}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_main)}</em><em>${formatPercent(row.percent_filter)}</em></div>`).join("")}</div></details>`).join("")}</div>`;
+  }
   const rows = preview.rows?.length ? `<div class="preview-rows"><div class="preview-row-head"><span>Ответ</span><strong>N</strong><em>Total</em><em>Valid</em></div>${preview.rows.map(row => `
-    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_main)}</em><em>${formatPercent(row.percent_filter)}</em></div>`).join("")}</div>` : "";
+    <div class="${row.is_special ? "special-row" : ""}"><span>${escapeHtml(row.label)}${row.is_special ? " · спецответ" : ""}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_main)}</em><em>${formatPercent(row.percent_filter)}</em></div>`).join("")}</div>` : "";
   const statistics = preview.statistics ? `<dl class="stats">
     ${stat("Среднее", preview.statistics.mean)}${stat("Медиана", preview.statistics.median)}
     ${stat("Минимум", preview.statistics.minimum)}${stat("Максимум", preview.statistics.maximum)}
     ${stat("Ст. отклонение", preview.statistics.stddev)}${stat("Ст. ошибка", preview.statistics.stderr)}
   </dl>` : "";
-  return base + rows + statistics;
+  const warnings = preview.warnings?.length ? `<div class="inline-warnings">${preview.warnings.map(item => `<p>⚑ ${escapeHtml(item)}</p>`).join("")}</div>` : "";
+  return base + warnings + rows + statistics;
 }
 
 function stat(label, value) {

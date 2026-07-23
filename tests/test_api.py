@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
 from sav_analytics.repository import ProjectRepository
-from tests.test_sav_reader import write_fixture
+from tests.test_sav_reader import write_fixture, write_grouped_fixture
 
 
 def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> None:
@@ -154,5 +154,38 @@ def test_numeric_recoding_crud_and_preview(tmp_path: Path) -> None:
             )
             assert deleted.status_code == 200
             assert deleted.json()["configuration"]["recodings"] == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_refresh_structure_preserves_group_settings(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "grouped.sav"
+    write_grouped_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("grouped.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            client.patch(
+                f"/api/projects/{project_id}/questions/Q5",
+                json={"label": "Моя матрица", "included_in_report": False},
+            )
+
+            refreshed = client.post(
+                f"/api/projects/{project_id}/structure/refresh"
+            )
+
+            assert refreshed.status_code == 200
+            matrix = next(
+                item
+                for item in refreshed.json()["configuration"]["questions"]
+                if item["code"] == "Q5"
+            )
+            assert matrix["label"] == "Моя матрица"
+            assert not matrix["included_in_report"]
+            assert matrix["special_values"] == [99.0]
     finally:
         app.dependency_overrides.clear()
