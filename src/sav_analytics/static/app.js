@@ -15,7 +15,7 @@ let currentRecodingId = null;
 let currentBannerId = null;
 let currentFilterId = null;
 let currentView = "questions";
-let variablesGrouped = true;
+let structureMode = "questions";
 
 const typeLabels = {
   single_choice: "Один ответ",
@@ -122,13 +122,13 @@ document.querySelector("#close-filter-editor").addEventListener("click", closeFi
 document.querySelector("#add-filter-condition").addEventListener("click", () => addFilterCondition());
 document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
 document.querySelector("#refresh-filter-preview").addEventListener("click", loadFilterPreview);
-document.querySelector("#toggle-variable-view").addEventListener("click", () => {
-  variablesGrouped = !variablesGrouped;
-  document.querySelector("#toggle-variable-view").textContent = variablesGrouped
-    ? "Показать все столбцы"
-    : "Сгруппировать столбцы";
+document.querySelectorAll("[data-structure-mode]").forEach(button => button.addEventListener("click", () => {
+  structureMode = button.dataset.structureMode;
+  document.querySelectorAll("[data-structure-mode]").forEach(item => item.classList.toggle("active", item === button));
+  editor.hidden = true;
+  currentQuestionCode = null;
   renderTable();
-});
+}));
 document.querySelector("#banner-block-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-banner-block]");
   if (button) button.closest(".banner-block").remove();
@@ -152,7 +152,7 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   currentView = button.dataset.view;
   document.querySelector("#recode-toolbar").hidden = currentView !== "recodings";
   document.querySelector("#banner-toolbar").hidden = currentView !== "banners";
-  document.querySelector("#variable-toolbar").hidden = currentView !== "variables";
+  document.querySelector("#structure-toolbar").hidden = currentView !== "questions";
   document.querySelector("#filter-toolbar").hidden = currentView !== "filters";
   if (currentView === "recodings") {
     editor.hidden = true;
@@ -195,6 +195,13 @@ document.querySelector("#table-body").addEventListener("click", event => {
     input.select();
     return;
   }
+  const ownerButton = event.target.closest("button[data-open-question]");
+  if (ownerButton) {
+    structureMode = "questions";
+    document.querySelectorAll("[data-structure-mode]").forEach(button => button.classList.toggle("active", button.dataset.structureMode === "questions"));
+    openQuestion(ownerButton.dataset.openQuestion);
+    return;
+  }
   const recodeRow = event.target.closest("tr[data-recode-id]");
   if (recodeRow) {
     openRecoding(recodeRow.dataset.recodeId);
@@ -215,8 +222,9 @@ document.querySelector("#table-body").addEventListener("click", event => {
     moveQuestion(moveButton.dataset.code, Number(moveButton.dataset.move));
     return;
   }
+  if (event.target.closest(".inline-members")) return;
   const row = event.target.closest("tr[data-code]");
-  if (row && currentView !== "variables") openQuestion(row.dataset.code);
+  if (row) openQuestion(row.dataset.code);
 });
 
 document.querySelector("#banner-form").addEventListener("submit", async event => {
@@ -409,15 +417,19 @@ function showProject(project) {
   currentRecodingId = null;
   currentBannerId = null;
   currentView = "questions";
+  structureMode = "questions";
   editor.hidden = true;
   recodeEditor.hidden = true;
   bannerEditor.hidden = true;
   document.querySelector("#recode-toolbar").hidden = true;
   document.querySelector("#banner-toolbar").hidden = true;
-  document.querySelector("#variable-toolbar").hidden = true;
+  document.querySelector("#structure-toolbar").hidden = false;
   document.querySelector("#filter-toolbar").hidden = true;
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
+  });
+  document.querySelectorAll("[data-structure-mode]").forEach(button => {
+    button.classList.toggle("active", button.dataset.structureMode === "questions");
   });
   renderProject();
   document.querySelector("#start").hidden = true;
@@ -443,6 +455,10 @@ function renderProject() {
 
 function renderTable() {
   if (!currentProject) return;
+  if (currentView === "questions" && structureMode === "variables") {
+    renderPhysicalVariables();
+    return;
+  }
   if (currentView === "filters") {
     const filters = configuredFilters();
     document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Логика</th><th>Условий</th><th>Используется как база</th>";
@@ -475,29 +491,16 @@ function renderTable() {
       </tr>`).join("") : '<tr><td colspan="5" class="empty-state">Перекодировок пока нет. Создайте, например, возрастные группы.</td></tr>';
     return;
   }
-  if (currentView === "variables") {
-    if (variablesGrouped) {
-      renderGroupedVariables();
-      return;
-    }
-    document.querySelector("#table-head").innerHTML = "<th>Имя</th><th>Метка</th><th>Формат</th><th>Measurement</th><th>Уникальных</th><th>Валидная база</th><th>Пропуски</th>";
-    document.querySelector("#table-body").innerHTML = currentProject.inspection.variables.map(variable => `
-      <tr>
-        <td><code>${escapeHtml(variable.name)}</code></td><td><strong>${escapeHtml(variable.label)}</strong></td>
-        <td>${escapeHtml(variable.original_format || variable.storage_type)}</td><td>${escapeHtml(variable.measurement_level || "—")}</td>
-        <td>${variable.unique_count.toLocaleString("ru-RU")}</td><td>${variable.valid_count.toLocaleString("ru-RU")}</td><td>${variable.missing_count.toLocaleString("ru-RU")}</td>
-      </tr>`).join("");
-    return;
-  }
   const allQuestions = configuredQuestions();
   const questions = allQuestions;
   document.querySelector("#table-head").innerHTML = "<th>Порядок</th><th>Код</th><th>Вопрос</th><th>Тип</th><th>Переменные</th><th>База</th><th>Статус</th>";
   document.querySelector("#table-body").innerHTML = questions.map((question, visibleIndex) => {
     const absoluteIndex = allQuestions.findIndex(item => item.code === question.code);
+    const members = question.source_variables.length > 1 ? `<details class="inline-members"><summary>Состав блока · ${question.source_variables.length}</summary><div>${question.source_variables.map(name => { const variable = currentProject.inspection.variables.find(item => item.name === name); return `<p><code>${escapeHtml(name)}</code><span>${escapeHtml(variable?.label || name)}</span></p>`; }).join("")}</div></details>` : "";
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
       <td class="order-buttons"><button type="button" data-code="${escapeHtml(question.code)}" data-move="-1" ${absoluteIndex === 0 ? "disabled" : ""}>↑</button><button type="button" data-code="${escapeHtml(question.code)}" data-move="1" ${absoluteIndex === allQuestions.length - 1 ? "disabled" : ""}>↓</button><span>${visibleIndex + 1}</span></td>
       <td><code>${escapeHtml(question.code)}</code></td>
-      <td><div class="question-name"><strong>${escapeHtml(question.label)}</strong><button type="button" class="inline-edit" data-edit-label="${escapeAttribute(question.code)}" title="Изменить название для Excel">✎</button></div>${question.source_variables.length > 1 ? `<small class="group-hint">Название блока для Excel · ${question.source_variables.length} столбцов</small>` : ""}${question.warnings.map(w => `<small>${escapeHtml(w)}</small>`).join("")}</td>
+      <td><div class="question-name"><strong>${escapeHtml(question.label)}</strong><button type="button" class="inline-edit" data-edit-label="${escapeAttribute(question.code)}" title="Изменить название для Excel">✎</button></div>${question.source_variables.length > 1 ? `<small class="group-hint">Название блока для Excel</small>` : ""}${members}${question.warnings.map(w => `<small>${escapeHtml(w)}</small>`).join("")}</td>
       <td><span class="type">${typeLabels[question.question_type] || escapeHtml(question.question_type)}</span></td>
       <td>${question.source_variables.length}</td><td>${question.valid_count.toLocaleString("ru-RU")}</td>
       <td><span class="status ${question.recognition === "auto_review" ? "review" : ""}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
@@ -505,19 +508,20 @@ function renderTable() {
   }).join("");
 }
 
-function renderGroupedVariables() {
-  document.querySelector("#table-head").innerHTML = "<th>Блок</th><th>Метка и состав</th><th>Формат</th><th>Measurement</th><th>Столбцов</th><th>Валидная база</th><th>Пропуски</th>";
-  document.querySelector("#table-body").innerHTML = configuredQuestions().map(question => {
-    const variables = question.source_variables
-      .map(name => currentProject.inspection.variables.find(item => item.name === name))
-      .filter(Boolean);
-    const formats = [...new Set(variables.map(item => item.original_format || item.storage_type))];
-    const measures = [...new Set(variables.map(item => item.measurement_level || "—"))];
-    const details = variables.length > 1
-      ? `<details class="variable-group-details"><summary>${escapeHtml(question.label)}</summary><div>${variables.map(item => `<p><code>${escapeHtml(item.name)}</code><span>${escapeHtml(item.label)}</span></p>`).join("")}</div></details>`
-      : `<strong>${escapeHtml(question.label)}</strong>`;
-    return `<tr><td><code>${escapeHtml(question.code)}</code></td><td>${details}</td><td>${escapeHtml(formats.join(", "))}</td><td>${escapeHtml(measures.join(", "))}</td><td><span class="source-count">${variables.length}</span></td><td>${question.valid_count.toLocaleString("ru-RU")}</td><td>${question.missing_count.toLocaleString("ru-RU")}</td></tr>`;
-  }).join("");
+function renderPhysicalVariables() {
+    document.querySelector("#table-head").innerHTML = "<th>Имя</th><th>Логический вопрос</th><th>Метка столбца</th><th>Формат</th><th>Measurement</th><th>Уникальных</th><th>Валидная база</th><th>Пропуски</th>";
+    document.querySelector("#table-body").innerHTML = currentProject.inspection.variables.map(variable => `
+      <tr>
+        <td><code>${escapeHtml(variable.name)}</code></td><td>${logicalOwnerButton(variable.name)}</td><td><strong>${escapeHtml(variable.label)}</strong></td>
+        <td>${escapeHtml(variable.original_format || variable.storage_type)}</td><td>${escapeHtml(variable.measurement_level || "—")}</td>
+        <td>${variable.unique_count.toLocaleString("ru-RU")}</td><td>${variable.valid_count.toLocaleString("ru-RU")}</td><td>${variable.missing_count.toLocaleString("ru-RU")}</td>
+      </tr>`).join("");
+}
+
+function logicalOwnerButton(variableName) {
+  const question = configuredQuestions().find(item => item.source_variables.includes(variableName));
+  if (!question) return "—";
+  return `<button type="button" class="owner-link" data-open-question="${escapeAttribute(question.code)}">${escapeHtml(question.code)}</button>`;
 }
 
 function openFilter(filterId = null) {
