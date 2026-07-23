@@ -42,10 +42,11 @@
         <div id="warnings" class="warnings" hidden></div>
         <div class="workspace-grid">
           <div class="structure-panel">
-            <div class="tabs"><button class="active" data-view="questions">Вопросы</button><button data-view="variables">Переменные</button><button data-view="excluded">Исключённые</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button></div>
+            <div class="tabs"><button class="active" data-view="questions">Вопросы</button><button data-view="variables">Переменные</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button></div>
             <div id="variable-toolbar" class="recode-toolbar" hidden><div><strong>Столбцы SAV</strong><small>Сгруппированный вид показывает один логический блок; плоский — каждый физический столбец.</small></div><button id="toggle-variable-view" type="button">Показать все столбцы</button></div>
             <div id="recode-toolbar" class="recode-toolbar" hidden><div><strong>Производные переменные</strong><small>Создавайте независимые группировки числовых переменных.</small></div><button id="new-recoding" type="button">+ Новая перекодировка</button></div>
             <div id="banner-toolbar" class="recode-toolbar" hidden><div><strong>Баннеры отчёта</strong><small>Total добавляется всегда; блок может содержать один или два вложенных уровня.</small></div><button id="new-banner" type="button">+ Новый баннер</button></div>
+            <div id="filter-toolbar" class="recode-toolbar" hidden><div><strong>Именованные правила</strong><small>Сохраняйте выборки и назначайте их базой отдельным вопросам.</small></div><button id="new-filter" type="button">+ Новое правило</button></div>
             <div class="table-wrap">
               <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
             </div>
@@ -53,7 +54,7 @@
           <aside id="question-editor" class="question-editor" hidden>
             <div class="editor-head"><div><p class="eyebrow">НАСТРОЙКА ВОПРОСА</p><h2 id="editor-code"></h2></div><button id="close-editor" class="icon-button" type="button">×</button></div>
             <form id="question-form">
-              <label>Название для отчёта<textarea id="question-label" rows="4" required></textarea></label>
+              <label><span id="question-label-caption">Название для отчёта</span><textarea id="question-label" rows="4" required></textarea><small id="question-label-help">Это название попадёт в содержание и топлайн Excel.</small></label>
               <label>Тип вопроса<select id="question-type">
                 <option value="single_choice">Один ответ</option>
                 <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
@@ -74,6 +75,7 @@
                 <option value="technical">Техническая</option>
               </select></label>
               <label class="checkbox"><input id="question-included" type="checkbox" /> Включить в отчёт</label>
+              <label>Пользовательская база<select id="question-base-filter"><option value="">Стандартная база</option></select></label>
               <section id="question-members" class="question-members" hidden></section>
               <section id="special-answers" class="special-answers" hidden><div><strong>Специальные ответы</strong><small>Показываются в распределении, но исключаются из средних. Для multiple проверяется совместный выбор.</small></div><div id="special-answer-list"></div></section>
               <button id="save-question" type="submit">Сохранить изменения</button>
@@ -108,6 +110,20 @@
               <p id="banner-error" class="error" hidden></p>
             </form>
             <section class="preview"><div class="preview-title"><h3>Колонки и базы</h3><button id="refresh-banner-preview" class="text-button" type="button">Пересчитать</button></div><div id="banner-preview" class="preview-content"><p class="muted">Сохраните баннер для расчёта.</p></div></section>
+          </aside>
+          <aside id="filter-editor" class="question-editor" hidden>
+            <div class="editor-head"><div><p class="eyebrow">БАЗА / ФИЛЬТР</p><h2 id="filter-editor-title">Новое правило</h2></div><button id="close-filter-editor" class="icon-button" type="button">×</button></div>
+            <form id="filter-form">
+              <label>Название правила<input id="filter-name" required maxlength="500" placeholder="Например, Покупатели категории" /></label>
+              <label>Объединить условия<select id="filter-operator"><option value="and">Все условия (И)</option><option value="or">Хотя бы одно (ИЛИ)</option></select></label>
+              <div class="range-heading"><strong>Условия</strong><small>Несколько значений вводятся через запятую.</small></div>
+              <div id="filter-condition-list" class="filter-condition-list"></div>
+              <button id="add-filter-condition" class="secondary compact-button" type="button">+ Добавить условие</button>
+              <button id="save-filter" type="submit">Сохранить правило</button>
+              <button id="delete-filter" class="danger-button" type="button" hidden>Удалить правило</button>
+              <p id="filter-error" class="error" hidden></p>
+            </form>
+            <section class="preview"><div class="preview-title"><h3>Получающаяся выборка</h3><button id="refresh-filter-preview" class="text-button" type="button">Пересчитать</button></div><div id="filter-preview" class="preview-content"><p class="muted">Сохраните правило для расчёта.</p></div></section>
           </aside>
         </div>
       </section>

@@ -8,10 +8,12 @@ const dropZone = document.querySelector("#drop-zone");
 const editor = document.querySelector("#question-editor");
 const recodeEditor = document.querySelector("#recode-editor");
 const bannerEditor = document.querySelector("#banner-editor");
+const filterEditor = document.querySelector("#filter-editor");
 let currentProject = null;
 let currentQuestionCode = null;
 let currentRecodingId = null;
 let currentBannerId = null;
+let currentFilterId = null;
 let currentView = "questions";
 let variablesGrouped = true;
 
@@ -64,9 +66,13 @@ document.querySelector("#new-project").addEventListener("click", () => {
   currentQuestionCode = null;
   currentRecodingId = null;
   currentBannerId = null;
+  currentFilterId = null;
+  currentFilterId = null;
   editor.hidden = true;
   recodeEditor.hidden = true;
   bannerEditor.hidden = true;
+  filterEditor.hidden = true;
+  filterEditor.hidden = true;
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
   form.reset();
@@ -111,6 +117,11 @@ document.querySelector("#close-banner-editor").addEventListener("click", closeBa
 document.querySelector("#add-banner-block").addEventListener("click", () => addBannerBlock());
 document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
 document.querySelector("#refresh-banner-preview").addEventListener("click", loadBannerPreview);
+document.querySelector("#new-filter").addEventListener("click", () => openFilter());
+document.querySelector("#close-filter-editor").addEventListener("click", closeFilter);
+document.querySelector("#add-filter-condition").addEventListener("click", () => addFilterCondition());
+document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
+document.querySelector("#refresh-filter-preview").addEventListener("click", loadFilterPreview);
 document.querySelector("#toggle-variable-view").addEventListener("click", () => {
   variablesGrouped = !variablesGrouped;
   document.querySelector("#toggle-variable-view").textContent = variablesGrouped
@@ -130,6 +141,10 @@ document.querySelector("#category-group-list").addEventListener("click", event =
   const button = event.target.closest("button[data-remove-category-group]");
   if (button) button.closest(".category-group").remove();
 });
+document.querySelector("#filter-condition-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-filter-condition]");
+  if (button) button.closest(".filter-condition").remove();
+});
 
 document.querySelectorAll(".tabs button[data-view]").forEach(button => button.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach(item => item.classList.remove("active"));
@@ -138,26 +153,48 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   document.querySelector("#recode-toolbar").hidden = currentView !== "recodings";
   document.querySelector("#banner-toolbar").hidden = currentView !== "banners";
   document.querySelector("#variable-toolbar").hidden = currentView !== "variables";
+  document.querySelector("#filter-toolbar").hidden = currentView !== "filters";
   if (currentView === "recodings") {
     editor.hidden = true;
     bannerEditor.hidden = true;
+    filterEditor.hidden = true;
     currentQuestionCode = null;
     currentBannerId = null;
+    currentFilterId = null;
   } else if (currentView === "banners") {
     editor.hidden = true;
     recodeEditor.hidden = true;
+    filterEditor.hidden = true;
     currentQuestionCode = null;
     currentRecodingId = null;
+    currentFilterId = null;
+  } else if (currentView === "filters") {
+    editor.hidden = true;
+    recodeEditor.hidden = true;
+    bannerEditor.hidden = true;
+    currentQuestionCode = null;
+    currentRecodingId = null;
+    currentBannerId = null;
   } else {
     recodeEditor.hidden = true;
     bannerEditor.hidden = true;
     currentRecodingId = null;
     currentBannerId = null;
+    filterEditor.hidden = true;
+    currentFilterId = null;
   }
   renderTable();
 }));
 
 document.querySelector("#table-body").addEventListener("click", event => {
+  const labelButton = event.target.closest("button[data-edit-label]");
+  if (labelButton) {
+    openQuestion(labelButton.dataset.editLabel);
+    const input = document.querySelector("#question-label");
+    input.focus();
+    input.select();
+    return;
+  }
   const recodeRow = event.target.closest("tr[data-recode-id]");
   if (recodeRow) {
     openRecoding(recodeRow.dataset.recodeId);
@@ -166,6 +203,11 @@ document.querySelector("#table-body").addEventListener("click", event => {
   const bannerRow = event.target.closest("tr[data-banner-id]");
   if (bannerRow) {
     openBanner(bannerRow.dataset.bannerId);
+    return;
+  }
+  const filterRow = event.target.closest("tr[data-filter-id]");
+  if (filterRow) {
+    openFilter(filterRow.dataset.filterId);
     return;
   }
   const moveButton = event.target.closest("button[data-move]");
@@ -210,6 +252,42 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     showError(bannerError, error);
   } finally {
     setBusy(saveButton, false, "Сохранить баннер");
+  }
+});
+
+document.querySelector("#filter-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-filter");
+  const filterError = document.querySelector("#filter-error");
+  filterError.hidden = true;
+  let rule;
+  try {
+    rule = collectFilterRule();
+  } catch (error) {
+    showError(filterError, error);
+    return;
+  }
+  const payload = { name: document.querySelector("#filter-name").value.trim(), rule };
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    const url = currentFilterId
+      ? `/api/projects/${currentProject.id}/filters/${currentFilterId}`
+      : `/api/projects/${currentProject.id}/filters`;
+    currentProject = await api(url, {
+      method: currentFilterId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentFilterId) {
+      currentFilterId = configuredFilters().find(item => item.name === payload.name)?.id;
+    }
+    renderProject();
+    openFilter(currentFilterId);
+    await loadFilterPreview();
+  } catch (error) {
+    showError(filterError, error);
+  } finally {
+    setBusy(saveButton, false, "Сохранить правило");
   }
 });
 
@@ -278,6 +356,16 @@ document.querySelector("#question-form").addEventListener("submit", async event 
         }),
       },
     );
+    currentProject = await api(
+      `/api/projects/${currentProject.id}/questions/${encodeURIComponent(currentQuestionCode)}/base`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filter_id: document.querySelector("#question-base-filter").value || null,
+        }),
+      },
+    );
     renderProject();
     fillEditor(findQuestion(currentQuestionCode));
     await loadPreview();
@@ -327,6 +415,7 @@ function showProject(project) {
   document.querySelector("#recode-toolbar").hidden = true;
   document.querySelector("#banner-toolbar").hidden = true;
   document.querySelector("#variable-toolbar").hidden = true;
+  document.querySelector("#filter-toolbar").hidden = true;
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
   });
@@ -354,6 +443,15 @@ function renderProject() {
 
 function renderTable() {
   if (!currentProject) return;
+  if (currentView === "filters") {
+    const filters = configuredFilters();
+    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Логика</th><th>Условий</th><th>Используется как база</th>";
+    document.querySelector("#table-body").innerHTML = filters.length ? filters.map(filter => {
+      const uses = configuredQuestions().filter(question => question.base_filter_id === filter.id).length;
+      return `<tr class="question-row ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${filter.id}"><td><strong>${escapeHtml(filter.name)}</strong></td><td>${filter.rule.operator === "and" ? "И" : "ИЛИ"}</td><td>${filter.rule.items.length}</td><td>${uses ? `${uses} вопр.` : "—"}</td></tr>`;
+    }).join("") : '<tr><td colspan="4" class="empty-state">Сохранённых баз и фильтров пока нет.</td></tr>';
+    return;
+  }
   if (currentView === "banners") {
     const banners = configuredBanners();
     document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Блоков</th><th>Структура</th>";
@@ -392,14 +490,14 @@ function renderTable() {
     return;
   }
   const allQuestions = configuredQuestions();
-  const questions = currentView === "excluded" ? allQuestions.filter(item => !item.included_in_report) : allQuestions;
+  const questions = allQuestions;
   document.querySelector("#table-head").innerHTML = "<th>Порядок</th><th>Код</th><th>Вопрос</th><th>Тип</th><th>Переменные</th><th>База</th><th>Статус</th>";
   document.querySelector("#table-body").innerHTML = questions.map((question, visibleIndex) => {
     const absoluteIndex = allQuestions.findIndex(item => item.code === question.code);
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
       <td class="order-buttons"><button type="button" data-code="${escapeHtml(question.code)}" data-move="-1" ${absoluteIndex === 0 ? "disabled" : ""}>↑</button><button type="button" data-code="${escapeHtml(question.code)}" data-move="1" ${absoluteIndex === allQuestions.length - 1 ? "disabled" : ""}>↓</button><span>${visibleIndex + 1}</span></td>
       <td><code>${escapeHtml(question.code)}</code></td>
-      <td><strong>${escapeHtml(question.label)}</strong>${question.warnings.map(w => `<small>${escapeHtml(w)}</small>`).join("")}</td>
+      <td><div class="question-name"><strong>${escapeHtml(question.label)}</strong><button type="button" class="inline-edit" data-edit-label="${escapeAttribute(question.code)}" title="Изменить название для Excel">✎</button></div>${question.source_variables.length > 1 ? `<small class="group-hint">Название блока для Excel · ${question.source_variables.length} столбцов</small>` : ""}${question.warnings.map(w => `<small>${escapeHtml(w)}</small>`).join("")}</td>
       <td><span class="type">${typeLabels[question.question_type] || escapeHtml(question.question_type)}</span></td>
       <td>${question.source_variables.length}</td><td>${question.valid_count.toLocaleString("ru-RU")}</td>
       <td><span class="status ${question.recognition === "auto_review" ? "review" : ""}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
@@ -420,6 +518,113 @@ function renderGroupedVariables() {
       : `<strong>${escapeHtml(question.label)}</strong>`;
     return `<tr><td><code>${escapeHtml(question.code)}</code></td><td>${details}</td><td>${escapeHtml(formats.join(", "))}</td><td>${escapeHtml(measures.join(", "))}</td><td><span class="source-count">${variables.length}</span></td><td>${question.valid_count.toLocaleString("ru-RU")}</td><td>${question.missing_count.toLocaleString("ru-RU")}</td></tr>`;
   }).join("");
+}
+
+function openFilter(filterId = null) {
+  currentFilterId = filterId;
+  currentQuestionCode = null;
+  currentRecodingId = null;
+  currentBannerId = null;
+  editor.hidden = true;
+  recodeEditor.hidden = true;
+  bannerEditor.hidden = true;
+  filterEditor.hidden = false;
+  const filter = filterId ? configuredFilters().find(item => item.id === filterId) : null;
+  document.querySelector("#filter-editor-title").textContent = filter?.name || "Новое правило";
+  document.querySelector("#filter-name").value = filter?.name || "";
+  document.querySelector("#filter-operator").value = filter?.rule.operator || "and";
+  const list = document.querySelector("#filter-condition-list");
+  list.innerHTML = "";
+  const conditions = filter?.rule.items?.filter(item => item.kind === "condition") || [];
+  if (conditions.length) conditions.forEach(condition => addFilterCondition(condition));
+  else addFilterCondition();
+  document.querySelector("#delete-filter").hidden = !filter;
+  document.querySelector("#filter-error").hidden = true;
+  document.querySelector("#filter-preview").innerHTML = filter
+    ? '<p class="muted">Считаем…</p>'
+    : '<p class="muted">Сохраните правило для расчёта.</p>';
+  renderTable();
+  if (filter) loadFilterPreview();
+}
+
+function closeFilter() {
+  filterEditor.hidden = true;
+  currentFilterId = null;
+  renderTable();
+}
+
+function addFilterCondition(condition = {}) {
+  const element = document.createElement("div");
+  element.className = "filter-condition";
+  const sourceValue = condition.source ? `${condition.source.kind}:${condition.source.ref}` : "";
+  const rawValue = condition.values?.join(", ")
+    || (condition.operator === "between" ? `${condition.lower ?? ""}, ${condition.upper ?? ""}` : condition.lower ?? condition.upper ?? "");
+  element.innerHTML = `<select class="filter-source">${filterSourceOptions(sourceValue)}</select><select class="filter-operation">${filterOperatorOptions(condition.operator || "eq")}</select><input class="filter-value" value="${escapeAttribute(rawValue)}" placeholder="Значение или список" /><button type="button" data-remove-filter-condition title="Удалить условие">×</button>`;
+  document.querySelector("#filter-condition-list").append(element);
+}
+
+function filterSourceOptions(selectedValue) {
+  const options = [];
+  configuredQuestions()
+    .filter(item => !["open_text", "technical"].includes(item.question_type))
+    .forEach(item => options.push(`<option value="question:${escapeAttribute(item.code)}" ${selectedValue === `question:${item.code}` ? "selected" : ""}>${escapeHtml(item.code)} — ${escapeHtml(item.label)}</option>`));
+  configuredRecodings().forEach(item => options.push(`<option value="recoding:${item.id}" ${selectedValue === `recoding:${item.id}` ? "selected" : ""}>↳ ${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`));
+  return options.join("");
+}
+
+function filterOperatorOptions(selected) {
+  const labels = { eq: "Равно", ne: "Не равно", in: "Входит в список", not_in: "Не входит в список", gt: "Больше", lt: "Меньше", between: "Между", filled: "Заполнено", missing: "Пропущено", selected_any: "Выбран хотя бы один вариант", selected_all: "Выбраны все варианты", selected_none: "Не выбран ни один" };
+  return Object.entries(labels).map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
+}
+
+function collectFilterRule() {
+  const elements = [...document.querySelectorAll("#filter-condition-list .filter-condition")];
+  if (!elements.length) throw new Error("Добавьте хотя бы одно условие.");
+  return {
+    kind: "group",
+    operator: document.querySelector("#filter-operator").value,
+    items: elements.map(element => {
+      const source = parseBannerSource(element.querySelector(".filter-source").value);
+      const operator = element.querySelector(".filter-operation").value;
+      const values = element.querySelector(".filter-value").value.split(",").map(value => value.trim()).filter(Boolean).map(parseFilterValue);
+      const condition = { kind: "condition", source, operator, values: [] };
+      if (["eq", "ne", "in", "not_in", "selected_any", "selected_all", "selected_none"].includes(operator)) condition.values = values;
+      if (operator === "gt") condition.lower = Number(values[0]);
+      if (operator === "lt") condition.upper = Number(values[0]);
+      if (operator === "between") [condition.lower, condition.upper] = values.map(Number);
+      return condition;
+    }),
+  };
+}
+
+function parseFilterValue(value) {
+  if (value !== "" && Number.isFinite(Number(value))) return Number(value);
+  return value;
+}
+
+async function loadFilterPreview() {
+  if (!currentProject || !currentFilterId) return;
+  const container = document.querySelector("#filter-preview");
+  container.innerHTML = '<p class="muted">Считаем…</p>';
+  try {
+    const preview = await api(`/api/projects/${currentProject.id}/filters/${currentFilterId}/preview`);
+    const warning = preview.empty ? "Пустая база — использовать её нельзя." : preview.small_base ? "Малая база: результаты будут отмечены серым." : "";
+    container.innerHTML = `<div class="filter-result"><strong>${preview.selected.toLocaleString("ru-RU")}</strong><span>из ${preview.total.toLocaleString("ru-RU")} · ${formatPercent(preview.share)}</span></div><p>${escapeHtml(preview.description)}</p>${warning ? `<p class="inline-warnings">${escapeHtml(warning)}</p>` : ""}`;
+  } catch (error) {
+    container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function deleteFilter() {
+  if (!currentFilterId || !confirm("Удалить это правило?")) return;
+  const errorBox = document.querySelector("#filter-error");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/filters/${currentFilterId}`, { method: "DELETE" });
+    closeFilter();
+    renderProject();
+  } catch (error) {
+    showError(errorBox, error);
+  }
 }
 
 function openBanner(bannerId = null) {
@@ -695,11 +900,19 @@ function openQuestion(code) {
 
 function fillEditor(question) {
   if (!question) return;
+  const grouped = question.source_variables.length > 1;
   document.querySelector("#editor-code").textContent = question.code;
+  document.querySelector("#question-label-caption").textContent = grouped
+    ? "Название блока для Excel"
+    : "Название для отчёта";
+  document.querySelector("#question-label-help").textContent = grouped
+    ? "Общий заголовок для всех пунктов блока в содержании и топлайне Excel."
+    : "Это название попадёт в содержание и топлайн Excel.";
   document.querySelector("#question-label").value = question.label;
   document.querySelector("#question-type").value = question.question_type;
   document.querySelector("#question-role").value = question.role;
   document.querySelector("#question-included").checked = question.included_in_report;
+  document.querySelector("#question-base-filter").innerHTML = '<option value="">Стандартная база</option>' + configuredFilters().map(filter => `<option value="${filter.id}" ${question.base_filter_id === filter.id ? "selected" : ""}>${escapeHtml(filter.name)}</option>`).join("");
   document.querySelector("#editor-error").hidden = true;
   renderQuestionMembers(question);
   renderSpecialAnswers(question);
@@ -828,6 +1041,10 @@ function configuredRecodings() {
 
 function configuredBanners() {
   return currentProject.configuration?.banners || [];
+}
+
+function configuredFilters() {
+  return currentProject.configuration?.filters || [];
 }
 
 function suggestRecodeCode() {

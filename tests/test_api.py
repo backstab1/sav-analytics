@@ -311,3 +311,59 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
             assert deleted.json()["configuration"]["banners"] == []
     finally:
         app.dependency_overrides.clear()
+
+
+def test_filter_crud_preview_and_question_base(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            created = client.post(
+                f"/api/projects/{project_id}/filters",
+                json={
+                    "name": "Только мужчины",
+                    "rule": {
+                        "operator": "and",
+                        "items": [
+                            {
+                                "source": {"kind": "question", "ref": "Q1"},
+                                "operator": "eq",
+                                "values": [1],
+                            }
+                        ],
+                    },
+                },
+            )
+            assert created.status_code == 201
+            filter_id = created.json()["configuration"]["filters"][0]["id"]
+
+            preview = client.get(
+                f"/api/projects/{project_id}/filters/{filter_id}/preview"
+            )
+            assert preview.status_code == 200
+            assert preview.json()["selected"] == 2
+
+            assigned = client.put(
+                f"/api/projects/{project_id}/questions/Q2/base",
+                json={"filter_id": filter_id},
+            )
+            assert assigned.status_code == 200
+            q2 = next(
+                item
+                for item in assigned.json()["configuration"]["questions"]
+                if item["code"] == "Q2"
+            )
+            assert q2["base_filter_id"] == filter_id
+
+            blocked = client.delete(
+                f"/api/projects/{project_id}/filters/{filter_id}"
+            )
+            assert blocked.status_code == 422
+    finally:
+        app.dependency_overrides.clear()

@@ -63,6 +63,7 @@ class ProjectRepository:
                     "questions": inspection.to_dict()["questions"],
                     "recodings": [],
                     "banners": [],
+                    "filters": [],
                     "updated_at": created_at,
                 },
             }
@@ -196,6 +197,7 @@ class ProjectRepository:
             "included_in_report",
             "special_values",
             "special_items",
+            "base_filter_id",
         }
         for detected in refreshed["questions"]:
             configured = dict(detected)
@@ -264,6 +266,78 @@ class ProjectRepository:
             raise ProjectNotFoundError(str(banner_id)) from exc
         return project, banner
 
+    def create_filter(self, project_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        project["configuration"]["filters"].append({"id": str(uuid4()), **definition})
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_filter(self, project_id: UUID, filter_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        filters = project["configuration"]["filters"]
+        try:
+            index = next(
+                index for index, item in enumerate(filters) if item["id"] == str(filter_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(filter_id)) from exc
+        filters[index] = {"id": str(filter_id), **definition}
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def delete_filter(self, project_id: UUID, filter_id: UUID) -> dict:
+        project = self.get(project_id)
+        identifier = str(filter_id)
+        if any(
+            question.get("base_filter_id") == identifier
+            for question in project["configuration"]["questions"]
+        ):
+            raise InvalidUploadError(
+                "Фильтр назначен как база вопроса и пока не может быть удалён."
+            )
+        filters = project["configuration"]["filters"]
+        filtered = [item for item in filters if item["id"] != identifier]
+        if len(filtered) == len(filters):
+            raise ProjectNotFoundError(identifier)
+        project["configuration"]["filters"] = filtered
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def filter(self, project_id: UUID, filter_id: UUID) -> tuple[dict, dict]:
+        project = self.get(project_id)
+        try:
+            definition = next(
+                item
+                for item in project["configuration"]["filters"]
+                if item["id"] == str(filter_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(filter_id)) from exc
+        return project, definition
+
+    def assign_question_base(
+        self, project_id: UUID, code: str, filter_id: UUID | None
+    ) -> dict:
+        project = self.get(project_id)
+        try:
+            question = next(
+                item for item in project["configuration"]["questions"] if item["code"] == code
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(code) from exc
+        identifier = str(filter_id) if filter_id else None
+        if identifier and not any(
+            item["id"] == identifier for item in project["configuration"]["filters"]
+        ):
+            raise ProjectNotFoundError(identifier)
+        question["base_filter_id"] = identifier
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
         return self.root / str(project_id) / "source.sav"
@@ -282,6 +356,7 @@ class ProjectRepository:
             }
         project["configuration"].setdefault("recodings", [])
         project["configuration"].setdefault("banners", [])
+        project["configuration"].setdefault("filters", [])
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")
 

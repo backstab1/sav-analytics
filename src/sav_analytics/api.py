@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
 from .core.banner import BannerError, calculate_banner_preview, validate_banner
+from .core.filtering import FilterError, calculate_filter_preview, validate_filter
 from .core.models import QuestionType, VariableRole
 from .core.recoding import RecodingError, calculate_recode_preview, validate_recode
 from .core.sav_reader import SavReadError
@@ -96,6 +97,49 @@ class BannerBlock(BaseModel):
 class BannerDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
     blocks: list[BannerBlock] = Field(min_length=1, max_length=50)
+
+
+class FilterSource(BaseModel):
+    kind: Literal["question", "recoding"]
+    ref: str = Field(min_length=1, max_length=64)
+
+
+class FilterCondition(BaseModel):
+    kind: Literal["condition"] = "condition"
+    source: FilterSource
+    operator: Literal[
+        "eq",
+        "ne",
+        "in",
+        "not_in",
+        "gt",
+        "lt",
+        "between",
+        "filled",
+        "missing",
+        "selected",
+        "selected_any",
+        "selected_all",
+        "selected_none",
+    ]
+    values: list[str | int | float] = Field(default_factory=list, max_length=500)
+    lower: float | None = None
+    upper: float | None = None
+
+
+class FilterGroup(BaseModel):
+    kind: Literal["group"] = "group"
+    operator: Literal["and", "or"] = "and"
+    items: list[FilterCondition | FilterGroup] = Field(min_length=1, max_length=50)
+
+
+class FilterDefinition(BaseModel):
+    name: str = Field(min_length=1, max_length=500)
+    rule: FilterGroup
+
+
+class QuestionBaseUpdate(BaseModel):
+    filter_id: UUID | None = None
 
 
 @app.exception_handler(Exception)
@@ -375,6 +419,83 @@ def preview_banner(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
+
+
+@app.post("/api/projects/{project_id}/filters", status_code=status.HTTP_201_CREATED)
+def create_filter(
+    project_id: UUID,
+    definition: FilterDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        project = repository.get(project_id)
+        validate_filter(payload, project)
+        return repository.create_filter(project_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except FilterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/projects/{project_id}/filters/{filter_id}")
+def update_filter(
+    project_id: UUID,
+    filter_id: UUID,
+    definition: FilterDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        project = repository.get(project_id)
+        validate_filter(payload, project)
+        return repository.update_filter(project_id, filter_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или фильтр не найдены.") from exc
+    except FilterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/projects/{project_id}/filters/{filter_id}")
+def delete_filter(
+    project_id: UUID,
+    filter_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.delete_filter(project_id, filter_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или фильтр не найдены.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/projects/{project_id}/filters/{filter_id}/preview")
+def preview_filter(
+    project_id: UUID,
+    filter_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project, definition = repository.filter(project_id, filter_id)
+        return calculate_filter_preview(repository.source_path(project_id), definition, project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или фильтр не найдены.") from exc
+    except FilterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/projects/{project_id}/questions/{code}/base")
+def assign_question_base(
+    project_id: UUID,
+    code: str,
+    update: QuestionBaseUpdate,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.assign_question_base(project_id, code, update.filter_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Вопрос или фильтр не найдены.") from exc
 
 
 @app.get("/api/projects/{project_id}/source")
