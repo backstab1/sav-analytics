@@ -226,6 +226,8 @@ class ProjectRepository:
                 "updated_at": project["created_at"],
             }
         project["configuration"].setdefault("recodings", [])
+        for recoding in project["configuration"]["recodings"]:
+            recoding.setdefault("mode", "ranges")
 
     @staticmethod
     def _ensure_unique_recode_code(

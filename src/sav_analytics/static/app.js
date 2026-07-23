@@ -87,11 +87,27 @@ document.querySelector("#question-type").addEventListener("change", () => {
 document.querySelector("#new-recoding").addEventListener("click", () => openRecoding());
 document.querySelector("#close-recode-editor").addEventListener("click", closeRecoding);
 document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
+document.querySelector("#add-category-group").addEventListener("click", () => addCategoryGroup());
+document.querySelector("#recode-mode").addEventListener("change", () => {
+  fillRecodeSources();
+  document.querySelector("#category-group-list").innerHTML = "";
+  renderRecodeMode();
+});
+document.querySelector("#recode-source").addEventListener("change", () => {
+  if (document.querySelector("#recode-mode").value === "categories") {
+    document.querySelector("#category-group-list").innerHTML = "";
+    renderRecodeMode();
+  }
+});
 document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
 document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
 document.querySelector("#range-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-range]");
   if (button) button.closest(".range-row").remove();
+});
+document.querySelector("#category-group-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-category-group]");
+  if (button) button.closest(".category-group").remove();
 });
 
 document.querySelectorAll(".tabs button[data-view]").forEach(button => button.addEventListener("click", () => {
@@ -130,13 +146,15 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
   const recodeError = document.querySelector("#recode-error");
   recodeError.hidden = true;
   let categories;
+  const mode = document.querySelector("#recode-mode").value;
   try {
-    categories = collectRanges();
+    categories = mode === "ranges" ? collectRanges() : collectCategoryGroups();
   } catch (error) {
     showError(recodeError, error);
     return;
   }
   const payload = {
+    mode,
     code: document.querySelector("#recode-code").value.trim(),
     name: document.querySelector("#recode-name").value.trim(),
     source_variable: document.querySelector("#recode-source").value,
@@ -268,7 +286,7 @@ function renderTable() {
         <td><strong>${escapeHtml(recoding.name)}</strong></td>
         <td><code>${escapeHtml(recoding.source_variable)}</code></td>
         <td>${recoding.categories.length}</td>
-        <td>${recoding.categories.map(category => `<small>${escapeHtml(category.label)}: ${formatRange(category)}</small>`).join("")}</td>
+        <td>${recoding.categories.map(category => `<small>${escapeHtml(category.label)}: ${escapeHtml(formatRecodeCategory(recoding, category))}</small>`).join("")}</td>
       </tr>`).join("") : '<tr><td colspan="5" class="empty-state">Перекодировок пока нет. Создайте, например, возрастные группы.</td></tr>';
     return;
   }
@@ -307,16 +325,22 @@ function openRecoding(recodingId = null) {
   document.querySelector("#recode-editor-title").textContent = recoding ? recoding.code : "Новая";
   document.querySelector("#recode-code").value = recoding?.code || suggestRecodeCode();
   document.querySelector("#recode-name").value = recoding?.name || "";
-  fillNumericSources(recoding?.source_variable);
+  document.querySelector("#recode-mode").value = recoding?.mode || "ranges";
+  fillRecodeSources(recoding?.source_variable);
   const rangeList = document.querySelector("#range-list");
   rangeList.innerHTML = "";
-  if (recoding) {
+  const categoryList = document.querySelector("#category-group-list");
+  categoryList.innerHTML = "";
+  if (recoding?.mode === "categories") {
+    recoding.categories.forEach(category => addCategoryGroup(category));
+  } else if (recoding) {
     recoding.categories.forEach(category => addRangeRow(category));
   } else {
     addRangeRow({ label: "18–24", lower: 18, upper: 24 });
     addRangeRow({ label: "25–34", lower: 25, upper: 34 });
     addRangeRow({ label: "35 и старше", lower: 35, upper: null });
   }
+  renderRecodeMode();
   document.querySelector("#delete-recoding").hidden = !recoding;
   document.querySelector("#recode-error").hidden = true;
   document.querySelector("#recode-preview").innerHTML = recoding
@@ -332,10 +356,23 @@ function closeRecoding() {
   renderTable();
 }
 
-function fillNumericSources(selected) {
-  const sources = currentProject.inspection.variables.filter(item => item.storage_type === "numeric");
+function fillRecodeSources(selected) {
+  const mode = document.querySelector("#recode-mode").value;
+  const sources = currentProject.inspection.variables.filter(item => (
+    mode === "ranges" ? item.storage_type === "numeric" : item.value_labels.length > 0
+  ));
   document.querySelector("#recode-source").innerHTML = sources.map(variable => `
     <option value="${escapeHtml(variable.name)}" ${variable.name === selected ? "selected" : ""}>${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`).join("");
+}
+
+function renderRecodeMode() {
+  const categorical = document.querySelector("#recode-mode").value === "categories";
+  document.querySelector("#range-editor").hidden = categorical;
+  document.querySelector("#category-editor").hidden = !categorical;
+  if (categorical && document.querySelectorAll("#category-group-list .category-group").length === 0) {
+    addCategoryGroup({ label: "Группа 1", values: [] });
+    addCategoryGroup({ label: "Группа 2", values: [] });
+  }
 }
 
 function addRangeRow(category = {}) {
@@ -367,6 +404,29 @@ function collectRanges() {
   });
 }
 
+function addCategoryGroup(category = {}) {
+  const source = document.querySelector("#recode-source").value;
+  const variable = currentProject.inspection.variables.find(item => item.name === source);
+  const values = category.values || [];
+  const group = document.createElement("div");
+  group.className = "category-group";
+  group.innerHTML = `<div class="category-group-head"><input class="category-group-label" aria-label="Название новой категории" value="${escapeAttribute(category.label || "")}" placeholder="Название группы" /><button type="button" data-remove-category-group title="Удалить группу">×</button></div><div class="source-value-list">${(variable?.value_labels || []).map(item => `<label class="checkbox"><input type="checkbox" data-source-value="${escapeAttribute(JSON.stringify(item.value))}" ${containsComparable(values, item.value) ? "checked" : ""} /><code>${escapeHtml(item.value)}</code> ${escapeHtml(item.label)}</label>`).join("")}</div>`;
+  document.querySelector("#category-group-list").append(group);
+}
+
+function collectCategoryGroups() {
+  const groups = [...document.querySelectorAll("#category-group-list .category-group")];
+  if (groups.length < 2) throw new Error("Добавьте минимум две новые категории.");
+  return groups.map(group => {
+    const label = group.querySelector(".category-group-label").value.trim();
+    const values = [...group.querySelectorAll("[data-source-value]:checked")]
+      .map(item => JSON.parse(item.dataset.sourceValue));
+    if (!label) throw new Error("У каждой новой категории должно быть название.");
+    if (!values.length) throw new Error(`В категории «${label}» ничего не выбрано.`);
+    return { label, values };
+  });
+}
+
 async function loadRecodePreview() {
   if (!currentProject || !currentRecodingId) return;
   const container = document.querySelector("#recode-preview");
@@ -382,7 +442,7 @@ async function loadRecodePreview() {
 function renderRecodePreview(preview) {
   const base = `<div class="base-line"><span>Total <strong>${preview.total_base.toLocaleString("ru-RU")}</strong></span><span>Пропуски <strong>${preview.source_missing_count}</strong></span><span>Вне диапазонов <strong>${preview.out_of_range_count}</strong></span></div>`;
   const rows = `<div class="preview-rows">${preview.rows.map(row => `
-    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_total)}</em><em>${escapeHtml(formatRange(row))}</em></div>`).join("")}</div>`;
+    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_total)}</em><em>${escapeHtml(preview.mode === "categories" ? `${row.source_values.length} знач.` : formatRange(row))}</em></div>`).join("")}</div>`;
   return base + rows;
 }
 
@@ -610,6 +670,13 @@ function formatRange(category) {
   const lower = category.lower == null ? "−∞" : Number(category.lower).toLocaleString("ru-RU");
   const upper = category.upper == null ? "+∞" : Number(category.upper).toLocaleString("ru-RU");
   return `${lower}…${upper}`;
+}
+
+function formatRecodeCategory(recoding, category) {
+  if ((recoding.mode || "ranges") === "categories") {
+    return `${category.values.length} исходных знач.`;
+  }
+  return formatRange(category);
 }
 
 function escapeHtml(value) {

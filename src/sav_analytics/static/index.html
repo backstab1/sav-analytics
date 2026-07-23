@@ -84,10 +84,10 @@
             <form id="recode-form">
               <label>Код производной переменной<input id="recode-code" required maxlength="64" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="AGE_GROUP" /></label>
               <label>Название<input id="recode-name" required maxlength="500" placeholder="Возрастные группы" /></label>
-              <label>Исходная числовая переменная<select id="recode-source" required></select></label>
-              <div class="range-heading"><strong>Категории и диапазоны</strong><small>Пустая нижняя или верхняя граница означает открытый край.</small></div>
-              <div id="range-list" class="range-list"></div>
-              <button id="add-range" class="secondary" type="button">+ Добавить категорию</button>
+              <label>Способ перекодировки<select id="recode-mode"><option value="ranges">Числовые диапазоны</option><option value="categories">Объединение категорий</option></select></label>
+              <label>Исходная переменная<select id="recode-source" required></select></label>
+              <section id="range-editor"><div class="range-heading"><strong>Категории и диапазоны</strong><small>Пустая нижняя или верхняя граница означает открытый край.</small></div><div id="range-list" class="range-list"></div><button id="add-range" class="secondary compact-button" type="button">+ Добавить категорию</button></section>
+              <section id="category-editor" hidden><div class="range-heading"><strong>Новые категории</strong><small>Каждое исходное значение можно включить только в одну группу.</small></div><div id="category-group-list" class="category-group-list"></div><button id="add-category-group" class="secondary compact-button" type="button">+ Добавить группу</button></section>
               <button id="save-recoding" type="submit">Сохранить перекодировку</button>
               <button id="delete-recoding" class="danger-button" type="button" hidden>Удалить перекодировку</button>
               <p id="recode-error" class="error" hidden></p>

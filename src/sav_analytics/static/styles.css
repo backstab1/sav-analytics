@@ -69,6 +69,14 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .range-row input { min-width: 0; padding: 8px !important; font-size: 12px !important; }
 .range-row > span { color: #8b958f; text-align: center; }
 .range-row > button { padding: 4px; color: #a85555; background: transparent; font-size: 19px; }
+.compact-button { width: 100%; margin-top: 8px; padding: 8px !important; font-size: 11px; }
+.category-group-list { display: grid; gap: 8px; }
+.category-group { border: 1px solid #dde4df; border-radius: 8px; background: #f8faf8; overflow: hidden; }
+.category-group-head { display: grid; grid-template-columns: 1fr 28px; gap: 5px; padding: 7px; border-bottom: 1px solid #e2e7e3; }
+.category-group-head input { padding: 7px !important; font-size: 12px !important; }
+.category-group-head button { padding: 2px; color: #a85555; background: transparent; font-size: 18px; }
+.source-value-list { display: grid; gap: 5px; max-height: 170px; overflow: auto; padding: 8px; }
+.source-value-list .checkbox { align-items: flex-start; font-size: 10px; font-weight: 600; }
 .empty-state { padding: 42px 20px; color: #7b857f; text-align: center; }
 .preview { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e3e7e3; }
 .preview h3 { margin: 0; font-size: 16px; }

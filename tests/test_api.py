@@ -154,6 +154,28 @@ def test_numeric_recoding_crud_and_preview(tmp_path: Path) -> None:
             )
             assert deleted.status_code == 200
             assert deleted.json()["configuration"]["recodings"] == []
+
+            categorical = client.post(
+                f"/api/projects/{project_id}/recodings",
+                json={
+                    "mode": "categories",
+                    "code": "GENDER_GROUP",
+                    "name": "Группы пола",
+                    "source_variable": "Q1",
+                    "categories": [
+                        {"label": "Мужчины", "values": [1]},
+                        {"label": "Женщины", "values": [2]},
+                    ],
+                },
+            )
+            assert categorical.status_code == 201
+            categorical_id = categorical.json()["configuration"]["recodings"][0]["id"]
+            category_preview = client.get(
+                f"/api/projects/{project_id}/recodings/{categorical_id}/preview"
+            )
+            assert category_preview.status_code == 200
+            assert category_preview.json()["mode"] == "categories"
+            assert [row["count"] for row in category_preview.json()["rows"]] == [2, 2]
     finally:
         app.dependency_overrides.clear()
 

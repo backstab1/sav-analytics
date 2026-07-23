@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
 from .core.models import QuestionType, VariableRole
-from .core.recoding import RecodingError, calculate_recode_preview, validate_numeric_recode
+from .core.recoding import RecodingError, calculate_recode_preview, validate_recode
 from .core.sav_reader import SavReadError
 from .core.topline import ToplineError, calculate_preview
 from .repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -59,10 +59,27 @@ class RangeCategory(BaseModel):
 
 
 class NumericRecodeDefinition(BaseModel):
+    mode: Literal["ranges"] = "ranges"
     code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
     name: str = Field(min_length=1, max_length=500)
     source_variable: str = Field(min_length=1, max_length=64)
     categories: list[RangeCategory] = Field(min_length=2, max_length=100)
+
+
+class CategoryGroup(BaseModel):
+    label: str = Field(min_length=1, max_length=250)
+    values: list[str | int | float] = Field(min_length=1, max_length=500)
+
+
+class CategoricalRecodeDefinition(BaseModel):
+    mode: Literal["categories"]
+    code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+    name: str = Field(min_length=1, max_length=500)
+    source_variable: str = Field(min_length=1, max_length=64)
+    categories: list[CategoryGroup] = Field(min_length=2, max_length=100)
+
+
+RecodeDefinition = NumericRecodeDefinition | CategoricalRecodeDefinition
 
 
 @app.exception_handler(Exception)
@@ -193,13 +210,13 @@ def preview_question(
 @app.post("/api/projects/{project_id}/recodings", status_code=status.HTTP_201_CREATED)
 def create_recoding(
     project_id: UUID,
-    definition: NumericRecodeDefinition,
+    definition: RecodeDefinition,
     repository: Annotated[ProjectRepository, Depends(get_repository)],
 ) -> dict:
     payload = definition.model_dump(mode="json")
     try:
         project = repository.get(project_id)
-        validate_numeric_recode(payload, project["inspection"]["variables"])
+        validate_recode(payload, project["inspection"]["variables"])
         return repository.create_recoding(project_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(
@@ -215,13 +232,13 @@ def create_recoding(
 def update_recoding(
     project_id: UUID,
     recoding_id: UUID,
-    definition: NumericRecodeDefinition,
+    definition: RecodeDefinition,
     repository: Annotated[ProjectRepository, Depends(get_repository)],
 ) -> dict:
     payload = definition.model_dump(mode="json")
     try:
         project = repository.get(project_id)
-        validate_numeric_recode(payload, project["inspection"]["variables"])
+        validate_recode(payload, project["inspection"]["variables"])
         return repository.update_recoding(project_id, recoding_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(
@@ -255,7 +272,7 @@ def preview_recoding(
 ) -> dict:
     try:
         project, recoding = repository.recoding(project_id, recoding_id)
-        validate_numeric_recode(recoding, project["inspection"]["variables"])
+        validate_recode(recoding, project["inspection"]["variables"])
         return calculate_recode_preview(repository.source_path(project_id), recoding)
     except ProjectNotFoundError as exc:
         raise HTTPException(
