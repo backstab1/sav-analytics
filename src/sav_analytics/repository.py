@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import BinaryIO
+from uuid import UUID, uuid4
+
+from .core.sav_reader import SavReadError, inspect_sav
+
+
+class ProjectNotFoundError(LookupError):
+    pass
+
+
+class InvalidUploadError(ValueError):
+    pass
+
+
+class ProjectRepository:
+    def __init__(self, root: Path, max_upload_bytes: int) -> None:
+        self.root = root
+        self.max_upload_bytes = max_upload_bytes
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def create(self, name: str, original_filename: str, source: BinaryIO) -> dict:
+        if not original_filename.lower().endswith(".sav"):
+            raise InvalidUploadError("Допускаются только файлы с расширением .sav.")
+        project_id = uuid4()
+        temporary = self.root / f".{project_id}.uploading"
+        destination = self.root / str(project_id)
+        temporary.mkdir()
+        source_path = temporary / "source.sav"
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with source_path.open("xb") as output:
+                while chunk := source.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > self.max_upload_bytes:
+                        raise InvalidUploadError("Размер SAV превышает допустимый лимит.")
+                    digest.update(chunk)
+                    output.write(chunk)
+
+            if size == 0:
+                raise InvalidUploadError("Загружен пустой файл.")
+            inspection = inspect_sav(source_path)
+            created_at = datetime.now(UTC).isoformat()
+            project = {
+                "id": str(project_id),
+                "name": name.strip() or Path(original_filename).stem,
+                "created_at": created_at,
+                "original_filename": Path(original_filename).name,
+                "source": {"size": size, "sha256": digest.hexdigest()},
+                "inspection": inspection.to_dict(),
+                "configuration": {
+                    "questions": inspection.to_dict()["questions"],
+                    "updated_at": created_at,
+                },
+            }
+            (temporary / "project.json").write_text(
+                json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            os.replace(temporary, destination)
+            return project
+        except (InvalidUploadError, SavReadError):
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
+        except Exception:
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
+
+    def list(self) -> list[dict]:
+        projects = []
+        for metadata_path in self.root.glob("*/project.json"):
+            project = self._read(metadata_path)
+            summary_keys = ("id", "name", "created_at", "original_filename")
+            projects.append({key: project[key] for key in summary_keys})
+        return sorted(projects, key=lambda item: item["created_at"], reverse=True)
+
+    def get(self, project_id: UUID) -> dict:
+        metadata_path = self.root / str(project_id) / "project.json"
+        if not metadata_path.is_file():
+            raise ProjectNotFoundError(str(project_id))
+        project = self._read(metadata_path)
+        self._ensure_configuration(project)
+        return project
+
+    def update_question(self, project_id: UUID, code: str, changes: dict) -> dict:
+        project = self.get(project_id)
+        questions = project["configuration"]["questions"]
+        try:
+            question = next(item for item in questions if item["code"] == code)
+        except StopIteration as exc:
+            raise ProjectNotFoundError(code) from exc
+        question.update(changes)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def reorder_questions(self, project_id: UUID, codes: list[str]) -> dict:
+        project = self.get(project_id)
+        questions = project["configuration"]["questions"]
+        current_codes = [item["code"] for item in questions]
+        if len(codes) != len(set(codes)) or set(codes) != set(current_codes):
+            raise InvalidUploadError("Новый порядок должен содержать все вопросы ровно один раз.")
+        by_code = {item["code"]: item for item in questions}
+        project["configuration"]["questions"] = [by_code[code] for code in codes]
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def question(self, project_id: UUID, code: str) -> tuple[dict, dict]:
+        project = self.get(project_id)
+        try:
+            question = next(
+                item for item in project["configuration"]["questions"] if item["code"] == code
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(code) from exc
+        return project, question
+
+    def source_path(self, project_id: UUID) -> Path:
+        self.get(project_id)
+        return self.root / str(project_id) / "source.sav"
+
+    @staticmethod
+    def _read(path: Path) -> dict:
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _ensure_configuration(project: dict) -> None:
+        if "configuration" not in project:
+            project["configuration"] = {
+                "questions": project["inspection"]["questions"],
+                "updated_at": project["created_at"],
+            }
+
+    def _write_project(self, project_id: UUID, project: dict) -> None:
+        project_dir = self.root / str(project_id)
+        target = project_dir / "project.json"
+        temporary = project_dir / ".project.json.tmp"
+        temporary.write_text(
+            json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        os.replace(temporary, target)

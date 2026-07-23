@@ -12,6 +12,7 @@
 /storage/
 /reports/
 /exports/
+/.data/
 *.db
 *.sqlite
 *.sqlite3
@@ -46,4 +47,3 @@ Thumbs.db
 *.log
 tmp/
 temp/
-

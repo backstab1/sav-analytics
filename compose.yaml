@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SAV_ANALYTICS_DATA_DIR: /data
+    volumes:
+      - sav_data:/data
+
+volumes:
+  sav_data:
+

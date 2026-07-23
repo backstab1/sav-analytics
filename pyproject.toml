@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sav-analytics"
+version = "0.1.0"
+description = "Импорт и анализ массивов SPSS для количественных исследований"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "numpy>=2.1,<3",
+  "pandas>=2.2,<3",
+  "pydantic-settings>=2.8,<3",
+  "python-multipart>=0.0.20,<1",
+  "pyreadstat>=1.2.8,<2",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.3,<9",
+  "ruff>=0.11,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sav_analytics"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

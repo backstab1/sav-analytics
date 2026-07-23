@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sav-analytics</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">sav<span>analytics</span></a>
+      <div class="stage">Локальная версия · без авторизации</div>
+    </header>
+    <main>
+      <section id="start" class="hero">
+        <p class="eyebrow">НОВЫЙ ПРОЕКТ</p>
+        <h1>Разберите массив SPSS<br />до понятной структуры</h1>
+        <p class="lead">Загрузите SAV — приложение сохранит оригинал, прочитает метаданные и предложит типы вопросов.</p>
+        <form id="upload-form" class="upload-card">
+          <label class="name-field">Название проекта<input name="name" placeholder="Например, Трекер бренда · июль" /></label>
+          <label id="drop-zone" class="drop-zone">
+            <input id="file" name="file" type="file" accept=".sav" required />
+            <span class="upload-icon">↑</span>
+            <strong id="file-title">Перетащите SAV сюда</strong>
+            <small id="file-caption">или нажмите, чтобы выбрать файл</small>
+          </label>
+          <button id="submit" type="submit">Создать проект</button>
+          <p id="form-error" class="error" hidden></p>
+        </form>
+        <section id="project-library" class="project-library" hidden>
+          <div class="section-title"><p class="eyebrow">НЕДАВНИЕ ПРОЕКТЫ</p><button id="refresh-projects" class="text-button" type="button">Обновить</button></div>
+          <div id="project-list" class="project-list"></div>
+        </section>
+      </section>
+
+      <section id="workspace" class="workspace" hidden>
+        <div class="workspace-head">
+          <div><p class="eyebrow">СТРУКТУРА МАССИВА</p><h1 id="project-name"></h1></div>
+          <div class="head-actions"><a id="download-source" class="secondary link-button" href="#">Скачать исходный SAV</a><button id="new-project" class="secondary">Новый проект</button></div>
+        </div>
+        <div id="summary" class="summary"></div>
+        <div id="warnings" class="warnings" hidden></div>
+        <div class="workspace-grid">
+          <div class="structure-panel">
+            <div class="tabs"><button class="active" data-view="questions">Вопросы</button><button data-view="variables">Переменные</button><button data-view="excluded">Исключённые</button><button disabled title="Следующий этап разработки">Перекодировки</button></div>
+            <div class="table-wrap">
+              <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
+            </div>
+          </div>
+          <aside id="question-editor" class="question-editor" hidden>
+            <div class="editor-head"><div><p class="eyebrow">НАСТРОЙКА ВОПРОСА</p><h2 id="editor-code"></h2></div><button id="close-editor" class="icon-button" type="button">×</button></div>
+            <form id="question-form">
+              <label>Название для отчёта<textarea id="question-label" rows="4" required></textarea></label>
+              <label>Тип вопроса<select id="question-type">
+                <option value="single_choice">Один ответ</option>
+                <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
+                <option value="multiple_choice_categorical">Множественный — категории</option>
+                <option value="scale">Шкала</option>
+                <option value="numeric">Числовой показатель</option>
+                <option value="ranking">Ранжирование</option>
+                <option value="matrix">Матрица шкал</option>
+                <option value="open_text">Открытый текст</option>
+                <option value="technical">Технический</option>
+              </select></label>
+              <label>Роль<select id="question-role">
+                <option value="question">Обычный вопрос</option>
+                <option value="id">ID</option>
+                <option value="weight">Вес</option>
+                <option value="wave">Волна</option>
+                <option value="filter">Фильтрующая / маршрутная</option>
+                <option value="technical">Техническая</option>
+              </select></label>
+              <label class="checkbox"><input id="question-included" type="checkbox" /> Включить в отчёт</label>
+              <button id="save-question" type="submit">Сохранить изменения</button>
+              <p id="editor-error" class="error" hidden></p>
+            </form>
+            <section class="preview"><div class="preview-title"><h3>Предпросмотр Total</h3><button id="refresh-preview" class="text-button" type="button">Пересчитать</button></div><div id="preview-content" class="preview-content"><p class="muted">Выберите вопрос.</p></div></section>
+          </aside>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
