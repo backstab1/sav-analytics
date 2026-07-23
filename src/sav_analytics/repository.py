@@ -11,6 +11,8 @@ from uuid import UUID, uuid4
 
 from .core.sav_reader import SavReadError, inspect_sav
 
+STRUCTURE_VERSION = 2
+
 
 class ProjectNotFoundError(LookupError):
     pass
@@ -57,6 +59,7 @@ class ProjectRepository:
                 "source": {"size": size, "sha256": digest.hexdigest()},
                 "inspection": inspection.to_dict(),
                 "configuration": {
+                    "structure_version": STRUCTURE_VERSION,
                     "questions": inspection.to_dict()["questions"],
                     "recodings": [],
                     "banners": [],
@@ -89,6 +92,8 @@ class ProjectRepository:
             raise ProjectNotFoundError(str(project_id))
         project = self._read(metadata_path)
         self._ensure_configuration(project)
+        if project["configuration"].get("structure_version", 0) < STRUCTURE_VERSION:
+            project = self._refresh_structure_data(project_id, project)
         return project
 
     def update_question(self, project_id: UUID, code: str, changes: dict) -> dict:
@@ -176,7 +181,11 @@ class ProjectRepository:
 
     def refresh_structure(self, project_id: UUID) -> dict:
         project = self.get(project_id)
-        refreshed = inspect_sav(self.source_path(project_id)).to_dict()
+        return self._refresh_structure_data(project_id, project)
+
+    def _refresh_structure_data(self, project_id: UUID, project: dict) -> dict:
+        source_path = self.root / str(project_id) / "source.sav"
+        refreshed = inspect_sav(source_path).to_dict()
         previous = project["configuration"]["questions"]
         previous_by_code = {item["code"]: item for item in previous}
         merged = []
@@ -206,6 +215,7 @@ class ProjectRepository:
             merged.append(configured)
         project["inspection"] = refreshed
         project["configuration"]["questions"] = merged
+        project["configuration"]["structure_version"] = STRUCTURE_VERSION
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project

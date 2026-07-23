@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 
@@ -211,6 +213,46 @@ def test_refresh_structure_preserves_group_settings(tmp_path: Path) -> None:
             assert matrix["special_values"] == [99.0]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    source = tmp_path / "grouped.sav"
+    write_grouped_fixture(source)
+    with source.open("rb") as stream:
+        created = repository.create("Legacy", "grouped.sav", stream)
+
+    project_id = UUID(created["id"])
+    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
+    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy["configuration"].pop("structure_version")
+    legacy["configuration"]["questions"] = [
+        {
+            "code": variable["name"],
+            "label": variable["label"],
+            "question_type": "single_choice",
+            "role": "question",
+            "source_variables": [variable["name"]],
+            "included_in_report": variable["name"] != "Q5_1",
+            "valid_count": variable["valid_count"],
+            "missing_count": variable["missing_count"],
+            "unique_count": variable["unique_count"],
+            "value_labels": variable["value_labels"],
+        }
+        for variable in legacy["inspection"]["variables"]
+    ]
+    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+
+    migrated = repository.get(project_id)
+
+    matrix = next(
+        question
+        for question in migrated["configuration"]["questions"]
+        if question["code"] == "Q5"
+    )
+    assert matrix["source_variables"] == ["Q5_1", "Q5_2"]
+    assert not matrix["included_in_report"]
+    assert migrated["configuration"]["structure_version"] == 2
 
 
 def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:

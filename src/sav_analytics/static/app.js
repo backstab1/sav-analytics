@@ -13,6 +13,7 @@ let currentQuestionCode = null;
 let currentRecodingId = null;
 let currentBannerId = null;
 let currentView = "questions";
+let variablesGrouped = true;
 
 const typeLabels = {
   single_choice: "Один ответ",
@@ -110,6 +111,13 @@ document.querySelector("#close-banner-editor").addEventListener("click", closeBa
 document.querySelector("#add-banner-block").addEventListener("click", () => addBannerBlock());
 document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
 document.querySelector("#refresh-banner-preview").addEventListener("click", loadBannerPreview);
+document.querySelector("#toggle-variable-view").addEventListener("click", () => {
+  variablesGrouped = !variablesGrouped;
+  document.querySelector("#toggle-variable-view").textContent = variablesGrouped
+    ? "Показать все столбцы"
+    : "Сгруппировать столбцы";
+  renderTable();
+});
 document.querySelector("#banner-block-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-banner-block]");
   if (button) button.closest(".banner-block").remove();
@@ -129,6 +137,7 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   currentView = button.dataset.view;
   document.querySelector("#recode-toolbar").hidden = currentView !== "recodings";
   document.querySelector("#banner-toolbar").hidden = currentView !== "banners";
+  document.querySelector("#variable-toolbar").hidden = currentView !== "variables";
   if (currentView === "recodings") {
     editor.hidden = true;
     bannerEditor.hidden = true;
@@ -317,6 +326,7 @@ function showProject(project) {
   bannerEditor.hidden = true;
   document.querySelector("#recode-toolbar").hidden = true;
   document.querySelector("#banner-toolbar").hidden = true;
+  document.querySelector("#variable-toolbar").hidden = true;
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
   });
@@ -368,6 +378,10 @@ function renderTable() {
     return;
   }
   if (currentView === "variables") {
+    if (variablesGrouped) {
+      renderGroupedVariables();
+      return;
+    }
     document.querySelector("#table-head").innerHTML = "<th>Имя</th><th>Метка</th><th>Формат</th><th>Measurement</th><th>Уникальных</th><th>Валидная база</th><th>Пропуски</th>";
     document.querySelector("#table-body").innerHTML = currentProject.inspection.variables.map(variable => `
       <tr>
@@ -390,6 +404,21 @@ function renderTable() {
       <td>${question.source_variables.length}</td><td>${question.valid_count.toLocaleString("ru-RU")}</td>
       <td><span class="status ${question.recognition === "auto_review" ? "review" : ""}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
     </tr>`;
+  }).join("");
+}
+
+function renderGroupedVariables() {
+  document.querySelector("#table-head").innerHTML = "<th>Блок</th><th>Метка и состав</th><th>Формат</th><th>Measurement</th><th>Столбцов</th><th>Валидная база</th><th>Пропуски</th>";
+  document.querySelector("#table-body").innerHTML = configuredQuestions().map(question => {
+    const variables = question.source_variables
+      .map(name => currentProject.inspection.variables.find(item => item.name === name))
+      .filter(Boolean);
+    const formats = [...new Set(variables.map(item => item.original_format || item.storage_type))];
+    const measures = [...new Set(variables.map(item => item.measurement_level || "—"))];
+    const details = variables.length > 1
+      ? `<details class="variable-group-details"><summary>${escapeHtml(question.label)}</summary><div>${variables.map(item => `<p><code>${escapeHtml(item.name)}</code><span>${escapeHtml(item.label)}</span></p>`).join("")}</div></details>`
+      : `<strong>${escapeHtml(question.label)}</strong>`;
+    return `<tr><td><code>${escapeHtml(question.code)}</code></td><td>${details}</td><td>${escapeHtml(formats.join(", "))}</td><td>${escapeHtml(measures.join(", "))}</td><td><span class="source-count">${variables.length}</span></td><td>${question.valid_count.toLocaleString("ru-RU")}</td><td>${question.missing_count.toLocaleString("ru-RU")}</td></tr>`;
   }).join("");
 }
 

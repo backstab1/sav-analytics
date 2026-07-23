@@ -91,6 +91,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .banner-preview-list em { color: #4f7d65; font-style: normal; white-space: nowrap; }
 .banner-preview-list .total-column { color: #fff; background: #4f7d65; border-color: #4f7d65; }
 .banner-preview-list .total-column span, .banner-preview-list .total-column em { color: #e8f2ec; }
+.source-count { display: inline-grid; min-width: 28px; height: 22px; place-items: center; color: #355b47; background: #e8f1ec; border-radius: 11px; font-weight: 750; }
+.variable-group-details { min-width: 250px; max-width: 520px; }
+.variable-group-details summary { overflow: hidden; cursor: pointer; font-weight: 750; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.variable-group-details > div { display: grid; gap: 1px; max-height: 230px; margin-top: 7px; overflow: auto; border-top: 1px solid #e2e7e3; }
+.variable-group-details p { display: grid; grid-template-columns: 78px 1fr; gap: 7px; margin: 0; padding: 5px 0; border-bottom: 1px solid #edf0ed; color: #647067; font-size: 10px; }
 .empty-state { padding: 42px 20px; color: #7b857f; text-align: center; }
 .preview { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e3e7e3; }
 .preview h3 { margin: 0; font-size: 16px; }
