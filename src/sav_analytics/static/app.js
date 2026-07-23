@@ -7,9 +7,11 @@ const submit = document.querySelector("#submit");
 const dropZone = document.querySelector("#drop-zone");
 const editor = document.querySelector("#question-editor");
 const recodeEditor = document.querySelector("#recode-editor");
+const bannerEditor = document.querySelector("#banner-editor");
 let currentProject = null;
 let currentQuestionCode = null;
 let currentRecodingId = null;
+let currentBannerId = null;
 let currentView = "questions";
 
 const typeLabels = {
@@ -60,8 +62,10 @@ document.querySelector("#new-project").addEventListener("click", () => {
   currentProject = null;
   currentQuestionCode = null;
   currentRecodingId = null;
+  currentBannerId = null;
   editor.hidden = true;
   recodeEditor.hidden = true;
+  bannerEditor.hidden = true;
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
   form.reset();
@@ -101,6 +105,15 @@ document.querySelector("#recode-source").addEventListener("change", () => {
 });
 document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
 document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
+document.querySelector("#new-banner").addEventListener("click", () => openBanner());
+document.querySelector("#close-banner-editor").addEventListener("click", closeBanner);
+document.querySelector("#add-banner-block").addEventListener("click", () => addBannerBlock());
+document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
+document.querySelector("#refresh-banner-preview").addEventListener("click", loadBannerPreview);
+document.querySelector("#banner-block-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-banner-block]");
+  if (button) button.closest(".banner-block").remove();
+});
 document.querySelector("#range-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-range]");
   if (button) button.closest(".range-row").remove();
@@ -115,12 +128,22 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   button.classList.add("active");
   currentView = button.dataset.view;
   document.querySelector("#recode-toolbar").hidden = currentView !== "recodings";
+  document.querySelector("#banner-toolbar").hidden = currentView !== "banners";
   if (currentView === "recodings") {
     editor.hidden = true;
+    bannerEditor.hidden = true;
     currentQuestionCode = null;
+    currentBannerId = null;
+  } else if (currentView === "banners") {
+    editor.hidden = true;
+    recodeEditor.hidden = true;
+    currentQuestionCode = null;
+    currentRecodingId = null;
   } else {
     recodeEditor.hidden = true;
+    bannerEditor.hidden = true;
     currentRecodingId = null;
+    currentBannerId = null;
   }
   renderTable();
 }));
@@ -131,6 +154,11 @@ document.querySelector("#table-body").addEventListener("click", event => {
     openRecoding(recodeRow.dataset.recodeId);
     return;
   }
+  const bannerRow = event.target.closest("tr[data-banner-id]");
+  if (bannerRow) {
+    openBanner(bannerRow.dataset.bannerId);
+    return;
+  }
   const moveButton = event.target.closest("button[data-move]");
   if (moveButton) {
     moveQuestion(moveButton.dataset.code, Number(moveButton.dataset.move));
@@ -138,6 +166,42 @@ document.querySelector("#table-body").addEventListener("click", event => {
   }
   const row = event.target.closest("tr[data-code]");
   if (row && currentView !== "variables") openQuestion(row.dataset.code);
+});
+
+document.querySelector("#banner-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-banner");
+  const bannerError = document.querySelector("#banner-error");
+  bannerError.hidden = true;
+  let blocks;
+  try {
+    blocks = collectBannerBlocks();
+  } catch (error) {
+    showError(bannerError, error);
+    return;
+  }
+  const payload = { name: document.querySelector("#banner-name").value.trim(), blocks };
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    const url = currentBannerId
+      ? `/api/projects/${currentProject.id}/banners/${currentBannerId}`
+      : `/api/projects/${currentProject.id}/banners`;
+    currentProject = await api(url, {
+      method: currentBannerId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentBannerId) {
+      currentBannerId = configuredBanners().find(item => item.name === payload.name)?.id;
+    }
+    renderProject();
+    openBanner(currentBannerId);
+    await loadBannerPreview();
+  } catch (error) {
+    showError(bannerError, error);
+  } finally {
+    setBusy(saveButton, false, "Сохранить баннер");
+  }
 });
 
 document.querySelector("#recode-form").addEventListener("submit", async event => {
@@ -246,10 +310,13 @@ function showProject(project) {
   currentProject = project;
   currentQuestionCode = null;
   currentRecodingId = null;
+  currentBannerId = null;
   currentView = "questions";
   editor.hidden = true;
   recodeEditor.hidden = true;
+  bannerEditor.hidden = true;
   document.querySelector("#recode-toolbar").hidden = true;
+  document.querySelector("#banner-toolbar").hidden = true;
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
   });
@@ -277,6 +344,16 @@ function renderProject() {
 
 function renderTable() {
   if (!currentProject) return;
+  if (currentView === "banners") {
+    const banners = configuredBanners();
+    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Блоков</th><th>Структура</th>";
+    document.querySelector("#table-body").innerHTML = banners.length ? banners.map(banner => `
+      <tr class="question-row ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${banner.id}">
+        <td><strong>${escapeHtml(banner.name)}</strong></td><td>${banner.blocks.length}</td>
+        <td>${banner.blocks.map(block => `<small>${block.sources.map(source => escapeHtml(bannerSourceLabel(source))).join(" → ")}</small>`).join("")}</td>
+      </tr>`).join("") : '<tr><td colspan="3" class="empty-state">Баннеров пока нет. Total будет добавлен автоматически.</td></tr>';
+    return;
+  }
   if (currentView === "recodings") {
     const recodings = configuredRecodings();
     document.querySelector("#table-head").innerHTML = "<th>Код</th><th>Название</th><th>Исходная переменная</th><th>Категорий</th><th>Диапазоны</th>";
@@ -314,6 +391,109 @@ function renderTable() {
       <td><span class="status ${question.recognition === "auto_review" ? "review" : ""}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
     </tr>`;
   }).join("");
+}
+
+function openBanner(bannerId = null) {
+  currentBannerId = bannerId;
+  currentQuestionCode = null;
+  currentRecodingId = null;
+  editor.hidden = true;
+  recodeEditor.hidden = true;
+  bannerEditor.hidden = false;
+  const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
+  document.querySelector("#banner-editor-title").textContent = banner ? banner.name : "Новый";
+  document.querySelector("#banner-name").value = banner?.name || "Основной баннер";
+  const list = document.querySelector("#banner-block-list");
+  list.innerHTML = "";
+  if (banner) banner.blocks.forEach(block => addBannerBlock(block));
+  else addBannerBlock();
+  document.querySelector("#delete-banner").hidden = !banner;
+  document.querySelector("#banner-error").hidden = true;
+  document.querySelector("#banner-preview").innerHTML = banner
+    ? '<p class="muted">Считаем…</p>'
+    : '<p class="muted">Сохраните баннер для расчёта.</p>';
+  renderTable();
+  if (banner) loadBannerPreview();
+}
+
+function closeBanner() {
+  bannerEditor.hidden = true;
+  currentBannerId = null;
+  renderTable();
+}
+
+function addBannerBlock(block = {}) {
+  const first = block.sources?.[0];
+  const second = block.sources?.[1];
+  const element = document.createElement("div");
+  element.className = "banner-block";
+  element.innerHTML = `<div class="banner-block-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button type="button" data-remove-banner-block title="Удалить блок">×</button></div><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Вложить второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label>`;
+  document.querySelector("#banner-block-list").append(element);
+}
+
+function bannerSourceOptions(selected, allowEmpty) {
+  const selectedValue = selected ? `${selected.kind}:${selected.ref}` : "";
+  const options = [];
+  if (allowEmpty) options.push('<option value="">Без вложения</option>');
+  configuredQuestions()
+    .filter(item => item.question_type === "single_choice" && item.source_variables.length === 1)
+    .forEach(item => options.push(`<option value="question:${escapeAttribute(item.code)}" ${selectedValue === `question:${item.code}` ? "selected" : ""}>${escapeHtml(item.code)} — ${escapeHtml(item.label)}</option>`));
+  configuredRecodings().forEach(item => options.push(`<option value="recoding:${item.id}" ${selectedValue === `recoding:${item.id}` ? "selected" : ""}>↳ ${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`));
+  return options.join("");
+}
+
+function collectBannerBlocks() {
+  const elements = [...document.querySelectorAll("#banner-block-list .banner-block")];
+  if (!elements.length) throw new Error("Добавьте хотя бы один блок баннера.");
+  return elements.map(element => {
+    const first = parseBannerSource(element.querySelector(".banner-source-first").value);
+    const secondValue = element.querySelector(".banner-source-second").value;
+    const sources = [first];
+    if (secondValue) sources.push(parseBannerSource(secondValue));
+    return {
+      label: element.querySelector(".banner-block-label").value.trim() || null,
+      sources,
+    };
+  });
+}
+
+function parseBannerSource(value) {
+  const separator = value.indexOf(":");
+  if (separator < 1) throw new Error("Выберите источник баннера.");
+  return { kind: value.slice(0, separator), ref: value.slice(separator + 1) };
+}
+
+function bannerSourceLabel(source) {
+  if (source.kind === "question") return findQuestion(source.ref)?.label || source.ref;
+  return configuredRecodings().find(item => item.id === source.ref)?.name || source.ref;
+}
+
+async function loadBannerPreview() {
+  if (!currentProject || !currentBannerId) return;
+  const container = document.querySelector("#banner-preview");
+  container.innerHTML = '<p class="muted">Считаем…</p>';
+  try {
+    const preview = await api(`/api/projects/${currentProject.id}/banners/${currentBannerId}/preview`);
+    container.innerHTML = renderBannerPreview(preview);
+  } catch (error) {
+    container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderBannerPreview(preview) {
+  return `<div class="banner-preview-list">${preview.columns.map((column, index) => `<div class="${index === 0 ? "total-column" : ""}"><span>${escapeHtml(column.block || "Общий итог")}</span><strong>${escapeHtml(column.label)}</strong><em>База ${column.base.toLocaleString("ru-RU")}</em></div>`).join("")}</div>`;
+}
+
+async function deleteBanner() {
+  if (!currentBannerId || !confirm("Удалить этот баннер?")) return;
+  const errorBox = document.querySelector("#banner-error");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/banners/${currentBannerId}`, { method: "DELETE" });
+    closeBanner();
+    renderProject();
+  } catch (error) {
+    showError(errorBox, error);
+  }
 }
 
 function openRecoding(recodingId = null) {
@@ -615,6 +795,10 @@ function configuredQuestions() {
 
 function configuredRecodings() {
   return currentProject.configuration?.recodings || [];
+}
+
+function configuredBanners() {
+  return currentProject.configuration?.banners || [];
 }
 
 function suggestRecodeCode() {

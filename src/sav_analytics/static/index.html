@@ -42,8 +42,9 @@
         <div id="warnings" class="warnings" hidden></div>
         <div class="workspace-grid">
           <div class="structure-panel">
-            <div class="tabs"><button class="active" data-view="questions">Вопросы</button><button data-view="variables">Переменные</button><button data-view="excluded">Исключённые</button><button data-view="recodings">Перекодировки</button></div>
+            <div class="tabs"><button class="active" data-view="questions">Вопросы</button><button data-view="variables">Переменные</button><button data-view="excluded">Исключённые</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button></div>
             <div id="recode-toolbar" class="recode-toolbar" hidden><div><strong>Производные переменные</strong><small>Создавайте независимые группировки числовых переменных.</small></div><button id="new-recoding" type="button">+ Новая перекодировка</button></div>
+            <div id="banner-toolbar" class="recode-toolbar" hidden><div><strong>Баннеры отчёта</strong><small>Total добавляется всегда; блок может содержать один или два вложенных уровня.</small></div><button id="new-banner" type="button">+ Новый баннер</button></div>
             <div class="table-wrap">
               <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
             </div>
@@ -93,6 +94,19 @@
               <p id="recode-error" class="error" hidden></p>
             </form>
             <section class="preview"><div class="preview-title"><h3>Предпросмотр групп</h3><button id="refresh-recode-preview" class="text-button" type="button">Пересчитать</button></div><div id="recode-preview" class="preview-content"><p class="muted">Сохраните перекодировку для расчёта.</p></div></section>
+          </aside>
+          <aside id="banner-editor" class="question-editor" hidden>
+            <div class="editor-head"><div><p class="eyebrow">БАННЕР</p><h2 id="banner-editor-title">Новый</h2></div><button id="close-banner-editor" class="icon-button" type="button">×</button></div>
+            <form id="banner-form">
+              <label>Название баннера<input id="banner-name" required maxlength="500" placeholder="Основной баннер" /></label>
+              <div class="range-heading"><strong>Блоки колонок</strong><small>Второй уровень создаёт полное пересечение категорий: например Пол → Возраст.</small></div>
+              <div id="banner-block-list" class="banner-block-list"></div>
+              <button id="add-banner-block" class="secondary compact-button" type="button">+ Добавить блок</button>
+              <button id="save-banner" type="submit">Сохранить баннер</button>
+              <button id="delete-banner" class="danger-button" type="button" hidden>Удалить баннер</button>
+              <p id="banner-error" class="error" hidden></p>
+            </form>
+            <section class="preview"><div class="preview-title"><h3>Колонки и базы</h3><button id="refresh-banner-preview" class="text-button" type="button">Пересчитать</button></div><div id="banner-preview" class="preview-content"><p class="muted">Сохраните баннер для расчёта.</p></div></section>
           </aside>
         </div>
       </section>

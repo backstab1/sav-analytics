@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Upload
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
+from .core.banner import BannerError, calculate_banner_preview, validate_banner
 from .core.models import QuestionType, VariableRole
 from .core.recoding import RecodingError, calculate_recode_preview, validate_recode
 from .core.sav_reader import SavReadError
@@ -80,6 +81,21 @@ class CategoricalRecodeDefinition(BaseModel):
 
 
 RecodeDefinition = NumericRecodeDefinition | CategoricalRecodeDefinition
+
+
+class BannerSource(BaseModel):
+    kind: Literal["question", "recoding"]
+    ref: str = Field(min_length=1, max_length=64)
+
+
+class BannerBlock(BaseModel):
+    label: str | None = Field(default=None, max_length=250)
+    sources: list[BannerSource] = Field(min_length=1, max_length=2)
+
+
+class BannerDefinition(BaseModel):
+    name: str = Field(min_length=1, max_length=500)
+    blocks: list[BannerBlock] = Field(min_length=1, max_length=50)
 
 
 @app.exception_handler(Exception)
@@ -282,6 +298,85 @@ def preview_recoding(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
+
+
+@app.post("/api/projects/{project_id}/banners", status_code=status.HTTP_201_CREATED)
+def create_banner(
+    project_id: UUID,
+    definition: BannerDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        project = repository.get(project_id)
+        validate_banner(payload, project)
+        return repository.create_banner(project_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден."
+        ) from exc
+    except BannerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@app.put("/api/projects/{project_id}/banners/{banner_id}")
+def update_banner(
+    project_id: UUID,
+    banner_id: UUID,
+    definition: BannerDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        project = repository.get(project_id)
+        validate_banner(payload, project)
+        return repository.update_banner(project_id, banner_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект или баннер не найдены."
+        ) from exc
+    except BannerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@app.delete("/api/projects/{project_id}/banners/{banner_id}")
+def delete_banner(
+    project_id: UUID,
+    banner_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.delete_banner(project_id, banner_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект или баннер не найдены."
+        ) from exc
+
+
+@app.get("/api/projects/{project_id}/banners/{banner_id}/preview")
+def preview_banner(
+    project_id: UUID,
+    banner_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project, banner = repository.banner(project_id, banner_id)
+        validate_banner(banner, project)
+        return calculate_banner_preview(repository.source_path(project_id), banner, project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект или баннер не найдены."
+        ) from exc
+    except BannerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
 @app.get("/api/projects/{project_id}/source")
 def download_source(
     project_id: UUID,

@@ -59,6 +59,7 @@ class ProjectRepository:
                 "configuration": {
                     "questions": inspection.to_dict()["questions"],
                     "recodings": [],
+                    "banners": [],
                     "updated_at": created_at,
                 },
             }
@@ -209,6 +210,50 @@ class ProjectRepository:
         self._write_project(project_id, project)
         return project
 
+    def create_banner(self, project_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        project["configuration"]["banners"].append({"id": str(uuid4()), **definition})
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_banner(self, project_id: UUID, banner_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        banners = project["configuration"]["banners"]
+        try:
+            index = next(
+                index for index, item in enumerate(banners) if item["id"] == str(banner_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(banner_id)) from exc
+        banners[index] = {"id": str(banner_id), **definition}
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def delete_banner(self, project_id: UUID, banner_id: UUID) -> dict:
+        project = self.get(project_id)
+        banners = project["configuration"]["banners"]
+        filtered = [item for item in banners if item["id"] != str(banner_id)]
+        if len(filtered) == len(banners):
+            raise ProjectNotFoundError(str(banner_id))
+        project["configuration"]["banners"] = filtered
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def banner(self, project_id: UUID, banner_id: UUID) -> tuple[dict, dict]:
+        project = self.get(project_id)
+        try:
+            banner = next(
+                item
+                for item in project["configuration"]["banners"]
+                if item["id"] == str(banner_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(banner_id)) from exc
+        return project, banner
+
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
         return self.root / str(project_id) / "source.sav"
@@ -226,6 +271,7 @@ class ProjectRepository:
                 "updated_at": project["created_at"],
             }
         project["configuration"].setdefault("recodings", [])
+        project["configuration"].setdefault("banners", [])
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")
 

@@ -77,6 +77,20 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .category-group-head button { padding: 2px; color: #a85555; background: transparent; font-size: 18px; }
 .source-value-list { display: grid; gap: 5px; max-height: 170px; overflow: auto; padding: 8px; }
 .source-value-list .checkbox { align-items: flex-start; font-size: 10px; font-weight: 600; }
+.banner-block-list { display: grid; gap: 8px; }
+.banner-block { display: grid; gap: 8px; padding: 9px; border: 1px solid #dde4df; border-radius: 8px; background: #f8faf8; }
+.banner-block-head { display: grid; grid-template-columns: 1fr 28px; gap: 5px; }
+.banner-block-head input { padding: 7px !important; font-size: 11px !important; }
+.banner-block-head button { padding: 2px; color: #a85555; background: transparent; font-size: 18px; }
+.banner-block label { display: grid; gap: 4px; color: #68736c; font-size: 10px; font-weight: 700; }
+.banner-block select { padding: 7px !important; font-size: 11px !important; }
+.banner-preview-list { display: grid; gap: 4px; max-height: 430px; overflow: auto; }
+.banner-preview-list > div { display: grid; grid-template-columns: 90px 1fr auto; gap: 7px; align-items: center; padding: 8px; border: 1px solid #e1e6e2; border-radius: 6px; background: #fff; font-size: 10px; }
+.banner-preview-list span { overflow: hidden; color: #77827b; text-overflow: ellipsis; white-space: nowrap; }
+.banner-preview-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.banner-preview-list em { color: #4f7d65; font-style: normal; white-space: nowrap; }
+.banner-preview-list .total-column { color: #fff; background: #4f7d65; border-color: #4f7d65; }
+.banner-preview-list .total-column span, .banner-preview-list .total-column em { color: #e8f2ec; }
 .empty-state { padding: 42px 20px; color: #7b857f; text-align: center; }
 .preview { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e3e7e3; }
 .preview h3 { margin: 0; font-size: 16px; }

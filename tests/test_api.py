@@ -211,3 +211,61 @@ def test_refresh_structure_preserves_group_settings(tmp_path: Path) -> None:
             assert matrix["special_values"] == [99.0]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            recoding = client.post(
+                f"/api/projects/{project_id}/recodings",
+                json={
+                    "mode": "ranges",
+                    "code": "SCORE_GROUP",
+                    "name": "Группы оценки",
+                    "source_variable": "Q2",
+                    "categories": [
+                        {"label": "Низкая", "lower": 0, "upper": 7},
+                        {"label": "Высокая", "lower": 8, "upper": 10},
+                    ],
+                },
+            ).json()["configuration"]["recodings"][0]
+            banner = client.post(
+                f"/api/projects/{project_id}/banners",
+                json={
+                    "name": "Основной",
+                    "blocks": [
+                        {
+                            "label": "Пол → Оценка",
+                            "sources": [
+                                {"kind": "question", "ref": "Q1"},
+                                {"kind": "recoding", "ref": recoding["id"]},
+                            ],
+                        }
+                    ],
+                },
+            )
+            assert banner.status_code == 201
+            banner_id = banner.json()["configuration"]["banners"][0]["id"]
+
+            preview = client.get(
+                f"/api/projects/{project_id}/banners/{banner_id}/preview"
+            )
+            assert preview.status_code == 200
+            assert preview.json()["columns"][0]["label"] == "Total"
+            assert len(preview.json()["columns"]) == 5
+
+            deleted = client.delete(
+                f"/api/projects/{project_id}/banners/{banner_id}"
+            )
+            assert deleted.status_code == 200
+            assert deleted.json()["configuration"]["banners"] == []
+    finally:
+        app.dependency_overrides.clear()
