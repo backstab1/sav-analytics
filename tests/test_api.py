@@ -102,3 +102,57 @@ def test_question_configuration_and_preview_are_persisted(tmp_path: Path) -> Non
             assert persisted["configuration"]["questions"][0]["code"] == codes[-1]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_numeric_recoding_crud_and_preview(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    recoding = {
+        "code": "SCORE_GROUP",
+        "name": "Группы оценки",
+        "source_variable": "Q2",
+        "categories": [
+            {"label": "Низкая", "lower": 0, "upper": 7},
+            {"label": "Высокая", "lower": 8, "upper": 10},
+        ],
+    }
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+
+            created = client.post(
+                f"/api/projects/{project_id}/recodings", json=recoding
+            )
+            assert created.status_code == 201
+            saved = created.json()["configuration"]["recodings"][0]
+            recoding_id = saved["id"]
+
+            preview = client.get(
+                f"/api/projects/{project_id}/recodings/{recoding_id}/preview"
+            )
+            assert preview.status_code == 200
+            assert [row["count"] for row in preview.json()["rows"]] == [1, 2]
+
+            overlapping = {**recoding, "code": "OVERLAP"}
+            overlapping["categories"] = [
+                {"label": "A", "lower": 0, "upper": 7},
+                {"label": "B", "lower": 7, "upper": 10},
+            ]
+            rejected = client.post(
+                f"/api/projects/{project_id}/recodings", json=overlapping
+            )
+            assert rejected.status_code == 422
+            assert "пересекаются" in rejected.json()["detail"]
+
+            deleted = client.delete(
+                f"/api/projects/{project_id}/recodings/{recoding_id}"
+            )
+            assert deleted.status_code == 200
+            assert deleted.json()["configuration"]["recodings"] == []
+    finally:
+        app.dependency_overrides.clear()

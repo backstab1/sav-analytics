@@ -8,9 +8,10 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .core.models import QuestionType, VariableRole
+from .core.recoding import RecodingError, calculate_recode_preview, validate_numeric_recode
 from .core.sav_reader import SavReadError
 from .core.topline import ToplineError, calculate_preview
 from .repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -39,6 +40,27 @@ class QuestionUpdate(BaseModel):
 
 class QuestionOrder(BaseModel):
     codes: list[str]
+
+
+class RangeCategory(BaseModel):
+    label: str = Field(min_length=1, max_length=250)
+    lower: float | None = None
+    upper: float | None = None
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> RangeCategory:
+        if self.lower is None and self.upper is None:
+            raise ValueError("Укажите хотя бы одну границу диапазона.")
+        if self.lower is not None and self.upper is not None and self.lower > self.upper:
+            raise ValueError("Нижняя граница не может быть выше верхней.")
+        return self
+
+
+class NumericRecodeDefinition(BaseModel):
+    code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+    name: str = Field(min_length=1, max_length=500)
+    source_variable: str = Field(min_length=1, max_length=64)
+    categories: list[RangeCategory] = Field(min_length=2, max_length=100)
 
 
 @app.exception_handler(Exception)
@@ -108,6 +130,10 @@ def update_question(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Проект или вопрос не найден."
         ) from exc
+    except ToplineError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
 
 
 @app.put("/api/projects/{project_id}/questions/order")
@@ -143,12 +169,83 @@ def preview_question(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Проект или вопрос не найден."
         ) from exc
-    except ToplineError as exc:
+
+
+@app.post("/api/projects/{project_id}/recodings", status_code=status.HTTP_201_CREATED)
+def create_recoding(
+    project_id: UUID,
+    definition: NumericRecodeDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        project = repository.get(project_id)
+        validate_numeric_recode(payload, project["inspection"]["variables"])
+        return repository.create_recoding(project_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден."
+        ) from exc
+    except (RecodingError, InvalidUploadError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
 
+@app.put("/api/projects/{project_id}/recodings/{recoding_id}")
+def update_recoding(
+    project_id: UUID,
+    recoding_id: UUID,
+    definition: NumericRecodeDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        project = repository.get(project_id)
+        validate_numeric_recode(payload, project["inspection"]["variables"])
+        return repository.update_recoding(project_id, recoding_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект или перекодировка не найдены."
+        ) from exc
+    except (RecodingError, InvalidUploadError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@app.delete("/api/projects/{project_id}/recodings/{recoding_id}")
+def delete_recoding(
+    project_id: UUID,
+    recoding_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.delete_recoding(project_id, recoding_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект или перекодировка не найдены."
+        ) from exc
+
+
+@app.get("/api/projects/{project_id}/recodings/{recoding_id}/preview")
+def preview_recoding(
+    project_id: UUID,
+    recoding_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project, recoding = repository.recoding(project_id, recoding_id)
+        validate_numeric_recode(recoding, project["inspection"]["variables"])
+        return calculate_recode_preview(repository.source_path(project_id), recoding)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Проект или перекодировка не найдены."
+        ) from exc
+    except RecodingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
 @app.get("/api/projects/{project_id}/source")
 def download_source(
     project_id: UUID,

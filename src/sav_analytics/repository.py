@@ -58,6 +58,7 @@ class ProjectRepository:
                 "inspection": inspection.to_dict(),
                 "configuration": {
                     "questions": inspection.to_dict()["questions"],
+                    "recodings": [],
                     "updated_at": created_at,
                 },
             }
@@ -123,6 +124,55 @@ class ProjectRepository:
             raise ProjectNotFoundError(code) from exc
         return project, question
 
+    def create_recoding(self, project_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        recodings = project["configuration"]["recodings"]
+        self._ensure_unique_recode_code(recodings, definition["code"])
+        recodings.append({"id": str(uuid4()), **definition})
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_recoding(self, project_id: UUID, recoding_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        recodings = project["configuration"]["recodings"]
+        try:
+            index = next(
+                index for index, item in enumerate(recodings) if item["id"] == str(recoding_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(recoding_id)) from exc
+        self._ensure_unique_recode_code(
+            recodings, definition["code"], exclude_id=str(recoding_id)
+        )
+        recodings[index] = {"id": str(recoding_id), **definition}
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def delete_recoding(self, project_id: UUID, recoding_id: UUID) -> dict:
+        project = self.get(project_id)
+        recodings = project["configuration"]["recodings"]
+        filtered = [item for item in recodings if item["id"] != str(recoding_id)]
+        if len(filtered) == len(recodings):
+            raise ProjectNotFoundError(str(recoding_id))
+        project["configuration"]["recodings"] = filtered
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def recoding(self, project_id: UUID, recoding_id: UUID) -> tuple[dict, dict]:
+        project = self.get(project_id)
+        try:
+            recoding = next(
+                item
+                for item in project["configuration"]["recodings"]
+                if item["id"] == str(recoding_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(recoding_id)) from exc
+        return project, recoding
+
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
         return self.root / str(project_id) / "source.sav"
@@ -136,8 +186,21 @@ class ProjectRepository:
         if "configuration" not in project:
             project["configuration"] = {
                 "questions": project["inspection"]["questions"],
+                "recodings": [],
                 "updated_at": project["created_at"],
             }
+        project["configuration"].setdefault("recodings", [])
+
+    @staticmethod
+    def _ensure_unique_recode_code(
+        recodings: list[dict], code: str, exclude_id: str | None = None
+    ) -> None:
+        duplicate = any(
+            item["code"].casefold() == code.casefold() and item["id"] != exclude_id
+            for item in recodings
+        )
+        if duplicate:
+            raise InvalidUploadError("Код перекодировки уже используется в этом проекте.")
 
     def _write_project(self, project_id: UUID, project: dict) -> None:
         project_dir = self.root / str(project_id)

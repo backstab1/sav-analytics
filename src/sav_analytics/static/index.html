@@ -42,7 +42,8 @@
         <div id="warnings" class="warnings" hidden></div>
         <div class="workspace-grid">
           <div class="structure-panel">
-            <div class="tabs"><button class="active" data-view="questions">Вопросы</button><button data-view="variables">Переменные</button><button data-view="excluded">Исключённые</button><button disabled title="Следующий этап разработки">Перекодировки</button></div>
+            <div class="tabs"><button class="active" data-view="questions">Вопросы</button><button data-view="variables">Переменные</button><button data-view="excluded">Исключённые</button><button data-view="recodings">Перекодировки</button></div>
+            <div id="recode-toolbar" class="recode-toolbar" hidden><div><strong>Производные переменные</strong><small>Создавайте независимые группировки числовых переменных.</small></div><button id="new-recoding" type="button">+ Новая перекодировка</button></div>
             <div class="table-wrap">
               <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
             </div>
@@ -75,6 +76,21 @@
               <p id="editor-error" class="error" hidden></p>
             </form>
             <section class="preview"><div class="preview-title"><h3>Предпросмотр Total</h3><button id="refresh-preview" class="text-button" type="button">Пересчитать</button></div><div id="preview-content" class="preview-content"><p class="muted">Выберите вопрос.</p></div></section>
+          </aside>
+          <aside id="recode-editor" class="question-editor" hidden>
+            <div class="editor-head"><div><p class="eyebrow">ПЕРЕКОДИРОВКА</p><h2 id="recode-editor-title">Новая</h2></div><button id="close-recode-editor" class="icon-button" type="button">×</button></div>
+            <form id="recode-form">
+              <label>Код производной переменной<input id="recode-code" required maxlength="64" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="AGE_GROUP" /></label>
+              <label>Название<input id="recode-name" required maxlength="500" placeholder="Возрастные группы" /></label>
+              <label>Исходная числовая переменная<select id="recode-source" required></select></label>
+              <div class="range-heading"><strong>Категории и диапазоны</strong><small>Пустая нижняя или верхняя граница означает открытый край.</small></div>
+              <div id="range-list" class="range-list"></div>
+              <button id="add-range" class="secondary" type="button">+ Добавить категорию</button>
+              <button id="save-recoding" type="submit">Сохранить перекодировку</button>
+              <button id="delete-recoding" class="danger-button" type="button" hidden>Удалить перекодировку</button>
+              <p id="recode-error" class="error" hidden></p>
+            </form>
+            <section class="preview"><div class="preview-title"><h3>Предпросмотр групп</h3><button id="refresh-recode-preview" class="text-button" type="button">Пересчитать</button></div><div id="recode-preview" class="preview-content"><p class="muted">Сохраните перекодировку для расчёта.</p></div></section>
           </aside>
         </div>
       </section>

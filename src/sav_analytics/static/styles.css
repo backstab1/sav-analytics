@@ -52,10 +52,23 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .editor-head h2 { margin: 4px 0 18px; font-size: 24px; }
 .question-editor form { display: grid; gap: 14px; }
 .question-editor label:not(.checkbox) { display: grid; gap: 7px; color: #58645d; font-size: 12px; font-weight: 750; }
-.question-editor textarea, .question-editor select { width: 100%; padding: 10px 11px; border: 1px solid #cfd6d0; border-radius: 8px; background: #fff; color: #17231d; resize: vertical; font: inherit; }
+.question-editor textarea, .question-editor select, .question-editor input:not([type="checkbox"]) { width: 100%; padding: 10px 11px; border: 1px solid #cfd6d0; border-radius: 8px; background: #fff; color: #17231d; resize: vertical; font: inherit; }
 .checkbox { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 700; }
 .checkbox input { width: 17px; height: 17px; accent-color: #4f7d65; }
 .question-editor form > button { color: #fff; background: #17231d; }
+.question-editor form > .secondary { color: #26342c; background: #fff; }
+.question-editor form > .danger-button { color: #a83232; background: #fff; border: 1px solid #e3bcbc; }
+.recode-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 14px 16px; background: #fff; border: 1px solid #dce1dc; border-top: 0; }
+.recode-toolbar div { display: grid; gap: 3px; }
+.recode-toolbar small, .range-heading small { color: #7c8780; font-size: 11px; }
+.recode-toolbar button { padding: 9px 12px; color: #fff; background: #4f7d65; font-size: 12px; }
+.range-heading { display: grid; gap: 4px; margin-top: 4px; }
+.range-list { display: grid; gap: 7px; }
+.range-row { display: grid; grid-template-columns: minmax(100px, 1fr) 64px 10px 64px 27px; align-items: center; gap: 5px; }
+.range-row input { min-width: 0; padding: 8px !important; font-size: 12px !important; }
+.range-row > span { color: #8b958f; text-align: center; }
+.range-row > button { padding: 4px; color: #a85555; background: transparent; font-size: 19px; }
+.empty-state { padding: 42px 20px; color: #7b857f; text-align: center; }
 .preview { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e3e7e3; }
 .preview h3 { margin: 0; font-size: 16px; }
 .base-line { display: flex; gap: 14px; margin: 14px 0; color: #68736c; font-size: 12px; }

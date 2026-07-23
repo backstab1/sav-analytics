@@ -6,8 +6,10 @@ const errorBox = document.querySelector("#form-error");
 const submit = document.querySelector("#submit");
 const dropZone = document.querySelector("#drop-zone");
 const editor = document.querySelector("#question-editor");
+const recodeEditor = document.querySelector("#recode-editor");
 let currentProject = null;
 let currentQuestionCode = null;
+let currentRecodingId = null;
 let currentView = "questions";
 
 const typeLabels = {
@@ -57,7 +59,9 @@ form.addEventListener("submit", async event => {
 document.querySelector("#new-project").addEventListener("click", () => {
   currentProject = null;
   currentQuestionCode = null;
+  currentRecodingId = null;
   editor.hidden = true;
+  recodeEditor.hidden = true;
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
   form.reset();
@@ -72,15 +76,37 @@ document.querySelector("#close-editor").addEventListener("click", () => {
   currentQuestionCode = null;
 });
 document.querySelector("#refresh-preview").addEventListener("click", loadPreview);
+document.querySelector("#new-recoding").addEventListener("click", () => openRecoding());
+document.querySelector("#close-recode-editor").addEventListener("click", closeRecoding);
+document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
+document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
+document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
+document.querySelector("#range-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-range]");
+  if (button) button.closest(".range-row").remove();
+});
 
 document.querySelectorAll(".tabs button[data-view]").forEach(button => button.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach(item => item.classList.remove("active"));
   button.classList.add("active");
   currentView = button.dataset.view;
+  document.querySelector("#recode-toolbar").hidden = currentView !== "recodings";
+  if (currentView === "recodings") {
+    editor.hidden = true;
+    currentQuestionCode = null;
+  } else {
+    recodeEditor.hidden = true;
+    currentRecodingId = null;
+  }
   renderTable();
 }));
 
 document.querySelector("#table-body").addEventListener("click", event => {
+  const recodeRow = event.target.closest("tr[data-recode-id]");
+  if (recodeRow) {
+    openRecoding(recodeRow.dataset.recodeId);
+    return;
+  }
   const moveButton = event.target.closest("button[data-move]");
   if (moveButton) {
     moveQuestion(moveButton.dataset.code, Number(moveButton.dataset.move));
@@ -88,6 +114,48 @@ document.querySelector("#table-body").addEventListener("click", event => {
   }
   const row = event.target.closest("tr[data-code]");
   if (row && currentView !== "variables") openQuestion(row.dataset.code);
+});
+
+document.querySelector("#recode-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-recoding");
+  const recodeError = document.querySelector("#recode-error");
+  recodeError.hidden = true;
+  let categories;
+  try {
+    categories = collectRanges();
+  } catch (error) {
+    showError(recodeError, error);
+    return;
+  }
+  const payload = {
+    code: document.querySelector("#recode-code").value.trim(),
+    name: document.querySelector("#recode-name").value.trim(),
+    source_variable: document.querySelector("#recode-source").value,
+    categories,
+  };
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    const url = currentRecodingId
+      ? `/api/projects/${currentProject.id}/recodings/${currentRecodingId}`
+      : `/api/projects/${currentProject.id}/recodings`;
+    const method = currentRecodingId ? "PUT" : "POST";
+    currentProject = await api(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentRecodingId) {
+      currentRecodingId = configuredRecodings().find(item => item.code === payload.code)?.id;
+    }
+    renderProject();
+    openRecoding(currentRecodingId);
+    await loadRecodePreview();
+  } catch (error) {
+    showError(recodeError, error);
+  } finally {
+    setBusy(saveButton, false, "Сохранить перекодировку");
+  }
 });
 
 document.querySelector("#question-form").addEventListener("submit", async event => {
@@ -150,8 +218,11 @@ async function loadProjects() {
 function showProject(project) {
   currentProject = project;
   currentQuestionCode = null;
+  currentRecodingId = null;
   currentView = "questions";
   editor.hidden = true;
+  recodeEditor.hidden = true;
+  document.querySelector("#recode-toolbar").hidden = true;
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
   });
@@ -179,6 +250,19 @@ function renderProject() {
 
 function renderTable() {
   if (!currentProject) return;
+  if (currentView === "recodings") {
+    const recodings = configuredRecodings();
+    document.querySelector("#table-head").innerHTML = "<th>Код</th><th>Название</th><th>Исходная переменная</th><th>Категорий</th><th>Диапазоны</th>";
+    document.querySelector("#table-body").innerHTML = recodings.length ? recodings.map(recoding => `
+      <tr class="question-row ${recoding.id === currentRecodingId ? "selected" : ""}" data-recode-id="${recoding.id}">
+        <td><code>${escapeHtml(recoding.code)}</code></td>
+        <td><strong>${escapeHtml(recoding.name)}</strong></td>
+        <td><code>${escapeHtml(recoding.source_variable)}</code></td>
+        <td>${recoding.categories.length}</td>
+        <td>${recoding.categories.map(category => `<small>${escapeHtml(category.label)}: ${formatRange(category)}</small>`).join("")}</td>
+      </tr>`).join("") : '<tr><td colspan="5" class="empty-state">Перекодировок пока нет. Создайте, например, возрастные группы.</td></tr>';
+    return;
+  }
   if (currentView === "variables") {
     document.querySelector("#table-head").innerHTML = "<th>Имя</th><th>Метка</th><th>Формат</th><th>Measurement</th><th>Уникальных</th><th>Валидная база</th><th>Пропуски</th>";
     document.querySelector("#table-body").innerHTML = currentProject.inspection.variables.map(variable => `
@@ -203,6 +287,106 @@ function renderTable() {
       <td><span class="status ${question.recognition === "auto_review" ? "review" : ""}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
     </tr>`;
   }).join("");
+}
+
+function openRecoding(recodingId = null) {
+  currentRecodingId = recodingId;
+  currentQuestionCode = null;
+  editor.hidden = true;
+  recodeEditor.hidden = false;
+  const recoding = recodingId ? configuredRecodings().find(item => item.id === recodingId) : null;
+  document.querySelector("#recode-editor-title").textContent = recoding ? recoding.code : "Новая";
+  document.querySelector("#recode-code").value = recoding?.code || suggestRecodeCode();
+  document.querySelector("#recode-name").value = recoding?.name || "";
+  fillNumericSources(recoding?.source_variable);
+  const rangeList = document.querySelector("#range-list");
+  rangeList.innerHTML = "";
+  if (recoding) {
+    recoding.categories.forEach(category => addRangeRow(category));
+  } else {
+    addRangeRow({ label: "18–24", lower: 18, upper: 24 });
+    addRangeRow({ label: "25–34", lower: 25, upper: 34 });
+    addRangeRow({ label: "35 и старше", lower: 35, upper: null });
+  }
+  document.querySelector("#delete-recoding").hidden = !recoding;
+  document.querySelector("#recode-error").hidden = true;
+  document.querySelector("#recode-preview").innerHTML = recoding
+    ? '<p class="muted">Считаем…</p>'
+    : '<p class="muted">Сохраните перекодировку для расчёта.</p>';
+  renderTable();
+  if (recoding) loadRecodePreview();
+}
+
+function closeRecoding() {
+  recodeEditor.hidden = true;
+  currentRecodingId = null;
+  renderTable();
+}
+
+function fillNumericSources(selected) {
+  const sources = currentProject.inspection.variables.filter(item => item.storage_type === "numeric");
+  document.querySelector("#recode-source").innerHTML = sources.map(variable => `
+    <option value="${escapeHtml(variable.name)}" ${variable.name === selected ? "selected" : ""}>${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`).join("");
+}
+
+function addRangeRow(category = {}) {
+  const row = document.createElement("div");
+  row.className = "range-row";
+  row.innerHTML = `
+    <input class="range-label" aria-label="Название категории" placeholder="Название" value="${escapeAttribute(category.label || "")}" required />
+    <input class="range-lower" aria-label="От" type="number" step="any" placeholder="От" value="${category.lower ?? ""}" />
+    <span>—</span>
+    <input class="range-upper" aria-label="До" type="number" step="any" placeholder="До" value="${category.upper ?? ""}" />
+    <button type="button" data-remove-range title="Удалить категорию">×</button>`;
+  document.querySelector("#range-list").append(row);
+}
+
+function collectRanges() {
+  const rows = [...document.querySelectorAll("#range-list .range-row")];
+  if (rows.length < 2) throw new Error("Добавьте минимум две категории.");
+  return rows.map(row => {
+    const label = row.querySelector(".range-label").value.trim();
+    const lowerRaw = row.querySelector(".range-lower").value;
+    const upperRaw = row.querySelector(".range-upper").value;
+    if (!label) throw new Error("У каждой категории должно быть название.");
+    if (lowerRaw === "" && upperRaw === "") throw new Error(`У категории «${label}» нет границ.`);
+    return {
+      label,
+      lower: lowerRaw === "" ? null : Number(lowerRaw),
+      upper: upperRaw === "" ? null : Number(upperRaw),
+    };
+  });
+}
+
+async function loadRecodePreview() {
+  if (!currentProject || !currentRecodingId) return;
+  const container = document.querySelector("#recode-preview");
+  container.innerHTML = '<p class="muted">Считаем…</p>';
+  try {
+    const preview = await api(`/api/projects/${currentProject.id}/recodings/${currentRecodingId}/preview`);
+    container.innerHTML = renderRecodePreview(preview);
+  } catch (error) {
+    container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderRecodePreview(preview) {
+  const base = `<div class="base-line"><span>Total <strong>${preview.total_base.toLocaleString("ru-RU")}</strong></span><span>Пропуски <strong>${preview.source_missing_count}</strong></span><span>Вне диапазонов <strong>${preview.out_of_range_count}</strong></span></div>`;
+  const rows = `<div class="preview-rows">${preview.rows.map(row => `
+    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_total)}</em><em>${escapeHtml(formatRange(row))}</em></div>`).join("")}</div>`;
+  return base + rows;
+}
+
+async function deleteRecoding() {
+  if (!currentRecodingId || !confirm("Удалить эту перекодировку? Исходная переменная не изменится.")) return;
+  const recodeError = document.querySelector("#recode-error");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/recodings/${currentRecodingId}`, { method: "DELETE" });
+    closeRecoding();
+    renderProject();
+  } catch (error) {
+    showError(recodeError, error);
+  }
 }
 
 async function moveQuestion(code, direction) {
@@ -273,6 +457,17 @@ function configuredQuestions() {
   return currentProject.configuration?.questions || currentProject.inspection.questions;
 }
 
+function configuredRecodings() {
+  return currentProject.configuration?.recodings || [];
+}
+
+function suggestRecodeCode() {
+  const used = new Set(configuredRecodings().map(item => item.code.toUpperCase()));
+  let index = used.size + 1;
+  while (used.has(`RECODE_${index}`)) index += 1;
+  return `RECODE_${index}`;
+}
+
 function findQuestion(code) {
   return configuredQuestions().find(item => item.code === code);
 }
@@ -315,10 +510,20 @@ function formatPercent(value) {
   return value == null ? "—" : `${(value * 100).toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
 }
 
+function formatRange(category) {
+  const lower = category.lower == null ? "−∞" : Number(category.lower).toLocaleString("ru-RU");
+  const upper = category.upper == null ? "+∞" : Number(category.upper).toLocaleString("ru-RU");
+  return `${lower}…${upper}`;
+}
+
 function escapeHtml(value) {
   const element = document.createElement("span");
   element.textContent = String(value ?? "");
   return element.innerHTML;
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
 loadProjects();
