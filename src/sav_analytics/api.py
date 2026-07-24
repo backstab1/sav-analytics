@@ -485,6 +485,22 @@ def preview_filter(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.post("/api/projects/{project_id}/filters/preview")
+def preview_filter_draft(
+    project_id: UUID,
+    definition: FilterDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        project = repository.get(project_id)
+        return calculate_filter_preview(repository.source_path(project_id), payload, project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except FilterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.put("/api/projects/{project_id}/questions/{code}/base")
 def assign_question_base(
     project_id: UUID,

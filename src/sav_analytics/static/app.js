@@ -120,6 +120,7 @@ document.querySelector("#refresh-banner-preview").addEventListener("click", load
 document.querySelector("#new-filter").addEventListener("click", () => openFilter());
 document.querySelector("#close-filter-editor").addEventListener("click", closeFilter);
 document.querySelector("#add-filter-condition").addEventListener("click", () => addFilterCondition());
+document.querySelector("#add-filter-group").addEventListener("click", () => addFilterGroup());
 document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
 document.querySelector("#refresh-filter-preview").addEventListener("click", loadFilterPreview);
 document.querySelectorAll("[data-structure-mode]").forEach(button => button.addEventListener("click", () => {
@@ -142,8 +143,12 @@ document.querySelector("#category-group-list").addEventListener("click", event =
   if (button) button.closest(".category-group").remove();
 });
 document.querySelector("#filter-condition-list").addEventListener("click", event => {
-  const button = event.target.closest("button[data-remove-filter-condition]");
-  if (button) button.closest(".filter-condition").remove();
+  const removeCondition = event.target.closest("button[data-remove-filter-condition]");
+  if (removeCondition) removeCondition.closest(".filter-condition").remove();
+  const removeGroup = event.target.closest("button[data-remove-filter-group]");
+  if (removeGroup) removeGroup.closest(".filter-group").remove();
+  const addNested = event.target.closest("button[data-add-group-condition]");
+  if (addNested) addFilterCondition({}, addNested.closest(".filter-group").querySelector(".filter-group-items"));
 });
 
 document.querySelectorAll(".tabs button[data-view]").forEach(button => button.addEventListener("click", () => {
@@ -464,7 +469,7 @@ function renderTable() {
     document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Логика</th><th>Условий</th><th>Используется как база</th>";
     document.querySelector("#table-body").innerHTML = filters.length ? filters.map(filter => {
       const uses = configuredQuestions().filter(question => question.base_filter_id === filter.id).length;
-      return `<tr class="question-row ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${filter.id}"><td><strong>${escapeHtml(filter.name)}</strong></td><td>${filter.rule.operator === "and" ? "И" : "ИЛИ"}</td><td>${filter.rule.items.length}</td><td>${uses ? `${uses} вопр.` : "—"}</td></tr>`;
+      return `<tr class="question-row ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${filter.id}"><td><strong>${escapeHtml(filter.name)}</strong></td><td>${filter.rule.operator === "and" ? "И" : "ИЛИ"}</td><td>${countFilterConditions(filter.rule)}</td><td>${uses ? `${uses} вопр.` : "—"}</td></tr>`;
     }).join("") : '<tr><td colspan="4" class="empty-state">Сохранённых баз и фильтров пока нет.</td></tr>';
     return;
   }
@@ -539,8 +544,8 @@ function openFilter(filterId = null) {
   document.querySelector("#filter-operator").value = filter?.rule.operator || "and";
   const list = document.querySelector("#filter-condition-list");
   list.innerHTML = "";
-  const conditions = filter?.rule.items?.filter(item => item.kind === "condition") || [];
-  if (conditions.length) conditions.forEach(condition => addFilterCondition(condition));
+  const items = filter?.rule.items || [];
+  if (items.length) items.forEach(item => addFilterItem(item, list));
   else addFilterCondition();
   document.querySelector("#delete-filter").hidden = !filter;
   document.querySelector("#filter-error").hidden = true;
@@ -557,14 +562,30 @@ function closeFilter() {
   renderTable();
 }
 
-function addFilterCondition(condition = {}) {
+function addFilterItem(item, container) {
+  if (item.kind === "group") addFilterGroup(item, container);
+  else addFilterCondition(item, container);
+}
+
+function addFilterCondition(condition = {}, container = document.querySelector("#filter-condition-list")) {
   const element = document.createElement("div");
   element.className = "filter-condition";
   const sourceValue = condition.source ? `${condition.source.kind}:${condition.source.ref}` : "";
   const rawValue = condition.values?.join(", ")
     || (condition.operator === "between" ? `${condition.lower ?? ""}, ${condition.upper ?? ""}` : condition.lower ?? condition.upper ?? "");
   element.innerHTML = `<select class="filter-source">${filterSourceOptions(sourceValue)}</select><select class="filter-operation">${filterOperatorOptions(condition.operator || "eq")}</select><input class="filter-value" value="${escapeAttribute(rawValue)}" placeholder="Значение или список" /><button type="button" data-remove-filter-condition title="Удалить условие">×</button>`;
-  document.querySelector("#filter-condition-list").append(element);
+  container.append(element);
+}
+
+function addFilterGroup(group = {}, container = document.querySelector("#filter-condition-list")) {
+  const element = document.createElement("div");
+  element.className = "filter-group";
+  element.innerHTML = `<div class="filter-group-head"><strong>Вложенная группа</strong><select class="filter-group-operator"><option value="and" ${(group.operator || "and") === "and" ? "selected" : ""}>Все условия (И)</option><option value="or" ${group.operator === "or" ? "selected" : ""}>Хотя бы одно (ИЛИ)</option></select><button type="button" data-remove-filter-group title="Удалить группу">×</button></div><div class="filter-group-items"></div><button type="button" class="secondary compact-button" data-add-group-condition>+ Условие в группу</button>`;
+  container.append(element);
+  const nested = element.querySelector(".filter-group-items");
+  const items = group.items || [];
+  if (items.length) items.forEach(item => addFilterCondition(item, nested));
+  else addFilterCondition({}, nested);
 }
 
 function filterSourceOptions(selectedValue) {
@@ -582,23 +603,35 @@ function filterOperatorOptions(selected) {
 }
 
 function collectFilterRule() {
-  const elements = [...document.querySelectorAll("#filter-condition-list .filter-condition")];
+  const container = document.querySelector("#filter-condition-list");
+  const elements = [...container.children].filter(element => element.matches(".filter-condition, .filter-group"));
   if (!elements.length) throw new Error("Добавьте хотя бы одно условие.");
   return {
     kind: "group",
     operator: document.querySelector("#filter-operator").value,
-    items: elements.map(element => {
-      const source = parseBannerSource(element.querySelector(".filter-source").value);
-      const operator = element.querySelector(".filter-operation").value;
-      const values = element.querySelector(".filter-value").value.split(",").map(value => value.trim()).filter(Boolean).map(parseFilterValue);
-      const condition = { kind: "condition", source, operator, values: [] };
-      if (["eq", "ne", "in", "not_in", "selected_any", "selected_all", "selected_none"].includes(operator)) condition.values = values;
-      if (operator === "gt") condition.lower = Number(values[0]);
-      if (operator === "lt") condition.upper = Number(values[0]);
-      if (operator === "between") [condition.lower, condition.upper] = values.map(Number);
-      return condition;
-    }),
+    items: elements.map(collectFilterItem),
   };
+}
+
+function collectFilterItem(element) {
+  if (element.classList.contains("filter-group")) {
+    const nested = [...element.querySelector(".filter-group-items").children].filter(item => item.classList.contains("filter-condition"));
+    if (!nested.length) throw new Error("Добавьте условие во вложенную группу.");
+    return { kind: "group", operator: element.querySelector(".filter-group-operator").value, items: nested.map(collectFilterItem) };
+  }
+  const source = parseBannerSource(element.querySelector(".filter-source").value);
+  const operator = element.querySelector(".filter-operation").value;
+  const values = element.querySelector(".filter-value").value.split(",").map(value => value.trim()).filter(Boolean).map(parseFilterValue);
+  const condition = { kind: "condition", source, operator, values: [] };
+  if (["eq", "ne", "in", "not_in", "selected_any", "selected_all", "selected_none"].includes(operator)) condition.values = values;
+  if (operator === "gt") condition.lower = Number(values[0]);
+  if (operator === "lt") condition.upper = Number(values[0]);
+  if (operator === "between") [condition.lower, condition.upper] = values.map(Number);
+  return condition;
+}
+
+function countFilterConditions(group) {
+  return group.items.reduce((total, item) => total + (item.kind === "group" ? countFilterConditions(item) : 1), 0);
 }
 
 function parseFilterValue(value) {
@@ -607,13 +640,15 @@ function parseFilterValue(value) {
 }
 
 async function loadFilterPreview() {
-  if (!currentProject || !currentFilterId) return;
+  if (!currentProject) return;
   const container = document.querySelector("#filter-preview");
   container.innerHTML = '<p class="muted">Считаем…</p>';
   try {
-    const preview = await api(`/api/projects/${currentProject.id}/filters/${currentFilterId}/preview`);
+    const payload = { name: document.querySelector("#filter-name").value.trim() || "Предпросмотр", rule: collectFilterRule() };
+    const preview = await api(`/api/projects/${currentProject.id}/filters/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const warning = preview.empty ? "Пустая база — использовать её нельзя." : preview.small_base ? "Малая база: результаты будут отмечены серым." : "";
-    container.innerHTML = `<div class="filter-result"><strong>${preview.selected.toLocaleString("ru-RU")}</strong><span>из ${preview.total.toLocaleString("ru-RU")} · ${formatPercent(preview.share)}</span></div><p>${escapeHtml(preview.description)}</p>${warning ? `<p class="inline-warnings">${escapeHtml(warning)}</p>` : ""}`;
+    const steps = preview.steps?.length ? `<div class="filter-steps">${preview.steps.map((step, index) => `<div><span>${index + 1}. ${escapeHtml(step.description)}</span><strong>N ${step.selected.toLocaleString("ru-RU")}</strong></div>`).join("")}</div>` : "";
+    container.innerHTML = `<div class="filter-result"><strong>${preview.selected.toLocaleString("ru-RU")}</strong><span>из ${preview.total.toLocaleString("ru-RU")} · ${formatPercent(preview.share)}</span></div><p>${escapeHtml(preview.description)}</p>${steps}${warning ? `<p class="inline-warnings">${escapeHtml(warning)}</p>` : ""}`;
   } catch (error) {
     container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
   }

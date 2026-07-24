@@ -343,6 +343,37 @@ def test_filter_crud_preview_and_question_base(tmp_path: Path) -> None:
             assert created.status_code == 201
             filter_id = created.json()["configuration"]["filters"][0]["id"]
 
+            draft_preview = client.post(
+                f"/api/projects/{project_id}/filters/preview",
+                json={
+                    "name": "Черновик",
+                    "rule": {
+                        "operator": "or",
+                        "items": [
+                            {
+                                "source": {"kind": "question", "ref": "Q1"},
+                                "operator": "eq",
+                                "values": [1],
+                            },
+                            {
+                                "kind": "group",
+                                "operator": "and",
+                                "items": [
+                                    {
+                                        "source": {"kind": "question", "ref": "Q2"},
+                                        "operator": "gt",
+                                        "lower": 8,
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                },
+            )
+            assert draft_preview.status_code == 200
+            assert draft_preview.json()["selected"] == 3
+            assert len(draft_preview.json()["steps"]) == 3
+
             preview = client.get(
                 f"/api/projects/{project_id}/filters/{filter_id}/preview"
             )

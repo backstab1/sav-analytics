@@ -91,9 +91,21 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .filter-condition { display: grid; grid-template-columns: 1fr 120px 1fr 28px; gap: 5px; padding: 8px; border: 1px solid #dde4df; border-radius: 8px; background: #f8faf8; }
 .filter-condition select, .filter-condition input { min-width: 0; padding: 7px !important; font-size: 10px !important; }
 .filter-condition button { padding: 2px; color: #a85555; background: transparent; font-size: 18px; }
+.filter-add-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.filter-group { display: grid; gap: 7px; padding: 9px; border: 1px solid #a9c3b4; border-radius: 9px; background: #f0f6f2; }
+.filter-group-head { display: grid; grid-template-columns: 1fr 135px 28px; gap: 6px; align-items: center; }
+.filter-group-head strong { font-size: 11px; }
+.filter-group-head select { padding: 7px; border: 1px solid #cfd6d0; border-radius: 7px; background: #fff; font-size: 10px; }
+.filter-group-head button { padding: 2px; color: #a85555; background: transparent; font-size: 18px; }
+.filter-group-items { display: grid; gap: 6px; }
+.filter-group-items .filter-condition { background: #fff; }
 .filter-result { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; }
 .filter-result strong { color: #355b47; font-size: 30px; }
 .filter-result span { color: #68736c; font-size: 12px; }
+.filter-steps { display: grid; gap: 1px; margin-top: 9px; border: 1px solid #e1e6e2; border-radius: 7px; overflow: hidden; }
+.filter-steps div { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 7px 8px; background: #fff; font-size: 10px; }
+.filter-steps span { overflow: hidden; color: #68736c; text-overflow: ellipsis; white-space: nowrap; }
+.filter-steps strong { color: #355b47; white-space: nowrap; }
 .banner-preview-list { display: grid; gap: 4px; max-height: 430px; overflow: auto; }
 .banner-preview-list > div { display: grid; grid-template-columns: 90px 1fr auto; gap: 7px; align-items: center; padding: 8px; border: 1px solid #e1e6e2; border-radius: 6px; background: #fff; font-size: 10px; }
 .banner-preview-list span { overflow: hidden; color: #77827b; text-overflow: ellipsis; white-space: nowrap; }
