@@ -46,7 +46,7 @@
             <div id="structure-toolbar" class="recode-toolbar"><div><strong>Представление структуры</strong><small>Настраивайте логические вопросы или проверяйте исходные столбцы SAV.</small></div><div class="structure-view-switch"><button type="button" data-structure-mode="questions" class="active">Логические вопросы</button><button type="button" data-structure-mode="variables">Столбцы SAV</button></div></div>
             <div id="recode-toolbar" class="recode-toolbar" hidden><div><strong>Производные переменные</strong><small>Создавайте независимые группировки числовых переменных.</small></div><button id="new-recoding" type="button">+ Новая перекодировка</button></div>
             <div id="banner-toolbar" class="recode-toolbar" hidden><div><strong>Баннеры отчёта</strong><small>Total добавляется всегда; блок может содержать один или два вложенных уровня.</small></div><button id="new-banner" type="button">+ Новый баннер</button></div>
-            <div id="filter-toolbar" class="recode-toolbar" hidden><div><strong>Именованные правила</strong><small>Сохраняйте выборки и назначайте их базой отдельным вопросам.</small></div><button id="new-filter" type="button">+ Новое правило</button></div>
+            <div id="filter-toolbar" class="recode-toolbar" hidden><div><strong>Именованные правила</strong><small>Сохраняйте выборки и назначайте их базой отдельным вопросам.</small></div><div class="filter-toolbar-actions"><label>Общий фильтр отчёта<select id="report-filter"><option value="">Без общего фильтра</option></select></label><button id="new-filter" type="button">+ Новое правило</button></div></div>
             <div class="table-wrap">
               <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
             </div>
@@ -120,6 +120,7 @@
               <div id="filter-condition-list" class="filter-condition-list"></div>
               <div class="filter-add-actions"><button id="add-filter-condition" class="secondary compact-button" type="button">+ Условие</button><button id="add-filter-group" class="secondary compact-button" type="button">+ Группа И/ИЛИ</button></div>
               <button id="save-filter" type="submit">Сохранить правило</button>
+              <button id="copy-filter" class="secondary" type="button" hidden>Сохранить как копию</button>
               <button id="delete-filter" class="danger-button" type="button" hidden>Удалить правило</button>
               <p id="filter-error" class="error" hidden></p>
             </form>

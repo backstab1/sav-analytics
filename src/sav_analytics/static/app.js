@@ -122,7 +122,9 @@ document.querySelector("#close-filter-editor").addEventListener("click", closeFi
 document.querySelector("#add-filter-condition").addEventListener("click", () => addFilterCondition());
 document.querySelector("#add-filter-group").addEventListener("click", () => addFilterGroup());
 document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
+document.querySelector("#copy-filter").addEventListener("click", copyFilter);
 document.querySelector("#refresh-filter-preview").addEventListener("click", loadFilterPreview);
+document.querySelector("#report-filter").addEventListener("change", assignReportFilter);
 document.querySelectorAll("[data-structure-mode]").forEach(button => button.addEventListener("click", () => {
   structureMode = button.dataset.structureMode;
   document.querySelectorAll("[data-structure-mode]").forEach(item => item.classList.toggle("active", item === button));
@@ -455,6 +457,7 @@ function renderProject() {
   const warningBox = document.querySelector("#warnings");
   warningBox.hidden = inspection.warnings.length === 0;
   warningBox.innerHTML = inspection.warnings.map(text => `<p>⚑ ${escapeHtml(text)}</p>`).join("");
+  renderReportFilterControl();
   renderTable();
 }
 
@@ -469,7 +472,10 @@ function renderTable() {
     document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Логика</th><th>Условий</th><th>Используется как база</th>";
     document.querySelector("#table-body").innerHTML = filters.length ? filters.map(filter => {
       const uses = configuredQuestions().filter(question => question.base_filter_id === filter.id).length;
-      return `<tr class="question-row ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${filter.id}"><td><strong>${escapeHtml(filter.name)}</strong></td><td>${filter.rule.operator === "and" ? "И" : "ИЛИ"}</td><td>${countFilterConditions(filter.rule)}</td><td>${uses ? `${uses} вопр.` : "—"}</td></tr>`;
+      const usage = [];
+      if (currentProject.configuration.report_filter_id === filter.id) usage.push("Общий фильтр");
+      if (uses) usage.push(`${uses} вопр.`);
+      return `<tr class="question-row ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${filter.id}"><td><strong>${escapeHtml(filter.name)}</strong></td><td>${filter.rule.operator === "and" ? "И" : "ИЛИ"}</td><td>${countFilterConditions(filter.rule)}</td><td>${usage.length ? usage.join(" · ") : "—"}</td></tr>`;
     }).join("") : '<tr><td colspan="4" class="empty-state">Сохранённых баз и фильтров пока нет.</td></tr>';
     return;
   }
@@ -548,6 +554,7 @@ function openFilter(filterId = null) {
   if (items.length) items.forEach(item => addFilterItem(item, list));
   else addFilterCondition();
   document.querySelector("#delete-filter").hidden = !filter;
+  document.querySelector("#copy-filter").hidden = !filter;
   document.querySelector("#filter-error").hidden = true;
   document.querySelector("#filter-preview").innerHTML = filter
     ? '<p class="muted">Считаем…</p>'
@@ -663,6 +670,56 @@ async function deleteFilter() {
     renderProject();
   } catch (error) {
     showError(errorBox, error);
+  }
+}
+
+async function copyFilter() {
+  if (!currentProject || !currentFilterId) return;
+  const errorBox = document.querySelector("#filter-error");
+  errorBox.hidden = true;
+  const button = document.querySelector("#copy-filter");
+  try {
+    const payload = {
+      name: `${document.querySelector("#filter-name").value.trim()} — копия`,
+      rule: collectFilterRule(),
+    };
+    setBusy(button, true, "Копируем…");
+    currentProject = await api(`/api/projects/${currentProject.id}/filters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    currentFilterId = configuredFilters().at(-1)?.id;
+    renderProject();
+    openFilter(currentFilterId);
+  } catch (error) {
+    showError(errorBox, error);
+  } finally {
+    setBusy(button, false, "Сохранить как копию");
+  }
+}
+
+function renderReportFilterControl() {
+  const select = document.querySelector("#report-filter");
+  if (!select || !currentProject) return;
+  select.innerHTML = '<option value="">Без общего фильтра</option>' + configuredFilters().map(filter => `<option value="${filter.id}" ${currentProject.configuration.report_filter_id === filter.id ? "selected" : ""}>${escapeHtml(filter.name)}</option>`).join("");
+}
+
+async function assignReportFilter() {
+  const select = document.querySelector("#report-filter");
+  select.disabled = true;
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/report-filter`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filter_id: select.value || null }),
+    });
+    renderProject();
+  } catch (error) {
+    alert(error.message);
+    renderReportFilterControl();
+  } finally {
+    select.disabled = false;
   }
 }
 

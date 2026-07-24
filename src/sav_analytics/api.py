@@ -514,6 +514,18 @@ def assign_question_base(
         raise HTTPException(status_code=404, detail="Вопрос или фильтр не найдены.") from exc
 
 
+@app.put("/api/projects/{project_id}/report-filter")
+def assign_report_filter(
+    project_id: UUID,
+    update: QuestionBaseUpdate,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.assign_report_filter(project_id, update.filter_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или фильтр не найдены.") from exc
+
+
 @app.get("/api/projects/{project_id}/source")
 def download_source(
     project_id: UUID,

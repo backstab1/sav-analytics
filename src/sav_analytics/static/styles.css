@@ -63,6 +63,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .recode-toolbar div { display: grid; gap: 3px; }
 .recode-toolbar small, .range-heading small { color: #7c8780; font-size: 11px; }
 .recode-toolbar button { padding: 9px 12px; color: #fff; background: #4f7d65; font-size: 12px; }
+.recode-toolbar .filter-toolbar-actions { display: flex; align-items: end; gap: 8px; }
+.filter-toolbar-actions label { display: grid; gap: 3px; color: #68736c; font-size: 9px; font-weight: 700; }
+.filter-toolbar-actions select { min-width: 190px; max-width: 280px; padding: 8px; border: 1px solid #cfd6d0; border-radius: 8px; background: #fff; color: #17231d; font-size: 11px; }
 .recode-toolbar .structure-view-switch { display: flex; gap: 3px; padding: 3px; border-radius: 9px; background: #edf2ee; }
 .structure-view-switch button { color: #667169; background: transparent; }
 .structure-view-switch button.active { color: #fff; background: #4f7d65; }

@@ -392,9 +392,35 @@ def test_filter_crud_preview_and_question_base(tmp_path: Path) -> None:
             )
             assert q2["base_filter_id"] == filter_id
 
+            report_filter = client.put(
+                f"/api/projects/{project_id}/report-filter",
+                json={"filter_id": filter_id},
+            )
+            assert report_filter.status_code == 200
+            assert report_filter.json()["configuration"]["report_filter_id"] == filter_id
+
             blocked = client.delete(
                 f"/api/projects/{project_id}/filters/{filter_id}"
             )
             assert blocked.status_code == 422
+
+            client.put(
+                f"/api/projects/{project_id}/questions/Q2/base",
+                json={"filter_id": None},
+            )
+            still_blocked = client.delete(
+                f"/api/projects/{project_id}/filters/{filter_id}"
+            )
+            assert still_blocked.status_code == 422
+
+            client.put(
+                f"/api/projects/{project_id}/report-filter",
+                json={"filter_id": None},
+            )
+            deleted = client.delete(
+                f"/api/projects/{project_id}/filters/{filter_id}"
+            )
+            assert deleted.status_code == 200
+            assert deleted.json()["configuration"]["filters"] == []
     finally:
         app.dependency_overrides.clear()

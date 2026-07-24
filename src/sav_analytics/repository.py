@@ -64,6 +64,7 @@ class ProjectRepository:
                     "recodings": [],
                     "banners": [],
                     "filters": [],
+                    "report_filter_id": None,
                     "updated_at": created_at,
                 },
             }
@@ -297,6 +298,10 @@ class ProjectRepository:
             raise InvalidUploadError(
                 "Фильтр назначен как база вопроса и пока не может быть удалён."
             )
+        if project["configuration"].get("report_filter_id") == identifier:
+            raise InvalidUploadError(
+                "Фильтр используется как общий фильтр отчёта и пока не может быть удалён."
+            )
         filters = project["configuration"]["filters"]
         filtered = [item for item in filters if item["id"] != identifier]
         if len(filtered) == len(filters):
@@ -338,6 +343,20 @@ class ProjectRepository:
         self._write_project(project_id, project)
         return project
 
+    def assign_report_filter(
+        self, project_id: UUID, filter_id: UUID | None
+    ) -> dict:
+        project = self.get(project_id)
+        identifier = str(filter_id) if filter_id else None
+        if identifier and not any(
+            item["id"] == identifier for item in project["configuration"]["filters"]
+        ):
+            raise ProjectNotFoundError(identifier)
+        project["configuration"]["report_filter_id"] = identifier
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
         return self.root / str(project_id) / "source.sav"
@@ -357,6 +376,7 @@ class ProjectRepository:
         project["configuration"].setdefault("recodings", [])
         project["configuration"].setdefault("banners", [])
         project["configuration"].setdefault("filters", [])
+        project["configuration"].setdefault("report_filter_id", None)
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")
 
