@@ -38,6 +38,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .secondary { border: 1px solid #ccd4ce; background: #fff; color: #26342c; }
 .head-actions { display: flex; gap: 8px; align-items: center; }
 .link-button { display: inline-block; padding: 14px 20px; border-radius: 10px; text-decoration: none; font-size: 13px; font-weight: 750; }
+.report-button { color: #fff; background: #355b47; }
 .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 28px 0; }
 .summary article { display: grid; gap: 4px; padding: 20px; background: #fff; border: 1px solid #dce1dc; border-radius: 12px; }
 .summary strong { font-size: 28px; }

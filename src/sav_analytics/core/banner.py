@@ -40,6 +40,23 @@ def calculate_banner_preview(
         user_missing=False,
         dates_as_pandas_datetime=False,
     )
+    built = build_banner_columns(frame, definition, project)
+    columns = [
+        {key: value for key, value in column.items() if key != "mask"}
+        for column in built
+    ]
+    return {
+        "id": definition.get("id"),
+        "name": definition["name"],
+        "total_base": len(frame),
+        "columns": columns,
+    }
+
+
+def build_banner_columns(
+    frame: pd.DataFrame, definition: dict[str, Any], project: dict[str, Any]
+) -> list[dict[str, Any]]:
+    validate_banner(definition, project)
     columns = [
         {
             "key": "total",
@@ -47,6 +64,7 @@ def calculate_banner_preview(
             "path": ["Total"],
             "base": len(frame),
             "block": None,
+            "mask": pd.Series(True, index=frame.index),
         }
     ]
     for block_index, block in enumerate(definition["blocks"]):
@@ -72,14 +90,10 @@ def calculate_banner_preview(
                     "block": block.get("label") or " → ".join(
                         source["label"] for source in resolved
                     ),
+                    "mask": mask,
                 }
             )
-    return {
-        "id": definition.get("id"),
-        "name": definition["name"],
-        "total_base": len(frame),
-        "columns": columns,
-    }
+    return columns
 
 
 def _resolve_source(source: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
@@ -180,4 +194,3 @@ def _scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
-

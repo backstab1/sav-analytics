@@ -448,6 +448,7 @@ function renderProject() {
   const questions = configuredQuestions();
   document.querySelector("#project-name").textContent = currentProject.name;
   document.querySelector("#download-source").href = `/api/projects/${currentProject.id}/source`;
+  document.querySelector("#download-report").href = `/api/projects/${currentProject.id}/reports/topline.xlsx`;
   document.querySelector("#summary").innerHTML = [
     [inspection.row_count.toLocaleString("ru-RU"), "респондентов"],
     [inspection.variable_count.toLocaleString("ru-RU"), "переменных"],

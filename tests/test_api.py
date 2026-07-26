@@ -25,6 +25,12 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             project = response.json()
             assert project["name"] == "Тестовый проект"
             assert project["inspection"]["row_count"] == 4
+            report = client.get(f"/api/projects/{project['id']}/reports/topline.xlsx")
+            assert report.status_code == 200
+            assert report.content.startswith(b"PK")
+            assert report.headers["content-type"].startswith(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
             assert repository.source_path(project["id"]).read_bytes() == source.read_bytes()
     finally:
         app.dependency_overrides.clear()

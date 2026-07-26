@@ -43,6 +43,15 @@ def calculate_filter_preview(
     }
 
 
+def evaluate_filter_frame(
+    definition: dict[str, Any], project: dict[str, Any], frame: pd.DataFrame
+) -> pd.Series:
+    """Return a boolean mask for an already loaded SAV frame."""
+    validate_filter(definition, project)
+    mask, _ = _evaluate_group(definition["rule"], project, frame)
+    return mask
+
+
 def _validate_group(group: dict[str, Any], project: dict[str, Any], depth: int) -> None:
     if depth > 2:
         raise FilterError("Вложенность фильтра не может превышать два уровня.")

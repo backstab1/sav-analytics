@@ -4,16 +4,18 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from .core.banner import BannerError, calculate_banner_preview, validate_banner
 from .core.filtering import FilterError, calculate_filter_preview, validate_filter
 from .core.models import QuestionType, VariableRole
 from .core.recoding import RecodingError, calculate_recode_preview, validate_recode
+from .core.report import ReportError, build_topline_xlsx
 from .core.sav_reader import SavReadError
 from .core.topline import ToplineError, calculate_preview
 from .repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -542,6 +544,27 @@ def download_source(
         path,
         media_type="application/x-spss-sav",
         filename=project["original_filename"],
+    )
+
+
+@app.get("/api/projects/{project_id}/reports/topline.xlsx")
+def download_topline(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> StreamingResponse:
+    try:
+        project = repository.get(project_id)
+        content = build_topline_xlsx(repository.source_path(project_id), project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except (ReportError, BannerError, FilterError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    filename = f"{project['name']}_topline.xlsx"
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": disposition},
     )
 
 
