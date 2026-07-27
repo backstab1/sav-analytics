@@ -22,6 +22,17 @@ def validate_banner(definition: dict[str, Any], project: dict[str, Any]) -> None
             raise BannerError("Блок баннера должен содержать один или два уровня.")
         for source in sources:
             _resolve_source(source, project)
+    weight_variable = definition.get("weight_variable")
+    if weight_variable and not any(
+        item["name"] == weight_variable for item in project["inspection"]["variables"]
+    ):
+        raise BannerError("Весовая переменная не найдена в SAV.")
+    calculated_weight_id = definition.get("calculated_weight_id")
+    if calculated_weight_id and not any(
+        item["id"] == str(calculated_weight_id)
+        for item in project["configuration"].get("calculated_weights", [])
+    ):
+        raise BannerError("Рассчитанный вес не найден в проекте.")
 
 
 def calculate_banner_preview(
@@ -90,6 +101,9 @@ def build_banner_columns(
                     "block": block.get("label") or " → ".join(
                         source["label"] for source in resolved
                     ),
+                    "block_index": block_index,
+                    "compare_to_total": block.get("compare_to_total", False),
+                    "compare_pairwise": block.get("compare_pairwise", False),
                     "mask": mask,
                 }
             )

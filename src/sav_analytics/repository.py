@@ -64,6 +64,7 @@ class ProjectRepository:
                     "recodings": [],
                     "banners": [],
                     "filters": [],
+                    "calculated_weights": [],
                     "report_filter_id": None,
                     "updated_at": created_at,
                 },
@@ -267,6 +268,62 @@ class ProjectRepository:
             raise ProjectNotFoundError(str(banner_id)) from exc
         return project, banner
 
+    def create_calculated_weight(self, project_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        project["configuration"]["calculated_weights"].append(
+            {"id": str(uuid4()), **definition}
+        )
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_calculated_weight(
+        self, project_id: UUID, weight_id: UUID, definition: dict
+    ) -> dict:
+        project = self.get(project_id)
+        weights = project["configuration"]["calculated_weights"]
+        try:
+            index = next(
+                index for index, item in enumerate(weights) if item["id"] == str(weight_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(weight_id)) from exc
+        weights[index] = {"id": str(weight_id), **definition}
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def delete_calculated_weight(self, project_id: UUID, weight_id: UUID) -> dict:
+        project = self.get(project_id)
+        identifier = str(weight_id)
+        if any(
+            banner.get("calculated_weight_id") == identifier
+            for banner in project["configuration"]["banners"]
+        ):
+            raise InvalidUploadError(
+                "Рассчитанный вес используется в баннере и пока не может быть удалён."
+            )
+        weights = project["configuration"]["calculated_weights"]
+        filtered = [item for item in weights if item["id"] != identifier]
+        if len(filtered) == len(weights):
+            raise ProjectNotFoundError(identifier)
+        project["configuration"]["calculated_weights"] = filtered
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def calculated_weight(self, project_id: UUID, weight_id: UUID) -> tuple[dict, dict]:
+        project = self.get(project_id)
+        try:
+            weight = next(
+                item
+                for item in project["configuration"]["calculated_weights"]
+                if item["id"] == str(weight_id)
+            )
+        except StopIteration as exc:
+            raise ProjectNotFoundError(str(weight_id)) from exc
+        return project, weight
+
     def create_filter(self, project_id: UUID, definition: dict) -> dict:
         project = self.get(project_id)
         project["configuration"]["filters"].append({"id": str(uuid4()), **definition})
@@ -376,6 +433,7 @@ class ProjectRepository:
         project["configuration"].setdefault("recodings", [])
         project["configuration"].setdefault("banners", [])
         project["configuration"].setdefault("filters", [])
+        project["configuration"].setdefault("calculated_weights", [])
         project["configuration"].setdefault("report_filter_id", None)
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")

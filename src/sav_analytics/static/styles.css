@@ -91,6 +91,23 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .banner-block-head button { padding: 2px; color: #a85555; background: transparent; font-size: 18px; }
 .banner-block label { display: grid; gap: 4px; color: #68736c; font-size: 10px; font-weight: 700; }
 .banner-block select { padding: 7px !important; font-size: 11px !important; }
+.banner-block .inline-check, .banner-stat-settings .inline-check { display: flex; grid-template-columns: auto 1fr; align-items: center; justify-content: flex-start; gap: 6px; }
+.banner-block .inline-check input, .banner-stat-settings .inline-check input { width: auto; margin: 0; }
+.banner-stat-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 9px; border: 1px solid #dde4df; border-radius: 8px; background: #f8faf8; }
+.banner-stat-settings .inline-check { grid-column: 1 / -1; }
+.banner-stat-settings .banner-weight-setting { grid-column: 1 / -1; }
+.weight-dimension-list { display: grid; gap: 9px; }
+.weight-dimension { display: grid; gap: 7px; padding: 9px; border: 1px solid #dde4df; border-radius: 8px; background: #f8faf8; }
+.weight-dimension-head { display: grid; grid-template-columns: 1fr 28px; gap: 6px; }
+.weight-dimension-head button { padding: 2px; color: #a85555; background: transparent; font-size: 18px; }
+.weight-targets { display: grid; gap: 5px; }
+.weight-target { display: grid; grid-template-columns: 1fr 90px; gap: 7px; align-items: center; font-size: 10px; }
+.weight-target input { padding: 6px !important; font-size: 11px !important; }
+.weight-diagnostics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.weight-diagnostics article { padding: 7px; border: 1px solid #e1e6e2; border-radius: 6px; background: #fff; }
+.weight-diagnostics strong, .weight-diagnostics span { display: block; }
+.weight-distribution { margin-top: 9px; }
+.weight-distribution p { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 3px 0; }
 .filter-condition-list { display: grid; gap: 8px; }
 .filter-condition { display: grid; grid-template-columns: 1fr 120px 1fr 28px; gap: 5px; padding: 8px; border: 1px solid #dde4df; border-radius: 8px; background: #f8faf8; }
 .filter-condition select, .filter-condition input { min-width: 0; padding: 7px !important; font-size: 10px !important; }

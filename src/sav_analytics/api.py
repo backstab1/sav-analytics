@@ -15,9 +15,10 @@ from .core.banner import BannerError, calculate_banner_preview, validate_banner
 from .core.filtering import FilterError, calculate_filter_preview, validate_filter
 from .core.models import QuestionType, VariableRole
 from .core.recoding import RecodingError, calculate_recode_preview, validate_recode
-from .core.report import ReportError, build_topline_xlsx
+from .core.report import ReportError, build_statistics_txt, build_topline_xlsx
 from .core.sav_reader import SavReadError
 from .core.topline import ToplineError, calculate_preview
+from .core.weighting import WeightingError, calculate_raking_preview
 from .repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 from .settings import Settings
 
@@ -94,11 +95,55 @@ class BannerSource(BaseModel):
 class BannerBlock(BaseModel):
     label: str | None = Field(default=None, max_length=250)
     sources: list[BannerSource] = Field(min_length=1, max_length=2)
+    compare_to_total: bool = False
+    compare_pairwise: bool = False
 
 
 class BannerDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
     blocks: list[BannerBlock] = Field(min_length=1, max_length=50)
+    confidence_level: float = Field(default=0.95, gt=0, lt=1)
+    bonferroni: bool = False
+    minimum_base: int = Field(default=30, ge=1, le=100_000)
+    weight_variable: str | None = Field(default=None, max_length=64)
+    calculated_weight_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_weight_selection(self) -> BannerDefinition:
+        if self.weight_variable and self.calculated_weight_id:
+            raise ValueError("Выберите готовый или рассчитанный вес, но не оба сразу.")
+        return self
+
+
+class WeightTarget(BaseModel):
+    label: str = Field(min_length=1, max_length=250)
+    values: list[str | int | float] = Field(min_length=1, max_length=500)
+    percent: float = Field(gt=0, le=100)
+
+
+class WeightDimension(BaseModel):
+    variable: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=500)
+    targets: list[WeightTarget] = Field(min_length=2, max_length=100)
+
+
+class CalculatedWeightDefinition(BaseModel):
+    name: str = Field(min_length=1, max_length=500)
+    dimensions: list[WeightDimension] = Field(min_length=1, max_length=20)
+    lower_bound: float | None = Field(default=0.3, gt=0)
+    upper_bound: float | None = Field(default=3.0, gt=0)
+    tolerance: float = Field(default=0.001, gt=0, lt=1)
+    maximum_iterations: int = Field(default=500, ge=1, le=5000)
+
+    @model_validator(mode="after")
+    def validate_limits(self) -> CalculatedWeightDefinition:
+        if (
+            self.lower_bound is not None
+            and self.upper_bound is not None
+            and self.lower_bound >= self.upper_bound
+        ):
+            raise ValueError("Нижняя граница веса должна быть меньше верхней.")
+        return self
 
 
 class FilterSource(BaseModel):
@@ -267,6 +312,10 @@ def preview_question(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Проект или вопрос не найден."
         ) from exc
+    except ToplineError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
 
 
 @app.post("/api/projects/{project_id}/recodings", status_code=status.HTTP_201_CREATED)
@@ -365,6 +414,72 @@ def create_banner(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
+
+
+@app.post("/api/projects/{project_id}/weights", status_code=status.HTTP_201_CREATED)
+def create_calculated_weight(
+    project_id: UUID,
+    definition: CalculatedWeightDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        repository.get(project_id)
+        calculate_raking_preview(repository.source_path(project_id), payload)
+        return repository.create_calculated_weight(project_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except (WeightingError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/projects/{project_id}/weights/{weight_id}")
+def update_calculated_weight(
+    project_id: UUID,
+    weight_id: UUID,
+    definition: CalculatedWeightDefinition,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    payload = definition.model_dump(mode="json")
+    try:
+        repository.get(project_id)
+        calculate_raking_preview(repository.source_path(project_id), payload)
+        return repository.update_calculated_weight(project_id, weight_id, payload)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
+    except (WeightingError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/projects/{project_id}/weights/{weight_id}")
+def delete_calculated_weight(
+    project_id: UUID,
+    weight_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.delete_calculated_weight(project_id, weight_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/projects/{project_id}/weights/{weight_id}/preview")
+def preview_calculated_weight(
+    project_id: UUID,
+    weight_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project, definition = repository.calculated_weight(project_id, weight_id)
+        return calculate_raking_preview(
+            repository.source_path(project_id), definition
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
+    except (WeightingError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.put("/api/projects/{project_id}/banners/{banner_id}")
@@ -564,6 +679,27 @@ def download_topline(
     return StreamingResponse(
         iter([content]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": disposition},
+    )
+
+
+@app.get("/api/projects/{project_id}/reports/statistics.txt")
+def download_statistics(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> StreamingResponse:
+    try:
+        project = repository.get(project_id)
+        content = build_statistics_txt(repository.source_path(project_id), project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except (ReportError, BannerError, FilterError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    filename = f"{project['name']}_statistics.txt"
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return StreamingResponse(
+        iter([content.encode("utf-8")]),
+        media_type="text/plain; charset=utf-8",
         headers={"Content-Disposition": disposition},
     )
 

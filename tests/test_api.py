@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
@@ -31,6 +32,17 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             assert report.headers["content-type"].startswith(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+            statistics = client.get(
+                f"/api/projects/{project['id']}/reports/statistics.txt"
+            )
+            assert statistics.status_code == 200
+            assert statistics.headers["content-type"].startswith("text/plain")
+            assert "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА" in statistics.text
+            technical_preview = client.get(
+                f"/api/projects/{project['id']}/questions/id/preview"
+            )
+            assert technical_preview.status_code == 422
+            assert "предпросмотр" in technical_preview.json()["detail"].lower()
             assert repository.source_path(project["id"]).read_bytes() == source.read_bytes()
     finally:
         app.dependency_overrides.clear()
@@ -428,5 +440,70 @@ def test_filter_crud_preview_and_question_base(tmp_path: Path) -> None:
             )
             assert deleted.status_code == 200
             assert deleted.json()["configuration"]["filters"] == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            created = client.post(
+                f"/api/projects/{project_id}/weights",
+                json={
+                    "name": "Вес по полу",
+                    "dimensions": [
+                        {
+                            "variable": "Q1",
+                            "label": "Пол",
+                            "targets": [
+                                {"label": "Мужчина", "values": [1], "percent": 50},
+                                {"label": "Женщина", "values": [2], "percent": 50},
+                            ],
+                        }
+                    ],
+                    "lower_bound": 0.3,
+                    "upper_bound": 3.0,
+                },
+            )
+            assert created.status_code == 201
+            weight = created.json()["configuration"]["calculated_weights"][0]
+
+            preview = client.get(
+                f"/api/projects/{project_id}/weights/{weight['id']}/preview"
+            )
+            assert preview.status_code == 200
+            assert preview.json()["mean"] == pytest.approx(1)
+            assert preview.json()["distributions"][0]["categories"][0][
+                "after_percent"
+            ] == pytest.approx(50)
+
+            banner = client.post(
+                f"/api/projects/{project_id}/banners",
+                json={
+                    "name": "Основной",
+                    "calculated_weight_id": weight["id"],
+                    "blocks": [
+                        {
+                            "label": "Пол",
+                            "sources": [{"kind": "question", "ref": "Q1"}],
+                        }
+                    ],
+                },
+            )
+            assert banner.status_code == 201
+            report = client.get(f"/api/projects/{project_id}/reports/topline.xlsx")
+            assert report.status_code == 200
+            blocked = client.delete(
+                f"/api/projects/{project_id}/weights/{weight['id']}"
+            )
+            assert blocked.status_code == 422
     finally:
         app.dependency_overrides.clear()

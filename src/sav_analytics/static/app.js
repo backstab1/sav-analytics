@@ -9,11 +9,13 @@ const editor = document.querySelector("#question-editor");
 const recodeEditor = document.querySelector("#recode-editor");
 const bannerEditor = document.querySelector("#banner-editor");
 const filterEditor = document.querySelector("#filter-editor");
+const weightEditor = document.querySelector("#weight-editor");
 let currentProject = null;
 let currentQuestionCode = null;
 let currentRecodingId = null;
 let currentBannerId = null;
 let currentFilterId = null;
+let currentWeightId = null;
 let currentView = "questions";
 let structureMode = "questions";
 
@@ -67,12 +69,12 @@ document.querySelector("#new-project").addEventListener("click", () => {
   currentRecodingId = null;
   currentBannerId = null;
   currentFilterId = null;
-  currentFilterId = null;
+  currentWeightId = null;
   editor.hidden = true;
   recodeEditor.hidden = true;
   bannerEditor.hidden = true;
   filterEditor.hidden = true;
-  filterEditor.hidden = true;
+  weightEditor.hidden = true;
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
   form.reset();
@@ -125,6 +127,21 @@ document.querySelector("#delete-filter").addEventListener("click", deleteFilter)
 document.querySelector("#copy-filter").addEventListener("click", copyFilter);
 document.querySelector("#refresh-filter-preview").addEventListener("click", loadFilterPreview);
 document.querySelector("#report-filter").addEventListener("change", assignReportFilter);
+document.querySelector("#new-weight").addEventListener("click", () => openWeight());
+document.querySelector("#close-weight-editor").addEventListener("click", closeWeight);
+document.querySelector("#add-weight-dimension").addEventListener("click", () => addWeightDimension());
+document.querySelector("#delete-weight").addEventListener("click", deleteWeight);
+document.querySelector("#refresh-weight-preview").addEventListener("click", loadWeightPreview);
+document.querySelector("#weight-trimming").addEventListener("change", renderWeightTrimming);
+document.querySelector("#weight-dimension-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-weight-dimension]");
+  if (button) button.closest(".weight-dimension").remove();
+});
+document.querySelector("#weight-dimension-list").addEventListener("change", event => {
+  if (event.target.matches(".weight-dimension-source")) {
+    renderWeightTargets(event.target.closest(".weight-dimension"));
+  }
+});
 document.querySelectorAll("[data-structure-mode]").forEach(button => button.addEventListener("click", () => {
   structureMode = button.dataset.structureMode;
   document.querySelectorAll("[data-structure-mode]").forEach(item => item.classList.toggle("active", item === button));
@@ -161,20 +178,25 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   document.querySelector("#banner-toolbar").hidden = currentView !== "banners";
   document.querySelector("#structure-toolbar").hidden = currentView !== "questions";
   document.querySelector("#filter-toolbar").hidden = currentView !== "filters";
+  document.querySelector("#weight-toolbar").hidden = currentView !== "weights";
   if (currentView === "recodings") {
     editor.hidden = true;
     bannerEditor.hidden = true;
     filterEditor.hidden = true;
+    weightEditor.hidden = true;
     currentQuestionCode = null;
     currentBannerId = null;
     currentFilterId = null;
+    currentWeightId = null;
   } else if (currentView === "banners") {
     editor.hidden = true;
     recodeEditor.hidden = true;
     filterEditor.hidden = true;
+    weightEditor.hidden = true;
     currentQuestionCode = null;
     currentRecodingId = null;
     currentFilterId = null;
+    currentWeightId = null;
   } else if (currentView === "filters") {
     editor.hidden = true;
     recodeEditor.hidden = true;
@@ -182,6 +204,17 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
     currentQuestionCode = null;
     currentRecodingId = null;
     currentBannerId = null;
+    weightEditor.hidden = true;
+    currentWeightId = null;
+  } else if (currentView === "weights") {
+    editor.hidden = true;
+    recodeEditor.hidden = true;
+    bannerEditor.hidden = true;
+    filterEditor.hidden = true;
+    currentQuestionCode = null;
+    currentRecodingId = null;
+    currentBannerId = null;
+    currentFilterId = null;
   } else {
     recodeEditor.hidden = true;
     bannerEditor.hidden = true;
@@ -189,6 +222,8 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
     currentBannerId = null;
     filterEditor.hidden = true;
     currentFilterId = null;
+    weightEditor.hidden = true;
+    currentWeightId = null;
   }
   renderTable();
 }));
@@ -224,6 +259,11 @@ document.querySelector("#table-body").addEventListener("click", event => {
     openFilter(filterRow.dataset.filterId);
     return;
   }
+  const weightRow = event.target.closest("tr[data-weight-id]");
+  if (weightRow) {
+    openWeight(weightRow.dataset.weightId);
+    return;
+  }
   const moveButton = event.target.closest("button[data-move]");
   if (moveButton) {
     moveQuestion(moveButton.dataset.code, Number(moveButton.dataset.move));
@@ -246,7 +286,16 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     showError(bannerError, error);
     return;
   }
-  const payload = { name: document.querySelector("#banner-name").value.trim(), blocks };
+  const weightSelection = document.querySelector("#banner-weight").value;
+  const payload = {
+    name: document.querySelector("#banner-name").value.trim(),
+    blocks,
+    confidence_level: Number(document.querySelector("#banner-confidence").value) / 100,
+    bonferroni: document.querySelector("#banner-bonferroni").checked,
+    minimum_base: Number(document.querySelector("#banner-minimum-base").value),
+    weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
+    calculated_weight_id: weightSelection.startsWith("calculated:") ? weightSelection.slice(11) : null,
+  };
   setBusy(saveButton, true, "Сохраняем…");
   try {
     const url = currentBannerId
@@ -267,6 +316,50 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     showError(bannerError, error);
   } finally {
     setBusy(saveButton, false, "Сохранить баннер");
+  }
+});
+
+document.querySelector("#weight-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-weight");
+  const weightError = document.querySelector("#weight-error");
+  weightError.hidden = true;
+  let dimensions;
+  try {
+    dimensions = collectWeightDimensions();
+  } catch (error) {
+    showError(weightError, error);
+    return;
+  }
+  const trimming = document.querySelector("#weight-trimming").checked;
+  const payload = {
+    name: document.querySelector("#weight-name").value.trim(),
+    dimensions,
+    lower_bound: trimming ? Number(document.querySelector("#weight-lower").value) : null,
+    upper_bound: trimming ? Number(document.querySelector("#weight-upper").value) : null,
+    tolerance: 0.001,
+    maximum_iterations: 500,
+  };
+  setBusy(saveButton, true, "Рассчитываем…");
+  try {
+    const url = currentWeightId
+      ? `/api/projects/${currentProject.id}/weights/${currentWeightId}`
+      : `/api/projects/${currentProject.id}/weights`;
+    currentProject = await api(url, {
+      method: currentWeightId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentWeightId) {
+      currentWeightId = configuredWeights().find(item => item.name === payload.name)?.id;
+    }
+    renderProject();
+    openWeight(currentWeightId);
+    await loadWeightPreview();
+  } catch (error) {
+    showError(weightError, error);
+  } finally {
+    setBusy(saveButton, false, "Рассчитать и сохранить");
   }
 });
 
@@ -423,15 +516,20 @@ function showProject(project) {
   currentQuestionCode = null;
   currentRecodingId = null;
   currentBannerId = null;
+  currentFilterId = null;
+  currentWeightId = null;
   currentView = "questions";
   structureMode = "questions";
   editor.hidden = true;
   recodeEditor.hidden = true;
   bannerEditor.hidden = true;
+  filterEditor.hidden = true;
+  weightEditor.hidden = true;
   document.querySelector("#recode-toolbar").hidden = true;
   document.querySelector("#banner-toolbar").hidden = true;
   document.querySelector("#structure-toolbar").hidden = false;
   document.querySelector("#filter-toolbar").hidden = true;
+  document.querySelector("#weight-toolbar").hidden = true;
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
   });
@@ -449,6 +547,7 @@ function renderProject() {
   document.querySelector("#project-name").textContent = currentProject.name;
   document.querySelector("#download-source").href = `/api/projects/${currentProject.id}/source`;
   document.querySelector("#download-report").href = `/api/projects/${currentProject.id}/reports/topline.xlsx`;
+  document.querySelector("#download-statistics").href = `/api/projects/${currentProject.id}/reports/statistics.txt`;
   document.querySelector("#summary").innerHTML = [
     [inspection.row_count.toLocaleString("ru-RU"), "респондентов"],
     [inspection.variable_count.toLocaleString("ru-RU"), "переменных"],
@@ -466,6 +565,17 @@ function renderTable() {
   if (!currentProject) return;
   if (currentView === "questions" && structureMode === "variables") {
     renderPhysicalVariables();
+    return;
+  }
+  if (currentView === "weights") {
+    const weights = configuredWeights();
+    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Распределений</th><th>Ограничения</th>";
+    document.querySelector("#table-body").innerHTML = weights.length ? weights.map(weight => `
+      <tr class="question-row ${weight.id === currentWeightId ? "selected" : ""}" data-weight-id="${weight.id}">
+        <td><strong>${escapeHtml(weight.name)}</strong></td>
+        <td>${weight.dimensions.length}</td>
+        <td>${weight.lower_bound == null ? "Без ограничений" : `${weight.lower_bound}–${weight.upper_bound}`}</td>
+      </tr>`).join("") : '<tr><td colspan="3" class="empty-state">Рассчитанных весов пока нет.</td></tr>';
     return;
   }
   if (currentView === "filters") {
@@ -724,6 +834,135 @@ async function assignReportFilter() {
   }
 }
 
+function openWeight(weightId = null) {
+  currentWeightId = weightId;
+  currentQuestionCode = null;
+  currentRecodingId = null;
+  currentBannerId = null;
+  currentFilterId = null;
+  editor.hidden = true;
+  recodeEditor.hidden = true;
+  bannerEditor.hidden = true;
+  filterEditor.hidden = true;
+  weightEditor.hidden = false;
+  const weight = weightId ? configuredWeights().find(item => item.id === weightId) : null;
+  document.querySelector("#weight-editor-title").textContent = weight ? weight.name : "Новый вес";
+  document.querySelector("#weight-name").value = weight?.name || "Вес по целевым распределениям";
+  const trimming = weight ? weight.lower_bound != null || weight.upper_bound != null : true;
+  document.querySelector("#weight-trimming").checked = trimming;
+  document.querySelector("#weight-lower").value = weight?.lower_bound ?? 0.3;
+  document.querySelector("#weight-upper").value = weight?.upper_bound ?? 3;
+  renderWeightTrimming();
+  const list = document.querySelector("#weight-dimension-list");
+  list.innerHTML = "";
+  if (weight) weight.dimensions.forEach(dimension => addWeightDimension(dimension));
+  else addWeightDimension();
+  document.querySelector("#delete-weight").hidden = !weight;
+  document.querySelector("#weight-error").hidden = true;
+  document.querySelector("#weight-preview").innerHTML = weight
+    ? '<p class="muted">Считаем…</p>'
+    : '<p class="muted">Сохраните вес для расчёта.</p>';
+  renderTable();
+  if (weight) loadWeightPreview();
+}
+
+function closeWeight() {
+  weightEditor.hidden = true;
+  currentWeightId = null;
+  renderTable();
+}
+
+function renderWeightTrimming() {
+  const enabled = document.querySelector("#weight-trimming").checked;
+  document.querySelector("#weight-lower").disabled = !enabled;
+  document.querySelector("#weight-upper").disabled = !enabled;
+}
+
+function weightSourceOptions(selectedVariable = "") {
+  return eligibleWeightQuestions().map(question => {
+    const variable = question.source_variables[0];
+    return `<option value="${escapeAttribute(variable)}" ${variable === selectedVariable ? "selected" : ""}>${escapeHtml(question.code)} — ${escapeHtml(question.label)}</option>`;
+  }).join("");
+}
+
+function eligibleWeightQuestions() {
+  return configuredQuestions().filter(question => {
+    if (question.question_type !== "single_choice" || question.source_variables.length !== 1) return false;
+    const variable = currentProject.inspection.variables.find(item => item.name === question.source_variables[0]);
+    return variable?.value_labels?.length >= 2;
+  });
+}
+
+function addWeightDimension(dimension = {}) {
+  if (!eligibleWeightQuestions().length) {
+    throw new Error("Для raking нужна хотя бы одна категориальная переменная с метками значений.");
+  }
+  const element = document.createElement("div");
+  element.className = "weight-dimension";
+  element.innerHTML = `<div class="weight-dimension-head"><select class="weight-dimension-source">${weightSourceOptions(dimension.variable)}</select><button type="button" data-remove-weight-dimension title="Удалить распределение">×</button></div><div class="weight-targets"></div>`;
+  document.querySelector("#weight-dimension-list").append(element);
+  renderWeightTargets(element, dimension.targets || []);
+}
+
+function renderWeightTargets(element, savedTargets = []) {
+  const variableName = element.querySelector(".weight-dimension-source").value;
+  const variable = currentProject.inspection.variables.find(item => item.name === variableName);
+  const equalTarget = 100 / variable.value_labels.length;
+  element.querySelector(".weight-targets").innerHTML = variable.value_labels.map(item => {
+    const saved = savedTargets.find(target => target.values.some(value => String(value) === String(item.value)));
+    const encoded = escapeAttribute(JSON.stringify(item.value));
+    return `<label class="weight-target" data-value="${encoded}"><span>${escapeHtml(item.label)}</span><input type="number" min="0.0001" max="100" step="0.0001" value="${saved?.percent ?? equalTarget}" required /></label>`;
+  }).join("");
+}
+
+function collectWeightDimensions() {
+  const elements = [...document.querySelectorAll("#weight-dimension-list .weight-dimension")];
+  if (!elements.length) throw new Error("Добавьте хотя бы одно целевое распределение.");
+  return elements.map(element => {
+    const variableName = element.querySelector(".weight-dimension-source").value;
+    const variable = currentProject.inspection.variables.find(item => item.name === variableName);
+    const targets = [...element.querySelectorAll(".weight-target")].map(row => ({
+      label: row.querySelector("span").textContent,
+      values: [JSON.parse(row.dataset.value)],
+      percent: Number(row.querySelector("input").value),
+    }));
+    return { variable: variableName, label: variable.label, targets };
+  });
+}
+
+async function loadWeightPreview() {
+  if (!currentProject || !currentWeightId) return;
+  const container = document.querySelector("#weight-preview");
+  container.innerHTML = '<p class="muted">Считаем…</p>';
+  try {
+    const preview = await api(`/api/projects/${currentProject.id}/weights/${currentWeightId}/preview`);
+    container.innerHTML = renderWeightPreview(preview);
+  } catch (error) {
+    container.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderWeightPreview(preview) {
+  const metrics = [
+    [preview.minimum, "Минимум"], [preview.maximum, "Максимум"],
+    [preview.effective_base, "Эффективная база"], [preview.design_effect, "Design effect"],
+    [preview.efficiency_percent, "Эффективность, %"], [preview.iterations, "Итераций"],
+  ];
+  return `<div class="weight-diagnostics">${metrics.map(([value, label]) => `<article><strong>${Number(value).toLocaleString("ru-RU", { maximumFractionDigits: 3 })}</strong><span>${label}</span></article>`).join("")}</div>${preview.distributions.map(dimension => `<div class="weight-distribution"><strong>${escapeHtml(dimension.label)}</strong>${dimension.categories.map(category => `<p><span>${escapeHtml(category.label)}</span><em>${category.before_percent.toFixed(1)}% → ${category.after_percent.toFixed(1)}% · цель ${category.target_percent.toFixed(1)}%</em></p>`).join("")}</div>`).join("")}`;
+}
+
+async function deleteWeight() {
+  if (!currentProject || !currentWeightId) return;
+  const errorBox = document.querySelector("#weight-error");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/weights/${currentWeightId}`, { method: "DELETE" });
+    closeWeight();
+    renderProject();
+  } catch (error) {
+    showError(errorBox, error);
+  }
+}
+
 function openBanner(bannerId = null) {
   currentBannerId = bannerId;
   currentQuestionCode = null;
@@ -734,6 +973,21 @@ function openBanner(bannerId = null) {
   const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
   document.querySelector("#banner-editor-title").textContent = banner ? banner.name : "Новый";
   document.querySelector("#banner-name").value = banner?.name || "Основной баннер";
+  document.querySelector("#banner-confidence").value = (banner?.confidence_level || 0.95) * 100;
+  document.querySelector("#banner-bonferroni").checked = banner?.bonferroni || false;
+  document.querySelector("#banner-minimum-base").value = banner?.minimum_base || 30;
+  const weightSelect = document.querySelector("#banner-weight");
+  const selectedWeight = banner?.calculated_weight_id
+    ? `calculated:${banner.calculated_weight_id}`
+    : banner?.weight_variable ? `ready:${banner.weight_variable}` : "";
+  const readyOptions = currentProject.inspection.variables
+    .filter(variable => variable.storage_type === "numeric")
+    .map(variable => `<option value="ready:${escapeAttribute(variable.name)}" ${selectedWeight === `ready:${variable.name}` ? "selected" : ""}>Готовый: ${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`)
+    .join("");
+  const calculatedOptions = configuredWeights()
+    .map(weight => `<option value="calculated:${weight.id}" ${selectedWeight === `calculated:${weight.id}` ? "selected" : ""}>Рассчитанный: ${escapeHtml(weight.name)}</option>`)
+    .join("");
+  weightSelect.innerHTML = '<option value="">Без веса</option>' + readyOptions + calculatedOptions;
   const list = document.querySelector("#banner-block-list");
   list.innerHTML = "";
   if (banner) banner.blocks.forEach(block => addBannerBlock(block));
@@ -758,7 +1012,7 @@ function addBannerBlock(block = {}) {
   const second = block.sources?.[1];
   const element = document.createElement("div");
   element.className = "banner-block";
-  element.innerHTML = `<div class="banner-block-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button type="button" data-remove-banner-block title="Удалить блок">×</button></div><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Вложить второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label>`;
+  element.innerHTML = `<div class="banner-block-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button type="button" data-remove-banner-block title="Удалить блок">×</button></div><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Вложить второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label><label class="inline-check"><input class="banner-compare-total" type="checkbox" ${block.compare_to_total ? "checked" : ""} /> Сравнивать подгруппы с Total (через Rest)</label><label class="inline-check"><input class="banner-compare-pairwise" type="checkbox" ${block.compare_pairwise ? "checked" : ""} /> Попарно сравнивать подгруппы</label>`;
   document.querySelector("#banner-block-list").append(element);
 }
 
@@ -784,6 +1038,8 @@ function collectBannerBlocks() {
     return {
       label: element.querySelector(".banner-block-label").value.trim() || null,
       sources,
+      compare_to_total: element.querySelector(".banner-compare-total").checked,
+      compare_pairwise: element.querySelector(".banner-compare-pairwise").checked,
     };
   });
 }
@@ -1142,6 +1398,10 @@ function configuredBanners() {
 
 function configuredFilters() {
   return currentProject.configuration?.filters || [];
+}
+
+function configuredWeights() {
+  return currentProject.configuration?.calculated_weights || [];
 }
 
 function suggestRecodeCode() {

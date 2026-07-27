@@ -29,7 +29,9 @@ class StatisticalTestResult:
     group_estimates: tuple[float, float] | None = None
     group_variances: tuple[float, float] | None = None
     group_bases: tuple[int, int] | None = None
-    group_successes: tuple[int, int] | None = None
+    group_successes: tuple[float, float] | None = None
+    group_weight_sums: tuple[float, float] | None = None
+    effective_bases: tuple[float, float] | None = None
     approximate: bool = False
 
 
@@ -186,6 +188,7 @@ def welch_t_test(
             difference,
             means,
             "Невзвешенная база одной из групп ниже установленного порога.",
+            group_bases=(len(sample_a), len(sample_b)),
         )
     if len(sample_a) < 2 or len(sample_b) < 2:
         return _skipped_result(
@@ -194,6 +197,7 @@ def welch_t_test(
             difference,
             means,
             "Для оценки дисперсии в каждой группе нужны минимум два наблюдения.",
+            group_bases=(len(sample_a), len(sample_b)),
         )
 
     variances = (float(sample_a.var(ddof=1)), float(sample_b.var(ddof=1)))
@@ -207,6 +211,7 @@ def welch_t_test(
             means,
             "Нулевая дисперсия обеих групп не позволяет выполнить Welch t-test.",
             group_variances=variances,
+            group_bases=(len(sample_a), len(sample_b)),
         )
 
     standard_error = math.sqrt(standard_error_squared)
@@ -235,9 +240,178 @@ def welch_t_test(
         degrees_of_freedom=degrees_of_freedom,
         group_estimates=means,
         group_variances=variances,
+        group_bases=(len(sample_a), len(sample_b)),
     )
 
 
+def effective_sample_size(weights: Iterable[float]) -> float:
+    sample = np.asarray(list(weights), dtype=float)
+    if not len(sample) or np.any(~np.isfinite(sample)) or np.any(sample <= 0):
+        raise ValueError("Веса должны быть конечными положительными числами.")
+    return float(sample.sum() ** 2 / np.square(sample).sum())
+
+
+def weighted_proportion_z_test(
+    outcome_a: Iterable[bool],
+    weights_a: Iterable[float],
+    outcome_b: Iterable[bool],
+    weights_b: Iterable[float],
+    *,
+    confidence_level: float = 0.95,
+    comparisons: int = 1,
+    minimum_base: int = 30,
+) -> StatisticalTestResult:
+    selected_a, sample_weights_a = _weighted_sample(outcome_a, weights_a)
+    selected_b, sample_weights_b = _weighted_sample(outcome_b, weights_b)
+    alpha = _adjusted_alpha(confidence_level, comparisons)
+    bases = (len(selected_a), len(selected_b))
+    effective_bases = (
+        effective_sample_size(sample_weights_a),
+        effective_sample_size(sample_weights_b),
+    )
+    weight_sums = (float(sample_weights_a.sum()), float(sample_weights_b.sum()))
+    successes = (
+        float(sample_weights_a[selected_a].sum()),
+        float(sample_weights_b[selected_b].sum()),
+    )
+    estimates = (successes[0] / weight_sums[0], successes[1] / weight_sums[1])
+    difference = estimates[0] - estimates[1]
+    common = {
+        "group_bases": bases,
+        "group_successes": successes,
+        "group_weight_sums": weight_sums,
+        "effective_bases": effective_bases,
+        "approximate": True,
+    }
+    if min(bases) < minimum_base:
+        return _skipped_result(
+            "z-test", alpha, difference, estimates,
+            "Невзвешенная база одной из групп ниже установленного порога.",
+            **common,
+        )
+    if min(effective_bases) < minimum_base:
+        return _skipped_result(
+            "z-test", alpha, difference, estimates,
+            "Эффективная база одной из групп ниже установленного порога.",
+            **common,
+        )
+    pooled = (
+        estimates[0] * effective_bases[0] + estimates[1] * effective_bases[1]
+    ) / sum(effective_bases)
+    expected = (
+        effective_bases[0] * pooled,
+        effective_bases[0] * (1 - pooled),
+        effective_bases[1] * pooled,
+        effective_bases[1] * (1 - pooled),
+    )
+    if any(value < 5 for value in expected):
+        return _skipped_result(
+            "z-test", alpha, difference, estimates,
+            "Хотя бы одна ожидаемая частота таблицы 2×2 меньше 5.",
+            expected_frequencies=expected,
+            **common,
+        )
+    pooled_se = math.sqrt(
+        pooled * (1 - pooled) * (1 / effective_bases[0] + 1 / effective_bases[1])
+    )
+    if pooled_se == 0:
+        return _skipped_result(
+            "z-test", alpha, difference, estimates,
+            "Нулевая дисперсия не позволяет выполнить z-test.",
+            expected_frequencies=expected,
+            **common,
+        )
+    statistic = difference / pooled_se
+    p_value = math.erfc(abs(statistic) / math.sqrt(2))
+    interval_se = math.sqrt(
+        estimates[0] * (1 - estimates[0]) / effective_bases[0]
+        + estimates[1] * (1 - estimates[1]) / effective_bases[1]
+    )
+    critical = NormalDist().inv_cdf(1 - alpha / 2)
+    interval = (difference - critical * interval_se, difference + critical * interval_se)
+    significant = p_value < alpha
+    return StatisticalTestResult(
+        method="z-test", performed=True, significant=significant,
+        direction=_direction(difference, significant), alpha=alpha,
+        statistic=statistic, p_value=p_value, difference=difference,
+        confidence_interval=interval, expected_frequencies=expected,
+        group_estimates=estimates, **common,
+    )
+
+
+def weighted_welch_t_test(
+    values_a: Iterable[float],
+    weights_a: Iterable[float],
+    values_b: Iterable[float],
+    weights_b: Iterable[float],
+    *,
+    confidence_level: float = 0.95,
+    comparisons: int = 1,
+    minimum_base: int = 30,
+) -> StatisticalTestResult:
+    sample_a, sample_weights_a = _weighted_numeric_sample(values_a, weights_a)
+    sample_b, sample_weights_b = _weighted_numeric_sample(values_b, weights_b)
+    alpha = _adjusted_alpha(confidence_level, comparisons)
+    bases = (len(sample_a), len(sample_b))
+    effective_bases = (
+        effective_sample_size(sample_weights_a),
+        effective_sample_size(sample_weights_b),
+    )
+    means = (
+        float(np.average(sample_a, weights=sample_weights_a)),
+        float(np.average(sample_b, weights=sample_weights_b)),
+    )
+    difference = means[0] - means[1]
+    common = {
+        "group_bases": bases,
+        "group_weight_sums": (float(sample_weights_a.sum()), float(sample_weights_b.sum())),
+        "effective_bases": effective_bases,
+        "approximate": True,
+    }
+    if min(bases) < minimum_base:
+        return _skipped_result(
+            "Welch t-test", alpha, difference, means,
+            "Невзвешенная база одной из групп ниже установленного порога.", **common,
+        )
+    if min(effective_bases) < minimum_base:
+        return _skipped_result(
+            "Welch t-test", alpha, difference, means,
+            "Эффективная база одной из групп ниже установленного порога.", **common,
+        )
+    variances = (
+        _weighted_variance(sample_a, sample_weights_a, means[0]),
+        _weighted_variance(sample_b, sample_weights_b, means[1]),
+    )
+    variance_terms = (
+        variances[0] / effective_bases[0],
+        variances[1] / effective_bases[1],
+    )
+    standard_error_squared = sum(variance_terms)
+    if standard_error_squared == 0:
+        return _skipped_result(
+            "Welch t-test", alpha, difference, means,
+            "Нулевая дисперсия обеих групп не позволяет выполнить Welch t-test.",
+            group_variances=variances, **common,
+        )
+    degrees_of_freedom = standard_error_squared**2 / (
+        variance_terms[0] ** 2 / (effective_bases[0] - 1)
+        + variance_terms[1] ** 2 / (effective_bases[1] - 1)
+    )
+    statistic = difference / math.sqrt(standard_error_squared)
+    p_value = float(2 * student_t.sf(abs(statistic), degrees_of_freedom))
+    critical = float(student_t.ppf(1 - alpha / 2, degrees_of_freedom))
+    interval = (
+        difference - critical * math.sqrt(standard_error_squared),
+        difference + critical * math.sqrt(standard_error_squared),
+    )
+    significant = p_value < alpha
+    return StatisticalTestResult(
+        method="Welch t-test", performed=True, significant=significant,
+        direction=_direction(difference, significant), alpha=alpha,
+        statistic=statistic, p_value=p_value, difference=difference,
+        confidence_interval=interval, degrees_of_freedom=degrees_of_freedom,
+        group_estimates=means, group_variances=variances, **common,
+    )
 def _validate_binomial_sample(successes: int, base: int, label: str) -> None:
     if not isinstance(base, int) or isinstance(base, bool) or base <= 0:
         raise ValueError(f"База группы {label} должна быть положительным целым числом.")
@@ -260,6 +434,42 @@ def _finite_sample(values: Iterable[float]) -> np.ndarray:
     return sample[np.isfinite(sample)]
 
 
+def _weighted_sample(
+    outcome: Iterable[bool], weights: Iterable[float]
+) -> tuple[np.ndarray, np.ndarray]:
+    selected = np.asarray(list(outcome), dtype=bool)
+    sample_weights = np.asarray(list(weights), dtype=float)
+    if not len(selected) or len(selected) != len(sample_weights):
+        raise ValueError("Значения и веса должны иметь одинаковую ненулевую длину.")
+    if np.any(~np.isfinite(sample_weights)) or np.any(sample_weights <= 0):
+        raise ValueError("Веса должны быть конечными положительными числами.")
+    return selected, sample_weights
+
+
+def _weighted_numeric_sample(
+    values: Iterable[float], weights: Iterable[float]
+) -> tuple[np.ndarray, np.ndarray]:
+    sample = np.asarray(list(values), dtype=float)
+    sample_weights = np.asarray(list(weights), dtype=float)
+    if not len(sample) or len(sample) != len(sample_weights):
+        raise ValueError("Значения и веса должны иметь одинаковую ненулевую длину.")
+    valid = np.isfinite(sample)
+    sample = sample[valid]
+    sample_weights = sample_weights[valid]
+    if not len(sample):
+        raise ValueError("Группа должна содержать хотя бы одно числовое значение.")
+    if np.any(~np.isfinite(sample_weights)) or np.any(sample_weights <= 0):
+        raise ValueError("Веса должны быть конечными положительными числами.")
+    return sample, sample_weights
+
+
+def _weighted_variance(values: np.ndarray, weights: np.ndarray, mean: float) -> float:
+    denominator = weights.sum() - np.square(weights).sum() / weights.sum()
+    if denominator <= 0:
+        return 0.0
+    return float(np.sum(weights * np.square(values - mean)) / denominator)
+
+
 def _direction(difference: float, significant: bool) -> Direction:
     if not significant:
         return "none"
@@ -276,7 +486,10 @@ def _skipped_result(
     expected_frequencies: tuple[float, float, float, float] | None = None,
     group_variances: tuple[float, float] | None = None,
     group_bases: tuple[int, int] | None = None,
-    group_successes: tuple[int, int] | None = None,
+    group_successes: tuple[float, float] | None = None,
+    group_weight_sums: tuple[float, float] | None = None,
+    effective_bases: tuple[float, float] | None = None,
+    approximate: bool = False,
 ) -> StatisticalTestResult:
     return StatisticalTestResult(
         method=method,
@@ -294,4 +507,7 @@ def _skipped_result(
         group_variances=group_variances,
         group_bases=group_bases,
         group_successes=group_successes,
+        group_weight_sums=group_weight_sums,
+        effective_bases=effective_bases,
+        approximate=approximate,
     )
