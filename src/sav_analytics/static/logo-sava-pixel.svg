@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" shape-rendering="geometricPrecision" role="img" aria-labelledby="title desc">
+  <title id="title">SAVA pixel logo</title>
+  <desc id="desc">A graphite squircle containing pixel S A over V A lettering, with the final A in coral.</desc>
+
+  <!-- Continuous-curvature app-icon silhouette. The canvas outside it is transparent. -->
+  <path
+    fill="#2F3236"
+    d="M300 56C196 56 126 80 86 151 58 201 52 273 52 512s6 311 34 361c40 71 110 95 214 95h424c104 0 174-24 214-95 28-50 34-122 34-361s-6-311-34-361c-40-71-110-95-214-95H300Z"
+  />
+
+  <!-- Pixel S: five overlapping modules form one crisp, scalable glyph. -->
+  <g fill="#FAFAF8">
+    <path d="M176 198h248v60H236v46h142v60H236v48h188v60H176v-120h60v-48h-60V198Z" />
+
+    <!-- Pixel A -->
+    <path fill-rule="evenodd" d="M594 198h128v50h48v224h-64v-86H610v86h-64V248h48v-50Zm16 60v70h96v-70h-96Z" />
+
+    <!-- Pixel V, built with stepped diagonal legs. -->
+    <path d="M170 552h66v112h34v72h36v72h38v-72h36v-72h34V552h66v132h-34v72h-36v72h-34v72H274v-72h-34v-72h-36v-72h-34V552Z" />
+  </g>
+
+  <!-- Only the final A carries the accent color. -->
+  <path
+    fill="#FF7358"
+    fill-rule="evenodd"
+    d="M594 552h128v50h48v298h-64v-104H610v104h-64V602h48v-50Zm16 60v126h96V612h-96Z"
+  />
+</svg>

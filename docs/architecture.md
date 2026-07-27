@@ -152,7 +152,7 @@ Production использует те же собственные Docker-обра
 - single, multiple, scale, numeric, ranking и matrix;
 - Main и Filter базы;
 - перекодировки и сложные фильтры;
-- Total/Rest, z-test, Fisher exact test и Welch t-test;
+- Total/Rest, допустимый по ожидаемым частотам z-test и Welch t-test;
 - Bonferroni и малые/эффективные базы;
 - готовые и рассчитанные веса;
 - волны, NPS, CSAT и корреляции;

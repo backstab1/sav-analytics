@@ -15,6 +15,7 @@ dependencies = [
   "pydantic-settings>=2.8,<3",
   "python-multipart>=0.0.20,<1",
   "pyreadstat>=1.2.8,<2",
+  "scipy>=1.16,<2",
   "uvicorn[standard]>=0.34,<1",
   "XlsxWriter>=3.2,<4",
 ]

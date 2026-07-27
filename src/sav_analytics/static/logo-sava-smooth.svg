@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">SAVA smooth logo</title>
+  <desc id="desc">A graphite squircle containing smooth S A over V A lettering, with the final A in coral.</desc>
+
+  <!-- Continuous-curvature app-icon silhouette. The canvas outside it is transparent. -->
+  <path
+    fill="#2F3236"
+    d="M300 56C196 56 126 80 86 151 58 201 52 273 52 512s6 311 34 361c40 71 110 95 214 95h424c104 0 174-24 214-95 28-50 34-122 34-361s-6-311-34-361c-40-71-110-95-214-95H300Z"
+  />
+
+  <!-- All lettering is outlined geometry: no external font dependency. -->
+  <g fill="none" stroke="#FAFAF8" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M416 222H262c-44 0-74 27-74 65s30 65 74 65h78c44 0 74 27 74 65s-30 65-74 65H186" />
+    <path d="M544 482 654 232c8-18 18-18 26 0l110 250M598 374h138" />
+    <path d="m190 574 108 246c8 18 18 18 26 0l108-246" />
+  </g>
+
+  <g fill="none" stroke="#FF7358" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m544 832 110-250c8-18 18-18 26 0l110 250M598 724h138" />
+  </g>
+</svg>
