@@ -114,7 +114,7 @@ document.querySelector("#recode-source").addEventListener("change", () => {
 });
 document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
 document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
-document.querySelector("#new-banner").addEventListener("click", () => openBanner());
+document.querySelector("#new-banner").addEventListener("click", () => openBanner(configuredBanners()[0]?.id || null));
 document.querySelector("#close-banner-editor").addEventListener("click", closeBanner);
 document.querySelector("#add-banner-block").addEventListener("click", () => addBannerBlock());
 document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
@@ -288,7 +288,7 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
   }
   const weightSelection = document.querySelector("#banner-weight").value;
   const payload = {
-    name: document.querySelector("#banner-name").value.trim(),
+    name: "Баннер",
     blocks,
     confidence_level: Number(document.querySelector("#banner-confidence").value) / 100,
     bonferroni: document.querySelector("#banner-bonferroni").checked,
@@ -307,7 +307,7 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
       body: JSON.stringify(payload),
     });
     if (!currentBannerId) {
-      currentBannerId = configuredBanners().find(item => item.name === payload.name)?.id;
+      currentBannerId = configuredBanners()[0]?.id;
     }
     renderProject();
     openBanner(currentBannerId);
@@ -558,6 +558,8 @@ function renderProject() {
   warningBox.hidden = inspection.warnings.length === 0;
   warningBox.innerHTML = inspection.warnings.map(text => `<p>⚑ ${escapeHtml(text)}</p>`).join("");
   renderReportFilterControl();
+  const bannerButton = document.querySelector("#new-banner");
+  bannerButton.textContent = configuredBanners().length ? "Редактировать баннер" : "+ Настроить баннер";
   renderTable();
 }
 
@@ -592,12 +594,12 @@ function renderTable() {
   }
   if (currentView === "banners") {
     const banners = configuredBanners();
-    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Блоков</th><th>Структура</th>";
+    document.querySelector("#table-head").innerHTML = "<th>Статус</th><th>Блоков</th><th>Структура</th>";
     document.querySelector("#table-body").innerHTML = banners.length ? banners.map(banner => `
       <tr class="question-row ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${banner.id}">
-        <td><strong>${escapeHtml(banner.name)}</strong></td><td>${banner.blocks.length}</td>
+        <td><span class="status">В Excel</span></td><td>${banner.blocks.length}</td>
         <td>${banner.blocks.map(block => `<small>${block.sources.map(source => escapeHtml(bannerSourceLabel(source))).join(" → ")}</small>`).join("")}</td>
-      </tr>`).join("") : '<tr><td colspan="3" class="empty-state">Баннеров пока нет. Total будет добавлен автоматически.</td></tr>';
+      </tr>`).join("") : '<tr><td colspan="3" class="empty-state">Баннера нет. В Excel будет только Total.</td></tr>';
     return;
   }
   if (currentView === "recodings") {
@@ -971,8 +973,7 @@ function openBanner(bannerId = null) {
   recodeEditor.hidden = true;
   bannerEditor.hidden = false;
   const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
-  document.querySelector("#banner-editor-title").textContent = banner ? banner.name : "Новый";
-  document.querySelector("#banner-name").value = banner?.name || "Основной баннер";
+  document.querySelector("#banner-editor-title").textContent = "Баннер";
   document.querySelector("#banner-confidence").value = (banner?.confidence_level || 0.95) * 100;
   document.querySelector("#banner-bonferroni").checked = banner?.bonferroni || false;
   document.querySelector("#banner-minimum-base").value = banner?.minimum_base || 30;

@@ -74,7 +74,7 @@ def build_topline_artifacts(path: str | Path, project: dict[str, Any]) -> Toplin
 
     banners = configuration.get("banners", [])
     if banners:
-        active_banner = banners[0]
+        active_banner = banners[-1]
         columns = build_banner_columns(frame, active_banner, project)
     else:
         active_banner = {}

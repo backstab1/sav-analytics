@@ -226,6 +226,10 @@ class ProjectRepository:
 
     def create_banner(self, project_id: UUID, definition: dict) -> dict:
         project = self.get(project_id)
+        if project["configuration"]["banners"]:
+            raise InvalidUploadError(
+                "В проекте уже есть баннер. Добавьте новый блок в существующий баннер."
+            )
         project["configuration"]["banners"].append({"id": str(uuid4()), **definition})
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
@@ -432,6 +436,10 @@ class ProjectRepository:
             }
         project["configuration"].setdefault("recodings", [])
         project["configuration"].setdefault("banners", [])
+        if len(project["configuration"]["banners"]) > 1:
+            project["configuration"]["banners"] = [
+                project["configuration"]["banners"][-1]
+            ]
         project["configuration"].setdefault("filters", [])
         project["configuration"].setdefault("calculated_weights", [])
         project["configuration"].setdefault("report_filter_id", None)

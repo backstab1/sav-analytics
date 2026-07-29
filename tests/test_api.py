@@ -322,6 +322,21 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
             assert preview.json()["columns"][0]["label"] == "Total"
             assert len(preview.json()["columns"]) == 5
 
+            second = client.post(
+                f"/api/projects/{project_id}/banners",
+                json={
+                    "name": "Пол",
+                    "blocks": [
+                        {
+                            "label": "Пол",
+                            "sources": [{"kind": "question", "ref": "Q1"}],
+                        }
+                    ],
+                },
+            )
+            assert second.status_code == 422
+            assert "уже есть баннер" in second.json()["detail"]
+
             deleted = client.delete(
                 f"/api/projects/{project_id}/banners/{banner_id}"
             )

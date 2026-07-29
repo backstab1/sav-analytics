@@ -410,7 +410,7 @@ def create_banner(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Проект не найден."
         ) from exc
-    except BannerError as exc:
+    except (BannerError, InvalidUploadError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
