@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
+
+from ..api_dependencies import get_repository
+from ..core.banner import BannerError
+from ..core.filtering import FilterError
+from ..core.report import ReportError
+from ..report_cache import prepare_report
+from ..report_jobs import get_report_job, start_report_job
+from ..repository import ProjectNotFoundError, ProjectRepository
+
+router = APIRouter(prefix="/api/projects/{project_id}/reports", tags=["reports"])
+
+
+@router.post("/prepare")
+def prepare_project_report(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project = repository.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    return start_report_job(repository, project_id, project)
+
+
+@router.get("/jobs/{job_id}")
+def report_job_status(project_id: UUID, job_id: UUID) -> dict:
+    job = get_report_job(job_id, project_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Задача формирования отчёта не найдена.")
+    return job
+
+
+@router.get("/topline.xlsx")
+def download_topline(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    try:
+        project = repository.get(project_id)
+        prepared = prepare_report(repository, project_id, project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except (ReportError, BannerError, FilterError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return FileResponse(
+        prepared.topline_path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"{project['name']}_topline.xlsx",
+    )
+
+
+@router.get("/statistics.txt")
+def download_statistics(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    try:
+        project = repository.get(project_id)
+        prepared = prepare_report(repository, project_id, project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except (ReportError, BannerError, FilterError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return FileResponse(
+        prepared.statistics_path,
+        media_type="text/plain; charset=utf-8",
+        filename=f"{project['name']}_statistics.txt",
+    )

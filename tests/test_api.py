@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
-from sav_analytics.repository import ProjectRepository
+from sav_analytics.repository import STRUCTURE_VERSION, ProjectRepository
 from tests.test_sav_reader import write_fixture, write_grouped_fixture
 
 
@@ -37,6 +37,16 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             )
             assert statistics.status_code == 200
             assert statistics.headers["content-type"].startswith("text/plain")
+            prepared = client.post(f"/api/projects/{project['id']}/reports/prepare")
+            assert prepared.status_code == 200
+            assert prepared.json()["cached"] is True
+            assert prepared.json()["status"] == "complete"
+            job = client.get(
+                f"/api/projects/{project['id']}/reports/jobs/"
+                f"{prepared.json()['job_id']}"
+            )
+            assert job.status_code == 200
+            assert job.json()["progress"] == 100
             assert "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА" in statistics.text
             technical_preview = client.get(
                 f"/api/projects/{project['id']}/questions/id/preview"
@@ -288,7 +298,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
     )
     assert matrix["source_variables"] == ["Q5_1", "Q5_2"]
     assert not matrix["included_in_report"]
-    assert migrated["configuration"]["structure_version"] == 2
+    assert migrated["configuration"]["structure_version"] == STRUCTURE_VERSION
 
 
 def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:

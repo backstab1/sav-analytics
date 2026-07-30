@@ -94,6 +94,7 @@ def _inspect_variable(series: pd.Series, name: str, metadata: Any) -> VariableIn
                 )
 
     analysis_series = series.mask(missing_mask)
+    variable_label = str(labels.get(name) or name).strip()
     question_type, warnings = infer_question_type(
         analysis_series,
         measurement_level=measurement,
@@ -105,7 +106,7 @@ def _inspect_variable(series: pd.Series, name: str, metadata: Any) -> VariableIn
 
     return VariableInspection(
         name=name,
-        label=str(labels.get(name) or name).strip(),
+        label=variable_label,
         storage_type=storage_type,
         original_format=original_format,
         measurement_level=measurement,

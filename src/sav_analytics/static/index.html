@@ -35,11 +35,10 @@
 
       <section id="workspace" class="workspace" hidden>
         <div class="workspace-head">
-          <div><p class="eyebrow">СТРУКТУРА МАССИВА</p><h1 id="project-name"></h1></div>
-          <div class="head-actions"><button id="refresh-structure" class="secondary" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button><a id="download-report" class="report-button link-button" href="#">Скачать Excel</a><a id="download-statistics" class="secondary link-button" href="#">Скачать статистику</a><a id="download-source" class="secondary link-button" href="#">Скачать SAV</a><button id="new-project" class="secondary">Новый проект</button></div>
+          <div class="workspace-title"><p class="eyebrow">СТРУКТУРА МАССИВА</p><h1 id="project-name"></h1></div>
+          <div class="head-actions"><a id="download-report" class="report-button link-button" href="#">Скачать Excel</a><a id="download-statistics" class="secondary link-button" href="#">Скачать статистику</a><a id="download-source" class="text-button link-button" href="#">Скачать SAV</a><button id="refresh-structure" class="text-button" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать</button><button id="new-project" class="text-button">Новый проект</button></div>
         </div>
         <div id="summary" class="summary"></div>
-        <div id="warnings" class="warnings" hidden></div>
         <div class="workspace-grid">
           <div class="structure-panel">
             <div class="tabs"><button class="active" data-view="questions">Структура</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button><button data-view="weights">Веса</button></div>
@@ -53,40 +52,42 @@
             </div>
           </div>
           <aside id="question-editor" class="question-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">НАСТРОЙКА ВОПРОСА</p><h2 id="editor-code"></h2></div><button id="close-editor" class="icon-button" type="button">×</button></div>
+            <div class="editor-head"><div><p class="eyebrow">НАСТРОЙКА ВОПРОСА</p><h2 id="editor-code"></h2></div><button id="close-editor" class="icon-button" type="button" aria-label="Закрыть редактор вопроса">×</button></div>
             <form id="question-form">
               <label><span id="question-label-caption">Название для отчёта</span><textarea id="question-label" rows="4" required></textarea><small id="question-label-help">Это название попадёт в содержание и топлайн Excel.</small></label>
-              <label>Тип вопроса<select id="question-type">
-                <option value="single_choice">Один ответ</option>
-                <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
-                <option value="multiple_choice_categorical">Множественный — категории</option>
-                <option value="scale">Шкала</option>
-                <option value="numeric">Числовой показатель</option>
-                <option value="ranking">Ранжирование</option>
-                <option value="matrix">Матрица шкал</option>
-                <option value="open_text">Открытый текст</option>
-                <option value="technical">Технический</option>
-              </select></label>
-              <label>Роль<select id="question-role">
-                <option value="question">Обычный вопрос</option>
-                <option value="id">ID</option>
-                <option value="weight">Вес</option>
-                <option value="wave">Волна</option>
-                <option value="filter">Фильтрующая / маршрутная</option>
-                <option value="technical">Техническая</option>
-              </select></label>
+              <div class="form-row">
+                <label>Тип вопроса<select id="question-type">
+                  <option value="single_choice">Один ответ</option>
+                  <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
+                  <option value="multiple_choice_categorical">Множественный — категории</option>
+                  <option value="scale">Шкала</option>
+                  <option value="numeric">Числовой показатель</option>
+                  <option value="ranking">Ранжирование</option>
+                  <option value="matrix">Матрица шкал</option>
+                  <option value="open_text">Открытый текст</option>
+                  <option value="technical">Технический</option>
+                </select></label>
+                <label>Роль<select id="question-role">
+                  <option value="question">Обычный вопрос</option>
+                  <option value="id">ID</option>
+                  <option value="weight">Вес</option>
+                  <option value="wave">Волна</option>
+                  <option value="filter">Фильтрующая / маршрутная</option>
+                  <option value="technical">Техническая</option>
+                </select></label>
+              </div>
               <label class="checkbox"><input id="question-included" type="checkbox" /> Включить в отчёт</label>
               <label id="special-metric-label" hidden>Специальный показатель<select id="question-special-metric"><option value="none">Нет</option><option value="nps">NPS (шкала 0–10)</option><option value="csat">CSAT (шкала 1–5)</option></select><small>Границы групп фиксированы и применяются автоматически.</small></label>
               <label>Пользовательская база<select id="question-base-filter"><option value="">Стандартная база</option></select></label>
               <section id="question-members" class="question-members" hidden></section>
-              <section id="special-answers" class="special-answers" hidden><div><strong>Специальные ответы</strong><small>Показываются в распределении, но исключаются из средних. Для multiple проверяется совместный выбор.</small></div><div id="special-answer-list"></div></section>
+              <section id="special-answers" class="special-answers" hidden><div><strong>Исключить ответы</strong><small>Отмеченные ответы останутся в распределении, но будут исключены из средних. Для multiple проверяется совместный выбор.</small></div><div id="special-answer-list"></div></section>
               <button id="save-question" type="submit">Сохранить изменения</button>
               <p id="editor-error" class="error" hidden></p>
             </form>
             <section class="preview"><div class="preview-title"><h3>Предпросмотр Total</h3><button id="refresh-preview" class="text-button" type="button">Пересчитать</button></div><div id="preview-content" class="preview-content"><p class="muted">Выберите вопрос.</p></div></section>
           </aside>
           <aside id="recode-editor" class="question-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">ПЕРЕКОДИРОВКА</p><h2 id="recode-editor-title">Новая</h2></div><button id="close-recode-editor" class="icon-button" type="button">×</button></div>
+            <div class="editor-head"><div><p class="eyebrow">ПЕРЕКОДИРОВКА</p><h2 id="recode-editor-title">Новая</h2></div><button id="close-recode-editor" class="icon-button" type="button" aria-label="Закрыть редактор перекодировки">×</button></div>
             <form id="recode-form">
               <label>Код производной переменной<input id="recode-code" required maxlength="64" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="AGE_GROUP" /></label>
               <label>Название<input id="recode-name" required maxlength="500" placeholder="Возрастные группы" /></label>
@@ -101,7 +102,7 @@
             <section class="preview"><div class="preview-title"><h3>Предпросмотр групп</h3><button id="refresh-recode-preview" class="text-button" type="button">Пересчитать</button></div><div id="recode-preview" class="preview-content"><p class="muted">Сохраните перекодировку для расчёта.</p></div></section>
           </aside>
           <aside id="banner-editor" class="question-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">БАННЕР</p><h2 id="banner-editor-title">Новый</h2></div><button id="close-banner-editor" class="icon-button" type="button">×</button></div>
+            <div class="editor-head"><div><p class="eyebrow">БАННЕР</p><h2 id="banner-editor-title">Новый</h2></div><button id="close-banner-editor" class="icon-button" type="button" aria-label="Закрыть редактор баннера">×</button></div>
             <form id="banner-form">
               <label>Название баннера<input id="banner-name" required maxlength="500" /></label>
               <div class="range-heading"><strong>Правила статистики для всего баннера</strong><small>Применяются одинаково ко всем блокам и колонкам.</small></div>
@@ -116,7 +117,7 @@
             <section class="preview"><div class="preview-title"><h3>Колонки и базы</h3><button id="refresh-banner-preview" class="text-button" type="button">Пересчитать</button></div><div id="banner-preview" class="preview-content"><p class="muted">Сохраните баннер для расчёта.</p></div></section>
           </aside>
           <aside id="filter-editor" class="question-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">БАЗА / ФИЛЬТР</p><h2 id="filter-editor-title">Новое правило</h2></div><button id="close-filter-editor" class="icon-button" type="button">×</button></div>
+            <div class="editor-head"><div><p class="eyebrow">БАЗА / ФИЛЬТР</p><h2 id="filter-editor-title">Новое правило</h2></div><button id="close-filter-editor" class="icon-button" type="button" aria-label="Закрыть редактор фильтра">×</button></div>
             <form id="filter-form">
               <label>Название правила<input id="filter-name" required maxlength="500" placeholder="Например, Покупатели категории" /></label>
               <label>Объединить условия<select id="filter-operator"><option value="and">Все условия (И)</option><option value="or">Хотя бы одно (ИЛИ)</option></select></label>
@@ -131,7 +132,7 @@
             <section class="preview"><div class="preview-title"><h3>Получающаяся выборка</h3><button id="refresh-filter-preview" class="text-button" type="button">Пересчитать</button></div><div id="filter-preview" class="preview-content"><p class="muted">Сохраните правило для расчёта.</p></div></section>
           </aside>
           <aside id="weight-editor" class="question-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">RAKING / IPF</p><h2 id="weight-editor-title">Новый вес</h2></div><button id="close-weight-editor" class="icon-button" type="button">×</button></div>
+            <div class="editor-head"><div><p class="eyebrow">RAKING / IPF</p><h2 id="weight-editor-title">Новый вес</h2></div><button id="close-weight-editor" class="icon-button" type="button" aria-label="Закрыть редактор весов">×</button></div>
             <form id="weight-form">
               <label>Название веса<input id="weight-name" required maxlength="500" placeholder="Вес по полу и возрасту" /></label>
               <div class="banner-stat-settings"><label>Минимальный вес<input id="weight-lower" type="number" min="0.01" step="0.01" value="0.3" /></label><label>Максимальный вес<input id="weight-upper" type="number" min="0.01" step="0.01" value="3" /></label><label class="inline-check"><input id="weight-trimming" type="checkbox" checked /> Ограничивать веса</label></div>

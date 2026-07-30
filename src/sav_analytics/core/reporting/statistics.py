@@ -1,0 +1,963 @@
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, replace
+from datetime import datetime
+from typing import Any, TextIO
+
+import numpy as np
+import pandas as pd
+
+from ..statistics import (
+    StatisticalTestResult,
+    balance_z_test,
+    proportion_z_test,
+    subgroup_vs_rest_z_test,
+    weighted_proportion_z_test,
+    weighted_welch_t_test,
+    welch_t_test,
+)
+from .models import StatisticalAuditEntry
+
+
+@dataclass(frozen=True)
+class _UnweightedProportionContext:
+    selected: np.ndarray
+    eligible: np.ndarray
+    column_masks: tuple[np.ndarray, ...]
+    effective_masks: tuple[np.ndarray, ...]
+    bases: tuple[int, ...]
+    successes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class _UnweightedMeanContext:
+    values: np.ndarray
+    valid: np.ndarray
+    base: np.ndarray
+    column_masks: tuple[np.ndarray, ...]
+    samples: tuple[np.ndarray, ...]
+
+
+def _excel_column_name(index: int) -> str:
+    result = ""
+    value = index
+    while value:
+        value, remainder = divmod(value - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+def _unweighted_proportion_context(
+    outcome: pd.Series,
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+) -> _UnweightedProportionContext:
+    selected = outcome.fillna(False).to_numpy(dtype=bool, copy=False)
+    eligible = eligible_mask.to_numpy(dtype=bool, copy=False)
+    column_masks = tuple(
+        column["mask"].to_numpy(dtype=bool, copy=False) for column in columns
+    )
+    effective_masks = tuple(mask & eligible for mask in column_masks)
+    bases = tuple(int(np.count_nonzero(mask)) for mask in effective_masks)
+    successes = tuple(
+        int(np.count_nonzero(selected & mask)) for mask in effective_masks
+    )
+    return _UnweightedProportionContext(
+        selected,
+        eligible,
+        column_masks,
+        effective_masks,
+        bases,
+        successes,
+    )
+
+def _unweighted_proportion_test(
+    context: _UnweightedProportionContext,
+    position: int,
+    column: dict[str, Any],
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> StatisticalTestResult | None:
+    if not column.get("compare_to_total"):
+        return None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    total = context.column_masks[0] & context.eligible
+    rest = total & ~context.column_masks[position]
+    try:
+        return proportion_z_test(
+            context.successes[position],
+            context.bases[position],
+            int(np.count_nonzero(context.selected & rest)),
+            int(np.count_nonzero(rest)),
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+    except ValueError:
+        return None
+
+def _unweighted_mean_context(
+    series: pd.Series,
+    base_mask: pd.Series,
+    columns: list[dict[str, Any]],
+) -> _UnweightedMeanContext:
+    numeric = pd.to_numeric(series, errors="coerce")
+    values = numeric.to_numpy(dtype=float, na_value=np.nan)
+    valid = np.isfinite(values)
+    base = base_mask.to_numpy(dtype=bool, copy=False)
+    column_masks = tuple(
+        column["mask"].to_numpy(dtype=bool, copy=False) for column in columns
+    )
+    samples = tuple(values[mask & base & valid] for mask in column_masks)
+    return _UnweightedMeanContext(values, valid, base, column_masks, samples)
+
+def _unweighted_mean_test(
+    context: _UnweightedMeanContext,
+    position: int,
+    column: dict[str, Any],
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> StatisticalTestResult | None:
+    if not column.get("compare_to_total"):
+        return None
+    subgroup = context.samples[position]
+    rest_mask = (
+        context.column_masks[0]
+        & ~context.column_masks[position]
+        & context.base
+        & context.valid
+    )
+    rest = context.values[rest_mask]
+    if not subgroup.size or not rest.size:
+        return None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    return welch_t_test(
+        subgroup,
+        rest,
+        confidence_level=settings["confidence_level"],
+        comparisons=comparisons,
+        minimum_base=settings["minimum_base"],
+    )
+
+def _balance_result(
+    scores: pd.Series,
+    mask_a: pd.Series,
+    mask_b: pd.Series,
+    settings: dict[str, Any],
+    columns: list[dict[str, Any]],
+    column: dict[str, Any],
+    method: str,
+) -> StatisticalTestResult | None:
+    sample_a = scores[mask_a].dropna()
+    sample_b = scores[mask_b].dropna()
+    if sample_a.empty or sample_b.empty:
+        return None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    weights = settings["weights"]
+    return balance_z_test(
+        sample_a,
+        sample_b,
+        weights_a=weights.loc[sample_a.index] if weights is not None else None,
+        weights_b=weights.loc[sample_b.index] if weights is not None else None,
+        method=method,
+        confidence_level=settings["confidence_level"],
+        comparisons=comparisons,
+        minimum_base=settings["minimum_base"],
+    )
+
+def _pairwise_balance_note(
+    scores: pd.Series,
+    column: dict[str, Any],
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    method: str,
+    cache: dict[tuple[int, int], StatisticalTestResult | None],
+) -> str | None:
+    if not column.get("compare_pairwise"):
+        return None
+    current_position = _column_position(columns, column)
+    findings: list[tuple[str, str]] = []
+    for position, other in enumerate(columns):
+        if other is column or other.get("block_index") != column.get("block_index"):
+            continue
+        pair = tuple(sorted((current_position, position)))
+        if pair not in cache:
+            left, right = (columns[pair[0]], columns[pair[1]])
+            cache[pair] = _balance_result(
+                scores,
+                left["mask"] & eligible_mask,
+                right["mask"] & eligible_mask,
+                settings,
+                columns,
+                left,
+                method,
+            )
+        result = cache[pair]
+        if current_position > position:
+            result = _reverse_test_result(result)
+        if current_position < position:
+            audit_entries.append(
+                StatisticalAuditEntry(
+                    sheet=audit_context[0],
+                    question_code=audit_context[1],
+                    question_label=audit_context[2],
+                    row_label=row_label,
+                    comparison="Pairwise",
+                    group_a=_column_title(current_position, column),
+                    group_b=_column_title(position, other),
+                    result=result,
+                    reason="Пустая группа." if result is None else None,
+                )
+            )
+        if result is not None and result.significant and result.direction in {"higher", "lower"}:
+            findings.append(
+                (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
+            )
+    return _format_pairwise_note(findings)
+
+def _proportion_test(
+    outcome: pd.Series,
+    total_mask: pd.Series,
+    column: dict[str, Any],
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> StatisticalTestResult | None:
+    if not column.get("compare_to_total"):
+        return None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    try:
+        weights = settings["weights"]
+        if weights is not None:
+            subgroup_mask = total_mask & column["mask"] & eligible_mask
+            rest_mask = total_mask & ~column["mask"] & eligible_mask
+            return weighted_proportion_z_test(
+                outcome[subgroup_mask],
+                weights[subgroup_mask],
+                outcome[rest_mask],
+                weights[rest_mask],
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
+            )
+        return subgroup_vs_rest_z_test(
+            outcome.fillna(False),
+            total_mask,
+            column["mask"],
+            eligible_mask=eligible_mask,
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+    except ValueError:
+        return None
+
+def _mean_test(
+    series: pd.Series,
+    total_mask: pd.Series,
+    column: dict[str, Any],
+    base_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> StatisticalTestResult | None:
+    if not column.get("compare_to_total"):
+        return None
+    subgroup_mask = total_mask & column["mask"] & base_mask
+    rest_mask = total_mask & ~column["mask"] & base_mask
+    subgroup = pd.to_numeric(series[subgroup_mask], errors="coerce").dropna()
+    rest = pd.to_numeric(series[rest_mask], errors="coerce").dropna()
+    if subgroup.empty or rest.empty:
+        return None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    weights = settings["weights"]
+    if weights is not None:
+        return weighted_welch_t_test(
+            subgroup,
+            weights.loc[subgroup.index],
+            rest,
+            weights.loc[rest.index],
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+    return welch_t_test(
+        subgroup,
+        rest,
+        confidence_level=settings["confidence_level"],
+        comparisons=comparisons,
+        minimum_base=settings["minimum_base"],
+    )
+
+def _comparison_count(column: dict[str, Any], columns: list[dict[str, Any]]) -> int:
+    block_columns = [
+        item
+        for item in columns
+        if item.get("block_index") == column.get("block_index")
+    ]
+    total_comparisons = len(block_columns) if column.get("compare_to_total") else 0
+    pairwise_comparisons = (
+        len(block_columns) * (len(block_columns) - 1) // 2
+        if column.get("compare_pairwise")
+        else 0
+    )
+    wave_columns = [item for item in block_columns if item.get("wave_value") is not None]
+    peer_groups = {item.get("wave_peer_key") for item in wave_columns}
+    wave_comparisons = (
+        max(0, len(wave_columns) - len(peer_groups))
+        if column.get("wave_comparison", "none") != "none"
+        else 0
+    )
+    return max(1, total_comparisons + pairwise_comparisons + wave_comparisons)
+
+def _wave_target(
+    column: dict[str, Any],
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> dict[str, Any] | None:
+    mode = settings.get("wave_comparison", "none")
+    if mode == "none" or column.get("wave_value") is None:
+        return None
+    peers = [
+        item
+        for item in columns
+        if item.get("block_index") == column.get("block_index")
+        and item.get("wave_peer_key") == column.get("wave_peer_key")
+        and item.get("wave_value") is not None
+    ]
+    if mode == "previous":
+        position = next((index for index, item in enumerate(peers) if item is column), -1)
+        return peers[position - 1] if position > 0 else None
+    control = settings.get("wave_control_value")
+    return next(
+        (
+            item
+            for item in peers
+            if item is not column and _values_equal(item.get("wave_value"), control)
+        ),
+        None,
+    )
+
+def _wave_proportion_test(
+    outcome: pd.Series,
+    column: dict[str, Any],
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> tuple[dict[str, Any] | None, StatisticalTestResult | None]:
+    target = _wave_target(column, columns, settings)
+    if target is None:
+        return None, None
+    current_mask = column["mask"] & eligible_mask
+    target_mask = target["mask"] & eligible_mask
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    selected = outcome.fillna(False).astype(bool)
+    weights = settings["weights"]
+    try:
+        if weights is not None:
+            result = weighted_proportion_z_test(
+                selected[current_mask],
+                weights[current_mask],
+                selected[target_mask],
+                weights[target_mask],
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
+            )
+        else:
+            result = proportion_z_test(
+                int((selected & current_mask).sum()),
+                int(current_mask.sum()),
+                int((selected & target_mask).sum()),
+                int(target_mask.sum()),
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
+            )
+    except ValueError:
+        result = None
+    return target, result
+
+def _wave_mean_test(
+    series: pd.Series,
+    column: dict[str, Any],
+    base_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> tuple[dict[str, Any] | None, StatisticalTestResult | None]:
+    target = _wave_target(column, columns, settings)
+    if target is None:
+        return None, None
+    current = pd.to_numeric(series[column["mask"] & base_mask], errors="coerce").dropna()
+    previous = pd.to_numeric(series[target["mask"] & base_mask], errors="coerce").dropna()
+    if current.empty or previous.empty:
+        return target, None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    weights = settings["weights"]
+    if weights is not None:
+        result = weighted_welch_t_test(
+            current,
+            weights.loc[current.index],
+            previous,
+            weights.loc[previous.index],
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+    else:
+        result = welch_t_test(
+            current,
+            previous,
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+    return target, result
+
+def _record_wave_comparison(
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    column: dict[str, Any],
+    columns: list[dict[str, Any]],
+    target: dict[str, Any] | None,
+    result: StatisticalTestResult | None,
+) -> None:
+    if target is None:
+        return
+    audit_entries.append(
+        StatisticalAuditEntry(
+            sheet=audit_context[0],
+            question_code=audit_context[1],
+            question_label=audit_context[2],
+            row_label=row_label,
+            comparison="Wave",
+            group_a=_worksheet_column_title(_column_position(columns, column), column),
+            group_b=_worksheet_column_title(_column_position(columns, target), target),
+            result=result,
+            reason="Пустая сравниваемая волна." if result is None else None,
+        )
+    )
+
+def _values_equal(left: Any, right: Any) -> bool:
+    try:
+        return bool(left == right) or str(left) == str(right)
+    except (TypeError, ValueError):
+        return False
+
+def _pairwise_proportion_note(
+    outcome: pd.Series,
+    column: dict[str, Any],
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    cache: dict[tuple[int, int], StatisticalTestResult | None],
+    vectorized: _UnweightedProportionContext | None = None,
+) -> str | None:
+    if not column.get("compare_pairwise"):
+        return None
+    selected = outcome.fillna(False).astype(bool) if vectorized is None else None
+    current_position = _column_position(columns, column)
+    current_mask = column["mask"] & eligible_mask if vectorized is None else None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    findings: list[tuple[str, str]] = []
+    for position, other in enumerate(columns):
+        if other is column or other.get("block_index") != column.get("block_index"):
+            continue
+        other_mask = other["mask"] & eligible_mask if vectorized is None else None
+        current_empty = (
+            not current_mask.any()
+            if vectorized is None
+            else vectorized.bases[current_position] == 0
+        )
+        other_empty = (
+            not other_mask.any()
+            if vectorized is None
+            else vectorized.bases[position] == 0
+        )
+        if current_empty or other_empty:
+            if current_position < position:
+                audit_entries.append(
+                    StatisticalAuditEntry(
+                        sheet=audit_context[0],
+                        question_code=audit_context[1],
+                        question_label=audit_context[2],
+                        row_label=row_label,
+                        comparison="Pairwise",
+                        group_a=_column_title(current_position, column),
+                        group_b=_column_title(position, other),
+                        result=None,
+                        reason="Пустая группа.",
+                    )
+                )
+            continue
+        pair = tuple(sorted((current_position, position)))
+        if pair not in cache:
+            weights = settings["weights"]
+            if vectorized is not None:
+                cache[pair] = proportion_z_test(
+                    vectorized.successes[pair[0]],
+                    vectorized.bases[pair[0]],
+                    vectorized.successes[pair[1]],
+                    vectorized.bases[pair[1]],
+                    confidence_level=settings["confidence_level"],
+                    comparisons=comparisons,
+                    minimum_base=settings["minimum_base"],
+                )
+            elif weights is not None:
+                left_mask = columns[pair[0]]["mask"] & eligible_mask
+                right_mask = columns[pair[1]]["mask"] & eligible_mask
+                cache[pair] = weighted_proportion_z_test(
+                    selected[left_mask],
+                    weights[left_mask],
+                    selected[right_mask],
+                    weights[right_mask],
+                    confidence_level=settings["confidence_level"],
+                    comparisons=comparisons,
+                    minimum_base=settings["minimum_base"],
+                )
+            else:
+                left_mask = columns[pair[0]]["mask"] & eligible_mask
+                right_mask = columns[pair[1]]["mask"] & eligible_mask
+                cache[pair] = proportion_z_test(
+                    int((selected & left_mask).sum()),
+                    int(left_mask.sum()),
+                    int((selected & right_mask).sum()),
+                    int(right_mask.sum()),
+                    confidence_level=settings["confidence_level"],
+                    comparisons=comparisons,
+                    minimum_base=settings["minimum_base"],
+                )
+        result = cache[pair]
+        if current_position > position:
+            result = _reverse_test_result(result)
+        if current_position < position:
+            audit_entries.append(
+                StatisticalAuditEntry(
+                    sheet=audit_context[0],
+                    question_code=audit_context[1],
+                    question_label=audit_context[2],
+                    row_label=row_label,
+                    comparison="Pairwise",
+                    group_a=_column_title(current_position, column),
+                    group_b=_column_title(position, other),
+                    result=result,
+                )
+            )
+        if result.significant and result.direction in {"higher", "lower"}:
+            findings.append(
+                (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
+            )
+    return _format_pairwise_note(findings)
+
+def _pairwise_mean_note(
+    series: pd.Series,
+    column: dict[str, Any],
+    base_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    cache: dict[tuple[int, int], StatisticalTestResult | None],
+    vectorized: _UnweightedMeanContext | None = None,
+) -> str | None:
+    if not column.get("compare_pairwise"):
+        return None
+    current_position = _column_position(columns, column)
+    current = (
+        vectorized.samples[current_position]
+        if vectorized is not None
+        else pd.to_numeric(series[column["mask"] & base_mask], errors="coerce").dropna()
+    )
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    findings: list[tuple[str, str]] = []
+    for position, other in enumerate(columns):
+        if other is column or other.get("block_index") != column.get("block_index"):
+            continue
+        other_values = (
+            vectorized.samples[position]
+            if vectorized is not None
+            else pd.to_numeric(
+                series[other["mask"] & base_mask], errors="coerce"
+            ).dropna()
+        )
+        current_empty = current.size == 0 if vectorized is not None else current.empty
+        other_empty = (
+            other_values.size == 0 if vectorized is not None else other_values.empty
+        )
+        if current_empty or other_empty:
+            if current_position < position:
+                audit_entries.append(
+                    StatisticalAuditEntry(
+                        sheet=audit_context[0],
+                        question_code=audit_context[1],
+                        question_label=audit_context[2],
+                        row_label=row_label,
+                        comparison="Pairwise",
+                        group_a=_column_title(current_position, column),
+                        group_b=_column_title(position, other),
+                        result=None,
+                        reason="Пустая группа.",
+                    )
+                )
+            continue
+        pair = tuple(sorted((current_position, position)))
+        if pair not in cache:
+            if vectorized is not None:
+                left = vectorized.samples[pair[0]]
+                right = vectorized.samples[pair[1]]
+            else:
+                left = pd.to_numeric(
+                    series[columns[pair[0]]["mask"] & base_mask], errors="coerce"
+                ).dropna()
+                right = pd.to_numeric(
+                    series[columns[pair[1]]["mask"] & base_mask], errors="coerce"
+                ).dropna()
+            weights = settings["weights"]
+            if weights is not None:
+                cache[pair] = weighted_welch_t_test(
+                    left,
+                    weights.loc[left.index],
+                    right,
+                    weights.loc[right.index],
+                    confidence_level=settings["confidence_level"],
+                    comparisons=comparisons,
+                    minimum_base=settings["minimum_base"],
+                )
+            else:
+                cache[pair] = welch_t_test(
+                    left,
+                    right,
+                    confidence_level=settings["confidence_level"],
+                    comparisons=comparisons,
+                    minimum_base=settings["minimum_base"],
+                )
+        result = cache[pair]
+        if current_position > position:
+            result = _reverse_test_result(result)
+        if current_position < position:
+            audit_entries.append(
+                StatisticalAuditEntry(
+                    sheet=audit_context[0],
+                    question_code=audit_context[1],
+                    question_label=audit_context[2],
+                    row_label=row_label,
+                    comparison="Pairwise",
+                    group_a=_column_title(current_position, column),
+                    group_b=_column_title(position, other),
+                    result=result,
+                )
+            )
+        if result.significant and result.direction in {"higher", "lower"}:
+            findings.append(
+                (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
+            )
+    return _format_pairwise_note(findings)
+
+def _format_pairwise_note(findings: list[tuple[str, str]]) -> str | None:
+    lines = []
+    higher = [label for direction, label in findings if direction == "higher"]
+    lower = [label for direction, label in findings if direction == "lower"]
+    if higher:
+        lines.append("Значимо выше: " + ", ".join(higher))
+    if lower:
+        lines.append("Значимо ниже: " + ", ".join(lower))
+    return "\n".join(lines) or None
+
+def _reverse_test_result(
+    result: StatisticalTestResult | None,
+) -> StatisticalTestResult | None:
+    """Return the same pairwise test viewed from group B instead of group A."""
+    if result is None:
+        return None
+    direction = {"higher": "lower", "lower": "higher"}.get(
+        result.direction, result.direction
+    )
+    interval = result.confidence_interval
+    expected = result.expected_frequencies
+    return replace(
+        result,
+        direction=direction,
+        statistic=-result.statistic if result.statistic is not None else None,
+        difference=-result.difference,
+        confidence_interval=(-interval[1], -interval[0]) if interval is not None else None,
+        expected_frequencies=(expected[2], expected[3], expected[0], expected[1])
+        if expected is not None
+        else None,
+        group_estimates=_swap_pair(result.group_estimates),
+        group_variances=_swap_pair(result.group_variances),
+        group_bases=_swap_pair(result.group_bases),
+        group_successes=_swap_pair(result.group_successes),
+        group_weight_sums=_swap_pair(result.group_weight_sums),
+        effective_bases=_swap_pair(result.effective_bases),
+    )
+
+def _swap_pair(pair: tuple[Any, Any] | None) -> tuple[Any, Any] | None:
+    return (pair[1], pair[0]) if pair is not None else None
+
+def _record_total_comparison(
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    column: dict[str, Any],
+    columns: list[dict[str, Any]],
+    result: StatisticalTestResult | None,
+) -> None:
+    if not column.get("compare_to_total"):
+        return
+    position = _column_position(columns, column)
+    audit_entries.append(
+        StatisticalAuditEntry(
+            sheet=audit_context[0],
+            question_code=audit_context[1],
+            question_label=audit_context[2],
+            row_label=row_label,
+            comparison="Subgroup/Rest",
+            group_a=_column_title(position, column),
+            group_b=f"Rest({_excel_column_name(position + 1)}) — Total − {column['label']}",
+            result=result,
+            reason="Пустая подгруппа или Rest." if result is None else None,
+        )
+    )
+
+def _column_title(position: int, column: dict[str, Any]) -> str:
+    return f"{_excel_column_name(position + 1)} — {column['label']}"
+
+def _worksheet_column_title(position: int, column: dict[str, Any]) -> str:
+    return f"{_excel_column_name(position + 2)} — {column['label']}"
+
+def _column_position(columns: list[dict[str, Any]], target: dict[str, Any]) -> int:
+    return next(index for index, column in enumerate(columns) if column is target)
+
+class _StatisticsAuditWriter:
+    def __init__(
+        self,
+        stream: TextIO,
+        project: dict[str, Any],
+        banner: dict[str, Any],
+        configuration: dict[str, Any],
+        settings: dict[str, Any],
+    ) -> None:
+        self.stream = stream
+        self.current_sheet: str | None = None
+        self.current_question: tuple[str, str] | None = None
+        self.current_row: str | None = None
+        self.entry_count = 0
+        report_filter = "не используется"
+        report_filter_id = configuration.get("report_filter_id")
+        if report_filter_id:
+            selected_filter = next(
+                (
+                    item
+                    for item in configuration.get("filters", [])
+                    if item["id"] == report_filter_id
+                ),
+                None,
+            )
+            report_filter = selected_filter["name"] if selected_filter else str(report_filter_id)
+        lines = [
+            "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
+            f"Проект: {project['name']}",
+            f"Исходный SAV: {project.get('original_filename', 'source.sav')}",
+            f"Дата расчёта: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+            f"Баннер: {banner.get('name', 'Total')}",
+            f"Общий фильтр: {report_filter}",
+            f"Вес: {settings['weight_label'] or 'не используется'}",
+            f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
+            f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
+            f"Порог малой базы: N < {settings['minimum_base']}",
+            "",
+            (
+                "Примечание: статистическая значимость рассчитана в модели независимых "
+                "наблюдений и сама по себе не подтверждает репрезентативность выборки."
+            ),
+        ]
+        self.stream.write("\n".join(lines) + "\n")
+
+    def write_entries(self, entries: list[StatisticalAuditEntry]) -> None:
+        for entry in entries:
+            lines: list[str] = []
+            if entry.sheet != self.current_sheet:
+                lines.extend(["", f"=== {entry.sheet} ==="])
+                self.current_sheet = entry.sheet
+                self.current_question = None
+                self.current_row = None
+            question_key = (entry.question_code, entry.question_label)
+            if question_key != self.current_question:
+                lines.extend(["", f"[{entry.question_code}] {entry.question_label}"])
+                self.current_question = question_key
+                self.current_row = None
+            if entry.row_label != self.current_row:
+                lines.append(f"  Строка: {entry.row_label}")
+                self.current_row = entry.row_label
+            lines.extend(_render_audit_entry(entry))
+            self.stream.write("\n".join(lines) + "\n")
+            self.entry_count += 1
+
+    def finish(self) -> None:
+        if self.entry_count == 0:
+            self.stream.write("\nСтатистические сравнения не включены.\n")
+
+def _render_statistics_txt(
+    project: dict[str, Any],
+    banner: dict[str, Any],
+    configuration: dict[str, Any],
+    settings: dict[str, Any],
+    entries: list[StatisticalAuditEntry],
+) -> str:
+    report_filter = "не используется"
+    report_filter_id = configuration.get("report_filter_id")
+    if report_filter_id:
+        selected_filter = next(
+            (
+                item
+                for item in configuration.get("filters", [])
+                if item["id"] == report_filter_id
+            ),
+            None,
+        )
+        report_filter = selected_filter["name"] if selected_filter else str(report_filter_id)
+    lines = [
+        "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
+        f"Проект: {project['name']}",
+        f"Исходный SAV: {project.get('original_filename', 'source.sav')}",
+        f"Дата расчёта: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+        f"Баннер: {banner.get('name', 'Total')}",
+        f"Общий фильтр: {report_filter}",
+        f"Вес: {settings['weight_label'] or 'не используется'}",
+        f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
+        f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
+        f"Порог малой базы: N < {settings['minimum_base']}",
+        "",
+        (
+            "Примечание: статистическая значимость рассчитана в модели независимых "
+            "наблюдений и сама по себе не подтверждает репрезентативность выборки."
+        ),
+    ]
+    if not entries:
+        lines.extend(["", "Статистические сравнения не включены."])
+        return "\n".join(lines) + "\n"
+
+    current_sheet = None
+    current_question = None
+    current_row = None
+    for entry in entries:
+        if entry.sheet != current_sheet:
+            lines.extend(["", f"=== {entry.sheet} ==="])
+            current_sheet = entry.sheet
+            current_question = None
+            current_row = None
+        question_key = (entry.question_code, entry.question_label)
+        if question_key != current_question:
+            lines.extend(["", f"[{entry.question_code}] {entry.question_label}"])
+            current_question = question_key
+            current_row = None
+        if entry.row_label != current_row:
+            lines.append(f"  Строка: {entry.row_label}")
+            current_row = entry.row_label
+        lines.extend(_render_audit_entry(entry))
+    return "\n".join(lines) + "\n"
+
+def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
+    lines = [
+        f"    {entry.comparison}: {entry.group_a} vs {entry.group_b}",
+    ]
+    result = entry.result
+    if result is None:
+        lines.append(f"      Статус: пропущен. Причина: {entry.reason or 'Тест неприменим.'}")
+        return lines
+    lines.append(f"      Метод: {result.method}")
+    if result.group_bases is not None:
+        lines.append(f"      Базы: N1={result.group_bases[0]}; N2={result.group_bases[1]}")
+    if result.group_successes is not None:
+        lines.append(
+            "      Числители: "
+            f"n1={_number(result.group_successes[0])}; "
+            f"n2={_number(result.group_successes[1])}"
+        )
+    if result.group_weight_sums is not None:
+        lines.append(
+            f"      Суммы весов: sum_w1={_number(result.group_weight_sums[0])}; "
+            f"sum_w2={_number(result.group_weight_sums[1])}"
+        )
+    if result.effective_bases is not None:
+        lines.append(
+            f"      Эффективные базы: n_eff1={_number(result.effective_bases[0])}; "
+            f"n_eff2={_number(result.effective_bases[1])}"
+        )
+    if result.group_estimates is not None:
+        if result.method == "z-test":
+            estimate_label = "Доли"
+        elif "z-test" in result.method:
+            estimate_label = "Балансы"
+        else:
+            estimate_label = "Средние"
+        estimates = result.group_estimates
+        lines.append(
+            f"      {estimate_label}: group1={_number(estimates[0])}; "
+            f"group2={_number(estimates[1])}"
+        )
+    if result.group_variances is not None:
+        variances = result.group_variances
+        lines.append(
+            f"      Дисперсии: var1={_number(variances[0])}; var2={_number(variances[1])}"
+        )
+        variance_bases = result.effective_bases or result.group_bases
+        if variance_bases is not None:
+            standard_errors = (
+                math.sqrt(variances[0] / variance_bases[0]),
+                math.sqrt(variances[1] / variance_bases[1]),
+            )
+            lines.append(
+                f"      Стандартные ошибки: se1={_number(standard_errors[0])}; "
+                f"se2={_number(standard_errors[1])}"
+            )
+    if result.expected_frequencies is not None:
+        lines.append(
+            "      Ожидаемые частоты 2×2: "
+            + "; ".join(_number(value) for value in result.expected_frequencies)
+        )
+    difference = result.difference * 100 if "z-test" in result.method else result.difference
+    difference_unit = " п.п." if "z-test" in result.method else ""
+    lines.append(f"      Разница: {_number(difference)}{difference_unit}")
+    if result.confidence_interval is not None:
+        interval = result.confidence_interval
+        if "z-test" in result.method:
+            interval = (interval[0] * 100, interval[1] * 100)
+        lines.append(
+            f"      Доверительный интервал: [{_number(interval[0])}; "
+            f"{_number(interval[1])}]"
+        )
+    if not result.performed:
+        lines.append(f"      Статус: пропущен. Причина: {result.reason}")
+        lines.append(f"      Скорректированный alpha: {_number(result.alpha)}")
+        return lines
+    statistic_name = "z" if "z-test" in result.method else "t"
+    lines.append(f"      {statistic_name}={_number(result.statistic)}")
+    if result.degrees_of_freedom is not None:
+        lines.append(f"      df={_number(result.degrees_of_freedom)}")
+    lines.append(f"      p-value={_p_value(result.p_value)}")
+    lines.append(f"      Скорректированный alpha: {_number(result.alpha)}")
+    decision = "значимо" if result.significant else "незначимо"
+    lines.append(f"      Решение: {decision}; направление={result.direction}")
+    if result.approximate:
+        lines.append("      Характер теста: приближённый")
+    return lines
+
+def _number(value: float | int | None) -> str:
+    if value is None:
+        return "—"
+    return f"{value:.6f}"
+
+def _p_value(value: float | None) -> str:
+    if value is None:
+        return "—"
+    return "<0.000001" if value < 0.000001 else _number(value)
+

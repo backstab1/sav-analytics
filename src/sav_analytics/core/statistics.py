@@ -543,7 +543,11 @@ def _adjusted_alpha(confidence_level: float, comparisons: int) -> float:
 
 
 def _finite_sample(values: Iterable[float]) -> np.ndarray:
-    sample = np.asarray(list(values), dtype=float)
+    sample = (
+        np.asarray(values, dtype=float)
+        if isinstance(values, np.ndarray)
+        else np.asarray(list(values), dtype=float)
+    )
     return sample[np.isfinite(sample)]
 
 

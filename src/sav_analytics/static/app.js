@@ -84,6 +84,10 @@ document.querySelector("#new-project").addEventListener("click", () => {
 });
 
 document.querySelector("#refresh-projects").addEventListener("click", loadProjects);
+document.querySelectorAll("#download-report, #download-statistics").forEach(link => {
+  link.dataset.defaultLabel = link.textContent;
+  link.addEventListener("click", downloadPreparedReport);
+});
 document.querySelector("#close-editor").addEventListener("click", () => {
   editor.hidden = true;
   currentQuestionCode = null;
@@ -234,6 +238,7 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
 }));
 
 document.querySelector("#table-body").addEventListener("click", event => {
+  if (event.target.closest("[data-drag-code]")) return;
   const labelButton = event.target.closest("button[data-edit-label]");
   if (labelButton) {
     openQuestion(labelButton.dataset.editLabel);
@@ -269,15 +274,56 @@ document.querySelector("#table-body").addEventListener("click", event => {
     openWeight(weightRow.dataset.weightId);
     return;
   }
-  const moveButton = event.target.closest("button[data-move]");
-  if (moveButton) {
-    moveQuestion(moveButton.dataset.code, Number(moveButton.dataset.move));
-    return;
-  }
-  if (event.target.closest(".inline-members")) return;
   const row = event.target.closest("tr[data-code]");
   if (row) openQuestion(row.dataset.code);
 });
+
+let draggedQuestionCode = null;
+
+document.querySelector("#table-body").addEventListener("dragstart", event => {
+  const handle = event.target.closest("[data-drag-code]");
+  if (!handle || currentView !== "questions" || structureMode !== "questions") return;
+  draggedQuestionCode = handle.dataset.dragCode;
+  handle.closest("tr[data-code]")?.classList.add("is-dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", draggedQuestionCode);
+});
+
+document.querySelector("#table-body").addEventListener("dragover", event => {
+  if (!draggedQuestionCode) return;
+  const row = event.target.closest("tr[data-code]");
+  clearQuestionDropMarkers();
+  if (!row || row.dataset.code === draggedQuestionCode) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  const placeAfter = event.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2;
+  row.classList.add(placeAfter ? "drop-after" : "drop-before");
+});
+
+document.querySelector("#table-body").addEventListener("drop", async event => {
+  if (!draggedQuestionCode) return;
+  const row = event.target.closest("tr[data-code]");
+  const sourceCode = draggedQuestionCode;
+  const placeAfter = Boolean(row?.classList.contains("drop-after"));
+  clearQuestionDragState();
+  if (!row || row.dataset.code === sourceCode) return;
+  event.preventDefault();
+  await moveQuestionTo(sourceCode, row.dataset.code, placeAfter);
+});
+
+document.querySelector("#table-body").addEventListener("dragend", clearQuestionDragState);
+
+function clearQuestionDropMarkers() {
+  document.querySelectorAll("#table-body .drop-before, #table-body .drop-after")
+    .forEach(row => row.classList.remove("drop-before", "drop-after"));
+}
+
+function clearQuestionDragState() {
+  document.querySelectorAll("#table-body .is-dragging")
+    .forEach(row => row.classList.remove("is-dragging"));
+  clearQuestionDropMarkers();
+  draggedQuestionCode = null;
+}
 
 document.querySelector("#banner-form").addEventListener("submit", async event => {
   event.preventDefault();
@@ -568,9 +614,6 @@ function renderProject() {
     [questions.length.toLocaleString("ru-RU"), "вопросов"],
     [questions.filter(item => item.included_in_report).length, "включено в отчёт"],
   ].map(([value, label]) => `<article><strong>${value}</strong><span>${label}</span></article>`).join("");
-  const warningBox = document.querySelector("#warnings");
-  warningBox.hidden = inspection.warnings.length === 0;
-  warningBox.innerHTML = inspection.warnings.map(text => `<p>⚑ ${escapeHtml(text)}</p>`).join("");
   renderReportFilterControl();
   renderReportBannerControl();
   renderTable();
@@ -631,17 +674,15 @@ function renderTable() {
   }
   const allQuestions = configuredQuestions();
   const questions = allQuestions;
-  document.querySelector("#table-head").innerHTML = "<th>Порядок</th><th>Код</th><th>Вопрос</th><th>Тип</th><th>Переменные</th><th>База</th><th>Статус</th>";
-  document.querySelector("#table-body").innerHTML = questions.map((question, visibleIndex) => {
-    const absoluteIndex = allQuestions.findIndex(item => item.code === question.code);
-    const members = question.source_variables.length > 1 ? `<details class="inline-members"><summary>Состав блока · ${question.source_variables.length}</summary><div>${question.source_variables.map(name => { const variable = currentProject.inspection.variables.find(item => item.name === name); return `<p><code>${escapeHtml(name)}</code><span>${escapeHtml(variable?.label || name)}</span></p>`; }).join("")}</div></details>` : "";
+  document.querySelector("#table-head").innerHTML = "<th class=\"drag-cell\" aria-label=\"Порядок\"></th><th>Код</th><th class=\"question-cell\">Вопрос</th><th>Тип</th><th>Переменные</th><th>База</th><th>Статус</th>";
+  document.querySelector("#table-body").innerHTML = questions.map(question => {
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
-      <td class="order-buttons"><button type="button" data-code="${escapeHtml(question.code)}" data-move="-1" ${absoluteIndex === 0 ? "disabled" : ""}>↑</button><button type="button" data-code="${escapeHtml(question.code)}" data-move="1" ${absoluteIndex === allQuestions.length - 1 ? "disabled" : ""}>↓</button><span>${visibleIndex + 1}</span></td>
+      <td class="drag-cell"><button type="button" class="drag-handle" draggable="true" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="Перетащите, чтобы изменить порядок"><span aria-hidden="true">⋮⋮</span></button></td>
       <td><code>${escapeHtml(question.code)}</code></td>
-      <td><div class="question-name"><strong>${escapeHtml(question.label)}</strong><button type="button" class="inline-edit" data-edit-label="${escapeAttribute(question.code)}" title="Изменить название для Excel">✎</button></div>${question.source_variables.length > 1 ? `<small class="group-hint">Название блока для Excel</small>` : ""}${members}${question.warnings.map(w => `<small>${escapeHtml(w)}</small>`).join("")}</td>
+      <td class="question-cell"><div class="question-name"><strong>${escapeHtml(question.label)}</strong><button type="button" class="inline-edit" data-edit-label="${escapeAttribute(question.code)}" title="Изменить название для Excel">✎</button></div>${question.source_variables.length > 1 ? `<small class="group-hint">Название блока для Excel</small>` : ""}${question.warnings.map(w => `<small>${escapeHtml(w)}</small>`).join("")}</td>
       <td><span class="type">${typeLabels[question.question_type] || escapeHtml(question.question_type)}</span></td>
       <td>${question.source_variables.length}</td><td>${question.valid_count.toLocaleString("ru-RU")}</td>
-      <td><span class="status ${question.recognition === "auto_review" ? "review" : ""}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
+      <td><span class="status ${!question.included_in_report ? "excluded" : (question.recognition === "auto_review" ? "review" : "")}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
     </tr>`;
   }).join("");
 }
@@ -1294,12 +1335,14 @@ async function deleteRecoding() {
   }
 }
 
-async function moveQuestion(code, direction) {
+async function moveQuestionTo(code, targetCode, placeAfter) {
   const codes = configuredQuestions().map(item => item.code);
   const index = codes.indexOf(code);
-  const target = index + direction;
-  if (index < 0 || target < 0 || target >= codes.length) return;
-  [codes[index], codes[target]] = [codes[target], codes[index]];
+  if (index < 0 || code === targetCode) return;
+  codes.splice(index, 1);
+  const target = codes.indexOf(targetCode);
+  if (target < 0) return;
+  codes.splice(target + (placeAfter ? 1 : 0), 0, code);
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/questions/order`, {
       method: "PUT",
@@ -1499,6 +1542,67 @@ function updateFileLabel() {
   if (!file) return;
   fileTitle.textContent = file.name;
   fileCaption.textContent = `${(file.size / 1024 / 1024).toFixed(1)} МБ`;
+}
+
+async function downloadPreparedReport(event) {
+  event.preventDefault();
+  const link = event.currentTarget;
+  if (!currentProject || link.getAttribute("aria-disabled") === "true") return;
+  const downloads = [...document.querySelectorAll("#download-report, #download-statistics")];
+  let status = document.querySelector("#report-status");
+  if (!status) {
+    status = document.createElement("span");
+    status.id = "report-status";
+    status.className = "report-status";
+    status.setAttribute("role", "status");
+    document.querySelector(".head-actions").append(status);
+  }
+  let progress = document.querySelector("#report-progress");
+  if (!progress) {
+    progress = document.createElement("progress");
+    progress.id = "report-progress";
+    progress.className = "report-progress";
+    progress.max = 100;
+    document.querySelector(".head-actions").append(progress);
+  }
+  progress.hidden = false;
+  progress.value = 0;
+  downloads.forEach(item => item.setAttribute("aria-disabled", "true"));
+  link.textContent = "Формируется…";
+  status.textContent = "Готовим Excel и статистику. Для большого отчёта это может занять около минуты.";
+  status.classList.remove("error");
+  try {
+    let result = await api(`/api/projects/${currentProject.id}/reports/prepare`, {
+      method: "POST",
+    });
+    while (result.status === "queued" || result.status === "running") {
+      progress.value = result.progress || 0;
+      status.textContent = `${result.stage} · ${result.progress || 0}%`;
+      await new Promise(resolve => window.setTimeout(resolve, 500));
+      result = await api(
+        `/api/projects/${currentProject.id}/reports/jobs/${result.job_id}`
+      );
+    }
+    if (result.status === "failed") {
+      throw new Error(result.error || "Не удалось сформировать отчёт.");
+    }
+    progress.value = 100;
+    const preparedLink = document.createElement("a");
+    preparedLink.href = link.href;
+    document.body.append(preparedLink);
+    preparedLink.click();
+    preparedLink.remove();
+    status.textContent = result.cached
+      ? "Готовый файл взят из кэша."
+      : "Отчёт сформирован. Повторные скачивания будут мгновенными.";
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add("error");
+  } finally {
+    downloads.forEach(item => item.setAttribute("aria-disabled", "false"));
+    link.textContent = link.dataset.defaultLabel;
+    window.setTimeout(() => { progress.hidden = true; }, 2500);
+  }
 }
 
 async function api(url, options = {}) {

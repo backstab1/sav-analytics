@@ -3,13 +3,77 @@ from pathlib import Path
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
+import numpy as np
 import pandas as pd
 import pyreadstat
 import pytest
 
-from sav_analytics.core.report import ReportError, build_statistics_txt, build_topline_xlsx
+from sav_analytics.core.report import (
+    ReportError,
+    _mean_test,
+    _proportion_test,
+    _unweighted_mean_context,
+    _unweighted_mean_test,
+    _unweighted_proportion_context,
+    _unweighted_proportion_test,
+    build_statistics_txt,
+    build_topline_xlsx,
+)
 from sav_analytics.core.sav_reader import inspect_sav
 from tests.test_sav_reader import write_fixture
+
+
+def test_vectorized_unweighted_proportion_matches_legacy_path_exactly() -> None:
+    random = np.random.default_rng(20260731)
+    for _ in range(50):
+        total = pd.Series(random.random(250) > 0.05)
+        subgroup = pd.Series(total.to_numpy() & (random.random(250) > 0.45))
+        eligible = pd.Series(random.random(250) > 0.1)
+        outcome = pd.Series(random.random(250) > 0.6)
+        columns = [
+            {"mask": total, "block_index": None, "compare_to_total": False},
+            {"mask": subgroup, "block_index": 0, "compare_to_total": True},
+        ]
+        settings = {
+            "weights": None,
+            "confidence_level": 0.95,
+            "bonferroni": True,
+            "minimum_base": 30,
+        }
+        legacy = _proportion_test(
+            outcome, total, columns[1], eligible, columns, settings
+        )
+        context = _unweighted_proportion_context(outcome, eligible, columns)
+        vectorized = _unweighted_proportion_test(
+            context, 1, columns[1], columns, settings
+        )
+        assert vectorized == legacy
+
+
+def test_vectorized_unweighted_mean_matches_legacy_path_exactly() -> None:
+    random = np.random.default_rng(20260731)
+    for _ in range(50):
+        total = pd.Series(random.random(250) > 0.05)
+        subgroup = pd.Series(total.to_numpy() & (random.random(250) > 0.45))
+        base = pd.Series(random.random(250) > 0.1)
+        values = pd.Series(random.normal(50, 12, 250))
+        values[random.random(250) < 0.08] = np.nan
+        columns = [
+            {"mask": total, "block_index": None, "compare_to_total": False},
+            {"mask": subgroup, "block_index": 0, "compare_to_total": True},
+        ]
+        settings = {
+            "weights": None,
+            "confidence_level": 0.95,
+            "bonferroni": True,
+            "minimum_base": 30,
+        }
+        legacy = _mean_test(
+            values, total, columns[1], base, columns, settings
+        )
+        context = _unweighted_mean_context(values, base, columns)
+        vectorized = _unweighted_mean_test(context, 1, columns[1], columns, settings)
+        assert vectorized == legacy
 
 
 def test_topline_workbook_has_required_sheets_and_numeric_cells(tmp_path: Path) -> None:

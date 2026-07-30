@@ -101,6 +101,39 @@ def test_string_variables_with_numbered_suffix_are_not_forced_into_multiple(
     )
 
 
+def test_unlabelled_string_is_open_text_even_with_few_unique_answers(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "few_open_answers.sav"
+    frame = pd.DataFrame(
+        {
+            "Q_OPEN": ["Скучный", "Не нравится", "Скучный", "Не знаю"],
+            "Q_CATEGORY": ["A", "B", "A", "B"],
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={
+            "Q_OPEN": "Расскажите подробнее",
+            "Q_CATEGORY": "Выберите вариант",
+        },
+        variable_value_labels={"Q_CATEGORY": {"A": "Вариант A", "B": "Вариант B"}},
+        variable_measure={"Q_OPEN": "nominal", "Q_CATEGORY": "nominal"},
+    )
+
+    result = inspect_sav(source)
+
+    opened = next(question for question in result.questions if question.code == "Q_OPEN")
+    category = next(
+        question for question in result.questions if question.code == "Q_CATEGORY"
+    )
+    assert opened.question_type is QuestionType.OPEN_TEXT
+    assert not opened.included_in_report
+    assert category.question_type is QuestionType.SINGLE_CHOICE
+    assert category.included_in_report
+
+
 def test_numbered_scales_become_matrix_and_detect_special_answers(tmp_path: Path) -> None:
     source = tmp_path / "grouped.sav"
     write_grouped_fixture(source)

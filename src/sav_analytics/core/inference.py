@@ -47,7 +47,7 @@ def infer_question_type(
     level = (measurement_level or "").lower()
 
     if not pd.api.types.is_numeric_dtype(series):
-        if value_labels or (0 < unique_count <= 30 and level in {"nominal", "ordinal"}):
+        if value_labels:
             return QuestionType.SINGLE_CHOICE, warnings
         return QuestionType.OPEN_TEXT, warnings
 

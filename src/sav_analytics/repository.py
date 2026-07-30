@@ -13,7 +13,7 @@ import pyreadstat
 
 from .core.sav_reader import SavReadError, inspect_sav
 
-STRUCTURE_VERSION = 2
+STRUCTURE_VERSION = 4
 
 
 class ProjectNotFoundError(LookupError):
@@ -230,6 +230,9 @@ class ProjectRepository:
         refreshed = inspect_sav(source_path).to_dict()
         previous = project["configuration"]["questions"]
         previous_by_code = {item["code"]: item for item in previous}
+        inspected_by_code = {
+            item["code"]: item for item in project["inspection"]["questions"]
+        }
         merged = []
         editable_fields = {
             "label",
@@ -245,7 +248,15 @@ class ProjectRepository:
             configured = dict(detected)
             if detected["code"] in previous_by_code:
                 old = previous_by_code[detected["code"]]
-                configured.update({key: old[key] for key in editable_fields if key in old})
+                old_inspected = inspected_by_code.get(detected["code"], {})
+                configured.update(
+                    {
+                        key: old[key]
+                        for key in editable_fields
+                        if key in old
+                        and (key not in old_inspected or old[key] != old_inspected[key])
+                    }
+                )
             else:
                 children = [
                     previous_by_code[name]
@@ -478,6 +489,10 @@ class ProjectRepository:
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
         return self.root / str(project_id) / "source.sav"
+
+    def report_cache_dir(self, project_id: UUID) -> Path:
+        self.get(project_id)
+        return self.root / str(project_id) / "reports"
 
     @staticmethod
     def _read(path: Path) -> dict:
