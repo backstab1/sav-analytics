@@ -288,6 +288,8 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     return;
   }
   const weightSelection = document.querySelector("#banner-weight").value;
+  const waveMode = document.querySelector("#banner-wave-comparison").value;
+  const waveControl = document.querySelector("#banner-wave-control").value;
   const payload = {
     name: document.querySelector("#banner-name").value.trim(),
     blocks,
@@ -298,6 +300,10 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     minimum_base: Number(document.querySelector("#banner-minimum-base").value),
     weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
     calculated_weight_id: weightSelection.startsWith("calculated:") ? weightSelection.slice(11) : null,
+    wave_comparison: waveMode,
+    wave_control_value: waveMode === "control" && waveControl
+      ? JSON.parse(waveControl)
+      : null,
   };
   setBusy(saveButton, true, "Сохраняем…");
   try {
@@ -1015,6 +1021,18 @@ function openBanner(bannerId = null) {
   document.querySelector("#banner-compare-pairwise").checked = banner?.compare_pairwise ?? banner?.blocks.some(block => block.compare_pairwise) ?? false;
   document.querySelector("#banner-bonferroni").checked = banner?.bonferroni || false;
   document.querySelector("#banner-minimum-base").value = banner?.minimum_base || 30;
+  const waveMode = banner?.wave_comparison || "none";
+  document.querySelector("#banner-wave-comparison").value = waveMode;
+  const waveQuestion = currentProject.configuration.questions.find(question => question.role === "wave");
+  const waveVariable = waveQuestion
+    ? currentProject.inspection.variables.find(variable => variable.name === waveQuestion.source_variables?.[0])
+    : null;
+  const controlSelect = document.querySelector("#banner-wave-control");
+  controlSelect.innerHTML = (waveVariable?.value_labels || []).map(item => {
+    const selected = String(item.value) === String(banner?.wave_control_value) ? "selected" : "";
+    return `<option value="${escapeAttribute(JSON.stringify(item.value))}" ${selected}>${escapeHtml(item.label)}</option>`;
+  }).join("");
+  document.querySelector("#banner-wave-control-label").hidden = waveMode !== "control";
   const weightSelect = document.querySelector("#banner-weight");
   const selectedWeight = banner?.calculated_weight_id
     ? `calculated:${banner.calculated_weight_id}`
@@ -1039,6 +1057,10 @@ function openBanner(bannerId = null) {
   renderTable();
   if (banner) loadBannerPreview();
 }
+
+document.querySelector("#banner-wave-comparison").addEventListener("change", event => {
+  document.querySelector("#banner-wave-control-label").hidden = event.target.value !== "control";
+});
 
 function closeBanner() {
   bannerEditor.hidden = true;

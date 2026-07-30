@@ -22,6 +22,17 @@ def validate_banner(definition: dict[str, Any], project: dict[str, Any]) -> None
             raise BannerError("Блок баннера должен содержать один или два уровня.")
         for source in sources:
             _resolve_source(source, project)
+    wave_mode = definition.get("wave_comparison", "none")
+    wave_sources = [
+        source
+        for block in blocks
+        for source in block["sources"]
+        if _source_is_wave(source, project)
+    ]
+    if wave_mode != "none" and not wave_sources:
+        raise BannerError("Для сравнения волн добавьте переменную с ролью «Волна» в баннер.")
+    if wave_mode == "control" and definition.get("wave_control_value") is None:
+        raise BannerError("Для контрольного сравнения выберите контрольную волну.")
     weight_variable = definition.get("weight_variable")
     if weight_variable and not any(
         item["name"] == weight_variable for item in project["inspection"]["variables"]
@@ -98,10 +109,15 @@ def build_banner_columns(
             mask = pd.Series(True, index=frame.index)
             path_labels = []
             keys = []
+            dimension_keys = []
+            wave_value = None
             for category in combination:
                 mask &= category["mask"]
                 path_labels.append(category["label"])
                 keys.append(category["key"])
+                dimension_keys.append(category["key"] if not category["is_wave"] else None)
+                if category["is_wave"]:
+                    wave_value = category["value"]
             columns.append(
                 {
                     "key": f"block-{block_index}:" + "|".join(keys),
@@ -114,9 +130,18 @@ def build_banner_columns(
                     "block_index": block_index,
                     "compare_to_total": compare_to_total,
                     "compare_pairwise": compare_pairwise,
+                    "wave_value": wave_value,
+                    "wave_peer_key": tuple(dimension_keys),
+                    "wave_comparison": definition.get("wave_comparison", "none"),
                     "mask": mask,
                 }
             )
+    if definition.get("wave_comparison") == "control" and not any(
+        column.get("wave_value") is not None
+        and _values_equal(column["wave_value"], definition.get("wave_control_value"))
+        for column in columns
+    ):
+        raise BannerError("Выбранная контрольная волна отсутствует в баннере.")
     return columns
 
 
@@ -171,6 +196,8 @@ def _source_categories(
             {
                 "key": f"question:{resolved['code']}:{_scalar(value)}",
                 "label": labels.get(str(_scalar(value)), str(_scalar(value))),
+                "value": _scalar(value),
+                "is_wave": resolved.get("role") == "wave",
                 "mask": series.map(lambda item, expected=value: _values_equal(item, expected)),
             }
             for value in values
@@ -197,10 +224,16 @@ def _source_categories(
             {
                 "key": f"recoding:{resolved['id']}:{position}",
                 "label": category["label"],
+                "value": position,
+                "is_wave": False,
                 "mask": mask,
             }
         )
     return {"label": resolved["name"], "categories": categories}
+
+
+def _source_is_wave(source: dict[str, Any], project: dict[str, Any]) -> bool:
+    return source["kind"] == "question" and _resolve_source(source, project).get("role") == "wave"
 
 
 def _contains_value(values: list[Any], expected: Any) -> bool:

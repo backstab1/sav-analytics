@@ -131,6 +131,8 @@ def build_topline_artifacts(path: str | Path, project: dict[str, Any]) -> Toplin
         "minimum_base": active_banner.get("minimum_base", 30),
         "weight_label": weight_label,
         "weights": weights,
+        "wave_comparison": active_banner.get("wave_comparison", "none"),
+        "wave_control_value": active_banner.get("wave_control_value"),
     }
     main = workbook.add_worksheet("topline_main")
     filtered = workbook.add_worksheet("topline_filter")
@@ -462,8 +464,19 @@ def _write_metric_row(
         _record_total_comparison(
             audit_entries, audit_context, label, column, columns, result
         )
+        wave_target, wave_result = _wave_proportion_test(
+            outcome, column, eligible_mask, columns, statistical_settings
+        )
+        _record_wave_comparison(
+            audit_entries, audit_context, label, column, columns, wave_target, wave_result
+        )
         cell_format = _result_format(
-            formats, format_family, int(mask.sum()), result, statistical_settings
+            formats,
+            format_family,
+            int(mask.sum()),
+            result,
+            statistical_settings,
+            wave_result,
         )
         if value is None:
             sheet.write_blank(row, index, None, cell_format)
@@ -534,8 +547,23 @@ def _write_numeric_metric(
             _record_total_comparison(
                 audit_entries, audit_context, label, column, columns, result
             )
+        wave_target = None
+        wave_result = None
+        if metric == "mean":
+            wave_target, wave_result = _wave_mean_test(
+                series, column, base_mask, columns, statistical_settings
+            )
+            _record_wave_comparison(
+                audit_entries,
+                audit_context,
+                label,
+                column,
+                columns,
+                wave_target,
+                wave_result,
+            )
         cell_format = _result_format(
-            formats, "mean", len(numeric), result, statistical_settings
+            formats, "mean", len(numeric), result, statistical_settings, wave_result
         )
         if value is None or not math.isfinite(value):
             sheet.write_blank(row, index, None, cell_format)
@@ -644,7 +672,154 @@ def _comparison_count(column: dict[str, Any], columns: list[dict[str, Any]]) -> 
         if column.get("compare_pairwise")
         else 0
     )
-    return max(1, total_comparisons + pairwise_comparisons)
+    wave_columns = [item for item in block_columns if item.get("wave_value") is not None]
+    peer_groups = {item.get("wave_peer_key") for item in wave_columns}
+    wave_comparisons = (
+        max(0, len(wave_columns) - len(peer_groups))
+        if column.get("wave_comparison", "none") != "none"
+        else 0
+    )
+    return max(1, total_comparisons + pairwise_comparisons + wave_comparisons)
+
+
+def _wave_target(
+    column: dict[str, Any],
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> dict[str, Any] | None:
+    mode = settings.get("wave_comparison", "none")
+    if mode == "none" or column.get("wave_value") is None:
+        return None
+    peers = [
+        item
+        for item in columns
+        if item.get("block_index") == column.get("block_index")
+        and item.get("wave_peer_key") == column.get("wave_peer_key")
+        and item.get("wave_value") is not None
+    ]
+    if mode == "previous":
+        position = next((index for index, item in enumerate(peers) if item is column), -1)
+        return peers[position - 1] if position > 0 else None
+    control = settings.get("wave_control_value")
+    return next(
+        (
+            item
+            for item in peers
+            if item is not column and _values_equal(item.get("wave_value"), control)
+        ),
+        None,
+    )
+
+
+def _wave_proportion_test(
+    outcome: pd.Series,
+    column: dict[str, Any],
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> tuple[dict[str, Any] | None, StatisticalTestResult | None]:
+    target = _wave_target(column, columns, settings)
+    if target is None:
+        return None, None
+    current_mask = column["mask"] & eligible_mask
+    target_mask = target["mask"] & eligible_mask
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    selected = outcome.fillna(False).astype(bool)
+    weights = settings["weights"]
+    try:
+        if weights is not None:
+            result = weighted_proportion_z_test(
+                selected[current_mask],
+                weights[current_mask],
+                selected[target_mask],
+                weights[target_mask],
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
+            )
+        else:
+            result = proportion_z_test(
+                int((selected & current_mask).sum()),
+                int(current_mask.sum()),
+                int((selected & target_mask).sum()),
+                int(target_mask.sum()),
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
+            )
+    except ValueError:
+        result = None
+    return target, result
+
+
+def _wave_mean_test(
+    series: pd.Series,
+    column: dict[str, Any],
+    base_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+) -> tuple[dict[str, Any] | None, StatisticalTestResult | None]:
+    target = _wave_target(column, columns, settings)
+    if target is None:
+        return None, None
+    current = pd.to_numeric(series[column["mask"] & base_mask], errors="coerce").dropna()
+    previous = pd.to_numeric(series[target["mask"] & base_mask], errors="coerce").dropna()
+    if current.empty or previous.empty:
+        return target, None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    weights = settings["weights"]
+    if weights is not None:
+        result = weighted_welch_t_test(
+            current,
+            weights.loc[current.index],
+            previous,
+            weights.loc[previous.index],
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+    else:
+        result = welch_t_test(
+            current,
+            previous,
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+    return target, result
+
+
+def _record_wave_comparison(
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    column: dict[str, Any],
+    columns: list[dict[str, Any]],
+    target: dict[str, Any] | None,
+    result: StatisticalTestResult | None,
+) -> None:
+    if target is None:
+        return
+    audit_entries.append(
+        StatisticalAuditEntry(
+            sheet=audit_context[0],
+            question_code=audit_context[1],
+            question_label=audit_context[2],
+            row_label=row_label,
+            comparison="Wave",
+            group_a=_worksheet_column_title(_column_position(columns, column), column),
+            group_b=_worksheet_column_title(_column_position(columns, target), target),
+            result=result,
+            reason="Пустая сравниваемая волна." if result is None else None,
+        )
+    )
+
+
+def _values_equal(left: Any, right: Any) -> bool:
+    try:
+        return bool(left == right) or str(left) == str(right)
+    except (TypeError, ValueError):
+        return False
 
 
 def _pairwise_proportion_note(
@@ -843,6 +1018,10 @@ def _column_title(position: int, column: dict[str, Any]) -> str:
     return f"{_excel_column_name(position + 1)} — {column['label']}"
 
 
+def _worksheet_column_title(position: int, column: dict[str, Any]) -> str:
+    return f"{_excel_column_name(position + 2)} — {column['label']}"
+
+
 def _column_position(columns: list[dict[str, Any]], target: dict[str, Any]) -> int:
     return next(index for index, column in enumerate(columns) if column is target)
 
@@ -1008,12 +1187,20 @@ def _result_format(
     base: int,
     result: StatisticalTestResult | None,
     settings: dict[str, Any],
+    wave_result: StatisticalTestResult | None = None,
 ) -> Any:
+    key = family
     if 0 < base < settings["minimum_base"]:
-        return formats[f"{family}_small"]
-    if result is not None and result.significant and result.direction in {"higher", "lower"}:
-        return formats[f"{family}_{result.direction}"]
-    return formats[family]
+        key = f"{family}_small"
+    elif result is not None and result.significant and result.direction in {"higher", "lower"}:
+        key = f"{family}_{result.direction}"
+    if (
+        wave_result is not None
+        and wave_result.significant
+        and wave_result.direction in {"higher", "lower"}
+    ):
+        return formats[f"{key}_wave_{wave_result.direction}"]
+    return formats[key]
 
 
 def _write_contents(
@@ -1160,6 +1347,23 @@ def _formats(workbook: Any) -> dict[str, Any]:
                     **border,
                 }
             )
+        for base_name, fill_color in {"": None, **result_fills}.items():
+            base_key = family if not base_name else f"{family}_{base_name}"
+            for direction, arrow, font_color in (
+                ("higher", "↑", "#548235"),
+                ("lower", "↓", "#C00000"),
+            ):
+                properties = {
+                    "font_name": "Arial",
+                    "font_size": 9,
+                    "font_color": font_color,
+                    "num_format": f'{num_format}" {arrow}"',
+                    "align": "right",
+                    **border,
+                }
+                if fill_color:
+                    properties["bg_color"] = fill_color
+                formats[f"{base_key}_wave_{direction}"] = workbook.add_format(properties)
     return formats
 
 

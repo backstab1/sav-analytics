@@ -107,11 +107,15 @@ class BannerDefinition(BaseModel):
     minimum_base: int = Field(default=30, ge=1, le=100_000)
     weight_variable: str | None = Field(default=None, max_length=64)
     calculated_weight_id: UUID | None = None
+    wave_comparison: Literal["none", "previous", "control"] = "none"
+    wave_control_value: str | int | float | None = None
 
     @model_validator(mode="after")
     def validate_weight_selection(self) -> BannerDefinition:
         if self.weight_variable and self.calculated_weight_id:
             raise ValueError("Выберите готовый или рассчитанный вес, но не оба сразу.")
+        if self.wave_comparison == "control" and self.wave_control_value is None:
+            raise ValueError("Для контрольного сравнения выберите контрольную волну.")
         return self
 
 
@@ -277,7 +281,7 @@ def update_question(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Проект или вопрос не найден."
         ) from exc
-    except ToplineError as exc:
+    except (ToplineError, InvalidUploadError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc

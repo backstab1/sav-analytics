@@ -107,6 +107,14 @@ class ProjectRepository:
             question = next(item for item in questions if item["code"] == code)
         except StopIteration as exc:
             raise ProjectNotFoundError(code) from exc
+        final_role = changes.get("role", question["role"])
+        final_type = changes.get("question_type", question["question_type"])
+        if final_role == "wave":
+            if final_type != "single_choice" or len(question["source_variables"]) != 1:
+                raise InvalidUploadError("Переменная волны должна быть одиночным single choice.")
+            if any(item["code"] != code and item.get("role") == "wave" for item in questions):
+                raise InvalidUploadError("В проекте может быть только одна переменная волны.")
+            changes["included_in_report"] = False
         question.update(changes)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)

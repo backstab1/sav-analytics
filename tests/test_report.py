@@ -243,6 +243,75 @@ def test_topline_marks_small_subgroup_base_gray(tmp_path: Path) -> None:
     assert "Невзвешенная база одной из групп ниже установленного порога" in audit
 
 
+def test_topline_compares_each_wave_with_previous_and_writes_arrow(tmp_path: Path) -> None:
+    source = tmp_path / "waves.sav"
+    frame = pd.DataFrame(
+        {
+            "WAVE": [1] * 60 + [2] * 60 + [3] * 60,
+            "OUTCOME": [1] * 30 + [2] * 30 + [1] * 48 + [2] * 12 + [1] * 18 + [2] * 42,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        variable_value_labels={
+            "WAVE": {1: "2024", 2: "2025", 3: "2026"},
+            "OUTCOME": {1: "Да", 2: "Нет"},
+        },
+        variable_measure={"WAVE": "nominal", "OUTCOME": "nominal"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    questions = inspection["questions"]
+    wave = next(question for question in questions if question["code"] == "WAVE")
+    wave["role"] = "wave"
+    wave["included_in_report"] = False
+    project = {
+        "name": "Волны",
+        "inspection": inspection,
+        "configuration": {
+            "questions": questions,
+            "recodings": [],
+            "filters": [],
+            "report_filter_id": None,
+            "banners": [
+                {
+                    "name": "По волнам",
+                    "confidence_level": 0.95,
+                    "bonferroni": False,
+                    "minimum_base": 30,
+                    "wave_comparison": "previous",
+                    "wave_control_value": None,
+                    "blocks": [
+                        {
+                            "label": "Волна",
+                            "sources": [{"kind": "question", "ref": "WAVE"}],
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+    audit = build_statistics_txt(source, project)
+
+    assert "↑" in _cell_num_format(content, "Да", "D")
+    assert "↓" in _cell_num_format(content, "Да", "E")
+    assert "Wave: D — 2025 vs C — 2024" in audit
+    assert "Wave: E — 2026 vs D — 2025" in audit
+    assert "Решение: значимо; направление=higher" in audit
+    assert "Решение: значимо; направление=lower" in audit
+
+    banner = project["configuration"]["banners"][0]
+    banner["wave_comparison"] = "control"
+    banner["wave_control_value"] = 1
+    control_audit = build_statistics_txt(source, project)
+
+    assert "Wave: D — 2025 vs C — 2024" in control_audit
+    assert "Wave: E — 2026 vs C — 2024" in control_audit
+    assert "Wave: E — 2026 vs D — 2025" not in control_audit
+
+
 def test_topline_applies_ready_weight_and_audits_effective_bases(tmp_path: Path) -> None:
     source = tmp_path / "weighted.sav"
     frame = pd.DataFrame(
@@ -447,3 +516,31 @@ def _cell_value(content: bytes, row_label: str, column: str) -> float:
             if cell.attrib["r"] == f"{column}{target_row}"
         )
         return float(target.find("m:v", namespace).text)
+
+
+def _cell_num_format(content: bytes, row_label: str, column: str) -> str:
+    namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(BytesIO(content)) as archive:
+        shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+        shared = ["".join(item.itertext()) for item in shared_root.findall("m:si", namespace)]
+        sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        target_row = next(
+            cell.attrib["r"][1:]
+            for cell in sheet.findall(".//m:c", namespace)
+            if cell.attrib["r"].startswith("A")
+            and cell.attrib.get("t") == "s"
+            and shared[int(cell.find("m:v", namespace).text)] == row_label
+        )
+        target = next(
+            cell
+            for cell in sheet.findall(".//m:c", namespace)
+            if cell.attrib["r"] == f"{column}{target_row}"
+        )
+        styles = ElementTree.fromstring(archive.read("xl/styles.xml"))
+        cell_formats = styles.find("m:cellXfs", namespace)
+        num_format_id = cell_formats[int(target.attrib["s"])].attrib["numFmtId"]
+        custom_formats = {
+            item.attrib["numFmtId"]: item.attrib["formatCode"]
+            for item in styles.findall("m:numFmts/m:numFmt", namespace)
+        }
+        return custom_formats.get(num_format_id, num_format_id)

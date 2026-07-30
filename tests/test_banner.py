@@ -79,3 +79,36 @@ def test_banner_rejects_multiple_question_as_source(tmp_path: Path) -> None:
 
     with pytest.raises(BannerError, match="single choice"):
         validate_banner(invalid, project)
+
+
+def test_banner_requires_wave_role_for_wave_comparisons(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    project = project_fixture(source)
+    invalid = {
+        "name": "Волны",
+        "wave_comparison": "previous",
+        "blocks": [{"sources": [{"kind": "question", "ref": "Q1"}]}],
+    }
+
+    with pytest.raises(BannerError, match="ролью «Волна»"):
+        validate_banner(invalid, project)
+
+
+def test_banner_builds_control_wave_metadata(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    project = project_fixture(source)
+    wave = next(item for item in project["configuration"]["questions"] if item["code"] == "Q1")
+    wave["role"] = "wave"
+    banner = {
+        "name": "Волны",
+        "wave_comparison": "control",
+        "wave_control_value": 1,
+        "blocks": [{"sources": [{"kind": "question", "ref": "Q1"}]}],
+    }
+
+    preview = calculate_banner_preview(source, banner, project)
+
+    assert [column["wave_value"] for column in preview["columns"][1:]] == [1.0, 2.0]
+    assert all(column["wave_comparison"] == "control" for column in preview["columns"][1:])
