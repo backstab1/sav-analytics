@@ -412,6 +412,119 @@ def weighted_welch_t_test(
         confidence_interval=interval, degrees_of_freedom=degrees_of_freedom,
         group_estimates=means, group_variances=variances, **common,
     )
+
+
+def balance_z_test(
+    scores_a: Iterable[float],
+    scores_b: Iterable[float],
+    *,
+    weights_a: Iterable[float] | None = None,
+    weights_b: Iterable[float] | None = None,
+    method: str = "balance z-test",
+    confidence_level: float = 0.95,
+    comparisons: int = 1,
+    minimum_base: int = 30,
+) -> StatisticalTestResult:
+    """Compare two independent -1/0/+1 balances such as NPS or CSAT balance."""
+    sample_a = _finite_sample(scores_a)
+    sample_b = _finite_sample(scores_b)
+    if not len(sample_a) or not len(sample_b):
+        raise ValueError("Обе группы должны содержать хотя бы одно значение баланса.")
+    if not np.isin(sample_a, (-1, 0, 1)).all() or not np.isin(sample_b, (-1, 0, 1)).all():
+        raise ValueError("Баланс допускает только значения -1, 0 и 1.")
+    weighted = weights_a is not None or weights_b is not None
+    if weighted and (weights_a is None or weights_b is None):
+        raise ValueError("Веса должны быть переданы для обеих групп.")
+    if weighted:
+        weight_a = _validated_weights(weights_a, len(sample_a))
+        weight_b = _validated_weights(weights_b, len(sample_b))
+    else:
+        weight_a = np.ones(len(sample_a), dtype=float)
+        weight_b = np.ones(len(sample_b), dtype=float)
+    bases = (len(sample_a), len(sample_b))
+    effective_bases = (
+        effective_sample_size(weight_a),
+        effective_sample_size(weight_b),
+    )
+    estimates = (
+        float(np.average(sample_a, weights=weight_a)),
+        float(np.average(sample_b, weights=weight_b)),
+    )
+    variances = (
+        float(np.average(np.abs(sample_a), weights=weight_a) - estimates[0] ** 2),
+        float(np.average(np.abs(sample_b), weights=weight_b) - estimates[1] ** 2),
+    )
+    difference = estimates[0] - estimates[1]
+    alpha = _adjusted_alpha(confidence_level, comparisons)
+    common = {
+        "group_estimates": estimates,
+        "group_variances": variances,
+        "group_bases": bases,
+        "group_weight_sums": (
+            float(weight_a.sum()),
+            float(weight_b.sum()),
+        ) if weighted else None,
+        "effective_bases": effective_bases if weighted else None,
+        "approximate": weighted,
+    }
+    if min(bases) < minimum_base:
+        return _skipped_result(
+            method,
+            alpha,
+            difference,
+            estimates,
+            "Невзвешенная база одной из групп ниже установленного порога.",
+            **common,
+        )
+    if weighted and min(effective_bases) < minimum_base:
+        return _skipped_result(
+            method,
+            alpha,
+            difference,
+            estimates,
+            "Эффективная база одной из групп ниже установленного порога.",
+            **common,
+        )
+    variance = variances[0] / effective_bases[0] + variances[1] / effective_bases[1]
+    if variance <= 0:
+        return _skipped_result(
+            method,
+            alpha,
+            difference,
+            estimates,
+            "Нулевая дисперсия не позволяет выполнить z-test баланса.",
+            **common,
+        )
+    standard_error = math.sqrt(variance)
+    statistic = difference / standard_error
+    p_value = math.erfc(abs(statistic) / math.sqrt(2))
+    critical = NormalDist().inv_cdf(1 - alpha / 2)
+    interval = (
+        difference - critical * standard_error,
+        difference + critical * standard_error,
+    )
+    significant = p_value < alpha
+    return StatisticalTestResult(
+        method=method,
+        performed=True,
+        significant=significant,
+        direction=_direction(difference, significant),
+        alpha=alpha,
+        statistic=statistic,
+        p_value=p_value,
+        difference=difference,
+        confidence_interval=interval,
+        **common,
+    )
+
+
+def _validated_weights(weights: Iterable[float] | None, expected: int) -> np.ndarray:
+    sample = np.asarray([] if weights is None else list(weights), dtype=float)
+    if len(sample) != expected or np.any(~np.isfinite(sample)) or np.any(sample <= 0):
+        raise ValueError("Веса должны совпадать с выборкой и быть положительными.")
+    return sample
+
+
 def _validate_binomial_sample(successes: int, base: int, label: str) -> None:
     if not isinstance(base, int) or isinstance(base, bool) or base <= 0:
         raise ValueError(f"База группы {label} должна быть положительным целым числом.")

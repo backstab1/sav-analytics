@@ -369,6 +369,68 @@ def test_topline_applies_ready_weight_and_audits_effective_bases(tmp_path: Path)
     assert "Характер теста: приближённый" in audit
 
 
+def test_topline_writes_nps_and_csat_rows_without_scale_mean(tmp_path: Path) -> None:
+    source = tmp_path / "special_metrics.sav"
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * 50 + [2] * 50,
+            "NPS_Q": [0] * 20 + [7] * 30 + [10] * 50,
+            "CSAT_Q": [1] * 20 + [3] * 30 + [5] * 50,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"NPS_Q": "Рекомендация", "CSAT_Q": "Удовлетворённость"},
+        variable_value_labels={
+            "GROUP": {1: "Первая", 2: "Вторая"},
+            "NPS_Q": {value: str(value) for value in range(11)},
+            "CSAT_Q": {value: str(value) for value in range(1, 6)},
+        },
+        variable_measure={"NPS_Q": "scale", "CSAT_Q": "scale"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    questions = inspection["questions"]
+    next(item for item in questions if item["code"] == "NPS_Q")["special_metric"] = "nps"
+    next(item for item in questions if item["code"] == "CSAT_Q")["special_metric"] = "csat"
+    project = {
+        "name": "NPS и CSAT",
+        "inspection": inspection,
+        "configuration": {
+            "questions": questions,
+            "recodings": [],
+            "filters": [],
+            "banners": [
+                {
+                    "name": "Группы",
+                    "compare_to_total": True,
+                    "compare_pairwise": True,
+                    "minimum_base": 30,
+                    "blocks": [
+                        {"sources": [{"kind": "question", "ref": "GROUP"}]}
+                    ],
+                }
+            ],
+            "report_filter_id": None,
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+    audit = build_statistics_txt(source, project)
+
+    assert _cell_value(content, "NPS", "B") == pytest.approx(30)
+    assert _cell_value(content, "CSAT balance", "B") == pytest.approx(30)
+    assert _cell_value(content, "% удовлетворённых", "B") == pytest.approx(50)
+    with ZipFile(BytesIO(content)) as archive:
+        shared_strings = archive.read("xl/sharedStrings.xml")
+        assert "Критики (0–6)".encode() in shared_strings
+        assert "Удовлетворённые (4–5)".encode() in shared_strings
+        assert "Среднее".encode() not in shared_strings
+    assert "Метод: NPS z-test" in audit
+    assert "Метод: CSAT balance z-test" in audit
+    assert "Балансы: group1=" in audit
+
+
 def test_topline_rejects_invalid_ready_weight(tmp_path: Path) -> None:
     source = tmp_path / "invalid_weight.sav"
     frame = pd.DataFrame({"GROUP": [1, 2], "W": [1.0, 0.0]})

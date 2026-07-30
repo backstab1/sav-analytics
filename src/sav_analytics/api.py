@@ -43,6 +43,7 @@ class QuestionUpdate(BaseModel):
     included_in_report: bool | None = None
     special_values: list[str | int | float] | None = None
     special_items: list[str] | None = None
+    special_metric: Literal["none", "nps", "csat"] | None = None
 
 
 class QuestionOrder(BaseModel):

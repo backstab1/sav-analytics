@@ -15,6 +15,7 @@ from .banner import build_banner_columns
 from .filtering import evaluate_filter_frame
 from .statistics import (
     StatisticalTestResult,
+    balance_z_test,
     effective_sample_size,
     proportion_z_test,
     subgroup_vs_rest_z_test,
@@ -353,6 +354,21 @@ def _write_question_rows(
         valid_denominator,
     )
     if question_type == "scale":
+        special_metric = question.get("special_metric", "none")
+        if special_metric in {"nps", "csat"}:
+            return _write_special_scale_rows(
+                sheet,
+                row,
+                series,
+                special_metric,
+                columns,
+                base_mask,
+                formats,
+                statistical_settings,
+                audit_entries,
+                (sheet_name, question["code"], question["label"]),
+                valid_denominator,
+            )
         row = _write_numeric_metric(
             sheet,
             row,
@@ -384,6 +400,98 @@ def _write_question_rows(
                 audit_entries,
                 (sheet_name, question["code"], question["label"]),
             )
+    return row
+
+
+def _write_special_scale_rows(
+    sheet: Any,
+    row: int,
+    series: pd.Series,
+    metric: str,
+    columns: list[dict[str, Any]],
+    base_mask: pd.Series,
+    formats: dict[str, Any],
+    settings: dict[str, Any],
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    valid_denominator: bool,
+) -> int:
+    numeric = pd.to_numeric(series, errors="coerce")
+    expected = set(range(11)) if metric == "nps" else set(range(1, 6))
+    observed = set(numeric.dropna().unique())
+    if not observed or not observed <= expected:
+        label = "NPS 0–10" if metric == "nps" else "CSAT 1–5"
+        raise ReportError(f"Вопрос {audit_context[1]} не соответствует шкале {label}.")
+    valid_mask = numeric.notna() if valid_denominator else None
+    if metric == "nps":
+        groups = [
+            ("Критики (0–6)", numeric.between(0, 6)),
+            ("Нейтралы (7–8)", numeric.between(7, 8)),
+            ("Промоутеры (9–10)", numeric.between(9, 10)),
+        ]
+        score = pd.Series(0.0, index=series.index)
+        score[numeric.between(0, 6)] = -1
+        score[numeric.between(9, 10)] = 1
+        balance_label = "NPS"
+        method = "NPS z-test"
+    else:
+        groups = [
+            ("Неудовлетворённые (1–2)", numeric.between(1, 2)),
+            ("Нейтральные (3)", numeric.eq(3)),
+            ("Удовлетворённые (4–5)", numeric.between(4, 5)),
+        ]
+        score = pd.Series(0.0, index=series.index)
+        score[numeric.between(1, 2)] = -1
+        score[numeric.between(4, 5)] = 1
+        balance_label = "CSAT balance"
+        method = "CSAT balance z-test"
+    score[numeric.isna()] = math.nan if valid_denominator else 0
+    for label, selected in groups:
+        row = _write_metric_row(
+            sheet,
+            row,
+            label,
+            columns,
+            base_mask,
+            valid_mask,
+            lambda mask, selected=selected: _ratio(selected[mask].sum(), mask.sum()),
+            selected,
+            formats,
+            "percent",
+            settings,
+            audit_entries,
+            audit_context,
+        )
+    row = _write_balance_metric_row(
+        sheet,
+        row,
+        balance_label,
+        score,
+        columns,
+        base_mask & numeric.notna() if valid_denominator else base_mask,
+        formats,
+        settings,
+        audit_entries,
+        audit_context,
+        method,
+    )
+    if metric == "csat":
+        satisfied = numeric.between(4, 5)
+        row = _write_metric_row(
+            sheet,
+            row,
+            "% удовлетворённых",
+            columns,
+            base_mask,
+            valid_mask,
+            lambda mask: _ratio(satisfied[mask].sum(), mask.sum()),
+            satisfied,
+            formats,
+            "percent",
+            settings,
+            audit_entries,
+            audit_context,
+        )
     return row
 
 
@@ -583,6 +691,171 @@ def _write_numeric_metric(
             if note:
                 sheet.write_comment(row, index, note, {"author": "sav-analytics"})
     return row + 1
+
+
+def _write_balance_metric_row(
+    sheet: Any,
+    row: int,
+    label: str,
+    scores: pd.Series,
+    columns: list[dict[str, Any]],
+    eligible_mask: pd.Series,
+    formats: dict[str, Any],
+    settings: dict[str, Any],
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    method: str,
+) -> int:
+    sheet.write(row, 0, label, formats["percent"])
+    total_mask = columns[0]["mask"] & eligible_mask
+    for index, column in enumerate(columns, start=1):
+        current_mask = column["mask"] & eligible_mask
+        weights = settings["weights"]
+        if not current_mask.any():
+            value = None
+        elif weights is None:
+            value = float(scores[current_mask].mean())
+        else:
+            value = float(
+                (scores[current_mask] * weights[current_mask]).sum()
+                / weights[current_mask].sum()
+            )
+        total_result = None
+        if column.get("compare_to_total"):
+            total_result = _balance_result(
+                scores,
+                current_mask,
+                total_mask & ~column["mask"],
+                settings,
+                columns,
+                column,
+                method,
+            )
+            _record_total_comparison(
+                audit_entries, audit_context, label, column, columns, total_result
+            )
+        wave_target = _wave_target(column, columns, settings)
+        wave_result = None
+        if wave_target is not None:
+            wave_result = _balance_result(
+                scores,
+                current_mask,
+                wave_target["mask"] & eligible_mask,
+                settings,
+                columns,
+                column,
+                method,
+            )
+            _record_wave_comparison(
+                audit_entries,
+                audit_context,
+                label,
+                column,
+                columns,
+                wave_target,
+                wave_result,
+            )
+        pairwise_note = _pairwise_balance_note(
+            scores,
+            column,
+            eligible_mask,
+            columns,
+            settings,
+            audit_entries,
+            audit_context,
+            label,
+            method,
+        )
+        cell_format = _result_format(
+            formats,
+            "percent",
+            int(current_mask.sum()),
+            total_result,
+            settings,
+            wave_result,
+        )
+        if value is None:
+            sheet.write_blank(row, index, None, cell_format)
+        else:
+            sheet.write_number(row, index, value * 100, cell_format)
+        if pairwise_note:
+            sheet.write_comment(row, index, pairwise_note, {"author": "sav-analytics"})
+    return row + 1
+
+
+def _balance_result(
+    scores: pd.Series,
+    mask_a: pd.Series,
+    mask_b: pd.Series,
+    settings: dict[str, Any],
+    columns: list[dict[str, Any]],
+    column: dict[str, Any],
+    method: str,
+) -> StatisticalTestResult | None:
+    sample_a = scores[mask_a].dropna()
+    sample_b = scores[mask_b].dropna()
+    if sample_a.empty or sample_b.empty:
+        return None
+    comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
+    weights = settings["weights"]
+    return balance_z_test(
+        sample_a,
+        sample_b,
+        weights_a=weights.loc[sample_a.index] if weights is not None else None,
+        weights_b=weights.loc[sample_b.index] if weights is not None else None,
+        method=method,
+        confidence_level=settings["confidence_level"],
+        comparisons=comparisons,
+        minimum_base=settings["minimum_base"],
+    )
+
+
+def _pairwise_balance_note(
+    scores: pd.Series,
+    column: dict[str, Any],
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    method: str,
+) -> str | None:
+    if not column.get("compare_pairwise"):
+        return None
+    current_position = _column_position(columns, column)
+    findings: list[tuple[str, str]] = []
+    for position, other in enumerate(columns):
+        if other is column or other.get("block_index") != column.get("block_index"):
+            continue
+        result = _balance_result(
+            scores,
+            column["mask"] & eligible_mask,
+            other["mask"] & eligible_mask,
+            settings,
+            columns,
+            column,
+            method,
+        )
+        if current_position < position:
+            audit_entries.append(
+                StatisticalAuditEntry(
+                    sheet=audit_context[0],
+                    question_code=audit_context[1],
+                    question_label=audit_context[2],
+                    row_label=row_label,
+                    comparison="Pairwise",
+                    group_a=_column_title(current_position, column),
+                    group_b=_column_title(position, other),
+                    result=result,
+                    reason="Пустая группа." if result is None else None,
+                )
+            )
+        if result is not None and result.significant and result.direction in {"higher", "lower"}:
+            findings.append(
+                (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
+            )
+    return _format_pairwise_note(findings)
 
 
 def _proportion_test(
@@ -1115,7 +1388,12 @@ def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
             f"n_eff2={_number(result.effective_bases[1])}"
         )
     if result.group_estimates is not None:
-        estimate_label = "Доли" if result.method == "z-test" else "Средние"
+        if result.method == "z-test":
+            estimate_label = "Доли"
+        elif "z-test" in result.method:
+            estimate_label = "Балансы"
+        else:
+            estimate_label = "Средние"
         estimates = result.group_estimates
         lines.append(
             f"      {estimate_label}: group1={_number(estimates[0])}; "
@@ -1141,12 +1419,12 @@ def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
             "      Ожидаемые частоты 2×2: "
             + "; ".join(_number(value) for value in result.expected_frequencies)
         )
-    difference = result.difference * 100 if result.method == "z-test" else result.difference
-    difference_unit = " п.п." if result.method == "z-test" else ""
+    difference = result.difference * 100 if "z-test" in result.method else result.difference
+    difference_unit = " п.п." if "z-test" in result.method else ""
     lines.append(f"      Разница: {_number(difference)}{difference_unit}")
     if result.confidence_interval is not None:
         interval = result.confidence_interval
-        if result.method == "z-test":
+        if "z-test" in result.method:
             interval = (interval[0] * 100, interval[1] * 100)
         lines.append(
             f"      Доверительный интервал: [{_number(interval[0])}; "
@@ -1156,7 +1434,7 @@ def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
         lines.append(f"      Статус: пропущен. Причина: {result.reason}")
         lines.append(f"      Скорректированный alpha: {_number(result.alpha)}")
         return lines
-    statistic_name = "z" if result.method == "z-test" else "t"
+    statistic_name = "z" if "z-test" in result.method else "t"
     lines.append(f"      {statistic_name}={_number(result.statistic)}")
     if result.degrees_of_freedom is not None:
         lines.append(f"      df={_number(result.degrees_of_freedom)}")

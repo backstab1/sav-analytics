@@ -110,6 +110,24 @@ def test_question_configuration_and_preview_are_persisted(tmp_path: Path) -> Non
             assert preview.json()["valid_base"] == 4
             assert [row["count"] for row in preview.json()["rows"]] == [2, 2]
 
+            nps = client.patch(
+                f"/api/projects/{project_id}/questions/Q2",
+                json={"special_metric": "nps"},
+            )
+            assert nps.status_code == 200
+            q2 = next(
+                item
+                for item in nps.json()["configuration"]["questions"]
+                if item["code"] == "Q2"
+            )
+            assert q2["special_metric"] == "nps"
+            invalid_csat = client.patch(
+                f"/api/projects/{project_id}/questions/Q2",
+                json={"special_metric": "csat"},
+            )
+            assert invalid_csat.status_code == 422
+            assert "1–5" in invalid_csat.json()["detail"]
+
             codes = [item["code"] for item in project["configuration"]["questions"]]
             reordered = client.put(
                 f"/api/projects/{project_id}/questions/order",

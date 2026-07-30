@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
+import pyreadstat
+
 from .core.sav_reader import SavReadError, inspect_sav
 
 STRUCTURE_VERSION = 2
@@ -115,6 +117,34 @@ class ProjectRepository:
             if any(item["code"] != code and item.get("role") == "wave" for item in questions):
                 raise InvalidUploadError("В проекте может быть только одна переменная волны.")
             changes["included_in_report"] = False
+        special_metric = changes.get("special_metric", question.get("special_metric", "none"))
+        if special_metric in {"nps", "csat"}:
+            if final_type != "scale" or len(question["source_variables"]) != 1:
+                raise InvalidUploadError("NPS и CSAT можно назначить только одиночной шкале.")
+            variable_name = question["source_variables"][0]
+            variable = next(
+                item for item in project["inspection"]["variables"] if item["name"] == variable_name
+            )
+            labelled = [item["value"] for item in variable.get("value_labels", [])]
+            frame, _ = pyreadstat.read_sav(
+                self.source_path(project_id),
+                usecols=[variable_name],
+                apply_value_formats=False,
+                user_missing=False,
+                dates_as_pandas_datetime=False,
+            )
+            observed = frame[variable_name].dropna().tolist()
+            try:
+                values = {float(value) for value in [*labelled, *observed]}
+            except (TypeError, ValueError) as exc:
+                raise InvalidUploadError(
+                    "Шкала NPS/CSAT должна содержать числовые значения."
+                ) from exc
+            expected = set(range(11)) if special_metric == "nps" else set(range(1, 6))
+            label = "NPS" if special_metric == "nps" else "CSAT"
+            if not values or not values <= expected:
+                bounds = "0–10" if special_metric == "nps" else "1–5"
+                raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
         question.update(changes)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
@@ -208,6 +238,7 @@ class ProjectRepository:
             "included_in_report",
             "special_values",
             "special_items",
+            "special_metric",
             "base_filter_id",
         }
         for detected in refreshed["questions"]:

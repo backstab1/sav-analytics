@@ -96,6 +96,10 @@ document.querySelector("#question-type").addEventListener("change", () => {
     ...question,
     question_type: document.querySelector("#question-type").value,
   });
+  if (question) renderSpecialMetric({
+    ...question,
+    question_type: document.querySelector("#question-type").value,
+  });
 });
 document.querySelector("#new-recoding").addEventListener("click", () => openRecoding());
 document.querySelector("#close-recode-editor").addEventListener("click", closeRecoding);
@@ -469,6 +473,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
           question_type: document.querySelector("#question-type").value,
           role: document.querySelector("#question-role").value,
           included_in_report: document.querySelector("#question-included").checked,
+          special_metric: document.querySelector("#question-special-metric").value,
           ...collectSpecialAnswers(),
         }),
       },
@@ -1328,6 +1333,16 @@ function fillEditor(question) {
   document.querySelector("#editor-error").hidden = true;
   renderQuestionMembers(question);
   renderSpecialAnswers(question);
+  renderSpecialMetric(question);
+}
+
+function renderSpecialMetric(question) {
+  const label = document.querySelector("#special-metric-label");
+  const available = question.question_type === "scale" && question.source_variables.length === 1;
+  label.hidden = !available;
+  document.querySelector("#question-special-metric").value = available
+    ? (question.special_metric || "none")
+    : "none";
 }
 
 function renderQuestionMembers(question) {

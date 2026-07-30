@@ -3,6 +3,7 @@ import math
 import pytest
 
 from sav_analytics.core.statistics import (
+    balance_z_test,
     effective_sample_size,
     proportion_z_test,
     subgroup_vs_rest_z_test,
@@ -10,6 +11,37 @@ from sav_analytics.core.statistics import (
     weighted_welch_t_test,
     welch_t_test,
 )
+
+
+def test_nps_balance_z_test_matches_reference_formula() -> None:
+    group_a = [-1] * 10 + [0] * 20 + [1] * 70
+    group_b = [-1] * 30 + [0] * 30 + [1] * 40
+
+    result = balance_z_test(group_a, group_b, method="NPS z-test")
+
+    assert result.performed is True
+    assert result.group_estimates == pytest.approx((0.6, 0.1))
+    assert result.group_variances == pytest.approx((0.44, 0.69))
+    assert result.difference == pytest.approx(0.5)
+    assert result.statistic == pytest.approx(4.703604341054247)
+    assert result.significant is True
+    assert result.direction == "higher"
+
+
+def test_weighted_balance_uses_kish_effective_base() -> None:
+    scores_a = [-1] * 20 + [1] * 20
+    scores_b = [-1] * 20 + [1] * 20
+    result = balance_z_test(
+        scores_a,
+        scores_b,
+        weights_a=[2.0] * 20 + [1.0] * 20,
+        weights_b=[1.0] * 40,
+        minimum_base=30,
+    )
+
+    assert result.approximate is True
+    assert result.effective_bases == pytest.approx((36.0, 40.0))
+    assert result.group_estimates == pytest.approx((-1 / 3, 0.0))
 
 
 def test_proportion_z_test_matches_reference_result() -> None:

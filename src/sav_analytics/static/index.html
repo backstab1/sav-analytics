@@ -76,6 +76,7 @@
                 <option value="technical">Техническая</option>
               </select></label>
               <label class="checkbox"><input id="question-included" type="checkbox" /> Включить в отчёт</label>
+              <label id="special-metric-label" hidden>Специальный показатель<select id="question-special-metric"><option value="none">Нет</option><option value="nps">NPS (шкала 0–10)</option><option value="csat">CSAT (шкала 1–5)</option></select><small>Границы групп фиксированы и применяются автоматически.</small></label>
               <label>Пользовательская база<select id="question-base-filter"><option value="">Стандартная база</option></select></label>
               <section id="question-members" class="question-members" hidden></section>
               <section id="special-answers" class="special-answers" hidden><div><strong>Специальные ответы</strong><small>Показываются в распределении, но исключаются из средних. Для multiple проверяется совместный выбор.</small></div><div id="special-answer-list"></div></section>
