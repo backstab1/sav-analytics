@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import pyreadstat
+import xlsxwriter
 
 from .statistics import effective_sample_size
 
@@ -20,6 +22,122 @@ class RakingResult:
     iterations: int
     maximum_deviation: float
     diagnostics: dict[str, Any]
+
+
+def build_raking_export(
+    path: str | Path,
+    definition: dict[str, Any],
+    project: dict[str, Any],
+) -> bytes:
+    """Build a respondent-level XLSX with identifiers and calculated raking weights."""
+    questions = project["configuration"]["questions"]
+    id_question = next((item for item in questions if item.get("role") == "id"), None)
+    weight_question = next((item for item in questions if item.get("role") == "weight"), None)
+    extra_variables = []
+    for question in (id_question, weight_question):
+        if question and len(question.get("source_variables", [])) == 1:
+            extra_variables.append(question["source_variables"][0])
+    dimension_variables = [item["variable"] for item in definition["dimensions"]]
+    variables = list(dict.fromkeys([*dimension_variables, *extra_variables]))
+    frame, _ = pyreadstat.read_sav(
+        path,
+        usecols=variables,
+        apply_value_formats=False,
+        user_missing=False,
+        dates_as_pandas_datetime=False,
+    )
+    result = calculate_raking(frame, definition)
+
+    identifier_name = (
+        id_question["source_variables"][0]
+        if id_question and len(id_question.get("source_variables", [])) == 1
+        else None
+    )
+    source_weight_name = (
+        weight_question["source_variables"][0]
+        if weight_question and len(weight_question.get("source_variables", [])) == 1
+        else None
+    )
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output, {"in_memory": True})
+    workbook.set_properties(
+        {
+            "title": f"Рассчитанный вес — {definition['name']}",
+            "subject": "Респондентский экспорт веса raking/IPF",
+            "author": "sav-analytics",
+        }
+    )
+    sheet = workbook.add_worksheet("Вес")
+    sheet.hide_gridlines(2)
+    sheet.freeze_panes(1, 0)
+    header = workbook.add_format(
+        {
+            "font_name": "Arial",
+            "font_size": 10,
+            "bold": True,
+            "font_color": "#FFFFFF",
+            "bg_color": "#355B47",
+            "align": "center",
+            "valign": "vcenter",
+            "bottom": 1,
+            "bottom_color": "#244532",
+        }
+    )
+    text_format = workbook.add_format({"font_name": "Arial", "font_size": 9})
+    integer_format = workbook.add_format(
+        {"font_name": "Arial", "font_size": 9, "num_format": "0"}
+    )
+    weight_format = workbook.add_format(
+        {"font_name": "Arial", "font_size": 9, "num_format": "0.000000"}
+    )
+    headers = [id_question["label"] if identifier_name else "Номер строки"]
+    if source_weight_name:
+        headers.append(f"Исходный вес ({source_weight_name})")
+    headers.append("Рассчитанный вес")
+    sheet.write_row(0, 0, headers, header)
+    for row_index, frame_index in enumerate(frame.index, start=1):
+        identifier = frame.at[frame_index, identifier_name] if identifier_name else row_index
+        _write_export_value(sheet, row_index, 0, identifier, text_format, integer_format)
+        column = 1
+        if source_weight_name:
+            _write_export_value(
+                sheet,
+                row_index,
+                column,
+                frame.at[frame_index, source_weight_name],
+                text_format,
+                weight_format,
+            )
+            column += 1
+        sheet.write_number(row_index, column, float(result.weights.loc[frame_index]), weight_format)
+    last_row = len(frame)
+    last_column = len(headers) - 1
+    sheet.autofilter(0, 0, last_row, last_column)
+    sheet.set_column(0, 0, 22)
+    if last_column >= 1:
+        sheet.set_column(1, last_column, 20)
+    sheet.set_row(0, 24)
+    workbook.close()
+    return output.getvalue()
+
+
+def _write_export_value(
+    sheet: Any,
+    row: int,
+    column: int,
+    value: Any,
+    text_format: Any,
+    numeric_format: Any,
+) -> None:
+    if pd.isna(value):
+        sheet.write_blank(row, column, None, text_format)
+    elif isinstance(value, str):
+        sheet.write_string(row, column, value, text_format)
+    elif isinstance(value, (int, float)) or hasattr(value, "item"):
+        numeric = value.item() if hasattr(value, "item") else value
+        sheet.write_number(row, column, float(numeric), numeric_format)
+    else:
+        sheet.write_string(row, column, str(value), text_format)
 
 
 def calculate_raking_preview(

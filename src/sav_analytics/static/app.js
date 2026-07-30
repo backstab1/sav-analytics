@@ -906,6 +906,11 @@ function openWeight(weightId = null) {
   if (weight) weight.dimensions.forEach(dimension => addWeightDimension(dimension));
   else addWeightDimension();
   document.querySelector("#delete-weight").hidden = !weight;
+  const downloadWeight = document.querySelector("#download-weight");
+  downloadWeight.hidden = !weight;
+  downloadWeight.href = weight
+    ? `/api/projects/${currentProject.id}/weights/${weight.id}/export.xlsx`
+    : "#";
   document.querySelector("#weight-error").hidden = true;
   document.querySelector("#weight-preview").innerHTML = weight
     ? '<p class="muted">Считаем…</p>'

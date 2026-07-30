@@ -532,6 +532,14 @@ def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None
             assert preview.json()["distributions"][0]["categories"][0][
                 "after_percent"
             ] == pytest.approx(50)
+            exported = client.get(
+                f"/api/projects/{project_id}/weights/{weight['id']}/export.xlsx"
+            )
+            assert exported.status_code == 200
+            assert exported.content.startswith(b"PK")
+            assert exported.headers["content-type"].startswith(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
             banner = client.post(
                 f"/api/projects/{project_id}/banners",

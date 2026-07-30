@@ -18,7 +18,7 @@ from .core.recoding import RecodingError, calculate_recode_preview, validate_rec
 from .core.report import ReportError, build_statistics_txt, build_topline_xlsx
 from .core.sav_reader import SavReadError
 from .core.topline import ToplineError, calculate_preview
-from .core.weighting import WeightingError, calculate_raking_preview
+from .core.weighting import WeightingError, build_raking_export, calculate_raking_preview
 from .repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 from .settings import Settings
 
@@ -489,6 +489,28 @@ def preview_calculated_weight(
         raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
     except (WeightingError, KeyError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/projects/{project_id}/weights/{weight_id}/export.xlsx")
+def download_calculated_weight(
+    project_id: UUID,
+    weight_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> StreamingResponse:
+    try:
+        project, definition = repository.calculated_weight(project_id, weight_id)
+        content = build_raking_export(repository.source_path(project_id), definition, project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
+    except (WeightingError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    filename = f"{project['name']}_{definition['name']}_weight.xlsx"
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @app.put("/api/projects/{project_id}/banners/{banner_id}")
