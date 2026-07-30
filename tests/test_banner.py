@@ -35,7 +35,9 @@ def test_banner_preview_keeps_total_and_builds_nested_columns(tmp_path: Path) ->
     write_fixture(source)
     project = project_fixture(source)
     banner = {
-        "name": "Основной",
+        "name": "Демография",
+        "compare_to_total": True,
+        "compare_pairwise": True,
         "blocks": [
             {"label": "Пол", "sources": [{"kind": "question", "ref": "Q1"}]},
             {
@@ -60,6 +62,8 @@ def test_banner_preview_keeps_total_and_builds_nested_columns(tmp_path: Path) ->
     }
     assert len(preview["columns"]) == 7
     assert [item["base"] for item in preview["columns"][3:]] == [1, 1, 0, 1]
+    assert all(item["compare_to_total"] for item in preview["columns"][1:])
+    assert all(item["compare_pairwise"] for item in preview["columns"][1:])
 
 
 def test_banner_rejects_multiple_question_as_source(tmp_path: Path) -> None:
@@ -75,4 +79,3 @@ def test_banner_rejects_multiple_question_as_source(tmp_path: Path) -> None:
 
     with pytest.raises(BannerError, match="single choice"):
         validate_banner(invalid, project)
-

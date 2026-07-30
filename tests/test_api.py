@@ -300,7 +300,7 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
             banner = client.post(
                 f"/api/projects/{project_id}/banners",
                 json={
-                    "name": "Основной",
+                    "name": "Пол и оценка",
                     "blocks": [
                         {
                             "label": "Пол → Оценка",
@@ -326,6 +326,8 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
                 f"/api/projects/{project_id}/banners",
                 json={
                     "name": "Пол",
+                    "compare_to_total": True,
+                    "compare_pairwise": True,
                     "blocks": [
                         {
                             "label": "Пол",
@@ -334,14 +336,27 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
                     ],
                 },
             )
-            assert second.status_code == 422
-            assert "уже есть баннер" in second.json()["detail"]
+            assert second.status_code == 201
+            second_configuration = second.json()["configuration"]
+            second_id = second_configuration["banners"][1]["id"]
+            assert second_configuration["report_banner_id"] == second_id
+            assert second_configuration["banners"][1]["compare_to_total"] is True
+            assert second_configuration["banners"][1]["compare_pairwise"] is True
+            assert "compare_to_total" not in second_configuration["banners"][1]["blocks"][0]
+
+            selected = client.put(
+                f"/api/projects/{project_id}/report-banner",
+                json={"banner_id": banner_id},
+            )
+            assert selected.status_code == 200
+            assert selected.json()["configuration"]["report_banner_id"] == banner_id
 
             deleted = client.delete(
                 f"/api/projects/{project_id}/banners/{banner_id}"
             )
             assert deleted.status_code == 200
-            assert deleted.json()["configuration"]["banners"] == []
+            assert len(deleted.json()["configuration"]["banners"]) == 1
+            assert deleted.json()["configuration"]["report_banner_id"] == second_id
     finally:
         app.dependency_overrides.clear()
 

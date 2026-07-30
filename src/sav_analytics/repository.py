@@ -63,6 +63,7 @@ class ProjectRepository:
                     "questions": inspection.to_dict()["questions"],
                     "recodings": [],
                     "banners": [],
+                    "report_banner_id": None,
                     "filters": [],
                     "calculated_weights": [],
                     "report_filter_id": None,
@@ -226,11 +227,9 @@ class ProjectRepository:
 
     def create_banner(self, project_id: UUID, definition: dict) -> dict:
         project = self.get(project_id)
-        if project["configuration"]["banners"]:
-            raise InvalidUploadError(
-                "В проекте уже есть баннер. Добавьте новый блок в существующий баннер."
-            )
-        project["configuration"]["banners"].append({"id": str(uuid4()), **definition})
+        banner_id = str(uuid4())
+        project["configuration"]["banners"].append({"id": banner_id, **definition})
+        project["configuration"]["report_banner_id"] = banner_id
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
@@ -256,6 +255,10 @@ class ProjectRepository:
         if len(filtered) == len(banners):
             raise ProjectNotFoundError(str(banner_id))
         project["configuration"]["banners"] = filtered
+        if project["configuration"].get("report_banner_id") == str(banner_id):
+            project["configuration"]["report_banner_id"] = (
+                filtered[-1]["id"] if filtered else None
+            )
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
@@ -271,6 +274,21 @@ class ProjectRepository:
         except StopIteration as exc:
             raise ProjectNotFoundError(str(banner_id)) from exc
         return project, banner
+
+    def assign_report_banner(
+        self, project_id: UUID, banner_id: UUID | None
+    ) -> dict:
+        project = self.get(project_id)
+        identifier = str(banner_id) if banner_id else None
+        if identifier and not any(
+            item["id"] == identifier
+            for item in project["configuration"]["banners"]
+        ):
+            raise ProjectNotFoundError(identifier)
+        project["configuration"]["report_banner_id"] = identifier
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
 
     def create_calculated_weight(self, project_id: UUID, definition: dict) -> dict:
         project = self.get(project_id)
@@ -436,10 +454,25 @@ class ProjectRepository:
             }
         project["configuration"].setdefault("recodings", [])
         project["configuration"].setdefault("banners", [])
-        if len(project["configuration"]["banners"]) > 1:
-            project["configuration"]["banners"] = [
-                project["configuration"]["banners"][-1]
-            ]
+        banners = project["configuration"]["banners"]
+        for index, banner in enumerate(banners, start=1):
+            if banner.get("name", "").strip().casefold() in {
+                "основной",
+                "основной баннер",
+            }:
+                banner["name"] = f"Баннер {index}"
+            banner.setdefault(
+                "compare_to_total",
+                any(block.get("compare_to_total", False) for block in banner["blocks"]),
+            )
+            banner.setdefault(
+                "compare_pairwise",
+                any(block.get("compare_pairwise", False) for block in banner["blocks"]),
+            )
+        if "report_banner_id" not in project["configuration"]:
+            project["configuration"]["report_banner_id"] = (
+                banners[-1]["id"] if banners else None
+            )
         project["configuration"].setdefault("filters", [])
         project["configuration"].setdefault("calculated_weights", [])
         project["configuration"].setdefault("report_filter_id", None)

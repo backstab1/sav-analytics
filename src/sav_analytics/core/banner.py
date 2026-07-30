@@ -78,6 +78,16 @@ def build_banner_columns(
             "mask": pd.Series(True, index=frame.index),
         }
     ]
+    compare_to_total = definition.get("compare_to_total")
+    if compare_to_total is None:
+        compare_to_total = any(
+            block.get("compare_to_total", False) for block in definition["blocks"]
+        )
+    compare_pairwise = definition.get("compare_pairwise")
+    if compare_pairwise is None:
+        compare_pairwise = any(
+            block.get("compare_pairwise", False) for block in definition["blocks"]
+        )
     for block_index, block in enumerate(definition["blocks"]):
         resolved = [_source_categories(source, project, frame) for source in block["sources"]]
         if len(resolved) == 1:
@@ -102,8 +112,8 @@ def build_banner_columns(
                         source["label"] for source in resolved
                     ),
                     "block_index": block_index,
-                    "compare_to_total": block.get("compare_to_total", False),
-                    "compare_pairwise": block.get("compare_pairwise", False),
+                    "compare_to_total": compare_to_total,
+                    "compare_pairwise": compare_pairwise,
                     "mask": mask,
                 }
             )

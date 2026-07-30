@@ -73,8 +73,15 @@ def build_topline_artifacts(path: str | Path, project: dict[str, Any]) -> Toplin
             raise ReportError("Общий фильтр отчёта даёт пустую выборку.")
 
     banners = configuration.get("banners", [])
-    if banners:
+    active_banner_id = configuration.get("report_banner_id")
+    if "report_banner_id" not in configuration and banners:
         active_banner = banners[-1]
+        columns = build_banner_columns(frame, active_banner, project)
+    elif active_banner_id and banners:
+        active_banner = next(
+            (banner for banner in banners if banner.get("id") == active_banner_id),
+            banners[-1],
+        )
         columns = build_banner_columns(frame, active_banner, project)
     else:
         active_banner = {}

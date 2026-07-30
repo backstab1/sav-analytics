@@ -44,6 +44,52 @@ def test_topline_workbook_has_required_sheets_and_numeric_cells(tmp_path: Path) 
         assert b'<v>4</v>' in main_xml
 
 
+def test_topline_uses_selected_banner_from_multiple_saved_banners(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "name": "Banner selection",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "filters": [],
+            "report_filter_id": None,
+            "report_banner_id": "gender",
+            "banners": [
+                {
+                    "id": "older",
+                    "name": "Older",
+                    "blocks": [
+                        {
+                            "label": "OLDER BLOCK",
+                            "sources": [{"kind": "question", "ref": "Q1"}],
+                        }
+                    ],
+                },
+                {
+                    "id": "gender",
+                    "name": "Gender",
+                    "blocks": [
+                        {
+                            "label": "GENDER BLOCK",
+                            "sources": [{"kind": "question", "ref": "Q1"}],
+                        }
+                    ],
+                },
+            ],
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+
+    with ZipFile(BytesIO(content)) as archive:
+        shared_strings = archive.read("xl/sharedStrings.xml")
+        assert b"GENDER BLOCK" in shared_strings
+        assert b"OLDER BLOCK" not in shared_strings
+
+
 def test_topline_applies_report_filter_to_total_base(tmp_path: Path) -> None:
     source = tmp_path / "fixture.sav"
     write_fixture(source)

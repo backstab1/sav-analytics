@@ -114,7 +114,7 @@ document.querySelector("#recode-source").addEventListener("change", () => {
 });
 document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
 document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
-document.querySelector("#new-banner").addEventListener("click", () => openBanner(configuredBanners()[0]?.id || null));
+document.querySelector("#new-banner").addEventListener("click", () => openBanner());
 document.querySelector("#close-banner-editor").addEventListener("click", closeBanner);
 document.querySelector("#add-banner-block").addEventListener("click", () => addBannerBlock());
 document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
@@ -127,6 +127,7 @@ document.querySelector("#delete-filter").addEventListener("click", deleteFilter)
 document.querySelector("#copy-filter").addEventListener("click", copyFilter);
 document.querySelector("#refresh-filter-preview").addEventListener("click", loadFilterPreview);
 document.querySelector("#report-filter").addEventListener("change", assignReportFilter);
+document.querySelector("#report-banner").addEventListener("change", assignReportBanner);
 document.querySelector("#new-weight").addEventListener("click", () => openWeight());
 document.querySelector("#close-weight-editor").addEventListener("click", closeWeight);
 document.querySelector("#add-weight-dimension").addEventListener("click", () => addWeightDimension());
@@ -288,8 +289,10 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
   }
   const weightSelection = document.querySelector("#banner-weight").value;
   const payload = {
-    name: "Баннер",
+    name: document.querySelector("#banner-name").value.trim(),
     blocks,
+    compare_to_total: document.querySelector("#banner-compare-total").checked,
+    compare_pairwise: document.querySelector("#banner-compare-pairwise").checked,
     confidence_level: Number(document.querySelector("#banner-confidence").value) / 100,
     bonferroni: document.querySelector("#banner-bonferroni").checked,
     minimum_base: Number(document.querySelector("#banner-minimum-base").value),
@@ -307,7 +310,7 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
       body: JSON.stringify(payload),
     });
     if (!currentBannerId) {
-      currentBannerId = configuredBanners()[0]?.id;
+      currentBannerId = configuredBanners().at(-1)?.id;
     }
     renderProject();
     openBanner(currentBannerId);
@@ -558,8 +561,7 @@ function renderProject() {
   warningBox.hidden = inspection.warnings.length === 0;
   warningBox.innerHTML = inspection.warnings.map(text => `<p>⚑ ${escapeHtml(text)}</p>`).join("");
   renderReportFilterControl();
-  const bannerButton = document.querySelector("#new-banner");
-  bannerButton.textContent = configuredBanners().length ? "Редактировать баннер" : "+ Настроить баннер";
+  renderReportBannerControl();
   renderTable();
 }
 
@@ -594,12 +596,13 @@ function renderTable() {
   }
   if (currentView === "banners") {
     const banners = configuredBanners();
-    document.querySelector("#table-head").innerHTML = "<th>Статус</th><th>Блоков</th><th>Структура</th>";
+    const activeBannerId = selectedReportBannerId();
+    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Статус</th><th>Блоков</th><th>Структура</th>";
     document.querySelector("#table-body").innerHTML = banners.length ? banners.map(banner => `
       <tr class="question-row ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${banner.id}">
-        <td><span class="status">В Excel</span></td><td>${banner.blocks.length}</td>
+        <td><strong>${escapeHtml(banner.name)}</strong></td><td>${banner.id === activeBannerId ? '<span class="status">В Excel</span>' : '—'}</td><td>${banner.blocks.length}</td>
         <td>${banner.blocks.map(block => `<small>${block.sources.map(source => escapeHtml(bannerSourceLabel(source))).join(" → ")}</small>`).join("")}</td>
-      </tr>`).join("") : '<tr><td colspan="3" class="empty-state">Баннера нет. В Excel будет только Total.</td></tr>';
+      </tr>`).join("") : '<tr><td colspan="4" class="empty-state">Баннеров нет. В Excel будет только Total.</td></tr>';
     return;
   }
   if (currentView === "recodings") {
@@ -818,6 +821,38 @@ function renderReportFilterControl() {
   select.innerHTML = '<option value="">Без общего фильтра</option>' + configuredFilters().map(filter => `<option value="${filter.id}" ${currentProject.configuration.report_filter_id === filter.id ? "selected" : ""}>${escapeHtml(filter.name)}</option>`).join("");
 }
 
+function selectedReportBannerId() {
+  const banners = configuredBanners();
+  return Object.prototype.hasOwnProperty.call(currentProject.configuration, "report_banner_id")
+    ? currentProject.configuration.report_banner_id
+    : banners.at(-1)?.id || null;
+}
+
+function renderReportBannerControl() {
+  const select = document.querySelector("#report-banner");
+  if (!select || !currentProject) return;
+  const selectedId = selectedReportBannerId();
+  select.innerHTML = '<option value="">Только Total</option>' + configuredBanners().map(banner => `<option value="${banner.id}" ${selectedId === banner.id ? "selected" : ""}>${escapeHtml(banner.name)}</option>`).join("");
+}
+
+async function assignReportBanner() {
+  const select = document.querySelector("#report-banner");
+  select.disabled = true;
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/report-banner`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ banner_id: select.value || null }),
+    });
+    renderProject();
+  } catch (error) {
+    alert(error.message);
+    renderReportBannerControl();
+  } finally {
+    select.disabled = false;
+  }
+}
+
 async function assignReportFilter() {
   const select = document.querySelector("#report-filter");
   select.disabled = true;
@@ -973,8 +1008,11 @@ function openBanner(bannerId = null) {
   recodeEditor.hidden = true;
   bannerEditor.hidden = false;
   const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
-  document.querySelector("#banner-editor-title").textContent = "Баннер";
+  document.querySelector("#banner-editor-title").textContent = banner?.name || "Новый баннер";
+  document.querySelector("#banner-name").value = banner?.name || `Баннер ${configuredBanners().length + 1}`;
   document.querySelector("#banner-confidence").value = (banner?.confidence_level || 0.95) * 100;
+  document.querySelector("#banner-compare-total").checked = banner?.compare_to_total ?? banner?.blocks.some(block => block.compare_to_total) ?? false;
+  document.querySelector("#banner-compare-pairwise").checked = banner?.compare_pairwise ?? banner?.blocks.some(block => block.compare_pairwise) ?? false;
   document.querySelector("#banner-bonferroni").checked = banner?.bonferroni || false;
   document.querySelector("#banner-minimum-base").value = banner?.minimum_base || 30;
   const weightSelect = document.querySelector("#banner-weight");
@@ -1013,7 +1051,7 @@ function addBannerBlock(block = {}) {
   const second = block.sources?.[1];
   const element = document.createElement("div");
   element.className = "banner-block";
-  element.innerHTML = `<div class="banner-block-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button type="button" data-remove-banner-block title="Удалить блок">×</button></div><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Вложить второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label><label class="inline-check"><input class="banner-compare-total" type="checkbox" ${block.compare_to_total ? "checked" : ""} /> Сравнивать подгруппы с Total (через Rest)</label><label class="inline-check"><input class="banner-compare-pairwise" type="checkbox" ${block.compare_pairwise ? "checked" : ""} /> Попарно сравнивать подгруппы</label>`;
+  element.innerHTML = `<div class="banner-block-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button type="button" data-remove-banner-block title="Удалить блок">×</button></div><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Вложить второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label>`;
   document.querySelector("#banner-block-list").append(element);
 }
 
@@ -1039,8 +1077,6 @@ function collectBannerBlocks() {
     return {
       label: element.querySelector(".banner-block-label").value.trim() || null,
       sources,
-      compare_to_total: element.querySelector(".banner-compare-total").checked,
-      compare_pairwise: element.querySelector(".banner-compare-pairwise").checked,
     };
   });
 }
