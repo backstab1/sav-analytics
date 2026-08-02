@@ -176,6 +176,24 @@ def _build_questions(
             continue
         if all_dichotomies:
             group_type = QuestionType.MULTIPLE_DICHOTOMY
+        elif _looks_like_positional_categories(frame, members, by_name):
+            for name in members:
+                variable = by_name[name]
+                variable.question_type = QuestionType.SINGLE_CHOICE
+                variable.warnings = [
+                    warning
+                    for warning in variable.warnings
+                    if "Тип шкалы определён по диапазону значений" not in warning
+                ]
+                variable.warnings.append(
+                    "Переменная распознана как позиционная категория внутри "
+                    "последовательного блока; будут показаны исходные коды."
+                )
+            warnings.append(
+                f"Группа {prefix} распознана как последовательность позиционных "
+                "категорий по структуре заполнения; проверьте подписи кодов."
+            )
+            continue
         elif _matrix_compatible(members, by_name):
             group_type = QuestionType.MATRIX
         else:
@@ -280,6 +298,46 @@ def _matrix_compatible(
         and 2 <= variable.unique_count <= 12
         for variable in inspected
     )
+
+
+def _looks_like_positional_categories(
+    frame: pd.DataFrame,
+    members: list[str],
+    variables: dict[str, VariableInspection],
+) -> bool:
+    """Detect optional ordered response slots without relying on question codes.
+
+    Positional exports commonly store the first selected category in the first
+    variable, the second in the next variable, and so on.  Their bases therefore
+    shrink from left to right and later slots are almost never filled when an
+    earlier slot is empty.  A sparse tail can otherwise resemble a short scale.
+    """
+    inspected = [variables[name] for name in members]
+    if not all(variable.storage_type == "numeric" for variable in inspected):
+        return False
+    if not any(variable.question_type is QuestionType.NUMERIC for variable in inspected):
+        return False
+    if not any(variable.question_type is QuestionType.SCALE for variable in inspected):
+        return False
+
+    filled = frame[members].notna()
+    counts = [int(filled[name].sum()) for name in members]
+    if not counts[0] or any(
+        left < right for left, right in zip(counts, counts[1:], strict=False)
+    ):
+        return False
+    if counts[-1] > counts[0] * 0.8:
+        return False
+
+    later_filled = 0
+    prefix_violations = 0
+    previous_filled = filled[members[0]].copy()
+    for name in members[1:]:
+        current = filled[name]
+        later_filled += int(current.sum())
+        prefix_violations += int((current & ~previous_filled).sum())
+        previous_filled &= current
+    return later_filled > 0 and prefix_violations / later_filled <= 0.05
 
 
 def _special_values(

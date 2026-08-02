@@ -149,3 +149,29 @@ def test_numbered_scales_become_matrix_and_detect_special_answers(tmp_path: Path
     multiple = next(question for question in result.questions if question.code == "Q6")
     assert multiple.question_type is QuestionType.MULTIPLE_DICHOTOMY
     assert multiple.special_items == ["Q6_99"]
+
+
+def test_sparse_numbered_response_slots_are_not_mistaken_for_scales(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "positional_categories.sav"
+    frame = pd.DataFrame(
+        {
+            "CHOICE_1": [*range(1, 16), *([float("nan")] * 5)],
+            "CHOICE_2": [1, 2, 3, 4, 5, *([float("nan")] * 15)],
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"CHOICE_1": "Первый выбор", "CHOICE_2": "Второй выбор"},
+        variable_measure={"CHOICE_1": "scale", "CHOICE_2": "scale"},
+    )
+
+    result = inspect_sav(source)
+
+    questions = {question.code: question for question in result.questions}
+    assert questions["CHOICE_1"].question_type is QuestionType.SINGLE_CHOICE
+    assert questions["CHOICE_2"].question_type is QuestionType.SINGLE_CHOICE
+    assert not any(question.code == "CHOICE" for question in result.questions)
+    assert any("позицион" in warning for warning in result.warnings)

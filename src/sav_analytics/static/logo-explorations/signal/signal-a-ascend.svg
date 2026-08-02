@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Signal A — Ascend</title>
+  <desc id="desc">The original chevron idea with an ascending analytical signal.</desc>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 20 32 6l17 14M15 44l17 14 17-14" stroke="#1D1D1F" stroke-width="6"/>
+    <path d="m8 40 48-16" stroke="#1D7A4F" stroke-width="7"/>
+  </g>
+</svg>

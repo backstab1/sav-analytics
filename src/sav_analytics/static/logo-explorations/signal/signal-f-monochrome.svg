@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Signal F — Monochrome</title>
+  <desc id="desc">A one-color version of the ascending signal mark.</desc>
+  <g fill="none" stroke="#1D7A4F" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 20 32 6l17 14M15 44l17 14 17-14" stroke-width="6"/>
+    <path d="m8 40 48-16" stroke-width="7"/>
+  </g>
+</svg>

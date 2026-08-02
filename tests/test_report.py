@@ -495,6 +495,84 @@ def test_topline_writes_nps_and_csat_rows_without_scale_mean(tmp_path: Path) -> 
     assert "Балансы: group1=" in audit
 
 
+@pytest.mark.parametrize(
+    ("values", "expected_top", "expected_bottom"),
+    [
+        ([1, 2, 3, 4, 5, 5], 50.0, 100 / 3),
+        ([1, 2, 3, 4, 4], 60.0, 40.0),
+    ],
+)
+def test_scale_writes_top_2_and_bottom_2_from_extreme_codes(
+    tmp_path: Path,
+    values: list[int],
+    expected_top: float,
+    expected_bottom: float,
+) -> None:
+    source = tmp_path / "scale.sav"
+    frame = pd.DataFrame({"SCALE": values})
+    maximum = max(values)
+    pyreadstat.write_sav(
+        frame,
+        source,
+        variable_value_labels={
+            "SCALE": {value: str(value) for value in range(1, maximum + 1)}
+        },
+        variable_measure={"SCALE": "scale"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "name": "Шкала",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [],
+            "report_filter_id": None,
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+
+    assert _cell_value(content, "Top-2", "B") == pytest.approx(expected_top)
+    assert _cell_value(content, "Bottom-2", "B") == pytest.approx(expected_bottom)
+
+
+def test_matrix_writes_top_2_and_bottom_2_below_each_item(tmp_path: Path) -> None:
+    source = tmp_path / "matrix_aggregates.sav"
+    frame = pd.DataFrame(
+        {
+            "MATRIX_1": [1, 2, 3, 4, 5],
+            "MATRIX_2": [1, 1, 2, 4, 5],
+        }
+    )
+    labels = {value: str(value) for value in range(1, 6)}
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"MATRIX_1": "Первое", "MATRIX_2": "Второе"},
+        variable_value_labels={"MATRIX_1": labels, "MATRIX_2": labels},
+        variable_measure={"MATRIX_1": "scale", "MATRIX_2": "scale"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "name": "Матрица",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [],
+            "report_filter_id": None,
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+
+    assert _cell_values(content, "Top-2", "B") == pytest.approx([40.0, 40.0])
+    assert _cell_values(content, "Bottom-2", "B") == pytest.approx([40.0, 60.0])
+
+
 def test_topline_rejects_invalid_ready_weight(tmp_path: Path) -> None:
     source = tmp_path / "invalid_weight.sav"
     frame = pd.DataFrame({"GROUP": [1, 2], "W": [1.0, 0.0]})
@@ -642,6 +720,28 @@ def _cell_value(content: bytes, row_label: str, column: str) -> float:
             if cell.attrib["r"] == f"{column}{target_row}"
         )
         return float(target.find("m:v", namespace).text)
+
+
+def _cell_values(content: bytes, row_label: str, column: str) -> list[float]:
+    namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(BytesIO(content)) as archive:
+        shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+        shared = ["".join(item.itertext()) for item in shared_root.findall("m:si", namespace)]
+        sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        cells = {cell.attrib["r"]: cell for cell in sheet.findall(".//m:c", namespace)}
+        result: list[float] = []
+        for cell in cells.values():
+            if (
+                not cell.attrib["r"].startswith("A")
+                or cell.attrib.get("t") != "s"
+                or shared[int(cell.find("m:v", namespace).text)] != row_label
+            ):
+                continue
+            target = cells.get(f"{column}{cell.attrib['r'][1:]}")
+            value = target.find("m:v", namespace) if target is not None else None
+            if value is not None:
+                result.append(float(value.text))
+        return result
 
 
 def _cell_num_format(content: bytes, row_label: str, column: str) -> str:

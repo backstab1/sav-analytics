@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">SAV Analytics logo explorations</title>
+  <desc id="desc">Five logo directions shown on light cards and at navigation size.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity=".08"/>
+    </filter>
+    <symbol id="signal" viewBox="0 0 64 64">
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 20 32 6l17 14M15 44l17 14 17-14" stroke="#1D1D1F" stroke-width="6"/>
+        <path d="m8 25 48 14" stroke="#1D7A4F" stroke-width="7"/>
+      </g>
+    </symbol>
+    <symbol id="contour" viewBox="0 0 64 64">
+      <path d="M18 18 32 7l14 11-7 6-7-6-7 6 14 16 7-6 6 7-20 16L12 41l6-7 7 6 7-6-14-16Z" fill="#1D1D1F"/>
+      <path d="m10 30 44 12" fill="none" stroke="#2EAE68" stroke-width="6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="calibrate" viewBox="0 0 64 64">
+      <path d="M32 5 56 32 32 59 8 32 32 5Z" fill="#E8F4EE" stroke="#1D1D1F" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M18 24h19M18 32h28M18 40h12" fill="none" stroke="#1D1D1F" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="43" cy="24" r="4" fill="#1D7A4F"/>
+    </symbol>
+    <symbol id="axis" viewBox="0 0 64 64">
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 52 30 11c1-3 3-3 4 0l18 41M20 37h24" stroke="#1D1D1F" stroke-width="6"/>
+        <path d="m15 47 11-8 8 3 15-18" stroke="#1D7A4F" stroke-width="5"/>
+      </g>
+      <circle cx="49" cy="24" r="4" fill="#2EAE68"/>
+    </symbol>
+    <symbol id="modules" viewBox="0 0 64 64">
+      <rect x="7" y="37" width="14" height="20" rx="5" fill="#1D1D1F"/>
+      <rect x="25" y="25" width="14" height="32" rx="5" fill="#1D1D1F"/>
+      <rect x="43" y="7" width="14" height="50" rx="5" fill="#1D7A4F"/>
+      <path d="m12 27 14-9 10 4L51 9" fill="none" stroke="#2EAE68" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <style>
+      .title{font:800 34px Inter,Arial,sans-serif;fill:#1D1D1F;letter-spacing:-1px}.sub{font:400 16px Inter,Arial,sans-serif;fill:#86868B}.name{font:700 18px Inter,Arial,sans-serif;fill:#1D1D1F}.note{font:400 13px Inter,Arial,sans-serif;fill:#86868B}.word{font:700 18px Inter,Arial,sans-serif;fill:#1D1D1F;letter-spacing:-.4px}.green{fill:#1D7A4F}
+    </style>
+  </defs>
+  <rect width="1280" height="720" fill="#FAFAFA"/>
+  <text class="title" x="64" y="70">SAV Analytics — logo directions</text>
+  <text class="sub" x="64" y="100">Графит · глубокий зелёный · мягкая геометрия · читаемость в 25 px</text>
+
+  <g transform="translate(64 142)">
+    <g filter="url(#shadow)"><rect width="210" height="300" rx="22" fill="#FFF"/></g>
+    <use href="#signal" x="53" y="42" width="104" height="104"/>
+    <text class="name" x="24" y="192">01 Signal</text><text class="note" x="24" y="218">Бережная доводка</text><text class="note" x="24" y="237">исходной идеи</text>
+    <use href="#signal" x="24" y="258" width="25" height="25"/><text class="word" x="59" y="278">sav<tspan class="green">analytics</tspan></text>
+  </g>
+  <g transform="translate(300 142)">
+    <g filter="url(#shadow)"><rect width="210" height="300" rx="22" fill="#FFF"/></g>
+    <use href="#contour" x="53" y="42" width="104" height="104"/>
+    <text class="name" x="24" y="192">02 Contour</text><text class="note" x="24" y="218">Плотнее, характернее,</text><text class="note" x="24" y="237">лучше для app icon</text>
+    <use href="#contour" x="24" y="258" width="25" height="25"/><text class="word" x="59" y="278">sav<tspan class="green">analytics</tspan></text>
+  </g>
+  <g transform="translate(536 142)">
+    <g filter="url(#shadow)"><rect width="210" height="300" rx="22" fill="#FFF"/></g>
+    <use href="#calibrate" x="53" y="42" width="104" height="104"/>
+    <text class="name" x="24" y="192">03 Calibrate</text><text class="note" x="24" y="218">Шкалы и контроль</text><text class="note" x="24" y="237">качества данных</text>
+    <use href="#calibrate" x="24" y="258" width="25" height="25"/><text class="word" x="59" y="278">sav<tspan class="green">analytics</tspan></text>
+  </g>
+  <g transform="translate(772 142)">
+    <g filter="url(#shadow)"><rect width="210" height="300" rx="22" fill="#FFF"/></g>
+    <use href="#axis" x="53" y="42" width="104" height="104"/>
+    <text class="name" x="24" y="192">04 Axis</text><text class="note" x="24" y="218">Монограмма A +</text><text class="note" x="24" y="237">аналитический тренд</text>
+    <use href="#axis" x="24" y="258" width="25" height="25"/><text class="word" x="59" y="278">sav<tspan class="green">analytics</tspan></text>
+  </g>
+  <g transform="translate(1008 142)">
+    <g filter="url(#shadow)"><rect width="210" height="300" rx="22" fill="#FFF"/></g>
+    <use href="#modules" x="53" y="42" width="104" height="104"/>
+    <text class="name" x="24" y="192">05 Modules</text><text class="note" x="24" y="218">Самый прямой образ</text><text class="note" x="24" y="237">аналитики и роста</text>
+    <use href="#modules" x="24" y="258" width="25" height="25"/><text class="word" x="59" y="278">sav<tspan class="green">analytics</tspan></text>
+  </g>
+
+  <rect x="64" y="490" width="1154" height="166" rx="22" fill="#1D1D1F"/>
+  <text x="94" y="530" style="font:600 13px Inter,Arial,sans-serif;fill:#A8A8AD;letter-spacing:1.3px">ON DARK</text>
+  <g transform="translate(102 554)"><rect width="76" height="76" rx="18" fill="#FFF"/><use href="#signal" x="14" y="14" width="48" height="48"/></g>
+  <g transform="translate(226 554)"><rect width="76" height="76" rx="18" fill="#FFF"/><use href="#contour" x="14" y="14" width="48" height="48"/></g>
+  <g transform="translate(350 554)"><rect width="76" height="76" rx="18" fill="#FFF"/><use href="#calibrate" x="14" y="14" width="48" height="48"/></g>
+  <g transform="translate(474 554)"><rect width="76" height="76" rx="18" fill="#FFF"/><use href="#axis" x="14" y="14" width="48" height="48"/></g>
+  <g transform="translate(598 554)"><rect width="76" height="76" rx="18" fill="#FFF"/><use href="#modules" x="14" y="14" width="48" height="48"/></g>
+  <text x="760" y="588" style="font:800 32px Inter,Arial,sans-serif;fill:#FFF;letter-spacing:-1px">sav<tspan fill="#43C77A">analytics</tspan></text>
+  <text x="760" y="616" style="font:400 14px Inter,Arial,sans-serif;fill:#A8A8AD">Вся палитра взята из новой дизайн-системы.</text>
+</svg>

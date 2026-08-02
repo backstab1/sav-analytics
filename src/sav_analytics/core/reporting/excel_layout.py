@@ -144,6 +144,7 @@ def _write_question_rows(
         return row
     if question_type == "matrix":
         for name in sources:
+            working = _scale_series(frame[name], question.get("special_values", []))
             sheet.write(row, 0, variables[name]["label"], formats["subquestion"])
             row += 1
             row = _write_distribution(
@@ -163,7 +164,7 @@ def _write_question_rows(
                 sheet,
                 row,
                 "Среднее",
-                frame[name],
+                working,
                 columns,
                 base_mask,
                 formats,
@@ -171,6 +172,33 @@ def _write_question_rows(
                 audit_entries,
                 (sheet_name, question["code"], question["label"]),
             )
+            for aggregate_label, take_highest in (
+                ("Top-2", True),
+                ("Bottom-2", False),
+            ):
+                selected = _scale_aggregate(
+                    working,
+                    variables[name],
+                    question.get("special_values", []),
+                    take_highest=take_highest,
+                )
+                row = _write_metric_row(
+                    sheet,
+                    row,
+                    aggregate_label,
+                    columns,
+                    base_mask,
+                    working.notna() if valid_denominator else None,
+                    lambda mask, selected=selected: _ratio(
+                        selected[mask].sum(), mask.sum()
+                    ),
+                    selected,
+                    formats,
+                    "percent",
+                    statistical_settings,
+                    audit_entries,
+                    (sheet_name, question["code"], question["label"]),
+                )
         return row
     if len(sources) != 1:
         return row
@@ -228,11 +256,12 @@ def _write_question_rows(
                 (sheet_name, question["code"], question["label"]),
                 valid_denominator,
             )
+        working = _scale_series(series, question.get("special_values", []))
         row = _write_numeric_metric(
             sheet,
             row,
             "Среднее",
-            series,
+            working,
             columns,
             base_mask,
             formats,
@@ -240,18 +269,23 @@ def _write_question_rows(
             audit_entries,
             (sheet_name, question["code"], question["label"]),
         )
-        values = sorted(float(value) for value in series.dropna().unique())
-        if len(values) >= 2:
-            top_values = set(values[-2:])
-            selected = series.isin(top_values)
+        for aggregate_label, take_highest in (("Top-2", True), ("Bottom-2", False)):
+            selected = _scale_aggregate(
+                working,
+                variables[sources[0]],
+                question.get("special_values", []),
+                take_highest=take_highest,
+            )
             row = _write_metric_row(
                 sheet,
                 row,
-                "Top-2",
+                aggregate_label,
                 columns,
                 base_mask,
-                series.notna() if valid_denominator else None,
-                lambda mask: _ratio(selected[mask].sum(), mask.sum()),
+                working.notna() if valid_denominator else None,
+                lambda mask, selected=selected: _ratio(
+                    selected[mask].sum(), mask.sum()
+                ),
                 selected,
                 formats,
                 "percent",
@@ -768,4 +802,37 @@ def _equal_series(series: pd.Series, expected: Any) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series.dtype) and isinstance(expected, Number):
         return series.eq(expected).fillna(False)
     return series.map(lambda item: _equal(item, expected))
+
+
+def _scale_series(series: pd.Series, special_values: list[Any]) -> pd.Series:
+    working = series.copy()
+    for value in special_values:
+        working = working.mask(_equal_series(working, value))
+    return pd.to_numeric(working, errors="coerce")
+
+
+def _scale_aggregate(
+    series: pd.Series,
+    variable: dict[str, Any],
+    special_values: list[Any],
+    *,
+    take_highest: bool,
+) -> pd.Series:
+    raw_values = [item["value"] for item in variable.get("value_labels", [])]
+    raw_values.extend(series.dropna().unique())
+    codes: set[float] = set()
+    for value in raw_values:
+        if any(_equal(value, special) for special in special_values):
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric):
+            codes.add(numeric)
+    ordered = sorted(codes)
+    selected_codes = ordered[-2:] if take_highest else ordered[:2]
+    if len(selected_codes) == 2:
+        return series.isin(selected_codes)
+    return pd.Series(False, index=series.index)
 

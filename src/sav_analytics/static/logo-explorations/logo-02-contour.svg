@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">SAV Analytics — Contour</title>
+  <desc id="desc">A compact continuous contour with a green analytical trend line.</desc>
+  <path d="M18 18 32 7l14 11-7 6-7-6-7 6 14 16 7-6 6 7-20 16L12 41l6-7 7 6 7-6-14-16Z" fill="#1D1D1F"/>
+  <path d="m10 30 44 12" fill="none" stroke="#2EAE68" stroke-width="6" stroke-linecap="round"/>
+</svg>

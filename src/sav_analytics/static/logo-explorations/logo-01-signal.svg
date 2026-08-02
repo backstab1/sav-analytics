@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">SAV Analytics — Signal</title>
+  <desc id="desc">Refined version of the original mark: two calibrated chevrons crossed by an ascending signal.</desc>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 20 32 6l17 14" stroke="#1D1D1F" stroke-width="6"/>
+    <path d="M15 44 32 58l17-14" stroke="#1D1D1F" stroke-width="6"/>
+    <path d="m8 25 48 14" stroke="#1D7A4F" stroke-width="7"/>
+  </g>
+</svg>

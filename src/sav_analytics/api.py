@@ -48,7 +48,14 @@ static_dir = Path(__file__).parent / "static"
 if static_dir.is_dir():
     from fastapi.staticfiles import StaticFiles
 
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+    class DevelopmentStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope: dict) -> object:
+            response = await super().get_response(path, scope)
+            response.headers["Cache-Control"] = "no-store, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            return response
+
+    app.mount("/", DevelopmentStaticFiles(directory=static_dir, html=True), name="frontend")
 
 
 __all__ = ["app", "get_repository", "get_settings"]

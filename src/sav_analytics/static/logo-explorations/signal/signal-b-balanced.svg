@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Signal B — Balanced</title>
+  <desc id="desc">A calmer, lighter construction optimized for interface use.</desc>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 19 32 6l18 13M14 45l18 13 18-13" stroke="#1D1D1F" stroke-width="5"/>
+    <path d="m8 39 48-14" stroke="#1D7A4F" stroke-width="5"/>
+  </g>
+</svg>

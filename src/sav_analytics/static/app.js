@@ -18,6 +18,14 @@ let currentFilterId = null;
 let currentWeightId = null;
 let currentView = "questions";
 let structureMode = "questions";
+let bannerFormDirty = false;
+const recodePreviewCache = new Map();
+const recodePreviewRequests = new Map();
+let recodeCardHydration = null;
+const filterPreviewCache = new Map();
+const filterPreviewRequests = new Map();
+let filterCardHydration = null;
+let filterPreviewTimer = null;
 
 const typeLabels = {
   single_choice: "Один ответ",
@@ -29,6 +37,27 @@ const typeLabels = {
   matrix: "Матрица",
   open_text: "Открытый текст",
   technical: "Технический",
+};
+
+const typeIcons = {
+  single_choice:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="10" r="3.2" fill="currentColor"/></svg>',
+  multiple_choice_dichotomy:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="4" width="12" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M7.2 10l2 2 3.8-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  multiple_choice_categorical:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="4" width="12" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M7.2 10l2 2 3.8-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  scale:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="9" width="14" height="2" rx="1" stroke="currentColor" stroke-width="1.5"/><circle cx="12.5" cy="10" r="3" fill="currentColor"/></svg>',
+  numeric:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 14V8M10 14V5M14 14V10" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+  ranking:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 6h9M4 10h12M4 14h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 5v4M14.5 7.5L16 9l1.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  matrix:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M3 7.5h14M3 12h14M7.5 3v14M12 3v14" stroke="currentColor" stroke-width="1" opacity=".45"/></svg>',
+  open_text:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 6h10M5 10h7M5 14h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  technical:
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 7v3.2l2 1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 fileInput.addEventListener("change", updateFileLabel);
@@ -56,6 +85,7 @@ form.addEventListener("submit", async event => {
   try {
     const project = await api("/api/projects", { method: "POST", body: new FormData(form) });
     showProject(project);
+    showToast("Проект создан");
   } catch (error) {
     showError(errorBox, error);
   } finally {
@@ -77,6 +107,10 @@ document.querySelector("#new-project").addEventListener("click", () => {
   weightEditor.hidden = true;
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
+  document.querySelector("#topbar-project").hidden = true;
+  document.querySelector("#topbar-actions").hidden = true;
+  document.querySelector("#topbar-start-stage").hidden = false;
+  window.scrollTo(0, 0);
   form.reset();
   fileTitle.textContent = "Перетащите SAV сюда";
   fileCaption.textContent = "или нажмите, чтобы выбрать файл";
@@ -123,19 +157,22 @@ document.querySelector("#recode-source").addEventListener("change", () => {
 document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
 document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
 document.querySelector("#new-banner").addEventListener("click", () => openBanner());
-document.querySelector("#close-banner-editor").addEventListener("click", closeBanner);
-document.querySelector("#add-banner-block").addEventListener("click", () => addBannerBlock());
+document.querySelector("#close-banner-editor").addEventListener("click", () => closeBanner());
+document.querySelector("#add-banner-block").addEventListener("click", () => {
+  addBannerBlock();
+  setBannerFormDirty(true);
+});
 document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
 document.querySelector("#refresh-banner-preview").addEventListener("click", loadBannerPreview);
 document.querySelector("#new-filter").addEventListener("click", () => openFilter());
 document.querySelector("#close-filter-editor").addEventListener("click", closeFilter);
-document.querySelector("#add-filter-condition").addEventListener("click", () => addFilterCondition());
-document.querySelector("#add-filter-group").addEventListener("click", () => addFilterGroup());
+document.querySelector("#add-filter-condition").addEventListener("click", () => {
+  addFilterCondition();
+  scheduleFilterPreview();
+});
 document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
 document.querySelector("#copy-filter").addEventListener("click", copyFilter);
-document.querySelector("#refresh-filter-preview").addEventListener("click", loadFilterPreview);
 document.querySelector("#report-filter").addEventListener("change", assignReportFilter);
-document.querySelector("#report-banner").addEventListener("change", assignReportBanner);
 document.querySelector("#new-weight").addEventListener("click", () => openWeight());
 document.querySelector("#close-weight-editor").addEventListener("click", closeWeight);
 document.querySelector("#add-weight-dimension").addEventListener("click", () => addWeightDimension());
@@ -151,6 +188,11 @@ document.querySelector("#weight-dimension-list").addEventListener("change", even
     renderWeightTargets(event.target.closest(".weight-dimension"));
   }
 });
+document.querySelector("#weight-dimension-list").addEventListener("input", event => {
+  if (event.target.matches(".weight-target input")) {
+    updateWeightDimensionStatus(event.target.closest(".weight-dimension"));
+  }
+});
 document.querySelectorAll("[data-structure-mode]").forEach(button => button.addEventListener("click", () => {
   structureMode = button.dataset.structureMode;
   document.querySelectorAll("[data-structure-mode]").forEach(item => item.classList.toggle("active", item === button));
@@ -160,8 +202,15 @@ document.querySelectorAll("[data-structure-mode]").forEach(button => button.addE
 }));
 document.querySelector("#banner-block-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-banner-block]");
-  if (button) button.closest(".banner-block").remove();
+  if (button) {
+    button.closest(".banner-block").remove();
+    setBannerFormDirty(true);
+  }
 });
+
+const bannerForm = document.querySelector("#banner-form");
+bannerForm.addEventListener("input", () => setBannerFormDirty(true));
+bannerForm.addEventListener("change", () => setBannerFormDirty(true));
 document.querySelector("#range-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-range]");
   if (button) button.closest(".range-row").remove();
@@ -171,13 +220,45 @@ document.querySelector("#category-group-list").addEventListener("click", event =
   if (button) button.closest(".category-group").remove();
 });
 document.querySelector("#filter-condition-list").addEventListener("click", event => {
+  const join = event.target.closest("button[data-filter-join]");
+  if (join) {
+    const group = join.closest(".filter-group");
+    const operator = group?.querySelector(".filter-group-operator") || document.querySelector("#filter-operator");
+    operator.value = operator.value === "and" ? "or" : "and";
+    refreshFilterJoins(group?.querySelector(".filter-group-items") || document.querySelector("#filter-condition-list"));
+    scheduleFilterPreview();
+    return;
+  }
   const removeCondition = event.target.closest("button[data-remove-filter-condition]");
-  if (removeCondition) removeCondition.closest(".filter-condition").remove();
+  if (removeCondition) {
+    const container = removeCondition.closest(".filter-condition").parentElement;
+    removeCondition.closest(".filter-condition").remove();
+    refreshFilterJoins(container);
+    scheduleFilterPreview();
+    return;
+  }
   const removeGroup = event.target.closest("button[data-remove-filter-group]");
-  if (removeGroup) removeGroup.closest(".filter-group").remove();
+  if (removeGroup) {
+    const container = removeGroup.closest(".filter-group").parentElement;
+    removeGroup.closest(".filter-group").remove();
+    refreshFilterJoins(container);
+    scheduleFilterPreview();
+    return;
+  }
   const addNested = event.target.closest("button[data-add-group-condition]");
-  if (addNested) addFilterCondition({}, addNested.closest(".filter-group").querySelector(".filter-group-items"));
+  if (addNested) {
+    addFilterCondition({}, addNested.closest(".filter-group").querySelector(".filter-group-items"));
+    scheduleFilterPreview();
+  }
 });
+document.querySelector("#filter-condition-list").addEventListener("change", event => {
+  if (event.target.matches(".filter-operation")) syncFilterConditionValue(event.target.closest(".filter-condition"));
+  if (event.target.matches(".filter-group-operator")) {
+    refreshFilterJoins(event.target.closest(".filter-group").querySelector(".filter-group-items"));
+  }
+});
+document.querySelector("#filter-form").addEventListener("input", scheduleFilterPreview);
+document.querySelector("#filter-form").addEventListener("change", scheduleFilterPreview);
 
 document.querySelectorAll(".tabs button[data-view]").forEach(button => button.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach(item => item.classList.remove("active"));
@@ -239,14 +320,6 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
 
 document.querySelector("#table-body").addEventListener("click", event => {
   if (event.target.closest("[data-drag-code]")) return;
-  const labelButton = event.target.closest("button[data-edit-label]");
-  if (labelButton) {
-    openQuestion(labelButton.dataset.editLabel);
-    const input = document.querySelector("#question-label");
-    input.focus();
-    input.select();
-    return;
-  }
   const ownerButton = event.target.closest("button[data-open-question]");
   if (ownerButton) {
     structureMode = "questions";
@@ -264,9 +337,9 @@ document.querySelector("#table-body").addEventListener("click", event => {
     openBanner(bannerRow.dataset.bannerId);
     return;
   }
-  const filterRow = event.target.closest("tr[data-filter-id]");
-  if (filterRow) {
-    openFilter(filterRow.dataset.filterId);
+  const filterCard = event.target.closest("[data-filter-id]");
+  if (filterCard) {
+    openFilter(filterCard.dataset.filterId);
     return;
   }
   const weightRow = event.target.closest("tr[data-weight-id]");
@@ -276,6 +349,32 @@ document.querySelector("#table-body").addEventListener("click", event => {
   }
   const row = event.target.closest("tr[data-code]");
   if (row) openQuestion(row.dataset.code);
+});
+
+document.querySelector("#entity-list").addEventListener("click", event => {
+  const reportBannerButton = event.target.closest("button[data-report-banner-id]");
+  if (reportBannerButton) {
+    const bannerId = reportBannerButton.dataset.reportBannerId;
+    void assignReportBanner(reportBannerButton.dataset.active === "true" ? null : bannerId, reportBannerButton);
+    return;
+  }
+  const recodeCard = event.target.closest("[data-recode-id]");
+  if (recodeCard) {
+    openRecoding(recodeCard.dataset.recodeId);
+    return;
+  }
+  const bannerCard = event.target.closest("[data-banner-id]");
+  if (bannerCard) {
+    openBanner(bannerCard.dataset.bannerId);
+    return;
+  }
+  const filterCard = event.target.closest("[data-filter-id]");
+  if (filterCard) {
+    openFilter(filterCard.dataset.filterId);
+    return;
+  }
+  const weightCard = event.target.closest("[data-weight-id]");
+  if (weightCard) openWeight(weightCard.dataset.weightId);
 });
 
 let draggedQuestionCode = null;
@@ -371,10 +470,11 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     renderProject();
     openBanner(currentBannerId);
     await loadBannerPreview();
+    showToast("Баннер сохранён");
   } catch (error) {
     showError(bannerError, error);
   } finally {
-    setBusy(saveButton, false, "Сохранить баннер");
+    setBusy(saveButton, false, "Сохранить");
   }
 });
 
@@ -415,6 +515,7 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
     renderProject();
     openWeight(currentWeightId);
     await loadWeightPreview();
+    showToast("Вес рассчитан и сохранён");
   } catch (error) {
     showError(weightError, error);
   } finally {
@@ -451,10 +552,11 @@ document.querySelector("#filter-form").addEventListener("submit", async event =>
     renderProject();
     openFilter(currentFilterId);
     await loadFilterPreview();
+    showToast("Правило сохранено");
   } catch (error) {
     showError(filterError, error);
   } finally {
-    setBusy(saveButton, false, "Сохранить правило");
+    setBusy(saveButton, false, "Сохранить");
   }
 });
 
@@ -492,9 +594,11 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
     if (!currentRecodingId) {
       currentRecodingId = configuredRecodings().find(item => item.code === payload.code)?.id;
     }
+    recodePreviewCache.delete(recodePreviewKey(currentRecodingId));
     renderProject();
     openRecoding(currentRecodingId);
     await loadRecodePreview();
+    showToast("Перекодировка сохранена");
   } catch (error) {
     showError(recodeError, error);
   } finally {
@@ -537,6 +641,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
     renderProject();
     fillEditor(findQuestion(currentQuestionCode));
     await loadPreview();
+    showToast("Настройки вопроса сохранены");
   } catch (error) {
     showError(editorError, error);
   } finally {
@@ -599,92 +704,271 @@ function showProject(project) {
   renderProject();
   document.querySelector("#start").hidden = true;
   document.querySelector("#workspace").hidden = false;
+  document.querySelector("#topbar-project").hidden = false;
+  document.querySelector("#topbar-actions").hidden = false;
+  document.querySelector("#topbar-start-stage").hidden = true;
+  window.scrollTo(0, 0);
 }
 
 function renderProject() {
   const inspection = currentProject.inspection;
   const questions = configuredQuestions();
   document.querySelector("#project-name").textContent = currentProject.name;
+  document.querySelector("#topbar-project-name").textContent = currentProject.name;
   document.querySelector("#download-source").href = `/api/projects/${currentProject.id}/source`;
   document.querySelector("#download-report").href = `/api/projects/${currentProject.id}/reports/topline.xlsx`;
   document.querySelector("#download-statistics").href = `/api/projects/${currentProject.id}/reports/statistics.txt`;
   document.querySelector("#summary").innerHTML = [
     [inspection.row_count.toLocaleString("ru-RU"), "респондентов"],
-    [inspection.variable_count.toLocaleString("ru-RU"), "переменных"],
     [questions.length.toLocaleString("ru-RU"), "вопросов"],
-    [questions.filter(item => item.included_in_report).length, "включено в отчёт"],
+    [questions.filter(item => item.question_type.startsWith("multiple_choice")).length.toLocaleString("ru-RU"), "multiple"],
+    [questions.filter(item => item.question_type === "matrix").length.toLocaleString("ru-RU"), "матриц"],
   ].map(([value, label]) => `<article><strong>${value}</strong><span>${label}</span></article>`).join("");
   renderReportFilterControl();
-  renderReportBannerControl();
   renderTable();
 }
 
 function renderTable() {
   if (!currentProject) return;
+  const tableWrap = document.querySelector("#table-wrap");
+  const entityList = document.querySelector("#entity-list");
+  const cardView = currentView === "recodings" || currentView === "banners" || currentView === "filters" || currentView === "weights";
+  tableWrap.hidden = cardView;
+  entityList.hidden = !cardView;
   if (currentView === "questions" && structureMode === "variables") {
     renderPhysicalVariables();
     return;
   }
   if (currentView === "weights") {
-    const weights = configuredWeights();
-    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Распределений</th><th>Ограничения</th>";
-    document.querySelector("#table-body").innerHTML = weights.length ? weights.map(weight => `
-      <tr class="question-row ${weight.id === currentWeightId ? "selected" : ""}" data-weight-id="${weight.id}">
-        <td><strong>${escapeHtml(weight.name)}</strong></td>
-        <td>${weight.dimensions.length}</td>
-        <td>${weight.lower_bound == null ? "Без ограничений" : `${weight.lower_bound}–${weight.upper_bound}`}</td>
-      </tr>`).join("") : '<tr><td colspan="3" class="empty-state">Рассчитанных весов пока нет.</td></tr>';
+    renderWeightCards(configuredWeights());
     return;
   }
   if (currentView === "filters") {
     const filters = configuredFilters();
-    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Логика</th><th>Условий</th><th>Используется как база</th>";
-    document.querySelector("#table-body").innerHTML = filters.length ? filters.map(filter => {
-      const uses = configuredQuestions().filter(question => question.base_filter_id === filter.id).length;
-      const usage = [];
-      if (currentProject.configuration.report_filter_id === filter.id) usage.push("Общий фильтр");
-      if (uses) usage.push(`${uses} вопр.`);
-      return `<tr class="question-row ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${filter.id}"><td><strong>${escapeHtml(filter.name)}</strong></td><td>${filter.rule.operator === "and" ? "И" : "ИЛИ"}</td><td>${countFilterConditions(filter.rule)}</td><td>${usage.length ? usage.join(" · ") : "—"}</td></tr>`;
-    }).join("") : '<tr><td colspan="4" class="empty-state">Сохранённых баз и фильтров пока нет.</td></tr>';
+    renderFilterCards(filters);
     return;
   }
   if (currentView === "banners") {
     const banners = configuredBanners();
-    const activeBannerId = selectedReportBannerId();
-    document.querySelector("#table-head").innerHTML = "<th>Название</th><th>Статус</th><th>Блоков</th><th>Структура</th>";
-    document.querySelector("#table-body").innerHTML = banners.length ? banners.map(banner => `
-      <tr class="question-row ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${banner.id}">
-        <td><strong>${escapeHtml(banner.name)}</strong></td><td>${banner.id === activeBannerId ? '<span class="status">В Excel</span>' : '—'}</td><td>${banner.blocks.length}</td>
-        <td>${banner.blocks.map(block => `<small>${block.sources.map(source => escapeHtml(bannerSourceLabel(source))).join(" → ")}</small>`).join("")}</td>
-      </tr>`).join("") : '<tr><td colspan="4" class="empty-state">Баннеров нет. В Excel будет только Total.</td></tr>';
+    renderBannerCards(banners);
     return;
   }
   if (currentView === "recodings") {
     const recodings = configuredRecodings();
-    document.querySelector("#table-head").innerHTML = "<th>Код</th><th>Название</th><th>Исходная переменная</th><th>Категорий</th><th>Диапазоны</th>";
-    document.querySelector("#table-body").innerHTML = recodings.length ? recodings.map(recoding => `
-      <tr class="question-row ${recoding.id === currentRecodingId ? "selected" : ""}" data-recode-id="${recoding.id}">
-        <td><code>${escapeHtml(recoding.code)}</code></td>
-        <td><strong>${escapeHtml(recoding.name)}</strong></td>
-        <td><code>${escapeHtml(recoding.source_variable)}</code></td>
-        <td>${recoding.categories.length}</td>
-        <td>${recoding.categories.map(category => `<small>${escapeHtml(category.label)}: ${escapeHtml(formatRecodeCategory(recoding, category))}</small>`).join("")}</td>
-      </tr>`).join("") : '<tr><td colspan="5" class="empty-state">Перекодировок пока нет. Создайте, например, возрастные группы.</td></tr>';
+    renderRecodeCards(recodings);
     return;
   }
   const allQuestions = configuredQuestions();
   const questions = allQuestions;
-  document.querySelector("#table-head").innerHTML = "<th class=\"drag-cell\" aria-label=\"Порядок\"></th><th>Код</th><th class=\"question-cell\">Вопрос</th><th>Тип</th><th>Переменные</th><th>База</th><th>Статус</th>";
+  document.querySelector("#table-head").innerHTML = "<th class=\"drag-cell\" aria-label=\"Порядок\"></th><th class=\"question-cell\">Вопрос</th><th class=\"type-column\">Тип</th><th class=\"count-column\">Перем.</th><th class=\"status-column\">Статус</th>";
   document.querySelector("#table-body").innerHTML = questions.map(question => {
+    const sourceLabel = originalQuestionLabel(question);
+    const warnings = (question.warnings || []).join(" · ");
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
       <td class="drag-cell"><button type="button" class="drag-handle" draggable="true" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="Перетащите, чтобы изменить порядок"><span aria-hidden="true">⋮⋮</span></button></td>
-      <td><code>${escapeHtml(question.code)}</code></td>
-      <td class="question-cell"><div class="question-name"><strong>${escapeHtml(question.label)}</strong><button type="button" class="inline-edit" data-edit-label="${escapeAttribute(question.code)}" title="Изменить название для Excel">✎</button></div>${question.source_variables.length > 1 ? `<small class="group-hint">Название блока для Excel</small>` : ""}${question.warnings.map(w => `<small>${escapeHtml(w)}</small>`).join("")}</td>
-      <td><span class="type">${typeLabels[question.question_type] || escapeHtml(question.question_type)}</span></td>
-      <td>${question.source_variables.length}</td><td>${question.valid_count.toLocaleString("ru-RU")}</td>
-      <td><span class="status ${!question.included_in_report ? "excluded" : (question.recognition === "auto_review" ? "review" : "")}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "В отчёте") : "Исключён"}</span></td>
+      <td class="question-cell"><span class="q-title">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</span>${sourceLabel ? `<span class="q-sub">${escapeHtml(sourceLabel)}</span>` : ""}${warnings ? `<span class="q-sub warning">${escapeHtml(warnings)}</span>` : ""}</td>
+      <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
+      <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
+      <td class="status-column"><span class="status ${!question.included_in_report ? "excluded" : (question.recognition === "auto_review" ? "review" : "")}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "Готов") : "Исключён"}</span></td>
     </tr>`;
   }).join("");
+}
+
+function renderRecodeCards(recodings) {
+  const container = document.querySelector("#entity-list");
+  container.className = "entity-list recode-card-list";
+  container.innerHTML = recodings.length ? recodings.map(recoding => {
+    const source = currentProject.inspection.variables.find(item => item.name === recoding.source_variable);
+    const preview = recodePreviewCache.get(recodePreviewKey(recoding.id));
+    return `<button type="button" class="recode-card ${recoding.id === currentRecodingId ? "selected" : ""}" data-recode-id="${escapeAttribute(recoding.id)}">
+      <span class="recode-card-head"><strong>${escapeHtml(recoding.name)}</strong><code>${escapeHtml(recoding.code)}</code></span>
+      <span class="recode-card-meta"><span>${recoding.mode === "categories" ? "Объединение категорий" : "Числовые диапазоны"}</span><span>Из <b>${escapeHtml(recoding.source_variable)}</b>${source?.label ? ` — ${escapeHtml(source.label)}` : ""}</span><span>${recoding.mode === "categories" ? "Групп" : "Категорий"} <b>${recoding.categories.length}</b></span></span>
+      <span class="recode-chips">${renderRecodeCardChips(recoding, preview)}</span>
+    </button>`;
+  }).join("") : '<div class="empty-state">Перекодировок пока нет. Создайте, например, возрастные группы.</div>';
+  if (recodings.length) void hydrateRecodeCards(recodings);
+}
+
+function renderBannerCards(banners) {
+  const container = document.querySelector("#entity-list");
+  const activeBannerId = selectedReportBannerId();
+  container.className = "entity-list banner-list";
+  container.innerHTML = banners.length ? banners.map(banner => {
+    const columnCount = 1 + banner.blocks.reduce((total, block) => total + block.sources.reduce((count, source) => count * bannerSourceCategoryCount(source), 1), 0);
+    const chips = ['<span class="chip total">A · Total</span>'].concat(banner.blocks.map(block => {
+      const label = block.label || block.sources.map(bannerSourceLabel).join(" → ");
+      const path = block.sources.map(source => escapeHtml(bannerSourceLabel(source))).join('<span class="lvl">→</span>');
+      return `<span class="chip" title="${escapeAttribute(label)}">${path}</span>`;
+    })).join("");
+    const active = banner.id === activeBannerId;
+    return `<article class="banner-card ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${escapeAttribute(banner.id)}">
+      <span class="banner-card-head"><strong>${escapeHtml(banner.name)}</strong><button type="button" class="badge-active ${active ? "active" : ""}" data-report-banner-id="${escapeAttribute(banner.id)}" data-active="${active}" title="${active ? "Оставить в Excel только Total" : "Использовать этот баннер в Excel"}">В Excel</button></span>
+      <span class="banner-meta"><span>Блоков <b>${banner.blocks.length}</b></span><span>Колонок <b>${columnCount}</b></span><span>Доверие <b>${formatPercent(banner.confidence_level || 0.95)}</b></span><span>Малая база &lt; <b>${banner.minimum_base || 30}</b></span></span>
+      <span class="block-chips">${chips}</span>
+    </article>`;
+  }).join("") : '<div class="empty-state">Баннеров пока нет. В Excel будет только Total.</div>';
+}
+
+function renderFilterCards(filters) {
+  const container = document.querySelector("#entity-list");
+  container.className = "entity-list filter-card-list";
+  container.innerHTML = filters.length ? filters.map(filter => {
+    const uses = configuredQuestions().filter(question => question.base_filter_id === filter.id).length;
+    const previewKey = filterPreviewKey(filter);
+    const previewLoaded = filterPreviewCache.has(previewKey);
+    const preview = filterPreviewCache.get(previewKey);
+    const sample = preview
+      ? `<span>Выборка <b>${preview.selected.toLocaleString("ru-RU")}</b> из ${preview.total.toLocaleString("ru-RU")}</span>`
+      : `<span>Выборка <b>${previewLoaded ? "—" : "считается…"}</b></span>`;
+    const usage = uses ? `<span>База для <b>${uses}</b> вопросов</span>` : "";
+    return `<button type="button" class="filter-card ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${escapeAttribute(filter.id)}">
+      <span class="filter-card-head"><strong>${escapeHtml(filter.name)}</strong></span>
+      <span class="filter-card-meta"><span>Условий <b>${countFilterConditions(filter.rule)}</b></span>${sample}${usage}</span>
+      <span class="filter-card-chips">${renderFilterRuleChips(filter.rule)}</span>
+    </button>`;
+  }).join("") : '<div class="empty-state">Сохранённых баз и фильтров пока нет.</div>';
+  if (filters.length) void hydrateFilterCards(filters);
+}
+
+function renderWeightCards(weights) {
+  const container = document.querySelector("#entity-list");
+  container.className = "entity-list card-list weight-card-list";
+  container.innerHTML = weights.length ? weights.map(weight => {
+    const limits = weight.lower_bound == null
+      ? "Без ограничения значений"
+      : `Границы <b>${formatWeightNumber(weight.lower_bound)}–${formatWeightNumber(weight.upper_bound)}</b>`;
+    const dimensions = weight.dimensions.map(dimension => `
+      <span class="chip" title="${escapeAttribute(dimension.label)}">${escapeHtml(dimension.label)} <b>${dimension.targets.length}</b></span>`).join("");
+    return `<article class="item-card weight-card ${weight.id === currentWeightId ? "selected" : ""}" data-weight-id="${escapeAttribute(weight.id)}">
+      <span class="item-card-head"><strong>${escapeHtml(weight.name)}</strong></span>
+      <span class="item-meta"><span>Распределений <b>${weight.dimensions.length}</b></span><span>${limits}</span></span>
+      <span class="chips">${dimensions}</span>
+    </article>`;
+  }).join("") : '<div class="empty-state">Рассчитанных весов пока нет. Добавьте целевые распределения и запустите расчёт.</div>';
+}
+
+function renderFilterRuleChips(rule) {
+  const chips = [];
+  if ((rule.items || []).length > 1) chips.push(`<span class="operator-chip">${rule.operator === "or" ? "ИЛИ" : "И"}</span>`);
+  (rule.items || []).forEach(item => {
+    if (item.kind === "group") {
+      if ((item.items || []).length > 1) chips.push(`<span class="operator-chip">${item.operator === "or" ? "ИЛИ" : "И"}</span>`);
+      (item.items || []).forEach(condition => chips.push(renderFilterConditionChip(condition)));
+    } else {
+      chips.push(renderFilterConditionChip(item));
+    }
+  });
+  return chips.join("");
+}
+
+function renderFilterConditionChip(condition) {
+  const source = condition.source?.kind === "recoding"
+    ? configuredRecodings().find(item => item.id === condition.source.ref)?.code || condition.source.ref
+    : condition.source?.ref || "?";
+  const operators = {
+    eq: "=", ne: "≠", in: "∈", not_in: "∉", gt: ">", lt: "<", between: "между",
+    filled: "заполнено", missing: "пропущено", selected_any: "выбран любой",
+    selected_all: "выбраны все", selected_none: "не выбрано",
+  };
+  let values = (condition.values || []).join(", ");
+  if (condition.operator === "between") {
+    values = [condition.lower, condition.upper].filter(value => value !== undefined && value !== null && value !== "").join("–");
+  } else if (condition.operator === "gt") {
+    values = condition.lower ?? "";
+  } else if (condition.operator === "lt") {
+    values = condition.upper ?? "";
+  }
+  const text = [source, operators[condition.operator] || condition.operator, values].filter(Boolean).join(" ");
+  return `<span title="${escapeAttribute(text)}">${escapeHtml(text)}</span>`;
+}
+
+function filterPreviewKey(filter) {
+  return `${currentProject?.id || ""}:${filter.id}:${JSON.stringify(filter.rule)}`;
+}
+
+async function getFilterCardPreview(filter, projectId) {
+  const key = `${projectId}:${filter.id}:${JSON.stringify(filter.rule)}`;
+  if (filterPreviewCache.has(key)) return filterPreviewCache.get(key);
+  if (filterPreviewRequests.has(key)) return filterPreviewRequests.get(key);
+  const request = api(`/api/projects/${projectId}/filters/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: filter.name, rule: filter.rule }),
+  }).then(preview => {
+    filterPreviewCache.set(key, preview);
+    return preview;
+  }).catch(() => {
+    filterPreviewCache.set(key, null);
+    return null;
+  }).finally(() => filterPreviewRequests.delete(key));
+  filterPreviewRequests.set(key, request);
+  return request;
+}
+
+function hydrateFilterCards(filters) {
+  if (filterCardHydration) return filterCardHydration;
+  const projectId = currentProject.id;
+  const pending = filters.filter(filter => !filterPreviewCache.has(`${projectId}:${filter.id}:${JSON.stringify(filter.rule)}`));
+  if (!pending.length) return Promise.resolve();
+  filterCardHydration = (async () => {
+    for (let index = 0; index < pending.length; index += 4) {
+      await Promise.all(pending.slice(index, index + 4).map(filter => getFilterCardPreview(filter, projectId)));
+    }
+    if (currentProject?.id === projectId && currentView === "filters") renderFilterCards(configuredFilters());
+  })().finally(() => { filterCardHydration = null; });
+  return filterCardHydration;
+}
+
+function bannerSourceCategoryCount(source) {
+  if (source.kind === "recoding") {
+    return configuredRecodings().find(item => item.id === source.ref)?.categories.length || 0;
+  }
+  const question = findQuestion(source.ref);
+  const variableName = question?.source_variables?.[0];
+  const variable = currentProject.inspection.variables.find(item => item.name === variableName);
+  return variable?.value_labels?.length || 0;
+}
+
+function renderRecodeCardChips(recoding, preview) {
+  const rows = new Map((preview?.rows || []).map(row => [String(row.label), row]));
+  return recoding.categories.map(category => {
+    const row = rows.get(String(category.label));
+    const percent = row ? ` <b>${formatPercent(row.percent_total)}</b>` : "";
+    return `<span>${escapeHtml(category.label)}${percent}</span>`;
+  }).join("");
+}
+
+function recodePreviewKey(recodingId) {
+  return `${currentProject?.id || ""}:${recodingId}`;
+}
+
+async function getRecodeCardPreview(recodingId, projectId) {
+  const key = `${projectId}:${recodingId}`;
+  if (recodePreviewCache.has(key)) return recodePreviewCache.get(key);
+  if (recodePreviewRequests.has(key)) return recodePreviewRequests.get(key);
+  const request = api(`/api/projects/${projectId}/recodings/${recodingId}/preview`)
+    .then(preview => {
+      recodePreviewCache.set(key, preview);
+      return preview;
+    })
+    .catch(() => null)
+    .finally(() => recodePreviewRequests.delete(key));
+  recodePreviewRequests.set(key, request);
+  return request;
+}
+
+function hydrateRecodeCards(recodings) {
+  if (recodeCardHydration) return recodeCardHydration;
+  const projectId = currentProject.id;
+  const pending = recodings.filter(item => !recodePreviewCache.has(`${projectId}:${item.id}`));
+  if (!pending.length) return Promise.resolve();
+  recodeCardHydration = (async () => {
+    for (let index = 0; index < pending.length; index += 4) {
+      await Promise.all(pending.slice(index, index + 4).map(item => getRecodeCardPreview(item.id, projectId)));
+    }
+    if (currentProject?.id === projectId && currentView === "recodings") renderRecodeCards(configuredRecodings());
+  })().finally(() => { recodeCardHydration = null; });
+  return recodeCardHydration;
 }
 
 function renderPhysicalVariables() {
@@ -711,11 +995,13 @@ function openFilter(filterId = null) {
   editor.hidden = true;
   recodeEditor.hidden = true;
   bannerEditor.hidden = true;
+  weightEditor.hidden = true;
   filterEditor.hidden = false;
   const filter = filterId ? configuredFilters().find(item => item.id === filterId) : null;
   document.querySelector("#filter-editor-title").textContent = filter?.name || "Новое правило";
   document.querySelector("#filter-name").value = filter?.name || "";
   document.querySelector("#filter-operator").value = filter?.rule.operator || "and";
+  syncFilterOperatorButtons();
   const list = document.querySelector("#filter-condition-list");
   list.innerHTML = "";
   const items = filter?.rule.items || [];
@@ -732,6 +1018,7 @@ function openFilter(filterId = null) {
 }
 
 function closeFilter() {
+  clearTimeout(filterPreviewTimer);
   filterEditor.hidden = true;
   currentFilterId = null;
   renderTable();
@@ -748,19 +1035,51 @@ function addFilterCondition(condition = {}, container = document.querySelector("
   const sourceValue = condition.source ? `${condition.source.kind}:${condition.source.ref}` : "";
   const rawValue = condition.values?.join(", ")
     || (condition.operator === "between" ? `${condition.lower ?? ""}, ${condition.upper ?? ""}` : condition.lower ?? condition.upper ?? "");
-  element.innerHTML = `<select class="filter-source">${filterSourceOptions(sourceValue)}</select><select class="filter-operation">${filterOperatorOptions(condition.operator || "eq")}</select><input class="filter-value" value="${escapeAttribute(rawValue)}" placeholder="Значение или список" /><button type="button" data-remove-filter-condition title="Удалить условие">×</button>`;
+  element.innerHTML = `<select class="filter-source" aria-label="Вопрос">${filterSourceOptions(sourceValue)}</select><div class="filter-condition-details"><select class="filter-operation" aria-label="Условие">${filterOperatorOptions(condition.operator || "eq")}</select><input class="filter-value" value="${escapeAttribute(rawValue)}" aria-label="Значение" /></div><button type="button" data-remove-filter-condition title="Удалить условие" aria-label="Удалить условие">×</button>`;
   container.append(element);
+  syncFilterConditionValue(element);
+  refreshFilterJoins(container);
 }
 
 function addFilterGroup(group = {}, container = document.querySelector("#filter-condition-list")) {
   const element = document.createElement("div");
   element.className = "filter-group";
-  element.innerHTML = `<div class="filter-group-head"><strong>Вложенная группа</strong><select class="filter-group-operator"><option value="and" ${(group.operator || "and") === "and" ? "selected" : ""}>Все условия (И)</option><option value="or" ${group.operator === "or" ? "selected" : ""}>Хотя бы одно (ИЛИ)</option></select><button type="button" data-remove-filter-group title="Удалить группу">×</button></div><div class="filter-group-items"></div><button type="button" class="secondary compact-button" data-add-group-condition>+ Условие в группу</button>`;
+  element.innerHTML = `<div class="filter-group-head"><label><span>В этой группе</span><select class="filter-group-operator" aria-label="Как должны выполняться условия группы"><option value="and" ${(group.operator || "and") === "and" ? "selected" : ""}>выполнены все условия</option><option value="or" ${group.operator === "or" ? "selected" : ""}>выполнено хотя бы одно</option></select></label><button type="button" data-remove-filter-group title="Удалить вариант" aria-label="Удалить вариант">×</button></div><div class="filter-group-items"></div><button type="button" class="secondary compact-button" data-add-group-condition>+ Добавить ещё один вариант</button>`;
   container.append(element);
   const nested = element.querySelector(".filter-group-items");
   const items = group.items || [];
   if (items.length) items.forEach(item => addFilterCondition(item, nested));
   else addFilterCondition({}, nested);
+  refreshFilterJoins(container);
+}
+
+function syncFilterConditionValue(condition) {
+  const operation = condition.querySelector(".filter-operation").value;
+  const value = condition.querySelector(".filter-value");
+  value.hidden = ["filled", "missing"].includes(operation);
+  const placeholders = {
+    in: "Значения через запятую", not_in: "Значения через запятую",
+    selected_any: "Варианты через запятую", selected_all: "Варианты через запятую", selected_none: "Варианты через запятую",
+    between: "От, до", gt: "Число", lt: "Число",
+  };
+  value.placeholder = placeholders[operation] || "Значение";
+}
+
+function refreshFilterJoins(container) {
+  if (!container) return;
+  container.querySelectorAll(":scope > .filter-join").forEach(join => join.remove());
+  const items = [...container.children].filter(item => item.matches(".filter-condition, .filter-group"));
+  const group = container.closest(".filter-group");
+  const operator = group?.querySelector(".filter-group-operator")?.value || document.querySelector("#filter-operator").value;
+  items.slice(1).forEach(item => {
+    const join = document.createElement("button");
+    join.type = "button";
+    join.className = "filter-join";
+    join.dataset.filterJoin = group ? "group" : "root";
+    join.textContent = operator === "or" ? "ИЛИ" : "И";
+    join.title = `Нажмите, чтобы заменить на ${operator === "or" ? "И" : "ИЛИ"}`;
+    item.before(join);
+  });
 }
 
 function filterSourceOptions(selectedValue) {
@@ -809,6 +1128,16 @@ function countFilterConditions(group) {
   return group.items.reduce((total, item) => total + (item.kind === "group" ? countFilterConditions(item) : 1), 0);
 }
 
+function syncFilterOperatorButtons() {
+  refreshFilterJoins(document.querySelector("#filter-condition-list"));
+}
+
+function scheduleFilterPreview() {
+  clearTimeout(filterPreviewTimer);
+  if (filterEditor.hidden || !currentProject) return;
+  filterPreviewTimer = setTimeout(() => { void loadFilterPreview(); }, 350);
+}
+
 function parseFilterValue(value) {
   if (value !== "" && Number.isFinite(Number(value))) return Number(value);
   return value;
@@ -816,14 +1145,16 @@ function parseFilterValue(value) {
 
 async function loadFilterPreview() {
   if (!currentProject) return;
+  clearTimeout(filterPreviewTimer);
+  filterPreviewTimer = null;
   const container = document.querySelector("#filter-preview");
   container.innerHTML = '<p class="muted">Считаем…</p>';
   try {
     const payload = { name: document.querySelector("#filter-name").value.trim() || "Предпросмотр", rule: collectFilterRule() };
     const preview = await api(`/api/projects/${currentProject.id}/filters/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const warning = preview.empty ? "Пустая база — использовать её нельзя." : preview.small_base ? "Малая база: результаты будут отмечены серым." : "";
-    const steps = preview.steps?.length ? `<div class="filter-steps">${preview.steps.map((step, index) => `<div><span>${index + 1}. ${escapeHtml(step.description)}</span><strong>N ${step.selected.toLocaleString("ru-RU")}</strong></div>`).join("")}</div>` : "";
-    container.innerHTML = `<div class="filter-result"><strong>${preview.selected.toLocaleString("ru-RU")}</strong><span>из ${preview.total.toLocaleString("ru-RU")} · ${formatPercent(preview.share)}</span></div><p>${escapeHtml(preview.description)}</p>${steps}${warning ? `<p class="inline-warnings">${escapeHtml(warning)}</p>` : ""}`;
+    const steps = preview.steps?.length ? `<div class="filter-steps">${preview.steps.map((step, index) => `<div><span>После условия ${index + 1}</span><strong>${step.selected.toLocaleString("ru-RU")}</strong></div>`).join("")}</div>` : "";
+    container.innerHTML = `<div class="filter-result"><strong>${preview.selected.toLocaleString("ru-RU")}</strong><span>из ${preview.total.toLocaleString("ru-RU")} · ${formatPercent(preview.share)}</span></div>${steps}${warning ? `<p class="inline-warnings">${escapeHtml(warning)}</p>` : ""}`;
   } catch (error) {
     container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
   }
@@ -836,6 +1167,7 @@ async function deleteFilter() {
     currentProject = await api(`/api/projects/${currentProject.id}/filters/${currentFilterId}`, { method: "DELETE" });
     closeFilter();
     renderProject();
+    showToast("Правило удалено");
   } catch (error) {
     showError(errorBox, error);
   }
@@ -860,10 +1192,11 @@ async function copyFilter() {
     currentFilterId = configuredFilters().at(-1)?.id;
     renderProject();
     openFilter(currentFilterId);
+    showToast("Копия правила создана");
   } catch (error) {
     showError(errorBox, error);
   } finally {
-    setBusy(button, false, "Сохранить как копию");
+    setBusy(button, false, "Копия");
   }
 }
 
@@ -880,28 +1213,20 @@ function selectedReportBannerId() {
     : banners.at(-1)?.id || null;
 }
 
-function renderReportBannerControl() {
-  const select = document.querySelector("#report-banner");
-  if (!select || !currentProject) return;
-  const selectedId = selectedReportBannerId();
-  select.innerHTML = '<option value="">Только Total</option>' + configuredBanners().map(banner => `<option value="${banner.id}" ${selectedId === banner.id ? "selected" : ""}>${escapeHtml(banner.name)}</option>`).join("");
-}
-
-async function assignReportBanner() {
-  const select = document.querySelector("#report-banner");
-  select.disabled = true;
+async function assignReportBanner(bannerId, button) {
+  button.disabled = true;
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/report-banner`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ banner_id: select.value || null }),
+      body: JSON.stringify({ banner_id: bannerId }),
     });
     renderProject();
+    showToast(bannerId ? "Баннер будет использован в Excel" : "В Excel останется только Total");
   } catch (error) {
     alert(error.message);
-    renderReportBannerControl();
   } finally {
-    select.disabled = false;
+    button.disabled = false;
   }
 }
 
@@ -915,6 +1240,7 @@ async function assignReportFilter() {
       body: JSON.stringify({ filter_id: select.value || null }),
     });
     renderProject();
+    showToast("Фильтр отчёта обновлён");
   } catch (error) {
     alert(error.message);
     renderReportFilterControl();
@@ -953,9 +1279,10 @@ function openWeight(weightId = null) {
     ? `/api/projects/${currentProject.id}/weights/${weight.id}/export.xlsx`
     : "#";
   document.querySelector("#weight-error").hidden = true;
+  document.querySelector("#weight-preview-section").hidden = !weight;
   document.querySelector("#weight-preview").innerHTML = weight
     ? '<p class="muted">Считаем…</p>'
-    : '<p class="muted">Сохраните вес для расчёта.</p>';
+    : "";
   renderTable();
   if (weight) loadWeightPreview();
 }
@@ -970,6 +1297,7 @@ function renderWeightTrimming() {
   const enabled = document.querySelector("#weight-trimming").checked;
   document.querySelector("#weight-lower").disabled = !enabled;
   document.querySelector("#weight-upper").disabled = !enabled;
+  document.querySelector("#weight-bound-fields").hidden = !enabled;
 }
 
 function weightSourceOptions(selectedVariable = "") {
@@ -992,8 +1320,8 @@ function addWeightDimension(dimension = {}) {
     throw new Error("Для raking нужна хотя бы одна категориальная переменная с метками значений.");
   }
   const element = document.createElement("div");
-  element.className = "weight-dimension";
-  element.innerHTML = `<div class="weight-dimension-head"><select class="weight-dimension-source">${weightSourceOptions(dimension.variable)}</select><button type="button" data-remove-weight-dimension title="Удалить распределение">×</button></div><div class="weight-targets"></div>`;
+  element.className = "weight-dimension dim";
+  element.innerHTML = `<div class="dim-head"><div class="weight-dimension-source-field"><span>Переменная</span><select class="weight-dimension-source" aria-label="Переменная целевого распределения">${weightSourceOptions(dimension.variable)}</select></div><span class="sum" aria-live="polite"></span><button class="del" type="button" data-remove-weight-dimension title="Удалить распределение" aria-label="Удалить распределение">×</button></div><div class="weight-targets"></div>`;
   document.querySelector("#weight-dimension-list").append(element);
   renderWeightTargets(element, dimension.targets || []);
 }
@@ -1005,8 +1333,24 @@ function renderWeightTargets(element, savedTargets = []) {
   element.querySelector(".weight-targets").innerHTML = variable.value_labels.map(item => {
     const saved = savedTargets.find(target => target.values.some(value => String(value) === String(item.value)));
     const encoded = escapeAttribute(JSON.stringify(item.value));
-    return `<label class="weight-target" data-value="${encoded}"><span>${escapeHtml(item.label)}</span><input type="number" min="0.0001" max="100" step="0.0001" value="${saved?.percent ?? equalTarget}" required /></label>`;
+    const percent = saved?.percent ?? equalTarget;
+    return `<label class="weight-target t-row" data-value="${encoded}"><span class="lbl" title="${escapeAttribute(item.label)}">${escapeHtml(item.label)}</span><span class="t-track" aria-hidden="true"><span class="t-fill" style="width:${Math.min(100, Math.max(0, Number(percent)))}%"></span></span><input type="number" min="0.0001" max="100" step="0.0001" value="${percent}" aria-label="Цель для ${escapeAttribute(item.label)}, процентов" required /></label>`;
   }).join("");
+  updateWeightDimensionStatus(element);
+}
+
+function updateWeightDimensionStatus(element) {
+  const inputs = [...element.querySelectorAll(".weight-target input")];
+  const total = inputs.reduce((sum, input) => sum + (Number(input.value) || 0), 0);
+  const valid = Math.abs(total - 100) <= 0.1;
+  const badge = element.querySelector(".sum");
+  badge.className = `sum ${valid ? "ok" : "bad"}`;
+  badge.textContent = `${formatWeightNumber(total)}%`;
+  badge.title = valid ? "Сумма целей корректна" : "Сумма целей должна составлять 100%";
+  inputs.forEach(input => {
+    const percent = Math.min(100, Math.max(0, Number(input.value) || 0));
+    input.closest(".weight-target").querySelector(".t-fill").style.width = `${percent}%`;
+  });
 }
 
 function collectWeightDimensions() {
@@ -1016,10 +1360,14 @@ function collectWeightDimensions() {
     const variableName = element.querySelector(".weight-dimension-source").value;
     const variable = currentProject.inspection.variables.find(item => item.name === variableName);
     const targets = [...element.querySelectorAll(".weight-target")].map(row => ({
-      label: row.querySelector("span").textContent,
+      label: row.querySelector(".lbl").textContent,
       values: [JSON.parse(row.dataset.value)],
       percent: Number(row.querySelector("input").value),
     }));
+    const total = targets.reduce((sum, target) => sum + target.percent, 0);
+    if (Math.abs(total - 100) > 0.1) {
+      throw new Error(`Сумма целей для «${variable.label}» должна составлять 100%. Сейчас ${formatWeightNumber(total)}%.`);
+    }
     return { variable: variableName, label: variable.label, targets };
   });
 }
@@ -1039,10 +1387,17 @@ async function loadWeightPreview() {
 function renderWeightPreview(preview) {
   const metrics = [
     [preview.minimum, "Минимум"], [preview.maximum, "Максимум"],
+    [preview.mean, "Среднее"], [preview.stddev, "Стандартное отклонение"],
     [preview.effective_base, "Эффективная база"], [preview.design_effect, "Design effect"],
     [preview.efficiency_percent, "Эффективность, %"], [preview.iterations, "Итераций"],
   ];
-  return `<div class="weight-diagnostics">${metrics.map(([value, label]) => `<article><strong>${Number(value).toLocaleString("ru-RU", { maximumFractionDigits: 3 })}</strong><span>${label}</span></article>`).join("")}</div>${preview.distributions.map(dimension => `<div class="weight-distribution"><strong>${escapeHtml(dimension.label)}</strong>${dimension.categories.map(category => `<p><span>${escapeHtml(category.label)}</span><em>${category.before_percent.toFixed(1)}% → ${category.after_percent.toFixed(1)}% · цель ${category.target_percent.toFixed(1)}%</em></p>`).join("")}</div>`).join("")}`;
+  const metricGrid = `<dl class="diag-grid">${metrics.map(([value, label]) => `<div><dt>${escapeHtml(label)}</dt><dd class="${label === "Среднее" || label === "Эффективность, %" ? "ok" : ""}">${formatWeightNumber(value)}</dd></div>`).join("")}</dl>`;
+  const distributions = preview.distributions.map(dimension => `<section class="weight-distribution"><div class="weight-distribution-head"><strong>${escapeHtml(dimension.label)}</strong><span>До → после · цель</span></div>${dimension.categories.map(category => `<div class="weight-result-row"><span title="${escapeAttribute(category.label)}">${escapeHtml(category.label)}</span><em>${category.before_percent.toFixed(1)} → <b>${category.after_percent.toFixed(1)}</b> · ${category.target_percent.toFixed(1)}%</em></div>`).join("")}</section>`).join("");
+  return metricGrid + distributions;
+}
+
+function formatWeightNumber(value) {
+  return Number(value).toLocaleString("ru-RU", { maximumFractionDigits: 3 });
 }
 
 async function deleteWeight() {
@@ -1052,6 +1407,7 @@ async function deleteWeight() {
     currentProject = await api(`/api/projects/${currentProject.id}/weights/${currentWeightId}`, { method: "DELETE" });
     closeWeight();
     renderProject();
+    showToast("Вес удалён");
   } catch (error) {
     showError(errorBox, error);
   }
@@ -1102,9 +1458,11 @@ function openBanner(bannerId = null) {
   else addBannerBlock();
   document.querySelector("#delete-banner").hidden = !banner;
   document.querySelector("#banner-error").hidden = true;
+  document.querySelector("#banner-preview-count").textContent = "";
   document.querySelector("#banner-preview").innerHTML = banner
     ? '<p class="muted">Считаем…</p>'
     : '<p class="muted">Сохраните баннер для расчёта.</p>';
+  setBannerFormDirty(false);
   renderTable();
   if (banner) loadBannerPreview();
 }
@@ -1114,17 +1472,26 @@ document.querySelector("#banner-wave-comparison").addEventListener("change", eve
 });
 
 function closeBanner() {
+  if (bannerFormDirty && !confirm("Есть несохранённые изменения. Закрыть редактор без сохранения?")) return;
+  setBannerFormDirty(false);
   bannerEditor.hidden = true;
   currentBannerId = null;
   renderTable();
+}
+
+function setBannerFormDirty(dirty) {
+  bannerFormDirty = dirty;
+  const warning = document.querySelector("#banner-unsaved-warning");
+  warning.hidden = !dirty;
+  document.querySelector("#save-banner").classList.toggle("has-unsaved-changes", dirty);
 }
 
 function addBannerBlock(block = {}) {
   const first = block.sources?.[0];
   const second = block.sources?.[1];
   const element = document.createElement("div");
-  element.className = "banner-block";
-  element.innerHTML = `<div class="banner-block-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button type="button" data-remove-banner-block title="Удалить блок">×</button></div><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Вложить второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label>`;
+  element.className = "banner-block block-row";
+  element.innerHTML = `<div class="banner-block-head block-row-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button class="del" type="button" data-remove-banner-block title="Удалить блок" aria-label="Удалить блок">×</button></div><div class="block-lvls"><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label></div>`;
   document.querySelector("#banner-block-list").append(element);
 }
 
@@ -1178,7 +1545,13 @@ async function loadBannerPreview() {
 }
 
 function renderBannerPreview(preview) {
-  return `<div class="banner-preview-list">${preview.columns.map((column, index) => `<div class="${index === 0 ? "total-column" : ""}"><span>${escapeHtml(column.block || "Общий итог")}</span><strong>${escapeHtml(column.label)}</strong><em>База ${column.base.toLocaleString("ru-RU")}</em></div>`).join("")}</div>`;
+  const minimumBase = configuredBanners().find(item => item.id === currentBannerId)?.minimum_base || 30;
+  document.querySelector("#banner-preview-count").textContent = `${preview.columns.length} колонок`;
+  return `<div class="col-preview">${preview.columns.map((column, index) => {
+    const label = index === 0 ? "Total" : `${column.block ? `${column.block} · ` : ""}${column.label}`;
+    const smallBase = column.base > 0 && column.base < minimumBase;
+    return `<div class="col-line ${index === 0 ? "total" : ""} ${smallBase ? "small-base" : ""}"><span>${escapeHtml(label)}</span><em>База ${column.base.toLocaleString("ru-RU")}</em></div>`;
+  }).join("")}</div>`;
 }
 
 async function deleteBanner() {
@@ -1186,8 +1559,10 @@ async function deleteBanner() {
   const errorBox = document.querySelector("#banner-error");
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/banners/${currentBannerId}`, { method: "DELETE" });
+    setBannerFormDirty(false);
     closeBanner();
     renderProject();
+    showToast("Баннер удалён");
   } catch (error) {
     showError(errorBox, error);
   }
@@ -1310,6 +1685,7 @@ async function loadRecodePreview() {
   container.innerHTML = '<p class="muted">Считаем…</p>';
   try {
     const preview = await api(`/api/projects/${currentProject.id}/recodings/${currentRecodingId}/preview`);
+    recodePreviewCache.set(recodePreviewKey(currentRecodingId), preview);
     container.innerHTML = renderRecodePreview(preview);
   } catch (error) {
     container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
@@ -1327,9 +1703,11 @@ async function deleteRecoding() {
   if (!currentRecodingId || !confirm("Удалить эту перекодировку? Исходная переменная не изменится.")) return;
   const recodeError = document.querySelector("#recode-error");
   try {
+    recodePreviewCache.delete(recodePreviewKey(currentRecodingId));
     currentProject = await api(`/api/projects/${currentProject.id}/recodings/${currentRecodingId}`, { method: "DELETE" });
     closeRecoding();
     renderProject();
+    showToast("Перекодировка удалена");
   } catch (error) {
     showError(recodeError, error);
   }
@@ -1350,6 +1728,7 @@ async function moveQuestionTo(code, targetCode, placeAfter) {
       body: JSON.stringify({ codes }),
     });
     renderProject();
+    showToast("Порядок вопросов обновлён");
   } catch (error) {
     alert(error.message);
   }
@@ -1366,7 +1745,7 @@ function openQuestion(code) {
 function fillEditor(question) {
   if (!question) return;
   const grouped = question.source_variables.length > 1;
-  document.querySelector("#editor-code").textContent = question.code;
+  document.querySelector("#editor-code").textContent = `${question.code} — ${question.label}`;
   document.querySelector("#question-label-caption").textContent = grouped
     ? "Название блока для Excel"
     : "Название для отчёта";
@@ -1467,6 +1846,7 @@ async function refreshStructure() {
     currentQuestionCode = null;
     editor.hidden = true;
     renderProject();
+    showToast("Структура перераспознана");
   } catch (error) {
     alert(error.message);
   } finally {
@@ -1510,6 +1890,15 @@ function configuredQuestions() {
   return currentProject.configuration?.questions || currentProject.inspection.questions;
 }
 
+function originalQuestionLabel(question) {
+  if (question.source_variables.length !== 1) return "";
+  const source = currentProject.inspection.variables.find(
+    variable => variable.name === question.source_variables[0]
+  );
+  const sourceLabel = source?.label?.trim() || "";
+  return sourceLabel && sourceLabel !== question.label.trim() ? sourceLabel : "";
+}
+
 function configuredRecodings() {
   return currentProject.configuration?.recodings || [];
 }
@@ -1549,13 +1938,15 @@ async function downloadPreparedReport(event) {
   const link = event.currentTarget;
   if (!currentProject || link.getAttribute("aria-disabled") === "true") return;
   const downloads = [...document.querySelectorAll("#download-report, #download-statistics")];
+  const feedback = document.querySelector("#report-feedback");
+  feedback.hidden = false;
   let status = document.querySelector("#report-status");
   if (!status) {
     status = document.createElement("span");
     status.id = "report-status";
     status.className = "report-status";
     status.setAttribute("role", "status");
-    document.querySelector(".head-actions").append(status);
+    feedback.append(status);
   }
   let progress = document.querySelector("#report-progress");
   if (!progress) {
@@ -1563,7 +1954,7 @@ async function downloadPreparedReport(event) {
     progress.id = "report-progress";
     progress.className = "report-progress";
     progress.max = 100;
-    document.querySelector(".head-actions").append(progress);
+    feedback.append(progress);
   }
   progress.hidden = false;
   progress.value = 0;
@@ -1601,7 +1992,10 @@ async function downloadPreparedReport(event) {
   } finally {
     downloads.forEach(item => item.setAttribute("aria-disabled", "false"));
     link.textContent = link.dataset.defaultLabel;
-    window.setTimeout(() => { progress.hidden = true; }, 2500);
+    window.setTimeout(() => {
+      progress.hidden = true;
+      feedback.hidden = true;
+    }, 3500);
   }
 }
 
@@ -1626,6 +2020,20 @@ function setBusy(button, busy, text) {
 function showError(element, error) {
   element.textContent = error.message;
   element.hidden = false;
+}
+
+function showToast(message) {
+  const container = document.querySelector("#toast-container");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.innerHTML = '<svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="8" stroke="#2eae68" stroke-width="1.6"/><path d="M5.5 9.5L7.5 11.5L12.5 6.5" stroke="#2eae68" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  toast.append(document.createTextNode(message));
+  container.append(toast);
+  window.setTimeout(() => {
+    toast.classList.add("toast-out");
+    toast.addEventListener("animationend", () => toast.remove(), { once: true });
+  }, 2100);
 }
 
 function formatDate(value) {

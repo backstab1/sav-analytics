@@ -13,7 +13,7 @@ import pyreadstat
 
 from .core.sav_reader import SavReadError, inspect_sav
 
-STRUCTURE_VERSION = 4
+STRUCTURE_VERSION = 5
 
 
 class ProjectNotFoundError(LookupError):
