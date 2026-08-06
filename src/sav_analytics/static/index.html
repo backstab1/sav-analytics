@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260802-weights-4" />
+    <link rel="stylesheet" href="/styles.css?v=20260806-scrollbar-1" />
   </head>
   <body>
     <header class="topbar">
@@ -72,10 +72,10 @@
           <div class="structure-panel">
             <div class="panel-box">
             <div class="tabs"><button class="active" data-view="questions">Структура</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button><button data-view="weights">Веса</button></div>
-            <div id="structure-toolbar" class="recode-toolbar"><div><strong>Представление структуры</strong><small>Настраивайте логические вопросы или проверяйте исходные столбцы SAV.</small></div><div class="structure-view-switch"><button type="button" data-structure-mode="questions" class="active">Логические вопросы</button><button type="button" data-structure-mode="variables">Столбцы SAV</button></div></div>
+            <div id="structure-toolbar" class="recode-toolbar"><div><strong>Представление структуры</strong><small>Настраивайте логические вопросы или проверяйте исходные столбцы SAV.</small></div><div class="structure-toolbar-actions"><span id="structure-search-count" class="search-count" aria-live="polite" hidden></span><div class="search-field"><svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg><input id="structure-search" type="text" placeholder="Поиск по коду и названию" autocomplete="off" aria-label="Поиск по структуре массива" /><button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button></div><div class="structure-view-switch"><button type="button" data-structure-mode="questions" class="active">Логические вопросы</button><button type="button" data-structure-mode="variables">Столбцы SAV</button></div></div></div>
             <div id="recode-toolbar" class="recode-toolbar" hidden><div><strong>Производные переменные</strong><small>Создавайте независимые группировки числовых переменных.</small></div><button id="new-recoding" type="button">+ Новая перекодировка</button></div>
             <div id="banner-toolbar" class="recode-toolbar" hidden><div><strong>Баннеры отчёта</strong><small>Total добавляется всегда. Нажмите «В Excel» на нужной карточке.</small></div><button id="new-banner" type="button">+ Новый баннер</button></div>
-            <div id="filter-toolbar" class="recode-toolbar" hidden><div><strong>Именованные правила</strong><small>Сохраняйте выборки и назначайте их базой отдельным вопросам.</small></div><div class="filter-toolbar-actions"><label>Общий фильтр отчёта<select id="report-filter"><option value="">Без общего фильтра</option></select></label><button id="new-filter" type="button">+ Новое правило</button></div></div>
+            <div id="filter-toolbar" class="recode-toolbar" hidden><div><strong>Именованные правила</strong><small>Назначайте правила базой отдельным вопросам. «В Excel» применяет правило ко всему отчёту.</small></div><button id="new-filter" type="button">+ Новое правило</button></div>
             <div id="weight-toolbar" class="recode-toolbar" hidden><div><strong>Рассчитанные веса</strong><small>Настройте целевые распределения и рассчитайте вес методом raking/IPF.</small></div><button id="new-weight" type="button">+ Новый вес</button></div>
             <div id="entity-list" class="entity-list" hidden></div>
             <div id="table-wrap" class="table-wrap">
@@ -213,7 +213,8 @@
         </div>
       </section>
     </main>
+    <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/app.js?v=20260802-weights-4" defer></script>
+    <script src="/app.js?v=20260806-scrollbar-1" defer></script>
   </body>
 </html>

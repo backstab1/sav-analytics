@@ -329,13 +329,17 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
   gap: 10px; padding: 16px 20px;
   border: 1px solid var(--c-border); border-radius: 14px;
   background: var(--c-surface); color: var(--c-ink); text-align: left; white-space: normal;
+  cursor: pointer;
   box-shadow: none; transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
 }
 .filter-card:hover { background: var(--c-surface); border-color: var(--c-border-strong); box-shadow: var(--shadow-card); }
 .filter-card:active { transform: none; }
 .filter-card.selected { border-color: var(--c-brand); box-shadow: inset 0 0 0 1px var(--c-brand); }
 .filter-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
-.filter-card-head strong { font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.015em; }
+.filter-card-head strong {
+  min-width: 0; overflow: hidden; font-family: var(--font-display); font-size: var(--t-md);
+  font-weight: 700; letter-spacing: -0.015em; text-overflow: ellipsis; white-space: nowrap;
+}
 .filter-card-meta { display: flex; flex-wrap: wrap; gap: 5px 14px; color: var(--c-ink-3); font-size: var(--t-xs); }
 .filter-card-meta b { color: var(--c-ink-2); font-weight: 600; }
 .filter-card-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -379,13 +383,10 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
   font-size: var(--t-xs); font-weight: 600;
 }
 .recode-toolbar button:hover { background: var(--c-brand-hover); }
-.recode-toolbar > div:first-child:not(.filter-toolbar-actions) { display: grid; gap: 2px; }
-.recode-toolbar > div:first-child:not(.filter-toolbar-actions) strong { font-size: var(--t-base); font-weight: 600; letter-spacing: -0.01em; }
-.recode-toolbar > div:first-child:not(.filter-toolbar-actions) small { color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1.4; }
+.recode-toolbar > div:first-child { display: grid; gap: 2px; }
+.recode-toolbar > div:first-child strong { font-size: var(--t-base); font-weight: 600; letter-spacing: -0.01em; }
+.recode-toolbar > div:first-child small { color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1.4; }
 
-.recode-toolbar .filter-toolbar-actions { display: flex; align-items: center; gap: var(--s-2); flex: 1; }
-.filter-toolbar-actions label { display: flex; align-items: center; gap: var(--s-2); color: var(--c-ink-2); font-size: var(--t-sm); font-weight: 500; }
-.filter-toolbar-actions select { width: auto; min-width: 200px; padding: 7px 12px; font-size: var(--t-sm); }
 
 /* Segmented — Apple style */
 .structure-view-switch {
@@ -401,6 +402,33 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
   background: var(--c-surface); color: var(--c-ink); font-weight: 600;
   box-shadow: 0 1px 1px rgba(0,0,0,.06), 0 3px 8px rgba(0,0,0,.08);
 }
+
+/* Search inside the structure toolbar */
+.structure-toolbar-actions {
+  display: flex; align-items: center; justify-content: flex-end;
+  flex-wrap: wrap; gap: var(--s-2); min-width: 0;
+}
+.search-field { position: relative; display: flex; align-items: center; min-width: 0; }
+.search-field .search-icon {
+  position: absolute; left: 11px; width: 15px; height: 15px;
+  color: var(--c-ink-4); pointer-events: none;
+}
+.search-field input {
+  width: clamp(190px, 21vw, 260px); padding: 7px 30px 7px 32px;
+  border-radius: 9px; font-size: var(--t-sm);
+}
+.search-field .search-clear {
+  position: absolute; right: 5px;
+  display: grid; place-items: center; width: 21px; height: 21px; padding: 0;
+  background: transparent; color: var(--c-ink-3); border: 0; border-radius: 50%;
+  font-size: 15px; font-weight: 500; line-height: 1;
+}
+.search-field .search-clear:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
+.search-count {
+  color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.empty-row td { padding: 0; }
 
 /* ================================================================
    TABLE
@@ -526,7 +554,9 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   max-height: calc(100vh - 86px);
   overflow: auto;
   min-width: 0; width: 100%;
-  padding: 18px 20px;
+  --editor-pad: 20px;
+  --scrollbar-reserve: 10px;
+  padding: 18px var(--editor-pad);
   background: var(--c-surface);
   border: 0; border-radius: var(--r-3);
   box-shadow: var(--shadow-drawer);
@@ -536,9 +566,30 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+@media (pointer: coarse) {
+  .question-editor { --scrollbar-reserve: 0px; }
+}
+
+/* Тонкая полоса прокрутки в цветах интерфейса вместо системной серой.
+   scrollbar-gutter резервирует ширину thin-полосы (~10px) — на неё и уменьшен
+   правый padding области скролла, чтобы контент остался симметричным. */
+.editor-scroll, .table-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border-strong) transparent;
+}
+.editor-scroll::-webkit-scrollbar, .table-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+.editor-scroll::-webkit-scrollbar-track, .table-wrap::-webkit-scrollbar-track { background: transparent; }
+.editor-scroll::-webkit-scrollbar-thumb, .table-wrap::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong); background-clip: content-box;
+  border: 1px solid transparent; border-radius: var(--r-pill);
+}
+.editor-scroll:hover::-webkit-scrollbar-thumb, .table-wrap:hover::-webkit-scrollbar-thumb {
+  background: var(--c-ink-4); background-clip: content-box;
+}
 .editor-head {
   display: flex; justify-content: space-between; align-items: center;
-  gap: var(--s-3); margin: -18px -20px var(--s-4); padding: 14px 20px;
+  gap: var(--s-3); margin: -18px calc(-1 * var(--editor-pad)) var(--s-4); padding: 14px var(--editor-pad);
   border-bottom: 1px solid var(--c-border);
   position: sticky; top: -18px; z-index: 12;
   background: rgba(255,255,255,.94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -597,12 +648,13 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .structure-editor .editor-scroll {
   display: grid; align-content: start; gap: 14px; min-height: 0; overflow-y: auto;
-  margin-right: -10px; padding: 0 10px 18px 0;
+  margin: 0 calc(-1 * var(--editor-pad));
+  padding: 0 calc(var(--editor-pad) - var(--scrollbar-reserve)) 18px var(--editor-pad);
   scrollbar-gutter: stable;
 }
 .structure-editor .editor-actions {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .45fr);
-  gap: 10px; margin: 0 -20px; padding: 12px 20px;
+  gap: 10px; margin: 0 calc(-1 * var(--editor-pad)); padding: 12px var(--editor-pad);
   border-top: 1px solid var(--c-border); background: var(--c-surface);
   box-shadow: 0 -10px 24px rgba(0,0,0,.04);
 }
@@ -624,11 +676,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .recode-editor .editor-scroll {
   display: grid; align-content: start; gap: 14px; min-height: 0; overflow-y: auto;
-  margin-right: -10px; padding: 0 10px 18px 0; scrollbar-gutter: stable;
+  margin: 0 calc(-1 * var(--editor-pad)); padding: 0 calc(var(--editor-pad) - var(--scrollbar-reserve)) 18px var(--editor-pad); scrollbar-gutter: stable;
 }
 .recode-editor .editor-actions {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(88px, .28fr);
-  gap: 10px; margin: 0 -20px; padding: 12px 20px;
+  gap: 10px; margin: 0 calc(-1 * var(--editor-pad)); padding: 12px var(--editor-pad);
   border-top: 1px solid var(--c-border); background: var(--c-surface);
   box-shadow: 0 -10px 24px rgba(0,0,0,.04);
 }
@@ -719,11 +771,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .banner-editor .editor-scroll {
   display: grid; align-content: start; gap: 14px; min-height: 0; overflow-y: auto;
-  margin-right: -10px; padding: 0 10px 18px 0; scrollbar-gutter: stable;
+  margin: 0 calc(-1 * var(--editor-pad)); padding: 0 calc(var(--editor-pad) - var(--scrollbar-reserve)) 18px var(--editor-pad); scrollbar-gutter: stable;
 }
 .banner-editor .editor-actions {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 10px; margin: 0 -20px; padding: 12px 20px;
+  gap: 10px; margin: 0 calc(-1 * var(--editor-pad)); padding: 12px var(--editor-pad);
   border-top: 1px solid var(--c-border); background: var(--c-surface);
 }
 .banner-editor .unsaved-warning {
@@ -776,11 +828,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .weight-editor .editor-scroll {
   display: grid; align-content: start; gap: 16px; min-height: 0; overflow-y: auto;
-  margin-right: -10px; padding: 0 10px 20px 0; scrollbar-gutter: stable;
+  margin: 0 calc(-1 * var(--editor-pad)); padding: 0 calc(var(--editor-pad) - var(--scrollbar-reserve)) 20px var(--editor-pad); scrollbar-gutter: stable;
 }
 .weight-editor .editor-actions {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center; gap: 10px; margin: 0 -20px; padding: 12px 20px;
+  align-items: center; gap: 10px; margin: 0 calc(-1 * var(--editor-pad)); padding: 12px var(--editor-pad);
   border-top: 1px solid var(--c-border); background: var(--c-surface);
   box-shadow: 0 -10px 24px rgba(0,0,0,.04);
 }
@@ -833,11 +885,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .filter-editor .editor-scroll {
   display: grid; align-content: start; gap: 14px; min-height: 0; overflow-y: auto;
-  margin-right: -10px; padding: 0 10px 18px 0; scrollbar-gutter: stable;
+  margin: 0 calc(-1 * var(--editor-pad)); padding: 0 calc(var(--editor-pad) - var(--scrollbar-reserve)) 18px var(--editor-pad); scrollbar-gutter: stable;
 }
 .filter-editor .editor-actions {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 10px; margin: 0 -20px; padding: 12px 20px;
+  gap: 10px; margin: 0 calc(-1 * var(--editor-pad)); padding: 12px var(--editor-pad);
   border-top: 1px solid var(--c-border); background: var(--c-surface);
 }
 .filter-editor .editor-actions:has(#copy-filter[hidden]) { grid-template-columns: 1fr; }
@@ -1047,19 +1099,33 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 @keyframes toast-out { to { opacity: 0; transform: translateY(-8px) scale(.95); } }
 
 /* ================================================================
+   SLIDE-OVER — редактор поверх контента, когда колонки не помещаются
+   ================================================================ */
+.editor-backdrop { display: none; }
+@keyframes slide-over-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ================================================================
    RESPONSIVE
    ================================================================ */
 @media (max-width: 860px) {
   .workspace-grid { grid-template-columns: 1fr; }
   .workspace-grid:has(.banner-editor:not([hidden])) { grid-template-columns: 1fr; }
-  .question-editor { position: static; max-height: none; }
-  .structure-editor { display: block; height: auto; min-height: 0; overflow: visible; padding-bottom: 0; }
-  .structure-editor .editor-scroll { overflow: visible; }
-  .recode-editor { display: block; height: auto; min-height: 0; overflow: visible; padding-bottom: 0; }
-  .recode-editor .editor-scroll { overflow: visible; }
-  .filter-editor { display: block; height: auto; max-height: none; min-height: 0; overflow: visible; padding-bottom: 0; }
-  .filter-editor #filter-form { grid-template-rows: auto auto; overflow: visible; }
-  .filter-editor .editor-scroll { overflow: visible; }
+  /* Любой редактор выезжает панелью, а не встаёт блоком под таблицей. */
+  .question-editor:not([hidden]) {
+    position: fixed; top: 0; right: 0; bottom: 0; left: auto; z-index: 120;
+    width: min(440px, 100vw); height: 100%; max-height: none; min-height: 0;
+    border-radius: 0; box-shadow: -18px 0 54px rgba(15, 20, 17, .26);
+    animation: slide-over-in 240ms var(--ease);
+  }
+  body:has(.question-editor:not([hidden])) .editor-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 110;
+    background: rgba(15, 20, 17, .34);
+    animation: backdrop-in 220ms var(--ease);
+  }
 }
 @media (max-width: 900px) {
   main { padding-top: var(--s-5); }
@@ -1072,28 +1138,34 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   .upload-card { padding: var(--s-4); }
   .form-row { grid-template-columns: 1fr; }
   .recode-toolbar { align-items: flex-start; flex-wrap: wrap; }
-  .recode-toolbar .filter-toolbar-actions { width: 100%; flex-wrap: wrap; }
-  .filter-toolbar-actions label { flex: 1 1 240px; align-items: flex-start; flex-direction: column; }
-  .filter-toolbar-actions select { width: 100%; min-width: 0; }
+  .structure-toolbar-actions { width: 100%; justify-content: flex-start; }
+  .search-field { flex: 1 1 200px; }
+  .search-field input { width: 100%; }
 }
 @media (min-width: 861px) and (max-width: 1180px) {
+  /* Редактор баннера шире остальных — здесь он тоже выезжает панелью. */
   .workspace-grid:has(.banner-editor:not([hidden])) { grid-template-columns: 1fr; }
-  .banner-editor { position: static; display: block; height: auto; max-height: none; overflow: visible; padding-bottom: 0; }
-  .banner-editor #banner-form { grid-template-rows: auto auto; overflow: visible; }
-  .banner-editor .editor-scroll { overflow: visible; }
+  .banner-editor:not([hidden]) {
+    position: fixed; top: 0; right: 0; bottom: 0; left: auto; z-index: 120;
+    width: min(460px, 100vw); height: 100%; max-height: none; min-height: 0;
+    border-radius: 0; box-shadow: -18px 0 54px rgba(15, 20, 17, .26);
+    animation: slide-over-in 240ms var(--ease);
+  }
+  body:has(.banner-editor:not([hidden])) .editor-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 110;
+    background: rgba(15, 20, 17, .34);
+    animation: backdrop-in 220ms var(--ease);
+  }
 }
 @media (min-width: 861px) and (max-width: 1180px) {
   .recode-toolbar { align-items: flex-start; flex-wrap: wrap; }
-  .recode-toolbar .filter-toolbar-actions { width: 100%; flex-wrap: wrap; }
-  .filter-toolbar-actions label { flex: 1 1 220px; }
-  .filter-toolbar-actions select { width: 100%; min-width: 0; }
 }
 @media (max-width: 620px) {
   main { padding-right: var(--s-4); padding-left: var(--s-4); }
   .topbar { padding-right: var(--s-4); padding-left: var(--s-4); }
   .topbar-actions > .topbar-icon { display: none; }
   .summary { display: grid; grid-template-columns: 1fr 1fr; }
-  .question-editor { padding: var(--s-4); }
+  .question-editor { --editor-pad: var(--s-4); padding: var(--s-4); }
   .range-row { grid-template-columns: minmax(100px, 1fr) 56px 10px 56px 28px; }
   .filter-condition { grid-template-columns: minmax(0, 1fr) 28px; }
   .filter-condition-details { grid-template-columns: 1fr; }

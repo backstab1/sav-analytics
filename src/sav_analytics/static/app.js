@@ -18,6 +18,7 @@ let currentFilterId = null;
 let currentWeightId = null;
 let currentView = "questions";
 let structureMode = "questions";
+let structureSearch = "";
 let bannerFormDirty = false;
 const recodePreviewCache = new Map();
 const recodePreviewRequests = new Map();
@@ -122,10 +123,7 @@ document.querySelectorAll("#download-report, #download-statistics").forEach(link
   link.dataset.defaultLabel = link.textContent;
   link.addEventListener("click", downloadPreparedReport);
 });
-document.querySelector("#close-editor").addEventListener("click", () => {
-  editor.hidden = true;
-  currentQuestionCode = null;
-});
+document.querySelector("#close-editor").addEventListener("click", closeQuestionEditor);
 document.querySelector("#refresh-preview").addEventListener("click", loadPreview);
 document.querySelector("#refresh-structure").addEventListener("click", refreshStructure);
 document.querySelector("#question-type").addEventListener("change", () => {
@@ -172,7 +170,6 @@ document.querySelector("#add-filter-condition").addEventListener("click", () => 
 });
 document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
 document.querySelector("#copy-filter").addEventListener("click", copyFilter);
-document.querySelector("#report-filter").addEventListener("change", assignReportFilter);
 document.querySelector("#new-weight").addEventListener("click", () => openWeight());
 document.querySelector("#close-weight-editor").addEventListener("click", closeWeight);
 document.querySelector("#add-weight-dimension").addEventListener("click", () => addWeightDimension());
@@ -200,6 +197,88 @@ document.querySelectorAll("[data-structure-mode]").forEach(button => button.addE
   currentQuestionCode = null;
   renderTable();
 }));
+
+const structureSearchInput = document.querySelector("#structure-search");
+structureSearchInput.addEventListener("input", () => {
+  structureSearch = structureSearchInput.value.trim();
+  document.querySelector("#structure-search-clear").hidden = !structureSearchInput.value;
+  renderTable();
+});
+structureSearchInput.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || !structureSearchInput.value) return;
+  event.stopPropagation();
+  resetStructureSearch();
+});
+document.querySelector("#structure-search-clear").addEventListener("click", () => {
+  resetStructureSearch();
+  structureSearchInput.focus();
+});
+
+function resetStructureSearch({ render = true } = {}) {
+  structureSearch = "";
+  structureSearchInput.value = "";
+  document.querySelector("#structure-search-clear").hidden = true;
+  document.querySelector("#structure-search-count").hidden = true;
+  if (render && currentProject) renderTable();
+}
+
+function matchesStructureSearch(...parts) {
+  if (!structureSearch) return true;
+  const haystack = parts.filter(Boolean).join(" ").toLowerCase();
+  return structureSearch.toLowerCase().split(/\s+/).filter(Boolean)
+    .every(token => haystack.includes(token));
+}
+
+function updateStructureSearchCount(shown, total) {
+  const counter = document.querySelector("#structure-search-count");
+  counter.hidden = !structureSearch;
+  counter.textContent = structureSearch ? `${shown} из ${total}` : "";
+}
+
+// Заголовки и ячейки обрезаются многоточием, поэтому дублируем текст в подсказку.
+function setHeadingText(element, text) {
+  element.textContent = text;
+  element.title = text;
+}
+
+function closeQuestionEditor() {
+  editor.hidden = true;
+  currentQuestionCode = null;
+  if (currentProject) renderTable();
+}
+
+// Слайд-овер ведёт себя как модальное окно: закрывается по фону и Esc.
+const slideOverQuery = window.matchMedia("(max-width: 860px)");
+const bannerSlideOverQuery = window.matchMedia("(min-width: 861px) and (max-width: 1180px)");
+
+function openEditors() {
+  return [
+    [editor, closeQuestionEditor],
+    [recodeEditor, closeRecoding],
+    [bannerEditor, closeBanner],
+    [filterEditor, closeFilter],
+    [weightEditor, closeWeight],
+  ].filter(([element]) => !element.hidden);
+}
+
+function slideOverOpen() {
+  if (slideOverQuery.matches) return openEditors().length > 0;
+  if (bannerSlideOverQuery.matches) return !bannerEditor.hidden;
+  return false;
+}
+
+function closeSlideOver() {
+  if (!slideOverOpen()) return;
+  const closable = bannerSlideOverQuery.matches && !slideOverQuery.matches
+    ? openEditors().filter(([element]) => element === bannerEditor)
+    : openEditors();
+  closable.forEach(([, close]) => close());
+}
+
+document.querySelector("#editor-backdrop").addEventListener("click", closeSlideOver);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") closeSlideOver();
+});
 document.querySelector("#banner-block-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-banner-block]");
   if (button) {
@@ -358,6 +437,12 @@ document.querySelector("#entity-list").addEventListener("click", event => {
     void assignReportBanner(reportBannerButton.dataset.active === "true" ? null : bannerId, reportBannerButton);
     return;
   }
+  const reportFilterButton = event.target.closest("button[data-report-filter-id]");
+  if (reportFilterButton) {
+    const filterId = reportFilterButton.dataset.reportFilterId;
+    void assignReportFilter(reportFilterButton.dataset.active === "true" ? null : filterId, reportFilterButton);
+    return;
+  }
   const recodeCard = event.target.closest("[data-recode-id]");
   if (recodeCard) {
     openRecoding(recodeCard.dataset.recodeId);
@@ -377,11 +462,20 @@ document.querySelector("#entity-list").addEventListener("click", event => {
   if (weightCard) openWeight(weightCard.dataset.weightId);
 });
 
+// Карточка — не <button> (внутри лежит своя кнопка), поэтому клавиатуру включаем вручную.
+document.querySelector("#entity-list").addEventListener("keydown", event => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const card = event.target.closest('[role="button"]');
+  if (!card || card !== event.target) return;
+  event.preventDefault();
+  card.click();
+});
+
 let draggedQuestionCode = null;
 
 document.querySelector("#table-body").addEventListener("dragstart", event => {
   const handle = event.target.closest("[data-drag-code]");
-  if (!handle || currentView !== "questions" || structureMode !== "questions") return;
+  if (!handle || currentView !== "questions" || structureMode !== "questions" || structureSearch) return;
   draggedQuestionCode = handle.dataset.dragCode;
   handle.closest("tr[data-code]")?.classList.add("is-dragging");
   event.dataTransfer.effectAllowed = "move";
@@ -685,6 +779,7 @@ function showProject(project) {
   currentWeightId = null;
   currentView = "questions";
   structureMode = "questions";
+  resetStructureSearch({ render: false });
   editor.hidden = true;
   recodeEditor.hidden = true;
   bannerEditor.hidden = true;
@@ -714,7 +809,7 @@ function renderProject() {
   const inspection = currentProject.inspection;
   const questions = configuredQuestions();
   document.querySelector("#project-name").textContent = currentProject.name;
-  document.querySelector("#topbar-project-name").textContent = currentProject.name;
+  setHeadingText(document.querySelector("#topbar-project-name"), currentProject.name);
   document.querySelector("#download-source").href = `/api/projects/${currentProject.id}/source`;
   document.querySelector("#download-report").href = `/api/projects/${currentProject.id}/reports/topline.xlsx`;
   document.querySelector("#download-statistics").href = `/api/projects/${currentProject.id}/reports/statistics.txt`;
@@ -724,7 +819,6 @@ function renderProject() {
     [questions.filter(item => item.question_type.startsWith("multiple_choice")).length.toLocaleString("ru-RU"), "multiple"],
     [questions.filter(item => item.question_type === "matrix").length.toLocaleString("ru-RU"), "матриц"],
   ].map(([value, label]) => `<article><strong>${value}</strong><span>${label}</span></article>`).join("");
-  renderReportFilterControl();
   renderTable();
 }
 
@@ -759,19 +853,33 @@ function renderTable() {
     return;
   }
   const allQuestions = configuredQuestions();
-  const questions = allQuestions;
+  const questions = allQuestions.filter(question =>
+    matchesStructureSearch(question.code, question.label, originalQuestionLabel(question))
+  );
+  updateStructureSearchCount(questions.length, allQuestions.length);
   document.querySelector("#table-head").innerHTML = "<th class=\"drag-cell\" aria-label=\"Порядок\"></th><th class=\"question-cell\">Вопрос</th><th class=\"type-column\">Тип</th><th class=\"count-column\">Перем.</th><th class=\"status-column\">Статус</th>";
+  if (!questions.length) {
+    document.querySelector("#table-body").innerHTML = emptySearchRow(5, "Вопросы не найдены.");
+    return;
+  }
   document.querySelector("#table-body").innerHTML = questions.map(question => {
     const sourceLabel = originalQuestionLabel(question);
     const warnings = (question.warnings || []).join(" · ");
+    const title = `${question.code} — ${question.label}`;
+    // Пока список отфильтрован, порядок менять нельзя: соседи в выдаче не соседи в отчёте.
+    const draggable = structureSearch ? "false" : "true";
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
-      <td class="drag-cell"><button type="button" class="drag-handle" draggable="true" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="Перетащите, чтобы изменить порядок"><span aria-hidden="true">⋮⋮</span></button></td>
-      <td class="question-cell"><span class="q-title">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</span>${sourceLabel ? `<span class="q-sub">${escapeHtml(sourceLabel)}</span>` : ""}${warnings ? `<span class="q-sub warning">${escapeHtml(warnings)}</span>` : ""}</td>
+      <td class="drag-cell"><button type="button" class="drag-handle" draggable="${draggable}" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="${structureSearch ? "Очистите поиск, чтобы менять порядок" : "Перетащите, чтобы изменить порядок"}"><span aria-hidden="true">⋮⋮</span></button></td>
+      <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</span>${sourceLabel ? `<span class="q-sub" title="${escapeAttribute(sourceLabel)}">${escapeHtml(sourceLabel)}</span>` : ""}${warnings ? `<span class="q-sub warning" title="${escapeAttribute(warnings)}">${escapeHtml(warnings)}</span>` : ""}</td>
       <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
       <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
       <td class="status-column"><span class="status ${!question.included_in_report ? "excluded" : (question.recognition === "auto_review" ? "review" : "")}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "Готов") : "Исключён"}</span></td>
     </tr>`;
   }).join("");
+}
+
+function emptySearchRow(columns, message) {
+  return `<tr class="empty-row"><td colspan="${columns}"><div class="empty-state">${escapeHtml(message)} По запросу «${escapeHtml(structureSearch)}» ничего не совпало.</div></td></tr>`;
 }
 
 function renderRecodeCards(recodings) {
@@ -781,7 +889,7 @@ function renderRecodeCards(recodings) {
     const source = currentProject.inspection.variables.find(item => item.name === recoding.source_variable);
     const preview = recodePreviewCache.get(recodePreviewKey(recoding.id));
     return `<button type="button" class="recode-card ${recoding.id === currentRecodingId ? "selected" : ""}" data-recode-id="${escapeAttribute(recoding.id)}">
-      <span class="recode-card-head"><strong>${escapeHtml(recoding.name)}</strong><code>${escapeHtml(recoding.code)}</code></span>
+      <span class="recode-card-head"><strong title="${escapeAttribute(recoding.name)}">${escapeHtml(recoding.name)}</strong><code>${escapeHtml(recoding.code)}</code></span>
       <span class="recode-card-meta"><span>${recoding.mode === "categories" ? "Объединение категорий" : "Числовые диапазоны"}</span><span>Из <b>${escapeHtml(recoding.source_variable)}</b>${source?.label ? ` — ${escapeHtml(source.label)}` : ""}</span><span>${recoding.mode === "categories" ? "Групп" : "Категорий"} <b>${recoding.categories.length}</b></span></span>
       <span class="recode-chips">${renderRecodeCardChips(recoding, preview)}</span>
     </button>`;
@@ -802,7 +910,7 @@ function renderBannerCards(banners) {
     })).join("");
     const active = banner.id === activeBannerId;
     return `<article class="banner-card ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${escapeAttribute(banner.id)}">
-      <span class="banner-card-head"><strong>${escapeHtml(banner.name)}</strong><button type="button" class="badge-active ${active ? "active" : ""}" data-report-banner-id="${escapeAttribute(banner.id)}" data-active="${active}" title="${active ? "Оставить в Excel только Total" : "Использовать этот баннер в Excel"}">В Excel</button></span>
+      <span class="banner-card-head"><strong title="${escapeAttribute(banner.name)}">${escapeHtml(banner.name)}</strong><button type="button" class="badge-active ${active ? "active" : ""}" data-report-banner-id="${escapeAttribute(banner.id)}" data-active="${active}" title="${active ? "Оставить в Excel только Total" : "Использовать этот баннер в Excel"}">В Excel</button></span>
       <span class="banner-meta"><span>Блоков <b>${banner.blocks.length}</b></span><span>Колонок <b>${columnCount}</b></span><span>Доверие <b>${formatPercent(banner.confidence_level || 0.95)}</b></span><span>Малая база &lt; <b>${banner.minimum_base || 30}</b></span></span>
       <span class="block-chips">${chips}</span>
     </article>`;
@@ -821,11 +929,12 @@ function renderFilterCards(filters) {
       ? `<span>Выборка <b>${preview.selected.toLocaleString("ru-RU")}</b> из ${preview.total.toLocaleString("ru-RU")}</span>`
       : `<span>Выборка <b>${previewLoaded ? "—" : "считается…"}</b></span>`;
     const usage = uses ? `<span>База для <b>${uses}</b> вопросов</span>` : "";
-    return `<button type="button" class="filter-card ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${escapeAttribute(filter.id)}">
-      <span class="filter-card-head"><strong>${escapeHtml(filter.name)}</strong></span>
+    const active = filter.id === selectedReportFilterId();
+    return `<article class="filter-card ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${escapeAttribute(filter.id)}" role="button" tabindex="0">
+      <span class="filter-card-head"><strong title="${escapeAttribute(filter.name)}">${escapeHtml(filter.name)}</strong><button type="button" class="badge-active ${active ? "active" : ""}" data-report-filter-id="${escapeAttribute(filter.id)}" data-active="${active}" title="${active ? "Убрать общий фильтр из отчёта" : "Применить это правило ко всему отчёту"}">В Excel</button></span>
       <span class="filter-card-meta"><span>Условий <b>${countFilterConditions(filter.rule)}</b></span>${sample}${usage}</span>
       <span class="filter-card-chips">${renderFilterRuleChips(filter.rule)}</span>
-    </button>`;
+    </article>`;
   }).join("") : '<div class="empty-state">Сохранённых баз и фильтров пока нет.</div>';
   if (filters.length) void hydrateFilterCards(filters);
 }
@@ -840,7 +949,7 @@ function renderWeightCards(weights) {
     const dimensions = weight.dimensions.map(dimension => `
       <span class="chip" title="${escapeAttribute(dimension.label)}">${escapeHtml(dimension.label)} <b>${dimension.targets.length}</b></span>`).join("");
     return `<article class="item-card weight-card ${weight.id === currentWeightId ? "selected" : ""}" data-weight-id="${escapeAttribute(weight.id)}">
-      <span class="item-card-head"><strong>${escapeHtml(weight.name)}</strong></span>
+      <span class="item-card-head"><strong title="${escapeAttribute(weight.name)}">${escapeHtml(weight.name)}</strong></span>
       <span class="item-meta"><span>Распределений <b>${weight.dimensions.length}</b></span><span>${limits}</span></span>
       <span class="chips">${dimensions}</span>
     </article>`;
@@ -972,10 +1081,17 @@ function hydrateRecodeCards(recodings) {
 }
 
 function renderPhysicalVariables() {
+    const allVariables = currentProject.inspection.variables;
+    const variables = allVariables.filter(variable => matchesStructureSearch(variable.name, variable.label));
+    updateStructureSearchCount(variables.length, allVariables.length);
     document.querySelector("#table-head").innerHTML = "<th>Имя</th><th>Логический вопрос</th><th>Метка столбца</th><th>Формат</th><th>Measurement</th><th>Уникальных</th><th>Валидная база</th><th>Пропуски</th>";
-    document.querySelector("#table-body").innerHTML = currentProject.inspection.variables.map(variable => `
+    if (!variables.length) {
+      document.querySelector("#table-body").innerHTML = emptySearchRow(8, "Столбцы не найдены.");
+      return;
+    }
+    document.querySelector("#table-body").innerHTML = variables.map(variable => `
       <tr>
-        <td><code>${escapeHtml(variable.name)}</code></td><td>${logicalOwnerButton(variable.name)}</td><td><strong>${escapeHtml(variable.label)}</strong></td>
+        <td><code>${escapeHtml(variable.name)}</code></td><td>${logicalOwnerButton(variable.name)}</td><td><strong title="${escapeAttribute(variable.label)}">${escapeHtml(variable.label)}</strong></td>
         <td>${escapeHtml(variable.original_format || variable.storage_type)}</td><td>${escapeHtml(variable.measurement_level || "—")}</td>
         <td>${variable.unique_count.toLocaleString("ru-RU")}</td><td>${variable.valid_count.toLocaleString("ru-RU")}</td><td>${variable.missing_count.toLocaleString("ru-RU")}</td>
       </tr>`).join("");
@@ -998,7 +1114,7 @@ function openFilter(filterId = null) {
   weightEditor.hidden = true;
   filterEditor.hidden = false;
   const filter = filterId ? configuredFilters().find(item => item.id === filterId) : null;
-  document.querySelector("#filter-editor-title").textContent = filter?.name || "Новое правило";
+  setHeadingText(document.querySelector("#filter-editor-title"), filter?.name || "Новое правило");
   document.querySelector("#filter-name").value = filter?.name || "";
   document.querySelector("#filter-operator").value = filter?.rule.operator || "and";
   syncFilterOperatorButtons();
@@ -1200,10 +1316,8 @@ async function copyFilter() {
   }
 }
 
-function renderReportFilterControl() {
-  const select = document.querySelector("#report-filter");
-  if (!select || !currentProject) return;
-  select.innerHTML = '<option value="">Без общего фильтра</option>' + configuredFilters().map(filter => `<option value="${filter.id}" ${currentProject.configuration.report_filter_id === filter.id ? "selected" : ""}>${escapeHtml(filter.name)}</option>`).join("");
+function selectedReportFilterId() {
+  return currentProject?.configuration?.report_filter_id || null;
 }
 
 function selectedReportBannerId() {
@@ -1230,22 +1344,20 @@ async function assignReportBanner(bannerId, button) {
   }
 }
 
-async function assignReportFilter() {
-  const select = document.querySelector("#report-filter");
-  select.disabled = true;
+async function assignReportFilter(filterId, button) {
+  button.disabled = true;
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/report-filter`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filter_id: select.value || null }),
+      body: JSON.stringify({ filter_id: filterId }),
     });
     renderProject();
-    showToast("Фильтр отчёта обновлён");
+    showToast(filterId ? "Правило применено ко всему отчёту" : "Общий фильтр отчёта снят");
   } catch (error) {
     alert(error.message);
-    renderReportFilterControl();
   } finally {
-    select.disabled = false;
+    button.disabled = false;
   }
 }
 
@@ -1261,7 +1373,7 @@ function openWeight(weightId = null) {
   filterEditor.hidden = true;
   weightEditor.hidden = false;
   const weight = weightId ? configuredWeights().find(item => item.id === weightId) : null;
-  document.querySelector("#weight-editor-title").textContent = weight ? weight.name : "Новый вес";
+  setHeadingText(document.querySelector("#weight-editor-title"), weight ? weight.name : "Новый вес");
   document.querySelector("#weight-name").value = weight?.name || "Вес по целевым распределениям";
   const trimming = weight ? weight.lower_bound != null || weight.upper_bound != null : true;
   document.querySelector("#weight-trimming").checked = trimming;
@@ -1421,7 +1533,7 @@ function openBanner(bannerId = null) {
   recodeEditor.hidden = true;
   bannerEditor.hidden = false;
   const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
-  document.querySelector("#banner-editor-title").textContent = banner?.name || "Новый баннер";
+  setHeadingText(document.querySelector("#banner-editor-title"), banner?.name || "Новый баннер");
   document.querySelector("#banner-name").value = banner?.name || `Баннер ${configuredBanners().length + 1}`;
   document.querySelector("#banner-confidence").value = (banner?.confidence_level || 0.95) * 100;
   document.querySelector("#banner-compare-total").checked = banner?.compare_to_total ?? banner?.blocks.some(block => block.compare_to_total) ?? false;
@@ -1550,7 +1662,7 @@ function renderBannerPreview(preview) {
   return `<div class="col-preview">${preview.columns.map((column, index) => {
     const label = index === 0 ? "Total" : `${column.block ? `${column.block} · ` : ""}${column.label}`;
     const smallBase = column.base > 0 && column.base < minimumBase;
-    return `<div class="col-line ${index === 0 ? "total" : ""} ${smallBase ? "small-base" : ""}"><span>${escapeHtml(label)}</span><em>База ${column.base.toLocaleString("ru-RU")}</em></div>`;
+    return `<div class="col-line ${index === 0 ? "total" : ""} ${smallBase ? "small-base" : ""}"><span title="${escapeAttribute(label)}">${escapeHtml(label)}</span><em>База ${column.base.toLocaleString("ru-RU")}</em></div>`;
   }).join("")}</div>`;
 }
 
@@ -1574,7 +1686,7 @@ function openRecoding(recodingId = null) {
   editor.hidden = true;
   recodeEditor.hidden = false;
   const recoding = recodingId ? configuredRecodings().find(item => item.id === recodingId) : null;
-  document.querySelector("#recode-editor-title").textContent = recoding ? recoding.code : "Новая";
+  setHeadingText(document.querySelector("#recode-editor-title"), recoding ? recoding.code : "Новая");
   document.querySelector("#recode-code").value = recoding?.code || suggestRecodeCode();
   document.querySelector("#recode-name").value = recoding?.name || "";
   document.querySelector("#recode-mode").value = recoding?.mode || "ranges";
@@ -1745,7 +1857,7 @@ function openQuestion(code) {
 function fillEditor(question) {
   if (!question) return;
   const grouped = question.source_variables.length > 1;
-  document.querySelector("#editor-code").textContent = `${question.code} — ${question.label}`;
+  setHeadingText(document.querySelector("#editor-code"), `${question.code} — ${question.label}`);
   document.querySelector("#question-label-caption").textContent = grouped
     ? "Название блока для Excel"
     : "Название для отчёта";
