@@ -146,6 +146,9 @@ src/sav_analytics/
 целевая production-архитектура — в [docs/architecture.md](docs/architecture.md).
 Эти документы описывают и будущие функции, поэтому не всё перечисленное там уже реализовано.
 
+Схождения и расхождения теста Subgroup/Rest с SPSS Custom Tables разобраны
+в [docs/spss-conformance.md](docs/spss-conformance.md).
+
 ## Что пока не реализовано
 
 - пользователи, роли и авторизация;
