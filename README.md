@@ -148,6 +148,8 @@ src/sav_analytics/
 
 Схождения и расхождения теста Subgroup/Rest с SPSS Custom Tables разобраны
 в [docs/spss-conformance.md](docs/spss-conformance.md).
+Что готово, что осталось до запуска и сколько это займёт — в
+[docs/roadmap.md](docs/roadmap.md).
 
 ## Что пока не реализовано
 
