@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 from numbers import Number
 from typing import Any
 
@@ -9,6 +10,7 @@ import pandas as pd
 
 from ..filtering import evaluate_filter_frame
 from ..statistics import StatisticalTestResult, effective_sample_size
+from .data import ReportData
 from .models import ReportError, StatisticalAuditEntry
 from .statistics import (
     _balance_result,
@@ -31,16 +33,35 @@ from .statistics import (
 from .styles import _result_format
 
 
+@dataclass(frozen=True)
+class _RowContext:
+    """Куда и с какими настройками пишутся строки одного вопроса.
+
+    Собирается один раз на вопрос в :func:`_write_topline` и передаётся вниз
+    целиком, вместо того чтобы протаскивать те же восемь значений через
+    каждую функцию записи.
+    """
+
+    sheet: Any
+    columns: list[dict[str, Any]]
+    formats: dict[str, Any]
+    settings: dict[str, Any]
+    audit_entries: list[StatisticalAuditEntry]
+    audit_context: tuple[str, str, str]
+    base_mask: pd.Series
+    valid_denominator: bool
+
+    def denominator(self, valid: pd.Series) -> pd.Series | None:
+        """Знаменатель доли: валидная база или None для полной базы."""
+        return valid if self.valid_denominator else None
+
+
 def _write_topline(
     sheet: Any,
-    frame: pd.DataFrame,
+    data: ReportData,
     project: dict[str, Any],
     questions: list[dict[str, Any]],
-    variables: dict[str, dict[str, Any]],
-    filters: dict[str, dict[str, Any]],
-    columns: list[dict[str, Any]],
     formats: dict[str, Any],
-    statistical_settings: dict[str, Any],
     audit_entries: list[StatisticalAuditEntry],
     sheet_name: str,
     *,
@@ -48,6 +69,11 @@ def _write_topline(
     audit_writer: _StatisticsAuditWriter | None = None,
     advance: Callable[[str], None] | None = None,
 ) -> dict[str, int]:
+    frame = data.frame
+    variables = data.variables
+    filters = data.filters
+    columns = data.columns
+    statistical_settings = data.statistical_settings
     last_column = len(columns)
     sheet.hide_gridlines(2)
     sheet.freeze_panes(5, 1)
@@ -85,18 +111,20 @@ def _write_topline(
         sheet.set_row(row, 30)
         row += 1
         row = _write_question_rows(
-            sheet,
+            _RowContext(
+                sheet=sheet,
+                columns=columns,
+                formats=formats,
+                settings=statistical_settings,
+                audit_entries=audit_entries,
+                audit_context=(sheet_name, question["code"], question["label"]),
+                base_mask=base_mask,
+                valid_denominator=valid_denominator,
+            ),
             row,
             frame,
             question,
             variables,
-            columns,
-            base_mask,
-            formats,
-            statistical_settings,
-            audit_entries,
-            sheet_name,
-            valid_denominator,
         )
         if audit_writer is not None:
             audit_writer.write_entries(audit_entries[audit_start:])
@@ -107,98 +135,39 @@ def _write_topline(
     return positions
 
 def _write_question_rows(
-    sheet: Any,
+    context: _RowContext,
     row: int,
     frame: pd.DataFrame,
     question: dict[str, Any],
     variables: dict[str, dict[str, Any]],
-    columns: list[dict[str, Any]],
-    base_mask: pd.Series,
-    formats: dict[str, Any],
-    statistical_settings: dict[str, Any],
-    audit_entries: list[StatisticalAuditEntry],
-    sheet_name: str,
-    valid_denominator: bool,
 ) -> int:
     question_type = question["question_type"]
     sources = question["source_variables"]
+    special_values = question.get("special_values", [])
     if question_type == "multiple_choice_dichotomy":
         answered = frame[sources].notna().any(axis=1)
         for name in sources:
-            selected = frame[name].eq(1)
             row = _write_metric_row(
-                sheet,
+                context,
                 row,
                 variables[name]["label"],
-                columns,
-                base_mask,
-                answered if valid_denominator else None,
-                lambda mask, selected=selected: _ratio(selected[mask].sum(), mask.sum()),
-                selected,
-                formats,
+                context.denominator(answered),
+                frame[name].eq(1),
                 "percent",
-                statistical_settings,
-                audit_entries,
-                (sheet_name, question["code"], question["label"]),
             )
         return row
     if question_type == "matrix":
         for name in sources:
-            working = _scale_series(frame[name], question.get("special_values", []))
-            sheet.write(row, 0, variables[name]["label"], formats["subquestion"])
+            working = _scale_series(frame[name], special_values)
+            context.sheet.write(
+                row, 0, variables[name]["label"], context.formats["subquestion"]
+            )
             row += 1
-            row = _write_distribution(
-                sheet,
-                row,
-                frame[name],
-                variables[name],
-                columns,
-                base_mask,
-                formats,
-                statistical_settings,
-                audit_entries,
-                (sheet_name, question["code"], question["label"]),
-                valid_denominator,
+            row = _write_distribution(context, row, frame[name], variables[name])
+            row = _write_numeric_metric(context, row, "Среднее", working)
+            row = _write_scale_aggregates(
+                context, row, working, variables[name], special_values
             )
-            row = _write_numeric_metric(
-                sheet,
-                row,
-                "Среднее",
-                working,
-                columns,
-                base_mask,
-                formats,
-                statistical_settings,
-                audit_entries,
-                (sheet_name, question["code"], question["label"]),
-            )
-            for aggregate_label, take_highest in (
-                ("Top-2", True),
-                ("Bottom-2", False),
-            ):
-                selected = _scale_aggregate(
-                    working,
-                    variables[name],
-                    question.get("special_values", []),
-                    take_highest=take_highest,
-                )
-                row = _write_metric_row(
-                    sheet,
-                    row,
-                    aggregate_label,
-                    columns,
-                    base_mask,
-                    working.notna() if valid_denominator else None,
-                    lambda mask, selected=selected: _ratio(
-                        selected[mask].sum(), mask.sum()
-                    ),
-                    selected,
-                    formats,
-                    "percent",
-                    statistical_settings,
-                    audit_entries,
-                    (sheet_name, question["code"], question["label"]),
-                )
         return row
     if len(sources) != 1:
         return row
@@ -213,108 +182,57 @@ def _write_question_rows(
             ("Стандартная ошибка", "stderr"),
         ]
         for label, metric in metrics:
-            row = _write_numeric_metric(
-                sheet,
-                row,
-                label,
-                series,
-                columns,
-                base_mask,
-                formats,
-                statistical_settings,
-                audit_entries,
-                (sheet_name, question["code"], question["label"]),
-                metric,
-            )
+            row = _write_numeric_metric(context, row, label, series, metric)
         return row
-    row = _write_distribution(
-        sheet,
-        row,
-        series,
-        variables[sources[0]],
-        columns,
-        base_mask,
-        formats,
-        statistical_settings,
-        audit_entries,
-        (sheet_name, question["code"], question["label"]),
-        valid_denominator,
-    )
+    row = _write_distribution(context, row, series, variables[sources[0]])
     if question_type == "scale":
         special_metric = question.get("special_metric", "none")
         if special_metric in {"nps", "csat"}:
-            return _write_special_scale_rows(
-                sheet,
-                row,
-                series,
-                special_metric,
-                columns,
-                base_mask,
-                formats,
-                statistical_settings,
-                audit_entries,
-                (sheet_name, question["code"], question["label"]),
-                valid_denominator,
-            )
-        working = _scale_series(series, question.get("special_values", []))
-        row = _write_numeric_metric(
-            sheet,
-            row,
-            "Среднее",
-            working,
-            columns,
-            base_mask,
-            formats,
-            statistical_settings,
-            audit_entries,
-            (sheet_name, question["code"], question["label"]),
+            return _write_special_scale_rows(context, row, series, special_metric)
+        working = _scale_series(series, special_values)
+        row = _write_numeric_metric(context, row, "Среднее", working)
+        row = _write_scale_aggregates(
+            context, row, working, variables[sources[0]], special_values
         )
-        for aggregate_label, take_highest in (("Top-2", True), ("Bottom-2", False)):
-            selected = _scale_aggregate(
-                working,
-                variables[sources[0]],
-                question.get("special_values", []),
-                take_highest=take_highest,
-            )
-            row = _write_metric_row(
-                sheet,
-                row,
-                aggregate_label,
-                columns,
-                base_mask,
-                working.notna() if valid_denominator else None,
-                lambda mask, selected=selected: _ratio(
-                    selected[mask].sum(), mask.sum()
-                ),
-                selected,
-                formats,
-                "percent",
-                statistical_settings,
-                audit_entries,
-                (sheet_name, question["code"], question["label"]),
-            )
+    return row
+
+def _write_scale_aggregates(
+    context: _RowContext,
+    row: int,
+    working: pd.Series,
+    variable: dict[str, Any],
+    special_values: list[Any],
+) -> int:
+    """Строки Top-2 и Bottom-2 под шкалой."""
+    for label, take_highest in (("Top-2", True), ("Bottom-2", False)):
+        selected = _scale_aggregate(
+            working, variable, special_values, take_highest=take_highest
+        )
+        row = _write_metric_row(
+            context,
+            row,
+            label,
+            context.denominator(working.notna()),
+            selected,
+            "percent",
+        )
     return row
 
 def _write_special_scale_rows(
-    sheet: Any,
+    context: _RowContext,
     row: int,
     series: pd.Series,
     metric: str,
-    columns: list[dict[str, Any]],
-    base_mask: pd.Series,
-    formats: dict[str, Any],
-    settings: dict[str, Any],
-    audit_entries: list[StatisticalAuditEntry],
-    audit_context: tuple[str, str, str],
-    valid_denominator: bool,
 ) -> int:
     numeric = pd.to_numeric(series, errors="coerce")
     expected = set(range(11)) if metric == "nps" else set(range(1, 6))
     observed = set(numeric.dropna().unique())
     if not observed or not observed <= expected:
         label = "NPS 0–10" if metric == "nps" else "CSAT 1–5"
-        raise ReportError(f"Вопрос {audit_context[1]} не соответствует шкале {label}.")
-    valid_mask = numeric.notna() if valid_denominator else None
+        raise ReportError(
+            f"Вопрос {context.audit_context[1]} не соответствует шкале {label}."
+        )
+    valid_mask = context.denominator(numeric.notna())
     if metric == "nps":
         groups = [
             ("Критики (0–6)", numeric.between(0, 6)),
@@ -337,67 +255,35 @@ def _write_special_scale_rows(
         score[numeric.between(4, 5)] = 1
         balance_label = "CSAT balance"
         method = "CSAT balance z-test"
-    score[numeric.isna()] = math.nan if valid_denominator else 0
+    score[numeric.isna()] = math.nan if context.valid_denominator else 0
     for label, selected in groups:
-        row = _write_metric_row(
-            sheet,
-            row,
-            label,
-            columns,
-            base_mask,
-            valid_mask,
-            lambda mask, selected=selected: _ratio(selected[mask].sum(), mask.sum()),
-            selected,
-            formats,
-            "percent",
-            settings,
-            audit_entries,
-            audit_context,
-        )
+        row = _write_metric_row(context, row, label, valid_mask, selected, "percent")
     row = _write_balance_metric_row(
-        sheet,
+        context,
         row,
         balance_label,
         score,
-        columns,
-        base_mask & numeric.notna() if valid_denominator else base_mask,
-        formats,
-        settings,
-        audit_entries,
-        audit_context,
+        context.base_mask & numeric.notna()
+        if context.valid_denominator
+        else context.base_mask,
         method,
     )
     if metric == "csat":
-        satisfied = numeric.between(4, 5)
         row = _write_metric_row(
-            sheet,
+            context,
             row,
             "% удовлетворённых",
-            columns,
-            base_mask,
             valid_mask,
-            lambda mask: _ratio(satisfied[mask].sum(), mask.sum()),
-            satisfied,
-            formats,
+            numeric.between(4, 5),
             "percent",
-            settings,
-            audit_entries,
-            audit_context,
         )
     return row
 
 def _write_distribution(
-    sheet: Any,
+    context: _RowContext,
     row: int,
     series: pd.Series,
     variable: dict[str, Any],
-    columns: list[dict[str, Any]],
-    base_mask: pd.Series,
-    formats: dict[str, Any],
-    statistical_settings: dict[str, Any],
-    audit_entries: list[StatisticalAuditEntry],
-    audit_context: tuple[str, str, str],
-    valid_denominator: bool,
 ) -> int:
     labels = {str(item["value"]): item["label"] for item in variable["value_labels"]}
     values = [item["value"] for item in variable["value_labels"]]
@@ -407,41 +293,34 @@ def _write_distribution(
     except (TypeError, ValueError):
         pass
     for value in values:
-        selected = _equal_series(series, value)
         row = _write_metric_row(
-            sheet,
+            context,
             row,
             labels.get(str(value), str(value)),
-            columns,
-            base_mask,
-            series.notna() if valid_denominator else None,
-            lambda mask, selected=selected: _ratio(selected[mask].sum(), mask.sum()),
-            selected,
-            formats,
+            context.denominator(series.notna()),
+            _equal_series(series, value),
             "percent",
-            statistical_settings,
-            audit_entries,
-            audit_context,
         )
     return row
 
 def _write_metric_row(
-    sheet: Any,
+    context: _RowContext,
     row: int,
     label: str,
-    columns: list[dict[str, Any]],
-    base_mask: pd.Series,
     valid_mask: pd.Series | None,
-    calculator: Any,
     outcome: pd.Series,
-    formats: dict[str, Any],
     format_family: str,
-    statistical_settings: dict[str, Any],
-    audit_entries: list[StatisticalAuditEntry],
-    audit_context: tuple[str, str, str],
 ) -> int:
+    sheet = context.sheet
+    columns = context.columns
+    formats = context.formats
+    statistical_settings = context.settings
+    audit_entries = context.audit_entries
+    audit_context = context.audit_context
     sheet.write(row, 0, label, formats[format_family])
-    eligible_mask = base_mask if valid_mask is None else base_mask & valid_mask
+    eligible_mask = (
+        context.base_mask if valid_mask is None else context.base_mask & valid_mask
+    )
     total_mask = columns[0]["mask"]
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     weights = statistical_settings["weights"]
@@ -512,18 +391,19 @@ def _write_metric_row(
     return row + 1
 
 def _write_numeric_metric(
-    sheet: Any,
+    context: _RowContext,
     row: int,
     label: str,
     series: pd.Series,
-    columns: list[dict[str, Any]],
-    base_mask: pd.Series,
-    formats: dict[str, Any],
-    statistical_settings: dict[str, Any],
-    audit_entries: list[StatisticalAuditEntry],
-    audit_context: tuple[str, str, str],
     metric: str = "mean",
 ) -> int:
+    sheet = context.sheet
+    columns = context.columns
+    formats = context.formats
+    statistical_settings = context.settings
+    audit_entries = context.audit_entries
+    audit_context = context.audit_context
+    base_mask = context.base_mask
     sheet.write(row, 0, label, formats["mean"])
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     weights = statistical_settings["weights"]
@@ -617,18 +497,19 @@ def _write_numeric_metric(
     return row + 1
 
 def _write_balance_metric_row(
-    sheet: Any,
+    context: _RowContext,
     row: int,
     label: str,
     scores: pd.Series,
-    columns: list[dict[str, Any]],
     eligible_mask: pd.Series,
-    formats: dict[str, Any],
-    settings: dict[str, Any],
-    audit_entries: list[StatisticalAuditEntry],
-    audit_context: tuple[str, str, str],
     method: str,
 ) -> int:
+    sheet = context.sheet
+    columns = context.columns
+    formats = context.formats
+    settings = context.settings
+    audit_entries = context.audit_entries
+    audit_context = context.audit_context
     sheet.write(row, 0, label, formats["percent"])
     total_mask = columns[0]["mask"] & eligible_mask
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}

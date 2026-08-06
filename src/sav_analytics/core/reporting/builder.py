@@ -64,14 +64,10 @@ def build_topline_artifacts(
     contents = workbook.add_worksheet("Содержание")
     main_rows = _write_topline(
         main,
-        data.frame,
+        data,
         project,
         data.questions,
-        data.variables,
-        data.filters,
-        data.columns,
         formats,
-        data.statistical_settings,
         audit_entries,
         "topline_main",
         valid_denominator=False,
@@ -80,14 +76,10 @@ def build_topline_artifacts(
     )
     filter_rows = _write_topline(
         filtered,
-        data.frame,
+        data,
         project,
         data.filter_questions,
-        data.variables,
-        data.filters,
-        data.columns,
         formats,
-        data.statistical_settings,
         audit_entries,
         "topline_filter",
         valid_denominator=True,
