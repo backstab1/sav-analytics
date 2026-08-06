@@ -29,6 +29,10 @@ QUESTION_HEIGHT = 30.0
 #: подписи. Сдвинутый дефолт заставляет записать высоту явно и прибивает её.
 DEFAULT_ROW_HEIGHT = 14.4
 
+#: Строки показателей складываются под строку вопроса: сводная строка стоит
+#: над деталями, поэтому в :func:`outline_settings` symbols_below выключен.
+OUTLINE_DETAIL = {"level": 1}
+
 COMMENT_BOX = {
     "author": "sav-analytics",
     "color": "#FBFCFB",
@@ -113,7 +117,8 @@ class ReportFormats:
             font_size=11,
             bold=True,
             font_color=INK,
-            valign="vcenter",
+            align="left",
+            valign="top",
             text_wrap=True,
             top=2,
             top_color=ACCENT,
@@ -126,7 +131,8 @@ class ReportFormats:
     def row_label(self) -> Any:
         return self.get(
             font_color=INK,
-            valign="vcenter",
+            align="left",
+            valign="top",
             text_wrap=True,
             bottom=1,
             bottom_color=HAIR,
@@ -137,7 +143,8 @@ class ReportFormats:
             bold=True,
             font_color=ACCENT,
             bg_color=SOFT,
-            valign="vcenter",
+            align="left",
+            valign="top",
             text_wrap=True,
             bottom=1,
             bottom_color=HAIR,

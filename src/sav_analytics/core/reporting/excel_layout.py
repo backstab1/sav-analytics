@@ -36,6 +36,7 @@ from .styles import (
     COMMENT_BOX,
     DEFAULT_ROW_HEIGHT,
     LABEL_WIDTH,
+    OUTLINE_DETAIL,
     QUESTION_HEIGHT,
     ROW_HEIGHT,
     ReportFormats,
@@ -124,6 +125,8 @@ def _write_topline(
         sheet.write_number(4, index, column["base"], formats.base(separated=separated))
     sheet.write(4, 0, "База, N", formats.base_label())
     sheet.freeze_panes(5, 1)
+    # Кнопка сворачивания стоит на строке вопроса, то есть над её показателями.
+    sheet.outline_settings(True, False, False, True)
 
     row = 5
     positions: dict[str, int] = {}
@@ -292,7 +295,7 @@ def _write_question_rows(
 def _write_subquestion(context: _RowContext, row: int, label: str) -> int:
     """Подпись подвопроса матрицы — полосой во всю ширину баннера."""
     subquestion = context.formats.subquestion()
-    context.sheet.set_row(row, ROW_HEIGHT)
+    context.sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
     context.sheet.write(row, 0, label, subquestion)
     for index in range(1, len(context.columns) + 1):
         context.sheet.write_blank(row, index, None, subquestion)
@@ -423,7 +426,7 @@ def _write_metric_row(
     statistical_settings = context.settings
     audit_entries = context.audit_entries
     audit_context = context.audit_context
-    sheet.set_row(row, ROW_HEIGHT)
+    sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
     sheet.write(row, 0, label, formats.derived_label() if derived else formats.row_label())
     if format_family == "percent" and not derived:
         context.bars.append(row)
@@ -518,7 +521,7 @@ def _write_numeric_metric(
     audit_entries = context.audit_entries
     audit_context = context.audit_context
     base_mask = context.base_mask
-    sheet.set_row(row, ROW_HEIGHT)
+    sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
     sheet.write(row, 0, label, formats.derived_label())
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     weights = statistical_settings["weights"]
@@ -635,7 +638,7 @@ def _write_balance_metric_row(
     settings = context.settings
     audit_entries = context.audit_entries
     audit_context = context.audit_context
-    sheet.set_row(row, ROW_HEIGHT)
+    sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
     sheet.write(row, 0, label, formats.derived_label())
     total_mask = columns[0]["mask"] & eligible_mask
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
