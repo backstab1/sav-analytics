@@ -30,7 +30,17 @@ from .statistics import (
     _wave_proportion_test,
     _wave_target,
 )
-from .styles import _result_format
+from .styles import (
+    BAR,
+    COLUMN_WIDTH,
+    COMMENT_BOX,
+    DEFAULT_ROW_HEIGHT,
+    LABEL_WIDTH,
+    QUESTION_HEIGHT,
+    ROW_HEIGHT,
+    ReportFormats,
+    _result_format,
+)
 
 
 @dataclass(frozen=True)
@@ -44,16 +54,23 @@ class _RowContext:
 
     sheet: Any
     columns: list[dict[str, Any]]
-    formats: dict[str, Any]
+    formats: ReportFormats
     settings: dict[str, Any]
     audit_entries: list[StatisticalAuditEntry]
     audit_context: tuple[str, str, str]
     base_mask: pd.Series
     valid_denominator: bool
+    separators: frozenset[int]
+    #: Строки распределения текущего вопроса — под гистограмму в колонке тотала.
+    bars: list[int]
 
     def denominator(self, valid: pd.Series) -> pd.Series | None:
         """Знаменатель доли: валидная база или None для полной базы."""
         return valid if self.valid_denominator else None
+
+    def separated(self, index: int) -> bool:
+        """Начинает ли колонка новый блок баннера."""
+        return index in self.separators
 
 
 def _write_topline(
@@ -61,7 +78,7 @@ def _write_topline(
     data: ReportData,
     project: dict[str, Any],
     questions: list[dict[str, Any]],
-    formats: dict[str, Any],
+    formats: ReportFormats,
     audit_entries: list[StatisticalAuditEntry],
     sheet_name: str,
     *,
@@ -75,19 +92,38 @@ def _write_topline(
     columns = data.columns
     statistical_settings = data.statistical_settings
     last_column = len(columns)
+    separators = _block_separators(columns)
     sheet.hide_gridlines(2)
-    sheet.freeze_panes(5, 1)
-    sheet.set_column(0, 0, 46)
-    sheet.set_column(1, last_column, 13)
-    sheet.set_row(0, 24)
-    sheet.write(0, 0, "Показатель", formats["banner"])
+    sheet.set_default_row(DEFAULT_ROW_HEIGHT)
+    sheet.set_column(0, 0, LABEL_WIDTH)
+    sheet.set_column(1, last_column, COLUMN_WIDTH)
+
+    sheet.set_row(0, 30)
+    sheet.write(0, 0, "Топлайн", formats.title())
+    caption = _caption(project, data)
+    if last_column > 1:
+        sheet.merge_range(0, 1, 0, last_column, caption, formats.meta())
+    else:
+        sheet.write(0, 1, caption, formats.meta())
+
+    for start, end, label in _banner_blocks(columns):
+        if not label:
+            continue
+        if end > start:
+            sheet.merge_range(1, start, 1, end, label.upper(), formats.block())
+        else:
+            sheet.write(1, start, label.upper(), formats.block())
+    sheet.set_row(1, 14)
+    sheet.set_row(2, QUESTION_HEIGHT)
+    sheet.set_row(3, 12)
+    sheet.set_row(4, 16)
     for index, column in enumerate(columns, start=1):
-        sheet.write(0, index, column.get("block") or "Общий итог", formats["banner"])
-        sheet.write(1, index, column["label"], formats["banner"])
-        sheet.write(2, index, _excel_column_name(index), formats["banner_letter"])
-        sheet.write_number(3, index, column["base"], formats["base"])
-    sheet.write(3, 0, "Невзвешенный N", formats["base_label"])
-    sheet.set_row(4, 7)
+        separated = index in separators
+        sheet.write(2, index, column["label"], formats.column_label(separated=separated))
+        sheet.write(3, index, _excel_column_name(index), formats.column_letter())
+        sheet.write_number(4, index, column["base"], formats.base(separated=separated))
+    sheet.write(4, 0, "База, N", formats.base_label())
+    sheet.freeze_panes(5, 1)
 
     row = 5
     positions: dict[str, int] = {}
@@ -100,32 +136,30 @@ def _write_topline(
                 raise ReportError(f"База вопроса {question['code']} не найдена.")
             base_mask &= evaluate_filter_frame(definition, project, frame)
         positions[question["code"]] = row + 1
-        sheet.merge_range(
-            row,
-            0,
-            row,
-            last_column,
-            f"{question['code']}. {question['label']}",
-            formats["question"],
+        # Формулировка живёт в закреплённой колонке A и переносится внутри неё:
+        # высота строки задана явно, поэтому хвост подписи обрезается, а не
+        # растягивает строку.
+        sheet.set_row(row, QUESTION_HEIGHT)
+        sheet.write(
+            row, 0, f"{question['code']}   {question['label']}", formats.question()
         )
-        sheet.set_row(row, 30)
+        for index in range(1, last_column + 1):
+            sheet.write_blank(row, index, None, formats.question_rule())
         row += 1
-        row = _write_question_rows(
-            _RowContext(
-                sheet=sheet,
-                columns=columns,
-                formats=formats,
-                settings=statistical_settings,
-                audit_entries=audit_entries,
-                audit_context=(sheet_name, question["code"], question["label"]),
-                base_mask=base_mask,
-                valid_denominator=valid_denominator,
-            ),
-            row,
-            frame,
-            question,
-            variables,
+        context = _RowContext(
+            sheet=sheet,
+            columns=columns,
+            formats=formats,
+            settings=statistical_settings,
+            audit_entries=audit_entries,
+            audit_context=(sheet_name, question["code"], question["label"]),
+            base_mask=base_mask,
+            valid_denominator=valid_denominator,
+            separators=separators,
+            bars=[],
         )
+        row = _write_question_rows(context, row, frame, question, variables)
+        _write_bars(sheet, context.bars)
         if audit_writer is not None:
             audit_writer.write_entries(audit_entries[audit_start:])
             del audit_entries[audit_start:]
@@ -133,6 +167,68 @@ def _write_topline(
             advance(f"{sheet_name}: {question['code']}")
         row += 1
     return positions
+
+def _banner_blocks(
+    columns: list[dict[str, Any]],
+) -> list[tuple[int, int, str | None]]:
+    """Границы блоков баннера как (первая колонка, последняя, подпись).
+
+    Колонка тотала идёт без ``block_index`` и всегда образует свою группу.
+    """
+    groups: list[list[Any]] = []
+    for index, column in enumerate(columns, start=1):
+        key = column.get("block_index")
+        if groups and key is not None and groups[-1][2] == key:
+            groups[-1][1] = index
+            continue
+        groups.append([index, index, key, column.get("block")])
+    return [(start, end, label) for start, end, _key, label in groups]
+
+def _block_separators(columns: list[dict[str, Any]]) -> frozenset[int]:
+    return frozenset(
+        start for start, _end, _label in _banner_blocks(columns) if start > 1
+    )
+
+def _caption(project: dict[str, Any], data: ReportData) -> str:
+    settings = data.statistical_settings
+    base = f"{data.columns[0]['base']:,}".replace(",", " ")
+    weight = settings.get("weight_label") or "без веса"
+    alpha = f"{1 - float(settings['confidence_level']):.2f}".replace(".", ",")
+    return f"{project['name']}   ·   n = {base}   ·   {weight}   ·   α = {alpha}"
+
+def _write_bars(sheet: Any, rows: list[int]) -> None:
+    """Гистограмма в колонке тотала — только по строкам распределения.
+
+    Строки идут группами: у матричного вопроса распределение повторяется для
+    каждого подвопроса и разделяется производными строками, поэтому правило
+    ставится на каждый непрерывный отрезок отдельно.
+    """
+    for start, end in _runs(rows):
+        sheet.conditional_format(
+            start,
+            1,
+            end,
+            1,
+            {
+                "type": "data_bar",
+                "bar_color": BAR,
+                "bar_border_color": BAR,
+                "bar_solid": True,
+                "min_type": "num",
+                "min_value": 0,
+                "max_type": "num",
+                "max_value": 100,
+            },
+        )
+
+def _runs(rows: list[int]) -> list[tuple[int, int]]:
+    runs: list[tuple[int, int]] = []
+    for row in sorted(rows):
+        if runs and row == runs[-1][1] + 1:
+            runs[-1] = (runs[-1][0], row)
+        else:
+            runs.append((row, row))
+    return runs
 
 def _write_question_rows(
     context: _RowContext,
@@ -159,10 +255,7 @@ def _write_question_rows(
     if question_type == "matrix":
         for name in sources:
             working = _scale_series(frame[name], special_values)
-            context.sheet.write(
-                row, 0, variables[name]["label"], context.formats["subquestion"]
-            )
-            row += 1
+            row = _write_subquestion(context, row, variables[name]["label"])
             row = _write_distribution(context, row, frame[name], variables[name])
             row = _write_numeric_metric(context, row, "Среднее", working)
             row = _write_scale_aggregates(
@@ -196,6 +289,15 @@ def _write_question_rows(
         )
     return row
 
+def _write_subquestion(context: _RowContext, row: int, label: str) -> int:
+    """Подпись подвопроса матрицы — полосой во всю ширину баннера."""
+    subquestion = context.formats.subquestion()
+    context.sheet.set_row(row, ROW_HEIGHT)
+    context.sheet.write(row, 0, label, subquestion)
+    for index in range(1, len(context.columns) + 1):
+        context.sheet.write_blank(row, index, None, subquestion)
+    return row + 1
+
 def _write_scale_aggregates(
     context: _RowContext,
     row: int,
@@ -215,6 +317,7 @@ def _write_scale_aggregates(
             context.denominator(working.notna()),
             selected,
             "percent",
+            derived=True,
         )
     return row
 
@@ -276,6 +379,7 @@ def _write_special_scale_rows(
             valid_mask,
             numeric.between(4, 5),
             "percent",
+            derived=True,
         )
     return row
 
@@ -310,6 +414,8 @@ def _write_metric_row(
     valid_mask: pd.Series | None,
     outcome: pd.Series,
     format_family: str,
+    *,
+    derived: bool = False,
 ) -> int:
     sheet = context.sheet
     columns = context.columns
@@ -317,7 +423,10 @@ def _write_metric_row(
     statistical_settings = context.settings
     audit_entries = context.audit_entries
     audit_context = context.audit_context
-    sheet.write(row, 0, label, formats[format_family])
+    sheet.set_row(row, ROW_HEIGHT)
+    sheet.write(row, 0, label, formats.derived_label() if derived else formats.row_label())
+    if format_family == "percent" and not derived:
+        context.bars.append(row)
     eligible_mask = (
         context.base_mask if valid_mask is None else context.base_mask & valid_mask
     )
@@ -362,17 +471,22 @@ def _write_metric_row(
         _record_wave_comparison(
             audit_entries, audit_context, label, column, columns, wave_target, wave_result
         )
-        cell_format = _result_format(
-            formats,
-            format_family,
-            base,
-            result,
-            statistical_settings,
-            wave_result,
-        )
+        separated = context.separated(index)
         if value is None:
-            sheet.write_blank(row, index, None, cell_format)
+            sheet.write_string(
+                row, index, "–", formats.absent(separated=separated, derived=derived)
+            )
         else:
+            cell_format = _result_format(
+                formats,
+                format_family,
+                base,
+                result,
+                statistical_settings,
+                wave_result,
+                separated=separated,
+                derived=derived,
+            )
             sheet.write_number(row, index, value * 100, cell_format)
         note = _pairwise_proportion_note(
             outcome,
@@ -387,7 +501,7 @@ def _write_metric_row(
             vectorized,
         )
         if note:
-            sheet.write_comment(row, index, note, {"author": "sav-analytics"})
+            sheet.write_comment(row, index, note, COMMENT_BOX)
     return row + 1
 
 def _write_numeric_metric(
@@ -404,7 +518,8 @@ def _write_numeric_metric(
     audit_entries = context.audit_entries
     audit_context = context.audit_context
     base_mask = context.base_mask
-    sheet.write(row, 0, label, formats["mean"])
+    sheet.set_row(row, ROW_HEIGHT)
+    sheet.write(row, 0, label, formats.derived_label())
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     weights = statistical_settings["weights"]
     mean_context = (
@@ -472,12 +587,22 @@ def _write_numeric_metric(
                 wave_target,
                 wave_result,
             )
-        cell_format = _result_format(
-            formats, "mean", len(numeric), result, statistical_settings, wave_result
-        )
+        separated = context.separated(index)
         if value is None or not math.isfinite(value):
-            sheet.write_blank(row, index, None, cell_format)
+            sheet.write_string(
+                row, index, "–", formats.absent(separated=separated, derived=True)
+            )
         else:
+            cell_format = _result_format(
+                formats,
+                "mean",
+                len(numeric),
+                result,
+                statistical_settings,
+                wave_result,
+                separated=separated,
+                derived=True,
+            )
             sheet.write_number(row, index, value, cell_format)
         if metric == "mean":
             note = _pairwise_mean_note(
@@ -510,7 +635,8 @@ def _write_balance_metric_row(
     settings = context.settings
     audit_entries = context.audit_entries
     audit_context = context.audit_context
-    sheet.write(row, 0, label, formats["percent"])
+    sheet.set_row(row, ROW_HEIGHT)
+    sheet.write(row, 0, label, formats.derived_label())
     total_mask = columns[0]["mask"] & eligible_mask
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     for index, column in enumerate(columns, start=1):
@@ -572,21 +698,35 @@ def _write_balance_metric_row(
             method,
             pairwise_cache,
         )
-        cell_format = _result_format(
-            formats,
-            "percent",
-            int(current_mask.sum()),
-            total_result,
-            settings,
-            wave_result,
-        )
+        separated = context.separated(index)
         if value is None:
-            sheet.write_blank(row, index, None, cell_format)
+            sheet.write_string(
+                row, index, "–", formats.absent(separated=separated, derived=True)
+            )
         else:
+            cell_format = _result_format(
+                formats,
+                "percent",
+                int(current_mask.sum()),
+                total_result,
+                settings,
+                wave_result,
+                separated=separated,
+                derived=True,
+            )
             sheet.write_number(row, index, value * 100, cell_format)
         if pairwise_note:
             sheet.write_comment(row, index, pairwise_note, {"author": "sav-analytics"})
     return row + 1
+
+LEGEND = (
+    "Цвет числа — отличие от тотала: зелёное выше, красное ниже.",
+    "▴ ▾ слева от числа — отличие от предыдущей волны.",
+    "Попарные сравнения внутри блока баннера — в примечании к ячейке.",
+    "Серое число — база меньше минимальной, тест не проводился.",
+    "Бледное тире — значения нет.",
+)
+
 
 def _write_contents(
     sheet: Any,
@@ -594,44 +734,55 @@ def _write_contents(
     questions: list[dict[str, Any]],
     main_rows: dict[str, int],
     filter_rows: dict[str, int],
-    formats: dict[str, Any],
+    formats: ReportFormats,
 ) -> None:
     sheet.hide_gridlines(2)
-    sheet.set_column(0, 0, 14)
-    sheet.set_column(1, 1, 60)
+    sheet.set_default_row(DEFAULT_ROW_HEIGHT)
+    sheet.set_column(0, 0, 10)
+    sheet.set_column(1, 1, 62)
     sheet.set_column(2, 2, 20)
-    sheet.merge_range("A1:C1", f"Содержание — {project['name']}", formats["title"])
-    sheet.write_row("A3", ["Код", "Название", "Лист"], formats["contents_header"])
-    row = 3
+    sheet.set_row(0, 30)
+    sheet.write(0, 0, "Содержание", formats.title())
+    sheet.write(1, 0, project["name"], formats.meta())
+    sheet.write_row(3, 0, ["Код", "Название", "Лист"], formats.contents_header())
+    row = 4
     for question in questions:
         code = question["code"]
+        sheet.set_row(row, ROW_HEIGHT)
         sheet.write_url(
             row,
             0,
             f"internal:'topline_main'!A{main_rows[code]}",
-            formats["link"],
+            formats.link(),
             code,
         )
-        sheet.write(row, 1, question["label"])
-        sheet.write(row, 2, "topline_main")
+        sheet.write(row, 1, question["label"], formats.contents_label())
+        sheet.write(row, 2, "topline_main", formats.contents_sheet())
         row += 1
     if filter_rows:
         row += 1
-        sheet.write_row(row, 0, ["Код", "Фильтровые вопросы", "Лист"], formats["contents_header"])
+        sheet.write_row(
+            row, 0, ["Код", "Фильтровые вопросы", "Лист"], formats.contents_header()
+        )
         row += 1
         by_code = {item["code"]: item for item in questions}
         for code, target_row in filter_rows.items():
+            sheet.set_row(row, ROW_HEIGHT)
             sheet.write_url(
                 row,
                 0,
                 f"internal:'topline_filter'!A{target_row}",
-                formats["link"],
+                formats.link(),
                 code,
             )
-            sheet.write(row, 1, by_code[code]["label"])
-            sheet.write(row, 2, "topline_filter")
+            sheet.write(row, 1, by_code[code]["label"], formats.contents_label())
+            sheet.write(row, 2, "topline_filter", formats.contents_sheet())
             row += 1
-    sheet.freeze_panes(3, 0)
+    row += 2
+    for line in LEGEND:
+        sheet.write(row, 1, line, formats.legend())
+        row += 1
+    sheet.freeze_panes(4, 0)
 
 def _excel_column_name(index: int) -> str:
     result = ""
