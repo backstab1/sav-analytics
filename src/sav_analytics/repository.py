@@ -145,6 +145,10 @@ class ProjectRepository:
             if not values or not values <= expected:
                 bounds = "0–10" if special_metric == "nps" else "1–5"
                 raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
+        # Сохранение вопроса и есть проверка: пользователь открыл карточку,
+        # увидел состав автоматически собранной группы и подтвердил настройки.
+        if question.get("recognition") == "auto_review":
+            question["recognition"] = "manual"
         question.update(changes)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
@@ -257,6 +261,14 @@ class ProjectRepository:
                         and (key not in old_inspected or old[key] != old_inspected[key])
                     }
                 )
+                # Подтверждение проверки переживает перераспознавание, пока состав
+                # группы не изменился: иначе проверять нужно заново.
+                if (
+                    old.get("recognition") == "manual"
+                    and detected.get("recognition") == "auto_review"
+                    and old.get("source_variables") == detected.get("source_variables")
+                ):
+                    configured["recognition"] = "manual"
             else:
                 children = [
                     previous_by_code[name]
