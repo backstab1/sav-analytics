@@ -19,6 +19,7 @@ let currentWeightId = null;
 let currentView = "questions";
 let structureMode = "questions";
 let structureSearch = "";
+let structureStatusFilter = null;
 let bannerFormDirty = false;
 const recodePreviewCache = new Map();
 const recodePreviewRequests = new Map();
@@ -216,10 +217,41 @@ document.querySelector("#structure-search-clear").addEventListener("click", () =
 
 function resetStructureSearch({ render = true } = {}) {
   structureSearch = "";
+  structureStatusFilter = null;
   structureSearchInput.value = "";
   document.querySelector("#structure-search-clear").hidden = true;
   document.querySelector("#structure-search-count").hidden = true;
   if (render && currentProject) renderTable();
+}
+
+// Карточки сводки работают как фильтр таблицы: повторный клик снимает его.
+document.querySelector("#summary").addEventListener("click", event => {
+  const card = event.target.closest("button[data-status-filter]");
+  if (!card || !currentProject) return;
+  const key = card.dataset.statusFilter;
+  structureStatusFilter = structureStatusFilter === key ? null : key;
+  if (structureStatusFilter) {
+    currentView = "questions";
+    structureMode = "questions";
+    document.querySelectorAll(".tabs button[data-view]").forEach(button => {
+      button.classList.toggle("active", button.dataset.view === "questions");
+    });
+    document.querySelectorAll("[data-structure-mode]").forEach(button => {
+      button.classList.toggle("active", button.dataset.structureMode === "questions");
+    });
+    document.querySelector("#structure-toolbar").hidden = false;
+    ["#recode-toolbar", "#banner-toolbar", "#filter-toolbar", "#weight-toolbar"]
+      .forEach(selector => { document.querySelector(selector).hidden = true; });
+  }
+  renderSummary(currentProject.inspection, configuredQuestions());
+  renderTable();
+});
+
+function matchesStatusFilter(question) {
+  if (!structureStatusFilter) return true;
+  const status = questionStatus(question);
+  if (structureStatusFilter === "included") return status !== "excluded";
+  return status === structureStatusFilter;
 }
 
 function matchesStructureSearch(...parts) {
@@ -229,10 +261,14 @@ function matchesStructureSearch(...parts) {
     .every(token => haystack.includes(token));
 }
 
+function structureFiltered() {
+  return Boolean(structureSearch || structureStatusFilter);
+}
+
 function updateStructureSearchCount(shown, total) {
   const counter = document.querySelector("#structure-search-count");
-  counter.hidden = !structureSearch;
-  counter.textContent = structureSearch ? `${shown} из ${total}` : "";
+  counter.hidden = !structureFiltered();
+  counter.textContent = structureFiltered() ? `${shown} из ${total}` : "";
 }
 
 // Заголовки и ячейки обрезаются многоточием, поэтому дублируем текст в подсказку.
@@ -475,7 +511,7 @@ let draggedQuestionCode = null;
 
 document.querySelector("#table-body").addEventListener("dragstart", event => {
   const handle = event.target.closest("[data-drag-code]");
-  if (!handle || currentView !== "questions" || structureMode !== "questions" || structureSearch) return;
+  if (!handle || currentView !== "questions" || structureMode !== "questions" || structureFiltered()) return;
   draggedQuestionCode = handle.dataset.dragCode;
   handle.closest("tr[data-code]")?.classList.add("is-dragging");
   event.dataTransfer.effectAllowed = "move";
@@ -813,13 +849,61 @@ function renderProject() {
   document.querySelector("#download-source").href = `/api/projects/${currentProject.id}/source`;
   document.querySelector("#download-report").href = `/api/projects/${currentProject.id}/reports/topline.xlsx`;
   document.querySelector("#download-statistics").href = `/api/projects/${currentProject.id}/reports/statistics.txt`;
-  document.querySelector("#summary").innerHTML = [
-    [inspection.row_count.toLocaleString("ru-RU"), "респондентов"],
-    [questions.length.toLocaleString("ru-RU"), "вопросов"],
-    [questions.filter(item => item.question_type.startsWith("multiple_choice")).length.toLocaleString("ru-RU"), "multiple"],
-    [questions.filter(item => item.question_type === "matrix").length.toLocaleString("ru-RU"), "матриц"],
-  ].map(([value, label]) => `<article><strong>${value}</strong><span>${label}</span></article>`).join("");
+  renderSummary(inspection, questions);
   renderTable();
+}
+
+function questionStatus(question) {
+  if (!question.included_in_report) return "excluded";
+  return question.recognition === "auto_review" ? "review" : "ready";
+}
+
+function renderSummary(inspection, questions) {
+  const included = questions.filter(item => questionStatus(item) !== "excluded");
+  const review = questions.filter(item => questionStatus(item) === "review");
+  const excluded = questions.filter(item => questionStatus(item) === "excluded");
+  const cards = [
+    { value: inspection.row_count, label: "респондентов", key: null },
+    { value: included.length, label: "в отчёте", key: "included" },
+    { value: review.length, label: "проверить", key: "review", tone: "warn" },
+    { value: excluded.length, label: "исключено", key: "excluded" },
+  ].map(card => {
+    const number = card.value.toLocaleString("ru-RU");
+    if (!card.key) return `<article><strong>${number}</strong><span>${card.label}</span></article>`;
+    const active = structureStatusFilter === card.key;
+    return `<button type="button" class="summary-filter ${card.tone || ""} ${active ? "active" : ""}"
+      data-status-filter="${card.key}" aria-pressed="${active}"
+      title="${active ? "Показать все вопросы" : `Показать только: ${card.label}`}"
+      ><strong>${number}</strong><span>${card.label}</span></button>`;
+  }).join("");
+  document.querySelector("#summary").innerHTML =
+    `<div class="summary-cards">${cards}</div><div class="summary-state">${reportStateLine()}</div>`;
+}
+
+// Строка под карточками: что именно уйдёт в Excel при текущих настройках.
+function reportStateLine() {
+  const banner = configuredBanners().find(item => item.id === selectedReportBannerId());
+  const filter = configuredFilters().find(item => item.id === selectedReportFilterId());
+  const parts = [
+    banner
+      ? ["Баннер", banner.name, true]
+      : ["Баннер", "только Total", false],
+    ["Вес", bannerWeightLabel(banner), Boolean(banner && (banner.weight_variable || banner.calculated_weight_id))],
+    filter ? ["Общий фильтр", filter.name, true] : ["Общий фильтр", "нет", false],
+  ];
+  return parts.map(([label, value, set]) =>
+    `<span><em>${label}</em> <b class="${set ? "set" : ""}" title="${escapeAttribute(value)}">${escapeHtml(value)}</b></span>`
+  ).join("");
+}
+
+function bannerWeightLabel(banner) {
+  if (!banner) return "нет";
+  if (banner.calculated_weight_id) {
+    const weight = configuredWeights().find(item => item.id === banner.calculated_weight_id);
+    return weight ? weight.name : "рассчитанный";
+  }
+  if (banner.weight_variable) return banner.weight_variable;
+  return "нет";
 }
 
 function renderTable() {
@@ -854,7 +938,8 @@ function renderTable() {
   }
   const allQuestions = configuredQuestions();
   const questions = allQuestions.filter(question =>
-    matchesStructureSearch(question.code, question.label, originalQuestionLabel(question))
+    matchesStatusFilter(question)
+    && matchesStructureSearch(question.code, question.label, originalQuestionLabel(question))
   );
   updateStructureSearchCount(questions.length, allQuestions.length);
   document.querySelector("#table-head").innerHTML = "<th class=\"drag-cell\" aria-label=\"Порядок\"></th><th class=\"question-cell\">Вопрос</th><th class=\"type-column\">Тип</th><th class=\"count-column\">Перем.</th><th class=\"status-column\">Статус</th>";
@@ -867,9 +952,9 @@ function renderTable() {
     const warnings = (question.warnings || []).join(" · ");
     const title = `${question.code} — ${question.label}`;
     // Пока список отфильтрован, порядок менять нельзя: соседи в выдаче не соседи в отчёте.
-    const draggable = structureSearch ? "false" : "true";
+    const draggable = structureFiltered() ? "false" : "true";
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
-      <td class="drag-cell"><button type="button" class="drag-handle" draggable="${draggable}" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="${structureSearch ? "Очистите поиск, чтобы менять порядок" : "Перетащите, чтобы изменить порядок"}"><span aria-hidden="true">⋮⋮</span></button></td>
+      <td class="drag-cell"><button type="button" class="drag-handle" draggable="${draggable}" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="${structureFiltered() ? "Сбросьте фильтр, чтобы менять порядок" : "Перетащите, чтобы изменить порядок"}"><span aria-hidden="true">⋮⋮</span></button></td>
       <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</span>${sourceLabel ? `<span class="q-sub" title="${escapeAttribute(sourceLabel)}">${escapeHtml(sourceLabel)}</span>` : ""}${warnings ? `<span class="q-sub warning" title="${escapeAttribute(warnings)}">${escapeHtml(warnings)}</span>` : ""}</td>
       <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
       <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
@@ -879,7 +964,10 @@ function renderTable() {
 }
 
 function emptySearchRow(columns, message) {
-  return `<tr class="empty-row"><td colspan="${columns}"><div class="empty-state">${escapeHtml(message)} По запросу «${escapeHtml(structureSearch)}» ничего не совпало.</div></td></tr>`;
+  const reason = structureSearch
+    ? `По запросу «${escapeHtml(structureSearch)}» ничего не совпало.`
+    : "Под выбранный фильтр ничего не подходит.";
+  return `<tr class="empty-row"><td colspan="${columns}"><div class="empty-state">${escapeHtml(message)} ${reason}</div></td></tr>`;
 }
 
 function renderRecodeCards(recodings) {
