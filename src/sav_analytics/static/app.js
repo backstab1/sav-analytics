@@ -111,7 +111,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   document.querySelector("#start").hidden = false;
   document.querySelector("#topbar-project").hidden = true;
   document.querySelector("#topbar-actions").hidden = true;
-  document.querySelector("#topbar-start-stage").hidden = false;
+  window.Shell.setProjectOpen(false);
   window.scrollTo(0, 0);
   form.reset();
   fileTitle.textContent = "Перетащите SAV сюда";
@@ -837,7 +837,7 @@ function showProject(project) {
   document.querySelector("#workspace").hidden = false;
   document.querySelector("#topbar-project").hidden = false;
   document.querySelector("#topbar-actions").hidden = false;
-  document.querySelector("#topbar-start-stage").hidden = true;
+  window.Shell.setProjectOpen(true);
   window.scrollTo(0, 0);
 }
 
@@ -851,6 +851,25 @@ function renderProject() {
   document.querySelector("#download-statistics").href = `/api/projects/${currentProject.id}/reports/statistics.txt`;
   renderSummary(inspection, questions);
   renderTable();
+  publishVariablesToShell(inspection, questions);
+}
+
+// Конструктор берёт список переменных отсюда: своей загрузки у него нет,
+// иначе один и тот же проект читался бы дважды.
+function publishVariablesToShell(inspection, questions) {
+  window.Shell.setProjectVariables(
+    questions
+      .filter(question => question.included_in_report)
+      .map(question => ({
+        code: question.code,
+        label: question.label,
+        type: question.type,
+        categories: (inspection.variables
+          .find(item => item.name === question.source_variables?.[0])?.value_labels || [])
+          .map(item => item.label),
+      })),
+    inspection.row_count,
+  );
 }
 
 function questionStatus(question) {

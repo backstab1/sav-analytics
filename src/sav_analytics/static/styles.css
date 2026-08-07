@@ -87,7 +87,7 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
        border-radius: 6px; font: 500 var(--t-sm)/1.4 "SF Mono", Menlo, Consolas, monospace; }
 
 /* ---------- Topbar — frosted ---------- */
-.topbar {
+.appbar {
   height: 54px; padding: 0 var(--page-gutter);
   background: rgba(255,255,255,.82);
   backdrop-filter: saturate(1.8) blur(20px);
@@ -104,9 +104,8 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
 }
 .brand svg { width: 25px; height: 25px; flex-shrink: 0; }
 .brand span { color: var(--c-brand); }
-.stage { margin-left: auto; color: var(--c-ink-3); font-size: var(--t-sm); }
 .topbar-project { flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
-.topbar-sep { width: 1px; height: 20px; background: var(--c-border-strong); flex-shrink: 0; }
+.appbar-sep { width: 1px; height: 20px; background: var(--c-border-strong); flex-shrink: 0; }
 .project-chip { overflow: hidden; color: var(--c-ink-2); font-size: var(--t-sm); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .project-chip strong { color: var(--c-ink); font-weight: 600; }
 .topbar-actions { margin-left: auto; flex-shrink: 0; flex-wrap: nowrap; }
@@ -118,7 +117,10 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
 .topbar-actions > .topbar-icon:hover { background: #ececef; color: var(--c-brand); }
 .topbar-icon svg { width: 17px; height: 17px; }
 
-main { max-width: 1560px; margin: 0 auto; padding: var(--s-6) var(--page-gutter) 80px; }
+/* Отступы переехали с main на .screen-pad: конструктору нужна вся ширина,
+   а лендингу и ручному режиму — прежняя колонка. */
+.screen-pad { max-width: 1560px; margin: 0 auto; padding: var(--s-6) var(--page-gutter) 80px; }
+.screen[hidden] { display: none !important; }
 
 /* ---------- Common ---------- */
 .eyebrow { margin: 0; color: var(--c-brand); font-size: var(--t-xs); font-weight: 600;
@@ -1167,10 +1169,9 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   }
 }
 @media (max-width: 900px) {
-  main { padding-top: var(--s-5); }
+  .screen-pad { padding-top: var(--s-5); }
   .workspace-head { flex-direction: column; align-items: flex-start; }
   .summary-cards > * { flex: 1 1 44%; }
-  .stage { display: none; }
   .topbar-project { display: none; }
   .topbar-actions { margin-left: auto; gap: 6px; }
   .upload-card { padding: var(--s-4); }
@@ -1199,8 +1200,8 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   .recode-toolbar { align-items: flex-start; flex-wrap: wrap; }
 }
 @media (max-width: 620px) {
-  main { padding-right: var(--s-4); padding-left: var(--s-4); }
-  .topbar { padding-right: var(--s-4); padding-left: var(--s-4); }
+  .screen-pad { padding-right: var(--s-4); padding-left: var(--s-4); }
+  .appbar { padding-right: var(--s-4); padding-left: var(--s-4); }
   .topbar-actions > .topbar-icon { display: none; }
   .summary-cards { display: grid; grid-template-columns: 1fr 1fr; }
   .question-editor { --editor-pad: var(--s-4); padding: var(--s-4); }
@@ -1419,3 +1420,258 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .diag-grid dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-ink-3); }
 .diag-grid dd { margin: 0; font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .diag-grid dd.ok { color: var(--c-brand); }
+
+/* ================================================================
+   Оболочка экранов
+
+   Три уровня навигации, у каждого своя форма, иначе они сливаются:
+     .nav-screens — глобальные экраны, залитая капсула;
+     .contextbar  — не вкладки вовсе, а кнопки текущего проекта;
+     .tabs        — виды внутри панели, единственные с подчёркиванием.
+
+   Классы конструктора с приставкой bld-: в этом файле плоские имена уже
+   один раз совпали и молча сломали вёрстку таблицы.
+   ================================================================ */
+
+/* ---------- Ярус 1: навигация и аккаунт ---------- */
+.nav-screens { margin-left: auto; display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.nav-screens button {
+  padding: 7px 14px; border-radius: var(--r-pill);
+  background: transparent; color: var(--c-ink-3);
+  font-size: var(--t-sm); font-weight: 600;
+}
+.nav-screens button:hover { background: var(--c-surface-soft); color: var(--c-ink-2); transform: none; }
+.nav-screens button[aria-current="page"] { background: var(--c-brand-tint); color: var(--c-brand); }
+.nav-wip {
+  margin-left: 6px; padding: 1px 5px; border-radius: var(--r-pill);
+  background: var(--c-warn-tint); color: var(--c-warn-ink);
+  font-size: 9px; font-weight: 700; letter-spacing: .04em;
+}
+
+.account { display: flex; align-items: center; gap: var(--s-2); flex-shrink: 0; }
+.account-avatar {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-content: center;
+  background: var(--c-brand); color: #fff;
+  font: 700 10px/1 var(--font-display);
+}
+.account-name { display: grid; gap: 1px; cursor: default; }
+.account-name strong { font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.01em; }
+.account-name small { color: var(--c-ink-3); font-size: 10px; }
+
+/* ---------- Ярус 2: панель проекта ---------- */
+.contextbar {
+  height: 48px; padding: 0 var(--page-gutter);
+  background: var(--c-surface); border-bottom: 1px solid var(--c-border);
+  display: flex; align-items: center; gap: var(--s-4);
+  position: sticky; top: 54px; z-index: 89;
+}
+.contextbar .topbar-project { flex: 0 1 auto; }
+.contextbar .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+/* ---------- Экран «Главная» ---------- */
+.lp-hero { display: grid; justify-items: center; gap: var(--s-4); padding: var(--s-7) 0 var(--s-6); text-align: center; }
+.lp-badge {
+  display: inline-flex; align-items: center; padding: 5px 13px; border-radius: var(--r-pill);
+  background: var(--c-warn-tint); color: var(--c-warn-ink); font-size: var(--t-xs); font-weight: 600;
+}
+.lp-hero h1 { max-width: 15ch; }
+.lp-lead { max-width: 62ch; margin: 0; color: var(--c-ink-2); font-size: var(--t-md); line-height: 1.6; }
+.lp-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); margin-top: var(--s-2); }
+.lp-cta button { padding: 12px 26px; font-size: var(--t-base); }
+.lp-cta-note { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); }
+.lp-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s-3); }
+.lp-card {
+  padding: var(--s-5); background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-3); box-shadow: var(--shadow-card); display: grid; gap: var(--s-2); align-content: start;
+}
+.lp-card p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1.55; }
+
+/* ---------- Экран «AI-конструктор» ---------- */
+.bld {
+  height: calc(100vh - 54px - 48px);
+  min-height: 560px;
+  display: grid; grid-template-columns: 268px minmax(0, 1fr) 340px;
+  background: var(--c-bg);
+}
+.bld-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.bld-col + .bld-col { border-left: 1px solid var(--c-border); }
+.bld-dim { color: var(--c-ink-3); font-size: var(--t-xs); }
+.bld-pane-head {
+  padding: 13px var(--s-4); border-bottom: 1px solid var(--c-border); background: var(--c-surface);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); flex-shrink: 0;
+}
+.bld-pane-head h3 { font-size: var(--t-base); }
+.bld-warning {
+  margin: 0; padding: 8px var(--s-4); flex-shrink: 0;
+  background: var(--c-warn-tint); color: var(--c-warn-ink);
+  font-size: var(--t-xs); line-height: 1.5; border-bottom: 1px solid var(--c-border);
+}
+
+.bld-palette { background: var(--c-surface); }
+.bld-search { padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--c-border); }
+.bld-search input {
+  width: 100%; padding: 8px 12px; border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-1); background: var(--c-surface-soft); font-size: var(--t-sm);
+}
+.bld-search input:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
+.bld-list { flex: 1; overflow-y: auto; padding: var(--s-2) var(--s-2) var(--s-5); }
+.bld-list-empty { padding: var(--s-4) var(--s-2); line-height: 1.5; }
+.bld-var {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: 7px var(--s-2); border-radius: var(--r-1); cursor: grab; user-select: none;
+}
+.bld-var:hover { background: var(--c-surface-soft); }
+.bld-var.dragging { opacity: .4; }
+/* Нет value labels — раскладывать нечего, поэтому не перетаскивается. */
+.bld-var-flat { cursor: default; color: var(--c-ink-4); }
+.bld-var-flat:hover { background: transparent; }
+.bld-var-flat .bld-var-code { background: var(--c-surface-soft); color: var(--c-ink-4); }
+.bld-var-flat .bld-var-name { color: var(--c-ink-4); }
+.bld-var-code {
+  flex-shrink: 0; min-width: 34px; padding: 2px 5px; border-radius: 5px;
+  background: var(--c-brand-tint); color: var(--c-brand);
+  font: 600 11px/1.5 "SF Mono", Menlo, Consolas, monospace; text-align: center;
+}
+.bld-var-name { flex: 1; min-width: 0; font-size: var(--t-sm); color: var(--c-ink-2);
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bld-var-kind { flex-shrink: 0; color: var(--c-ink-4); font-size: 11px; font-weight: 600; }
+.bld-quick { display: none; gap: 3px; flex-shrink: 0; }
+.bld-var:hover .bld-quick { display: flex; }
+.bld-var:hover .bld-var-kind { display: none; }
+.bld-quick button {
+  padding: 2px 7px; border-radius: 5px; background: var(--c-surface-soft);
+  color: var(--c-ink-2); font-size: 10px; font-weight: 700;
+}
+.bld-quick button:hover { background: var(--c-brand); color: #fff; }
+
+.bld-stage { background: var(--c-bg); }
+.bld-shelves { padding: var(--s-3) var(--s-4); background: var(--c-surface);
+               border-bottom: 1px solid var(--c-border); display: grid; gap: var(--s-2); flex-shrink: 0; }
+.bld-shelf { display: flex; align-items: flex-start; gap: var(--s-3); }
+.bld-shelf-label { flex-shrink: 0; width: 74px; padding-top: 7px; color: var(--c-ink-3);
+                   font-size: var(--t-xs); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.bld-zone {
+  flex: 1; min-height: 38px; padding: 4px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  border: 1px dashed var(--c-border-strong); border-radius: var(--r-1);
+  transition: border-color 140ms var(--ease), background 140ms var(--ease);
+}
+.bld-zone.over { border-color: var(--c-brand); border-style: solid; background: var(--c-brand-tint); }
+.bld-placeholder { padding: 0 var(--s-2); color: var(--c-ink-4); font-size: var(--t-sm); }
+.bld-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 6px 5px 9px; border-radius: var(--r-pill);
+  background: var(--c-surface-soft); border: 1px solid var(--c-border);
+  font-size: var(--t-sm); cursor: grab;
+}
+.bld-pill strong { font: 600 11px/1.4 "SF Mono", Menlo, Consolas, monospace; color: var(--c-brand); }
+.bld-pill button { width: 17px; height: 17px; padding: 0; border-radius: 50%;
+                   background: transparent; color: var(--c-ink-3); font-size: 14px; }
+.bld-pill button:hover { background: var(--c-danger); color: #fff; }
+
+.bld-toolbar {
+  display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap;
+  padding: 10px var(--s-4); background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border); flex-shrink: 0;
+}
+.bld-toolbar label { display: flex; align-items: center; gap: 6px; color: var(--c-ink-3);
+                     font-size: var(--t-xs); font-weight: 600; }
+.bld-toolbar select {
+  padding: 5px 8px; border: 1px solid var(--c-border-strong); border-radius: 6px;
+  background: var(--c-surface); font-size: var(--t-xs); font-weight: 500;
+}
+.bld-note { margin-left: auto; color: var(--c-ink-3); font-size: var(--t-xs); }
+
+.bld-grid-wrap { flex: 1; overflow: auto; background: var(--c-surface); }
+.bld-grid { border-collapse: separate; border-spacing: 0; font-size: var(--t-sm); }
+.bld-grid th, .bld-grid td {
+  border-right: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border);
+  padding: 6px 10px; text-align: right; white-space: nowrap; background: var(--c-surface);
+}
+.bld-grid .bld-ref { background: var(--c-surface-soft); color: var(--c-ink-3);
+                     font: 600 10px/1.4 "SF Mono", Menlo, Consolas, monospace; text-align: center; }
+.bld-grid thead th { position: sticky; top: 0; z-index: 3; }
+.bld-grid .bld-corner, .bld-grid .bld-rowhead {
+  position: sticky; left: 0; z-index: 4; text-align: left;
+  border-right: 1px solid var(--c-border-strong);
+}
+.bld-grid .bld-corner { z-index: 6; background: var(--c-surface-soft); }
+.bld-grid .bld-rownum {
+  position: sticky; left: 0; z-index: 4; width: 34px; min-width: 34px;
+  background: var(--c-surface-soft); color: var(--c-ink-3);
+  font: 600 10px/1.4 "SF Mono", Menlo, Consolas, monospace; text-align: center;
+}
+.bld-grid .bld-rowhead { left: 34px; min-width: 210px; max-width: 300px;
+                         white-space: normal; color: var(--c-ink-2); vertical-align: top; }
+.bld-grid .bld-grouphead {
+  color: var(--c-ink); font-family: var(--font-display); font-weight: 700;
+  font-size: var(--t-xs); text-align: center; background: var(--c-surface-soft);
+}
+/* Подписи категорий бывают в несколько строк текста: без переноса одна
+   такая колонка растягивает таблицу на пол-экрана. */
+.bld-grid .bld-cathead {
+  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600;
+  text-align: center; vertical-align: bottom;
+  min-width: 76px; max-width: 148px;
+  white-space: normal; line-height: 1.35; hyphens: auto;
+}
+.bld-grid .bld-grouphead { max-width: 340px; white-space: normal; line-height: 1.35; }
+.bld-grid .bld-cathead .bld-letter { display: block; color: var(--c-ink-4);
+                                     font: 700 9px/1.6 "SF Mono", Menlo, Consolas, monospace; }
+.bld-grid tr.bld-base td, .bld-grid tr.bld-base .bld-rowhead { color: var(--c-ink-3); font-size: var(--t-xs); }
+.bld-grid tr.bld-qrow td, .bld-grid tr.bld-qrow .bld-rowhead {
+  background: var(--c-surface-soft); font-weight: 600; color: var(--c-ink);
+  font-family: var(--font-display); text-align: left;
+}
+.bld-grid td.bld-val { font-variant-numeric: tabular-nums; color: var(--c-ink); }
+.bld-grid td.bld-val.bld-lowbase { color: var(--c-ink-4); }
+.bld-grid td.bld-val.bld-total { background: #fcfcfd; font-weight: 600; }
+.bld-grid td.bld-val .bld-sig { margin-left: 3px; color: var(--c-brand);
+                                font: 700 9px/1 "SF Mono", Menlo, Consolas, monospace; vertical-align: super; }
+.bld-grid tbody tr:hover td { background: #f7fbf9; }
+.bld-empty { height: 100%; display: grid; place-content: center; justify-items: center;
+             gap: var(--s-3); padding: var(--s-6); text-align: center; }
+.bld-empty p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); max-width: 320px; line-height: 1.55; }
+
+.bld-chat { background: var(--c-surface); }
+.bld-log { flex: 1; overflow-y: auto; padding: var(--s-4); display: grid; gap: var(--s-3); align-content: start; }
+.bld-msg { display: grid; gap: 5px; }
+.bld-who { color: var(--c-ink-4); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.bld-bubble { padding: 10px 13px; border-radius: var(--r-2); font-size: var(--t-sm); line-height: 1.55; }
+.bld-msg.user { justify-items: end; }
+.bld-msg.user .bld-bubble { background: var(--c-brand); color: #fff; border-bottom-right-radius: 5px; }
+.bld-msg.ai .bld-bubble { background: var(--c-surface-soft); color: var(--c-ink-2); border-bottom-left-radius: 5px; }
+.bld-did {
+  margin-top: 3px; padding: 7px 11px; border-left: 2px solid var(--c-brand);
+  background: var(--c-brand-tint); border-radius: 0 6px 6px 0;
+  color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.5;
+}
+.bld-suggest { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 var(--s-4) var(--s-3); flex-shrink: 0; }
+.bld-suggest button {
+  padding: 6px 11px; border: 1px solid var(--c-border); border-radius: var(--r-pill);
+  background: var(--c-surface); color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
+}
+.bld-suggest button:hover { border-color: var(--c-brand); color: var(--c-brand); background: var(--c-surface); }
+.bld-form { display: flex; gap: var(--s-2); align-items: flex-end;
+            padding: var(--s-3) var(--s-4); border-top: 1px solid var(--c-border); flex-shrink: 0; }
+.bld-form textarea {
+  flex: 1; min-height: 40px; max-height: 120px; padding: 10px 12px; resize: none;
+  border: 1px solid var(--c-border-strong); border-radius: var(--r-2);
+  background: var(--c-surface-soft); font-size: var(--t-sm); line-height: 1.45;
+}
+.bld-form textarea:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
+.bld-form button { flex-shrink: 0; width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+.bld-form button svg { width: 17px; height: 17px; }
+.bld-disclaimer { margin: 0; padding: var(--s-2) var(--s-4); background: var(--c-surface-soft);
+                  color: var(--c-ink-3); font-size: 11px; line-height: 1.5; text-align: center; flex-shrink: 0; }
+
+@media (max-width: 1180px) {
+  .bld { grid-template-columns: 232px minmax(0, 1fr); }
+  .bld-chat { display: none; }
+}
+@media (max-width: 900px) {
+  .nav-screens button { padding: 7px 10px; font-size: var(--t-xs); }
+  .nav-wip { display: none; }
+  .account-name { display: none; }
+}

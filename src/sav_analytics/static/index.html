@@ -7,10 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260806-summary-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260807-shell-1" />
   </head>
   <body>
-    <header class="topbar">
+    <!-- Ярус 1 — глобальный: не зависит от того, открыт ли проект. -->
+    <header class="appbar">
       <a class="brand" href="/" aria-label="sav analytics — на главную">
         <svg viewBox="0 0 1024 1024" aria-hidden="true">
           <path fill="#1d7a4f" opacity=".1" d="M300 56C196 56 126 80 86 151 58 201 52 273 52 512s6 311 34 361c40 71 110 95 214 95h424c104 0 174-24 214-95 28-50 34-122 34-361s-6-311-34-361c-40-71-110-95-214-95H300Z" />
@@ -23,11 +24,26 @@
         </svg>
         sav<span>analytics</span>
       </a>
+      <nav id="screen-nav" class="nav-screens" aria-label="Экраны">
+        <button type="button" data-screen="home">Главная<span class="nav-wip">В РАЗРАБОТКЕ</span></button>
+        <button type="button" data-screen="manual" aria-current="page">Ручной режим</button>
+        <button type="button" data-screen="builder">AI-конструктор</button>
+      </nav>
+      <div class="appbar-sep"></div>
+      <div class="account">
+        <span class="account-avatar" aria-hidden="true">ЛП</span>
+        <span class="account-name" title="Авторизации пока нет: приложение работает локально, без учётных записей">
+          <strong>Локальный пользователь</strong><small>без авторизации</small>
+        </span>
+      </div>
+    </header>
+
+    <!-- Ярус 2 — проектный: появляется только там, где есть открытый проект.
+         Идентификаторы внутри прежние, поэтому app.js продолжает ими управлять. -->
+    <div id="contextbar" class="contextbar" hidden>
       <div id="topbar-project" class="topbar-project" hidden>
-        <div class="topbar-sep"></div>
         <div class="project-chip"><strong id="topbar-project-name"></strong></div>
       </div>
-      <div id="topbar-start-stage" class="stage">Локальная версия · без авторизации</div>
       <div id="topbar-actions" class="head-actions topbar-actions" hidden>
         <button id="new-project" class="text-button">Новый проект</button>
         <a id="download-source" class="topbar-icon link-button" href="#" aria-label="Скачать исходный SAV" title="Скачать исходный SAV">
@@ -39,8 +55,30 @@
         <a id="download-statistics" class="secondary link-button" href="#">Статистика</a>
         <a id="download-report" class="report-button link-button" href="#">Скачать Excel</a>
       </div>
-    </header>
+    </div>
+
     <main>
+      <!-- ================= Экран «Главная» — заглушка под лендинг ================= -->
+      <section id="screen-home" class="screen screen-pad" hidden>
+        <div class="lp-hero">
+          <span class="lp-badge">Страница в разработке</span>
+          <h1>Топлайны из SPSS без ручной сборки</h1>
+          <p class="lp-lead">Загрузите массив <code>.sav</code> — приложение прочитает метаданные, предложит типы вопросов, соберёт баннеры и выгрузит готовый Excel со статистическими тестами.</p>
+          <div class="lp-cta">
+            <button type="button" class="lp-demo">Получить демо</button>
+            <button type="button" class="secondary lp-demo">Получить консультацию</button>
+          </div>
+          <p class="lp-cta-note">Здесь же будет вход в приложение, когда появится авторизация.</p>
+        </div>
+        <div class="lp-features">
+          <article class="lp-card"><h3>Структура за минуту</h3><p>Variable и value labels, multiple-response sets, дихотомии и матрицы шкал распознаются автоматически. Ручная правка — там, где она нужна.</p></article>
+          <article class="lp-card"><h3>Статистика как в SPSS</h3><p>Subgroup/Rest, попарные сравнения, Bonferroni, сравнение волн, NPS и CSAT. Полный аудит тестов выгружается отдельным файлом.</p></article>
+          <article class="lp-card"><h3>Веса и raking</h3><p>Готовый вес из массива или расчёт методом IPF по нескольким целевым распределениям с диагностикой сходимости.</p></article>
+        </div>
+      </section>
+
+      <!-- ================= Экран «Ручной режим» ================= -->
+      <section id="screen-manual" class="screen screen-pad">
       <section id="start" class="hero">
         <p class="eyebrow">НОВЫЙ ПРОЕКТ</p>
         <h1>Разберите массив SPSS<br />до понятной структуры</h1>
@@ -212,9 +250,53 @@
           </aside>
         </div>
       </section>
+      </section>
+
+      <!-- ================= Экран «AI-конструктор» ================= -->
+      <section id="screen-builder" class="screen bld" hidden>
+        <div class="bld-col bld-palette">
+          <div class="bld-pane-head">
+            <h3>Переменные</h3>
+            <span id="bld-count" class="bld-dim"></span>
+          </div>
+          <div class="bld-search">
+            <input id="bld-search" type="search" placeholder="Поиск по коду и названию" autocomplete="off" aria-label="Поиск по переменным" />
+          </div>
+          <div id="bld-list" class="bld-list"></div>
+        </div>
+
+        <div class="bld-col bld-stage">
+          <p class="bld-warning" role="status">Числа в таблице демонстрационные. Расчёт на данных проекта ещё не подключён — нужен эндпоинт для произвольного кросса.</p>
+          <div class="bld-shelves">
+            <div class="bld-shelf"><span class="bld-shelf-label">Строки</span><div class="bld-zone" data-zone="rows"></div></div>
+            <div class="bld-shelf"><span class="bld-shelf-label">Колонки</span><div class="bld-zone" data-zone="cols"></div></div>
+            <div class="bld-shelf"><span class="bld-shelf-label">Фильтр</span><div class="bld-zone" data-zone="filter"></div></div>
+          </div>
+          <div class="bld-toolbar">
+            <label>Показатель<select id="bld-measure"><option value="pct">% от базы</option><option value="n">Число ответов</option><option value="index">Индекс к Total</option></select></label>
+            <label>Тесты<select id="bld-sig"><option value="on">Попарные, 95%</option><option value="off">Не считать</option></select></label>
+            <span id="bld-stage-note" class="bld-note"></span>
+          </div>
+          <div id="bld-grid-wrap" class="bld-grid-wrap"></div>
+        </div>
+
+        <div class="bld-col bld-chat">
+          <div class="bld-pane-head"><h3>Расчёты по запросу</h3><span class="bld-dim">на данных проекта</span></div>
+          <div id="bld-log" class="bld-log"></div>
+          <div id="bld-suggest" class="bld-suggest"></div>
+          <form id="bld-form" class="bld-form">
+            <textarea id="bld-input" rows="1" placeholder="Например: разбей по возрасту" aria-label="Запрос к ассистенту"></textarea>
+            <button type="submit" aria-label="Отправить">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </button>
+          </form>
+          <p class="bld-disclaimer">Ассистент не подключён: ответы заранее записаны.</p>
+        </div>
+      </section>
     </main>
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/app.js?v=20260806-summary-1" defer></script>
+    <script src="/shell.js?v=20260807-shell-1" defer></script>
+    <script src="/app.js?v=20260807-shell-1" defer></script>
   </body>
 </html>
