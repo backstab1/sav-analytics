@@ -1,1 +1,6 @@
 *.rar filter=lfs diff=lfs merge=lfs -text
+
+# Скрипты в блоках `run:` ломаются, если в них попадут CRLF
+*.yml text eol=lf
+*.yaml text eol=lf
+

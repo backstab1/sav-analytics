@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  checks:
+    name: Линтер и тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Установить зависимости
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: ruff check
+        run: python -m ruff check .
+
+      - name: pytest с покрытием
+        run: |
+          python -m pytest \
+            --cov=sav_analytics \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-report=html \
+            --junitxml=junit.xml
+
+      - name: Отчёт о покрытии в сводку запуска
+        if: always()
+        run: |
+          echo '## Покрытие' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          python -m coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" \
+            || echo 'Данные о покрытии недоступны: тесты не дошли до конца.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Сохранить отчёты
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-and-tests
+          path: |
+            coverage.xml
+            htmlcov/
+            junit.xml
+          retention-days: 14
+
+  docker:
+    name: Сборка образа
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Собрать образ
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: sav-analytics:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Проверить, что контейнер поднимается
+        run: |
+          docker run --rm --detach --name sav-analytics-ci \
+            --publish 8000:8000 \
+            --env SAV_ANALYTICS_DATA_DIR=/tmp/data \
+            sav-analytics:ci
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/api/health; then
+              echo
+              echo "Контейнер ответил на /api/health с попытки $attempt."
+              docker stop sav-analytics-ci
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Контейнер не ответил на /api/health за 60 секунд." >&2
+          docker logs sav-analytics-ci >&2
+          docker stop sav-analytics-ci
+          exit 1
