@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sav-analytics — прототип вкладок и конструктора</title>
+    <style>
+      /* ================================================================
+         Прототип. Токены скопированы из static/styles.css без изменений,
+         чтобы макет читался как продолжение приложения, а не как чужой
+         экран. Всё, что ниже блока :root, — новое.
+         ================================================================ */
+
+      :root {
+        --c-bg:            #fafafa;
+        --c-surface:       #ffffff;
+        --c-surface-soft:  #f5f5f7;
+        --c-border:        rgba(0,0,0,.08);
+        --c-border-strong: rgba(0,0,0,.14);
+
+        --c-ink:           #1d1d1f;
+        --c-ink-2:         #494950;
+        --c-ink-3:         #86868b;
+        --c-ink-4:         #c7c7cc;
+
+        --c-brand:         #1d7a4f;
+        --c-brand-hover:   #166341;
+        --c-brand-2:       #2eae68;
+        --c-brand-tint:    #e8f4ee;
+
+        --c-danger:        #d64545;
+        --c-warn-ink:      #9a6b00;
+        --c-warn-tint:     #fdf4dd;
+        --c-ok-ink:        #1d7a4f;
+        --c-ok-tint:       #e8f4ee;
+
+        --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+        --s-5: 24px; --s-6: 32px;
+        --page-gutter: clamp(20px, 3vw, 56px);
+
+        --r-1: 8px;  --r-2: 12px; --r-3: 18px; --r-pill: 100px;
+
+        --t-xs:   12px;
+        --t-sm:   13px;
+        --t-base: 14.5px;
+        --t-md:   16px;
+        --t-lg:   19px;
+        --t-xl:   22px;
+
+        --font-display: "Inter Tight", -apple-system, "SF Pro Display", Inter, sans-serif;
+        --font-body: Inter, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+        --font-mono: "SF Mono", Menlo, Consolas, monospace;
+
+        --focus-ring: 0 0 0 3px rgba(29,122,79,.12);
+        --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+        --ease: cubic-bezier(.25,.1,.25,1);
+
+        font-family: var(--font-body);
+        font-size: var(--t-base);
+        color: var(--c-ink);
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      body { margin: 0; background: var(--c-bg); }
+      button, input, select, textarea { font: inherit; color: inherit; }
+      h1, h2, h3 { margin: 0; font-family: var(--font-display); }
+      h2 { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.025em; }
+      h3 { font-size: var(--t-md); font-weight: 700; letter-spacing: -0.015em; }
+
+      .eyebrow { margin: 0; color: var(--c-brand); font-size: var(--t-xs); font-weight: 600;
+                 letter-spacing: 0.08em; text-transform: uppercase; }
+      .muted { color: var(--c-ink-3); }
+
+      button {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        padding: 9px 20px; border: 0; border-radius: var(--r-pill);
+        background: var(--c-brand); color: #fff;
+        font-size: var(--t-sm); font-weight: 600;
+        white-space: nowrap; cursor: pointer;
+        transition: background 160ms var(--ease), transform 120ms var(--ease), color 160ms var(--ease);
+      }
+      button:hover { background: var(--c-brand-hover); }
+      button:active { transform: scale(.97); }
+      button:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 2px; }
+      .secondary { background: var(--c-surface-soft); color: var(--c-ink); }
+      .secondary:hover { background: #ececef; }
+
+      /* ---------- Топбар ---------- */
+      .topbar {
+        height: 54px; padding: 0 var(--page-gutter);
+        background: rgba(255,255,255,.82);
+        backdrop-filter: saturate(1.8) blur(20px);
+        -webkit-backdrop-filter: saturate(1.8) blur(20px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex; align-items: center; gap: 18px;
+        position: sticky; top: 0; z-index: 90;
+      }
+      .brand {
+        display: flex; align-items: center; gap: 9px; color: var(--c-ink); text-decoration: none;
+        font-family: var(--font-display); font-weight: 700; font-size: var(--t-md);
+        letter-spacing: -0.02em; flex-shrink: 0;
+      }
+      .brand svg { width: 25px; height: 25px; }
+      .brand span { color: var(--c-brand); }
+      .topbar-sep { width: 1px; height: 20px; background: var(--c-border-strong); flex-shrink: 0; }
+      .project-chip { color: var(--c-ink-2); font-size: var(--t-sm); font-weight: 500;
+                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .project-chip strong { color: var(--c-ink); font-weight: 600; }
+
+      /* ---------- Верхнеуровневые вкладки — сегмент-контрол ----------
+         Намеренно НЕ похожи на .tabs из приложения: те переключают вид
+         внутри панели и подчёркиваются снизу. Здесь другой уровень
+         навигации, поэтому другая форма — залитая капсула.            */
+      .mode-tabs {
+        margin-left: auto; display: flex; gap: 2px; padding: 3px;
+        background: var(--c-surface-soft); border-radius: var(--r-pill);
+        flex-shrink: 0;
+      }
+      .mode-tabs button {
+        padding: 6px 16px; border-radius: var(--r-pill);
+        background: transparent; color: var(--c-ink-3);
+        font-size: var(--t-sm); font-weight: 600;
+      }
+      .mode-tabs button:hover { background: transparent; color: var(--c-ink-2); transform: none; }
+      .mode-tabs button[aria-selected="true"] {
+        background: var(--c-surface); color: var(--c-ink);
+        box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.04);
+      }
+      .mode-tabs .tab-soon {
+        margin-left: 6px; padding: 1px 6px; border-radius: var(--r-pill);
+        background: var(--c-warn-tint); color: var(--c-warn-ink);
+        font-size: 10px; font-weight: 700; letter-spacing: .04em;
+      }
+      .topbar-actions { display: flex; align-items: center; gap: var(--s-2); flex-shrink: 0; }
+      .topbar-actions button { padding: 7px 14px; font-size: var(--t-xs); }
+
+      /* ---------- Оболочка вкладок ---------- */
+      .tabpanel[hidden] { display: none !important; }
+      .panel-manual { max-width: 1560px; margin: 0 auto; padding: var(--s-6) var(--page-gutter) 60px; }
+
+      /* ---------- Вкладка 1: сокращённый слепок текущего экрана ---------- */
+      .panel-box { background: var(--c-surface); border: 1px solid var(--c-border);
+                   border-radius: var(--r-3); box-shadow: var(--shadow-card); overflow: hidden; }
+      .tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--c-border); }
+      .tabs button {
+        padding: 9px 13px 12px; background: transparent; color: var(--c-ink-3);
+        border-radius: 0; font-size: var(--t-base); font-weight: 500; position: relative;
+      }
+      .tabs button:hover { color: var(--c-ink-2); background: transparent; transform: none; }
+      .tabs button.active { color: var(--c-ink); font-weight: 600; }
+      .tabs button.active::after {
+        content: ""; position: absolute; left: 11px; right: 11px; bottom: -1px;
+        height: 3px; border-radius: 3px 3px 0 0; background: var(--c-brand);
+      }
+      .recode-toolbar {
+        display: flex; justify-content: space-between; align-items: center; gap: var(--s-4);
+        padding: 13px 22px; border-bottom: 1px solid var(--c-border);
+      }
+      .recode-toolbar strong { font-size: var(--t-base); font-weight: 600; display: block; }
+      .recode-toolbar small { color: var(--c-ink-3); font-size: var(--t-sm); }
+      .manual-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+      .manual-table th { padding: 10px 22px; color: var(--c-ink-3); font-size: var(--t-xs);
+                         font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+                         text-align: left; border-bottom: 1px solid var(--c-border); }
+      .manual-table td { padding: 12px 22px; border-bottom: 1px solid var(--c-border); }
+      .manual-table tr:last-child td { border-bottom: 0; }
+      .manual-table code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
+                           border-radius: 6px; font: 500 var(--t-xs)/1.4 var(--font-mono); }
+      .manual-note { margin: var(--s-5) 0 0; padding: var(--s-4) var(--s-5);
+                     background: var(--c-brand-tint); border-radius: var(--r-2);
+                     color: var(--c-ink-2); font-size: var(--t-sm); line-height: 1.55; }
+
+      /* ---------- Вкладка 2: конструктор ----------
+         Три колонки: палитра переменных, рабочее поле, чат.            */
+      .builder {
+        height: calc(100vh - 54px);
+        /* Без нижней границы полки съедают всю высоту на коротком экране,
+           и таблица схлопывается в ноль. Ниже — страница просто скроллится. */
+        min-height: 620px;
+        display: grid;
+        grid-template-columns: 268px minmax(0, 1fr) 348px;
+        background: var(--c-bg);
+      }
+      .builder-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+      .builder-col + .builder-col { border-left: 1px solid var(--c-border); }
+      .col-head {
+        padding: 14px var(--s-4); border-bottom: 1px solid var(--c-border);
+        background: var(--c-surface); display: flex; align-items: center;
+        justify-content: space-between; gap: var(--s-2); flex-shrink: 0;
+      }
+      .col-head h3 { font-size: var(--t-base); }
+
+      /* Палитра переменных */
+      .palette { background: var(--c-surface); }
+      .palette-search { padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--c-border); }
+      .palette-search input {
+        width: 100%; padding: 8px 12px; border: 1px solid var(--c-border-strong);
+        border-radius: var(--r-1); background: var(--c-surface-soft); font-size: var(--t-sm);
+      }
+      .palette-search input:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
+      .palette-list { flex: 1; overflow-y: auto; padding: var(--s-2) var(--s-2) var(--s-5); }
+      .palette-group { margin: var(--s-3) 0 var(--s-1); padding: 0 var(--s-2);
+                       color: var(--c-ink-3); font-size: 11px; font-weight: 700;
+                       letter-spacing: .07em; text-transform: uppercase; }
+
+      .var-chip {
+        display: flex; align-items: center; gap: var(--s-2);
+        padding: 7px var(--s-2); border-radius: var(--r-1);
+        cursor: grab; user-select: none; position: relative;
+      }
+      .var-chip:hover { background: var(--c-surface-soft); }
+      .var-chip.dragging { opacity: .4; }
+      .var-chip .var-code {
+        flex-shrink: 0; min-width: 34px; padding: 2px 5px; border-radius: 5px;
+        background: var(--c-brand-tint); color: var(--c-brand);
+        font: 600 11px/1.5 var(--font-mono); text-align: center;
+      }
+      .var-chip .var-name {
+        flex: 1; min-width: 0; font-size: var(--t-sm); color: var(--c-ink-2);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .var-chip .var-kind {
+        flex-shrink: 0; color: var(--c-ink-4); font-size: 11px; font-weight: 600;
+      }
+      .var-quick { display: none; gap: 3px; flex-shrink: 0; }
+      .var-chip:hover .var-quick { display: flex; }
+      .var-chip:hover .var-kind { display: none; }
+      .var-quick button {
+        padding: 2px 7px; border-radius: 5px; background: var(--c-surface-soft);
+        color: var(--c-ink-2); font-size: 10px; font-weight: 700; letter-spacing: .03em;
+      }
+      .var-quick button:hover { background: var(--c-brand); color: #fff; }
+
+      /* Рабочее поле */
+      .stage-col { background: var(--c-bg); }
+      .shelves { padding: var(--s-3) var(--s-4); background: var(--c-surface);
+                 border-bottom: 1px solid var(--c-border); display: grid; gap: var(--s-2); flex-shrink: 0; }
+      .shelf { display: flex; align-items: flex-start; gap: var(--s-3); }
+      .shelf-label {
+        flex-shrink: 0; width: 74px; padding-top: 7px;
+        color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 700;
+        letter-spacing: .05em; text-transform: uppercase;
+      }
+      .shelf-zone {
+        flex: 1; min-height: 38px; padding: 4px;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+        border: 1px dashed var(--c-border-strong); border-radius: var(--r-1);
+        transition: border-color 140ms var(--ease), background 140ms var(--ease);
+      }
+      .shelf-zone.over { border-color: var(--c-brand); border-style: solid; background: var(--c-brand-tint); }
+      .shelf-zone .placeholder { padding: 0 var(--s-2); color: var(--c-ink-4); font-size: var(--t-sm); }
+
+      .pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 5px 6px 5px 9px; border-radius: var(--r-pill);
+        background: var(--c-surface-soft); border: 1px solid var(--c-border);
+        font-size: var(--t-sm); color: var(--c-ink); cursor: grab;
+      }
+      .pill strong { font: 600 11px/1.4 var(--font-mono); color: var(--c-brand); }
+      .pill button {
+        width: 17px; height: 17px; padding: 0; border-radius: 50%;
+        background: transparent; color: var(--c-ink-3); font-size: 14px; line-height: 1;
+      }
+      .pill button:hover { background: var(--c-danger); color: #fff; }
+
+      .stage-toolbar {
+        display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap;
+        padding: 10px var(--s-4); background: var(--c-surface);
+        border-bottom: 1px solid var(--c-border); flex-shrink: 0;
+      }
+      .stage-toolbar label { display: flex; align-items: center; gap: 6px;
+                             color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 600; }
+      .stage-toolbar select {
+        padding: 5px 8px; border: 1px solid var(--c-border-strong); border-radius: 6px;
+        background: var(--c-surface); color: var(--c-ink); font-size: var(--t-xs); font-weight: 500;
+      }
+      .stage-toolbar .spacer { margin-left: auto; }
+      .stage-toolbar .toolbar-note { color: var(--c-ink-3); font-size: var(--t-xs); }
+
+      .grid-wrap { flex: 1; overflow: auto; background: var(--c-surface); }
+      .grid { border-collapse: separate; border-spacing: 0; font-size: var(--t-sm); }
+      .grid th, .grid td {
+        border-right: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border);
+        padding: 6px 10px; text-align: right; white-space: nowrap; background: var(--c-surface);
+      }
+      /* Рамка листа: буквы столбцов и номера строк, как в Excel */
+      .grid .sheet-ref {
+        background: var(--c-surface-soft); color: var(--c-ink-3);
+        font: 600 10px/1.4 var(--font-mono); text-align: center; letter-spacing: .04em;
+      }
+      /* top у второй и третьей строк проставляется из JS по фактическим
+         высотам: захардкоженные пиксели разъезжаются на другом шрифте. */
+      .grid thead th { position: sticky; top: 0; z-index: 3; }
+      .grid .corner, .grid .rowhead {
+        position: sticky; left: 0; z-index: 4; text-align: left;
+        border-right: 1px solid var(--c-border-strong);
+      }
+      .grid .rownum {
+        position: sticky; left: 0; z-index: 4; width: 34px; min-width: 34px;
+        background: var(--c-surface-soft); color: var(--c-ink-3);
+        font: 600 10px/1.4 var(--font-mono); text-align: center;
+      }
+      .grid .rowhead {
+        left: 34px; min-width: 216px; max-width: 300px;
+        white-space: normal; color: var(--c-ink-2); vertical-align: top;
+      }
+      .grid .corner { z-index: 6; background: var(--c-surface-soft); }
+      .grid .group-head {
+        color: var(--c-ink); font-family: var(--font-display); font-weight: 700;
+        font-size: var(--t-xs); text-align: center; letter-spacing: -0.01em;
+        background: var(--c-surface-soft);
+      }
+      /* Имя намеренно не .col-head: этот класс уже занят шапкой панели
+         с display:flex, и он бы сломал table-cell у заголовка столбца. */
+      .grid .cat-head { color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600;
+                        text-align: center; vertical-align: bottom; min-width: 76px; }
+      .grid .cat-head .col-letter { display: block; color: var(--c-ink-4);
+                                    font: 700 9px/1.6 var(--font-mono); }
+      .grid tbody tr.base-row td { color: var(--c-ink-3); font-size: var(--t-xs); }
+      .grid tbody tr.base-row .rowhead { color: var(--c-ink-3); font-size: var(--t-xs);
+                                         text-transform: uppercase; letter-spacing: .05em; }
+      .grid tbody tr.question-row td, .grid tbody tr.question-row .rowhead {
+        background: var(--c-surface-soft); font-weight: 600; color: var(--c-ink);
+        font-family: var(--font-display); text-align: left;
+      }
+      .grid td.value { font-variant-numeric: tabular-nums; color: var(--c-ink); }
+      .grid td.value.low-base { color: var(--c-ink-4); }
+      .grid td.value .sig {
+        margin-left: 3px; color: var(--c-brand); font: 700 9px/1 var(--font-mono);
+        vertical-align: super;
+      }
+      .grid td.value.total-col { background: #fcfcfd; font-weight: 600; }
+      .grid tbody tr:hover td:not(.rownum) { background: #f7fbf9; }
+      .grid tbody tr:hover td.rowhead { background: #f7fbf9; }
+
+      .empty-stage {
+        height: 100%; display: grid; place-content: center; justify-items: center;
+        gap: var(--s-3); padding: var(--s-6); text-align: center;
+      }
+      .empty-stage svg { width: 46px; height: 46px; color: var(--c-ink-4); }
+      .empty-stage p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); max-width: 320px; line-height: 1.55; }
+
+      /* Чат */
+      .chat-col { background: var(--c-surface); }
+      .chat-log { flex: 1; overflow-y: auto; padding: var(--s-4); display: grid; gap: var(--s-3); align-content: start; }
+      .msg { display: grid; gap: 5px; }
+      .msg .who { color: var(--c-ink-4); font-size: 10px; font-weight: 700;
+                  letter-spacing: .07em; text-transform: uppercase; }
+      .msg .bubble { padding: 10px 13px; border-radius: var(--r-2); font-size: var(--t-sm); line-height: 1.55; }
+      .msg.user { justify-items: end; }
+      .msg.user .bubble { background: var(--c-brand); color: #fff; border-bottom-right-radius: 5px; }
+      .msg.ai .bubble { background: var(--c-surface-soft); color: var(--c-ink-2); border-bottom-left-radius: 5px; }
+      .msg.ai .bubble code { padding: 1px 5px; border-radius: 5px; background: var(--c-brand-tint);
+                             color: var(--c-brand); font: 500 11px/1.4 var(--font-mono); }
+      .msg .did {
+        margin-top: 3px; padding: 7px 11px; border-left: 2px solid var(--c-brand);
+        background: var(--c-brand-tint); border-radius: 0 6px 6px 0;
+        color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.5;
+      }
+      .chat-suggest { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 var(--s-4) var(--s-3); flex-shrink: 0; }
+      .chat-suggest button {
+        padding: 6px 11px; border: 1px solid var(--c-border); border-radius: var(--r-pill);
+        background: var(--c-surface); color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
+      }
+      .chat-suggest button:hover { border-color: var(--c-brand); color: var(--c-brand); background: var(--c-surface); }
+      .chat-form { display: flex; gap: var(--s-2); align-items: flex-end;
+                   padding: var(--s-3) var(--s-4) var(--s-4); border-top: 1px solid var(--c-border); flex-shrink: 0; }
+      .chat-form textarea {
+        flex: 1; min-height: 40px; max-height: 120px; padding: 10px 12px; resize: none;
+        border: 1px solid var(--c-border-strong); border-radius: var(--r-2);
+        background: var(--c-surface-soft); font-size: var(--t-sm); line-height: 1.45;
+      }
+      .chat-form textarea:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
+      .chat-form button { flex-shrink: 0; width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+      .chat-form button svg { width: 17px; height: 17px; }
+
+      .disclaimer {
+        padding: var(--s-2) var(--s-4); background: var(--c-warn-tint); color: var(--c-warn-ink);
+        font-size: 11px; line-height: 1.5; text-align: center; flex-shrink: 0;
+      }
+
+      @media (max-width: 1180px) {
+        .builder { grid-template-columns: 232px minmax(0, 1fr); }
+        .chat-col { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="sav analytics">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <path fill="#1d7a4f" opacity=".1" d="M300 56C196 56 126 80 86 151 58 201 52 273 52 512s6 311 34 361c40 71 110 95 214 95h424c104 0 174-24 214-95 28-50 34-122 34-361s-6-311-34-361c-40-71-110-95-214-95H300Z" />
+          <g fill="none" stroke="#1d1d1f" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M416 222H262c-44 0-74 27-74 65s30 65 74 65h78c44 0 74 27 74 65s-30 65-74 65H186" />
+            <path d="M544 482 654 232c8-18 18-18 26 0l110 250M598 374h138" />
+            <path d="m190 574 108 246c8 18 18 18 26 0l108-246" />
+          </g>
+          <path fill="none" stroke="#1d7a4f" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" d="m544 832 110-250c8-18 18-18 26 0l110 250M598 724h138" />
+        </svg>
+        sav<span>analytics</span>
+      </a>
+      <div class="topbar-sep"></div>
+      <div class="project-chip"><strong>Трекер банков · июль 2026</strong></div>
+
+      <!-- Верхнеуровневые вкладки. role=tablist + aria-selected, переключение
+           клавишами ← → — это ровно то, что нужно добавить в index.html. -->
+      <nav class="mode-tabs" role="tablist" aria-label="Режим работы">
+        <button role="tab" id="tab-manual" aria-controls="panel-manual" aria-selected="true">Ручной режим</button>
+        <button role="tab" id="tab-builder" aria-controls="panel-builder" aria-selected="false">
+          Конструктор<span class="tab-soon">СКОРО</span>
+        </button>
+      </nav>
+
+      <div class="topbar-actions">
+        <button class="secondary">Статистика</button>
+        <button>Скачать Excel</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- ============ Вкладка 1 — то, что есть сейчас ============ -->
+      <section class="tabpanel panel-manual" id="panel-manual" role="tabpanel" aria-labelledby="tab-manual">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:24px;flex-wrap:wrap">
+          <div>
+            <p class="eyebrow">СТРУКТУРА МАССИВА</p>
+            <h2 style="margin-top:6px">Трекер банков · июль 2026</h2>
+          </div>
+          <p class="muted" style="margin:0;font-size:13px">1 248 респондентов · 96 переменных · 42 вопроса в отчёте</p>
+        </div>
+
+        <div class="panel-box">
+          <!-- Внутренние вкладки остаются как есть: другой уровень, другая форма -->
+          <div class="tabs">
+            <button class="active">Структура</button>
+            <button>Перекодировки</button>
+            <button>Баннеры</button>
+            <button>Базы и фильтры</button>
+            <button>Веса</button>
+          </div>
+          <div class="recode-toolbar">
+            <div>
+              <strong>Представление структуры</strong>
+              <small>Настраивайте логические вопросы или проверяйте исходные столбцы SAV.</small>
+            </div>
+            <button class="secondary">Логические вопросы</button>
+          </div>
+          <table class="manual-table">
+            <thead>
+              <tr><th>Код</th><th>Название</th><th>Тип</th><th>В отчёте</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>S1</code></td><td>Пол</td><td class="muted">Один ответ</td><td class="muted">да</td></tr>
+              <tr><td><code>S2</code></td><td>Возраст</td><td class="muted">Один ответ</td><td class="muted">да</td></tr>
+              <tr><td><code>Q1</code></td><td>Какими банками вы пользуетесь</td><td class="muted">Множественный</td><td class="muted">да</td></tr>
+              <tr><td><code>Q3</code></td><td>Оценка обслуживания</td><td class="muted">Шкала</td><td class="muted">да</td></tr>
+              <tr><td><code>Q4</code></td><td>Готовность рекомендовать</td><td class="muted">Шкала · NPS</td><td class="muted">да</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="manual-note">
+          Эта вкладка — сокращённый слепок нынешнего экрана, он не меняется.
+          Смысл разделения в том, что ручной режим отвечает за <strong>подготовку</strong>
+          (типы, перекодировки, баннеры, веса), а конструктор — за <strong>исследование</strong>
+          уже подготовленных данных. Переключитесь на «Конструктор» в правом верхнем углу.
+        </p>
+      </section>
+
+      <!-- ============ Вкладка 2 — конструктор ============ -->
+      <section class="tabpanel builder" id="panel-builder" role="tabpanel" aria-labelledby="tab-builder" hidden>
+        <!-- Палитра -->
+        <div class="builder-col palette">
+          <div class="col-head">
+            <h3>Переменные</h3>
+            <span class="muted" style="font-size:12px" id="palette-count"></span>
+          </div>
+          <div class="palette-search">
+            <input id="palette-search" type="search" placeholder="Поиск по коду и названию" autocomplete="off" />
+          </div>
+          <div class="palette-list" id="palette-list"></div>
+        </div>
+
+        <!-- Рабочее поле -->
+        <div class="builder-col stage-col">
+          <div class="shelves">
+            <div class="shelf">
+              <span class="shelf-label">Строки</span>
+              <div class="shelf-zone" id="zone-rows" data-zone="rows"></div>
+            </div>
+            <div class="shelf">
+              <span class="shelf-label">Колонки</span>
+              <div class="shelf-zone" id="zone-cols" data-zone="cols"></div>
+            </div>
+            <div class="shelf">
+              <span class="shelf-label">Фильтр</span>
+              <div class="shelf-zone" id="zone-filter" data-zone="filter"></div>
+            </div>
+          </div>
+
+          <div class="stage-toolbar">
+            <label>Показатель
+              <select id="measure">
+                <option value="pct">% от базы</option>
+                <option value="n">Число ответов</option>
+                <option value="index">Индекс к Total</option>
+              </select>
+            </label>
+            <label>Вес
+              <select id="weight">
+                <option value="none">Без веса</option>
+                <option value="w1">Вес по полу и возрасту</option>
+              </select>
+            </label>
+            <label>Тесты
+              <select id="sig">
+                <option value="on">Попарные, 95%</option>
+                <option value="off">Не считать</option>
+              </select>
+            </label>
+            <span class="spacer"></span>
+            <span class="toolbar-note" id="stage-note"></span>
+          </div>
+
+          <div class="grid-wrap" id="grid-wrap"></div>
+        </div>
+
+        <!-- Чат -->
+        <div class="builder-col chat-col">
+          <div class="col-head">
+            <h3>Расчёты по запросу</h3>
+            <span class="muted" style="font-size:12px">на данных проекта</span>
+          </div>
+          <div class="chat-log" id="chat-log"></div>
+          <div class="chat-suggest" id="chat-suggest"></div>
+          <form class="chat-form" id="chat-form">
+            <textarea id="chat-input" rows="1" placeholder="Например: разбей Q1 по возрасту и покажи только 25–44"></textarea>
+            <button type="submit" aria-label="Отправить">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </form>
+          <p class="disclaimer" style="margin:0">
+            Прототип. Ответы заранее записаны, расчётов не происходит.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      /* ==============================================================
+         1. Переключение верхнеуровневых вкладок
+         ============================================================== */
+      const tabs = Array.from(document.querySelectorAll('.mode-tabs [role="tab"]'));
+
+      function selectTab(tab) {
+        tabs.forEach((item) => {
+          const selected = item === tab;
+          item.setAttribute('aria-selected', String(selected));
+          document.getElementById(item.getAttribute('aria-controls')).hidden = !selected;
+        });
+        tab.focus();
+        /* Панель только что показали — теперь у шапки есть высоты. */
+        refreshStickyHeader();
+      }
+
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => selectTab(tab));
+        tab.addEventListener('keydown', (event) => {
+          const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+          if (!step) return;
+          event.preventDefault();
+          selectTab(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length]);
+        });
+      });
+
+      /* ==============================================================
+         2. Демонстрационные переменные проекта
+         ============================================================== */
+      const VARIABLES = [
+        { code: 'S1', name: 'Пол', kind: 'single', group: 'Профиль', values: ['Мужской', 'Женский'] },
+        { code: 'S2', name: 'Возраст', kind: 'single', group: 'Профиль', values: ['18–24', '25–34', '35–44', '45–54', '55+'] },
+        { code: 'S3', name: 'Регион', kind: 'single', group: 'Профиль', values: ['Москва', 'Санкт-Петербург', 'Города 1 млн+', 'Города 500 тыс.–1 млн', 'Прочие'] },
+        { code: 'S4', name: 'Доход', kind: 'single', group: 'Профиль', values: ['Низкий', 'Средний', 'Высокий'] },
+        { code: 'Q1', name: 'Какими банками вы пользуетесь', kind: 'multiple', group: 'Основные вопросы', values: ['Сбер', 'Т-Банк', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Райффайзен', 'Другой'] },
+        { code: 'Q2', name: 'Основной банк', kind: 'single', group: 'Основные вопросы', values: ['Сбер', 'Т-Банк', 'ВТБ', 'Альфа-Банк', 'Другой'] },
+        { code: 'Q3', name: 'Оценка обслуживания', kind: 'scale', group: 'Основные вопросы', values: ['1 — очень плохо', '2', '3', '4', '5 — отлично'] },
+        { code: 'Q4', name: 'Готовность рекомендовать', kind: 'nps', group: 'Основные вопросы', values: ['Критики (0–6)', 'Нейтралы (7–8)', 'Промоутеры (9–10)'] },
+        { code: 'Q5', name: 'Расходы по карте в месяц, ₽', kind: 'numeric', group: 'Основные вопросы', values: ['До 20 тыс.', '20–50 тыс.', '50–100 тыс.', 'Более 100 тыс.'] },
+        { code: 'AGE_GRP', name: 'Возрастные группы', kind: 'recoding', group: 'Перекодировки', values: ['18–34', '35–54', '55+'] },
+        { code: 'W1', name: 'Волна', kind: 'single', group: 'Служебные', values: ['Июнь', 'Июль'] },
+      ];
+
+      const KIND_LABEL = {
+        single: 'один', multiple: 'мульти', scale: 'шкала',
+        nps: 'NPS', numeric: 'число', recoding: 'перекод.',
+      };
+
+      const byCode = new Map(VARIABLES.map((item) => [item.code, item]));
+
+      /* Раскладка стола. Стартовое состояние — то, ради чего конструктор
+         и нужен: один вопрос в строках, демография в колонках.          */
+      const layout = { rows: ['Q1'], cols: ['S1', 'S2'], filter: [] };
+
+      /* ==============================================================
+         3. Палитра переменных
+         ============================================================== */
+      const paletteList = document.getElementById('palette-list');
+      const paletteSearch = document.getElementById('palette-search');
+      const paletteCount = document.getElementById('palette-count');
+
+      function renderPalette() {
+        const query = paletteSearch.value.trim().toLowerCase();
+        const matched = VARIABLES.filter((item) =>
+          !query || item.code.toLowerCase().includes(query) || item.name.toLowerCase().includes(query));
+
+        paletteCount.textContent = matched.length + ' из ' + VARIABLES.length;
+        paletteList.innerHTML = '';
+
+        let lastGroup = null;
+        matched.forEach((item) => {
+          if (item.group !== lastGroup) {
+            lastGroup = item.group;
+            const heading = document.createElement('p');
+            heading.className = 'palette-group';
+            heading.textContent = item.group;
+            paletteList.append(heading);
+          }
+
+          const chip = document.createElement('div');
+          chip.className = 'var-chip';
+          chip.draggable = true;
+          chip.dataset.code = item.code;
+          chip.title = item.name;
+          chip.innerHTML =
+            '<span class="var-code">' + item.code + '</span>' +
+            '<span class="var-name"></span>' +
+            '<span class="var-kind">' + KIND_LABEL[item.kind] + '</span>' +
+            '<span class="var-quick">' +
+              '<button type="button" data-zone="rows">СТР</button>' +
+              '<button type="button" data-zone="cols">КОЛ</button>' +
+            '</span>';
+          chip.querySelector('.var-name').textContent = item.name;
+
+          chip.addEventListener('dragstart', (event) => {
+            event.dataTransfer.setData('text/plain', item.code);
+            event.dataTransfer.effectAllowed = 'copy';
+            chip.classList.add('dragging');
+          });
+          chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+
+          chip.querySelectorAll('.var-quick button').forEach((button) => {
+            button.addEventListener('click', () => addToZone(item.code, button.dataset.zone));
+          });
+
+          paletteList.append(chip);
+        });
+      }
+
+      paletteSearch.addEventListener('input', renderPalette);
+
+      /* ==============================================================
+         4. Полки строк, колонок и фильтра
+         ============================================================== */
+      const ZONE_PLACEHOLDER = {
+        rows: 'Перетащите вопрос — он станет строками таблицы',
+        cols: 'Перетащите переменную — она станет разрезом',
+        filter: 'Необязательно: ограничить выборку',
+      };
+
+      function addToZone(code, zone) {
+        Object.keys(layout).forEach((key) => {
+          layout[key] = layout[key].filter((item) => item !== code);
+        });
+        layout[zone].push(code);
+        render();
+      }
+
+      function removeFromZone(code, zone) {
+        layout[zone] = layout[zone].filter((item) => item !== code);
+        render();
+      }
+
+      document.querySelectorAll('.shelf-zone').forEach((zone) => {
+        zone.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          zone.classList.add('over');
+        });
+        zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+        zone.addEventListener('drop', (event) => {
+          event.preventDefault();
+          zone.classList.remove('over');
+          const code = event.dataTransfer.getData('text/plain');
+          if (byCode.has(code)) addToZone(code, zone.dataset.zone);
+        });
+      });
+
+      function renderShelves() {
+        document.querySelectorAll('.shelf-zone').forEach((zone) => {
+          const key = zone.dataset.zone;
+          zone.innerHTML = '';
+
+          if (!layout[key].length) {
+            const hint = document.createElement('span');
+            hint.className = 'placeholder';
+            hint.textContent = ZONE_PLACEHOLDER[key];
+            zone.append(hint);
+            return;
+          }
+
+          layout[key].forEach((code) => {
+            const variable = byCode.get(code);
+            const pill = document.createElement('span');
+            pill.className = 'pill';
+            pill.draggable = true;
+            pill.innerHTML = '<strong>' + code + '</strong><span></span><button type="button" aria-label="Убрать">×</button>';
+            pill.querySelector('span').textContent = variable.name;
+            pill.querySelector('button').addEventListener('click', () => removeFromZone(code, key));
+            pill.addEventListener('dragstart', (event) => {
+              event.dataTransfer.setData('text/plain', code);
+              event.dataTransfer.effectAllowed = 'copy';
+            });
+            zone.append(pill);
+          });
+        });
+      }
+
+      /* ==============================================================
+         5. Таблица
+         Числа детерминированные: один и тот же разрез всегда даёт одну
+         и ту же картинку, иначе макет выглядит нестабильным.
+         ============================================================== */
+      function hash(text) {
+        let value = 2166136261;
+        for (let index = 0; index < text.length; index += 1) {
+          value ^= text.charCodeAt(index);
+          value = Math.imul(value, 16777619);
+        }
+        return (value >>> 0) / 4294967295;
+      }
+
+      const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const sheetLetter = (index) => {
+        let label = '';
+        let value = index;
+        do {
+          label = LETTERS[value % 26] + label;
+          value = Math.floor(value / 26) - 1;
+        } while (value >= 0);
+        return label;
+      };
+
+      /* Три строки шапки липнут друг под другом. Смещения берём из
+         реальных высот: они зависят от шрифта и масштаба страницы. */
+      function stackStickyHeader(table) {
+        if (!table || !table.offsetParent) return; /* скрытая вкладка меряется нулями */
+        let offset = 0;
+        Array.from(table.tHead.rows).forEach((row) => {
+          Array.from(row.cells).forEach((cell) => { cell.style.top = offset + 'px'; });
+          offset += row.getBoundingClientRect().height;
+        });
+      }
+
+      function refreshStickyHeader() {
+        stackStickyHeader(document.querySelector('#grid-wrap table.grid'));
+      }
+
+      window.addEventListener('resize', refreshStickyHeader);
+
+      /* Декартово произведение категорий выбранных переменных. */
+      function combine(codes) {
+        return codes.reduce((accumulator, code) => {
+          const variable = byCode.get(code);
+          const next = [];
+          accumulator.forEach((prefix) => {
+            variable.values.forEach((value) => {
+              next.push(prefix.concat([{ code, value }]));
+            });
+          });
+          return next;
+        }, [[]]);
+      }
+
+      function renderGrid() {
+        const wrap = document.getElementById('grid-wrap');
+        const note = document.getElementById('stage-note');
+        const measure = document.getElementById('measure').value;
+        const withSig = document.getElementById('sig').value === 'on';
+
+        if (!layout.rows.length) {
+          wrap.innerHTML =
+            '<div class="empty-stage">' +
+              '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                '<rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.5" />' +
+                '<path d="M3 9h18M9 9v11" stroke="currentColor" stroke-width="1.5" />' +
+              '</svg>' +
+              '<p>Перетащите вопрос в «Строки» — таблица соберётся сама. ' +
+              'Или попросите об этом в чате справа.</p>' +
+            '</div>';
+          note.textContent = '';
+          return;
+        }
+
+        const colCombos = layout.cols.length ? combine(layout.cols) : [];
+        const columns = [{ key: 'total', label: 'Total', group: '' }].concat(
+          colCombos.map((combo) => ({
+            key: combo.map((part) => part.code + '=' + part.value).join('|'),
+            label: combo[combo.length - 1].value,
+            group: combo.length > 1 ? combo.slice(0, -1).map((part) => part.value).join(' · ') : byCode.get(combo[0].code).name,
+          })));
+
+        const totalBase = 1248;
+        const bases = columns.map((column, index) =>
+          index === 0 ? totalBase : Math.round(totalBase * (0.06 + hash(column.key) * 0.26)));
+
+        /* Шапка: буквы листа, группы, категории. */
+        let head = '<thead>';
+        head += '<tr><th class="corner sheet-ref"></th><th class="sheet-ref">A</th>';
+        columns.forEach((column, index) => {
+          head += '<th class="sheet-ref">' + sheetLetter(index + 1) + '</th>';
+        });
+        head += '</tr>';
+
+        head += '<tr><th class="corner"></th><th class="rowhead group-head" style="left:34px"></th>';
+        let cursor = 0;
+        while (cursor < columns.length) {
+          let span = 1;
+          while (cursor + span < columns.length && columns[cursor + span].group === columns[cursor].group) span += 1;
+          head += '<th class="group-head" colspan="' + span + '">' + (columns[cursor].group || '&nbsp;') + '</th>';
+          cursor += span;
+        }
+        head += '</tr>';
+
+        head += '<tr><th class="corner sheet-ref">1</th><th class="rowhead cat-head" style="left:34px;text-align:left">Показатель</th>';
+        columns.forEach((column, index) => {
+          head += '<th class="cat-head"><span class="col-letter">' + sheetLetter(index + 1) + '</span>' + column.label + '</th>';
+        });
+        head += '</tr></thead>';
+
+        /* Тело: по блоку на каждую переменную строк. */
+        let body = '<tbody>';
+        let rowNumber = 1;
+
+        const rowCombos = combine(layout.rows.slice(0, 1));
+        const rowVariable = byCode.get(layout.rows[0]);
+        const nested = layout.rows.slice(1);
+
+        rowNumber += 1;
+        body += '<tr class="question-row"><td class="rownum">' + rowNumber + '</td>' +
+                '<td class="rowhead" colspan="' + (columns.length + 1) + '">' +
+                rowVariable.code + ' · ' + rowVariable.name + '</td></tr>';
+
+        rowNumber += 1;
+        body += '<tr class="base-row"><td class="rownum">' + rowNumber + '</td><td class="rowhead">База, чел.</td>';
+        bases.forEach((base, index) => {
+          body += '<td class="value' + (index === 0 ? ' total-col' : '') + '">' + base + '</td>';
+        });
+        body += '</tr>';
+
+        const nestedCombos = nested.length ? combine(nested) : [[]];
+
+        nestedCombos.forEach((nestedCombo) => {
+          if (nestedCombo.length) {
+            rowNumber += 1;
+            body += '<tr class="question-row"><td class="rownum">' + rowNumber + '</td>' +
+                    '<td class="rowhead" colspan="' + (columns.length + 1) + '">' +
+                    nestedCombo.map((part) => part.value).join(' · ') + '</td></tr>';
+          }
+
+          rowCombos.forEach((rowCombo) => {
+            const label = rowCombo.map((part) => part.value).join(' · ');
+            const seed = label + '|' + nestedCombo.map((part) => part.value).join('|');
+            rowNumber += 1;
+
+            const values = columns.map((column) => {
+              const share = 0.04 + hash(seed + '#' + column.key) * 0.62;
+              return share;
+            });
+
+            body += '<tr><td class="rownum">' + rowNumber + '</td><td class="rowhead">' + label + '</td>';
+            values.forEach((share, index) => {
+              const base = bases[index];
+              const lowBase = base < 100;
+              let text;
+              if (measure === 'n') text = Math.round(share * base);
+              else if (measure === 'index') text = Math.round((share / values[0]) * 100);
+              else text = (share * 100).toFixed(1).replace('.', ',') + '%';
+
+              let sig = '';
+              if (withSig && index > 0 && measure !== 'index' && !lowBase) {
+                const beaten = values
+                  .map((other, position) => ({ other, position }))
+                  .filter((item) => item.position > 0 && item.position !== index &&
+                                    columns[item.position].group === columns[index].group &&
+                                    share - item.other > 0.1)
+                  .map((item) => sheetLetter(item.position + 1));
+                if (beaten.length) sig = '<span class="sig">' + beaten.join('') + '</span>';
+              }
+
+              body += '<td class="value' + (index === 0 ? ' total-col' : '') +
+                      (lowBase ? ' low-base' : '') + '">' + text + sig + '</td>';
+            });
+            body += '</tr>';
+          });
+        });
+        body += '</tbody>';
+
+        wrap.innerHTML = '<table class="grid">' + head + body + '</table>';
+        stackStickyHeader(wrap.querySelector('table.grid'));
+
+        const parts = [columns.length + ' колонок'];
+        if (layout.cols.length) parts.push('разрез: ' + layout.cols.map((code) => byCode.get(code).name).join(' × '));
+        if (layout.filter.length) parts.push('фильтр: ' + layout.filter.map((code) => byCode.get(code).name).join(', '));
+        if (bases.some((base) => base < 100)) parts.push('серым — база меньше 100');
+        note.textContent = parts.join(' · ');
+      }
+
+      function render() {
+        renderPalette();
+        renderShelves();
+        renderGrid();
+      }
+
+      ['measure', 'weight', 'sig'].forEach((id) => {
+        document.getElementById(id).addEventListener('change', renderGrid);
+      });
+
+      /* ==============================================================
+         6. Чат
+         Заранее записанные сценарии: каждый не просто отвечает текстом,
+         а меняет раскладку стола. Смысл вкладки именно в этом.
+         ============================================================== */
+      const chatLog = document.getElementById('chat-log');
+      const chatForm = document.getElementById('chat-form');
+      const chatInput = document.getElementById('chat-input');
+
+      const SCENARIOS = [
+        {
+          match: /возраст|s2/i,
+          reply: 'Добавил <code>S2 Возраст</code> в колонки. Пол остался первым уровнем, возраст лёг вторым — получился вложенный баннер.',
+          did: 'Колонки: Пол × Возраст',
+          apply: () => addToZone('S2', 'cols'),
+        },
+        {
+          match: /nps|рекоменд/i,
+          reply: 'Собрал <code>Q4</code> по группам NPS. Итоговый балл считается как промоутеры минус критики — вывел его отдельной строкой ниже.',
+          did: 'Строки: Q4 Готовность рекомендовать',
+          apply: () => { layout.rows = ['Q4']; },
+        },
+        {
+          match: /регион/i,
+          reply: 'Переложил разрез на <code>S3 Регион</code>. Базы по Санкт-Петербургу и городам 500 тыс.–1 млн ниже 100 — такие значения показываю серым.',
+          did: 'Колонки: Регион',
+          apply: () => { layout.cols = ['S3']; },
+        },
+        {
+          match: /индекс/i,
+          reply: 'Переключил показатель на индекс к Total: 100 — уровень всей выборки, 120 — в полтора раза выше среднего.',
+          did: 'Показатель: индекс',
+          apply: () => { document.getElementById('measure').value = 'index'; },
+        },
+        {
+          match: /вес|взвес/i,
+          reply: 'Применил <code>Вес по полу и возрасту</code>. Базы в шапке остались невзвешенными — по ним считаются тесты.',
+          did: 'Вес: по полу и возрасту',
+          apply: () => { document.getElementById('weight').value = 'w1'; },
+        },
+        {
+          match: /очист|сброс|заново/i,
+          reply: 'Очистил стол. Перетащите вопрос в «Строки» или скажите, что посчитать.',
+          did: 'Раскладка сброшена',
+          apply: () => { layout.rows = []; layout.cols = []; layout.filter = []; },
+        },
+      ];
+
+      const FALLBACK = {
+        reply: 'В прототипе записаны только несколько сценариев. Попробуйте: «разбей по возрасту», «покажи NPS», «переключи на индекс», «применить вес», «разрез по регионам».',
+        did: null,
+        apply: null,
+      };
+
+      function pushMessage(role, html, did) {
+        const message = document.createElement('div');
+        message.className = 'msg ' + role;
+        message.innerHTML =
+          '<span class="who">' + (role === 'user' ? 'Вы' : 'Ассистент') + '</span>' +
+          '<div class="bubble">' + html + '</div>' +
+          (did ? '<div class="did">Изменено: ' + did + '</div>' : '');
+        chatLog.append(message);
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+
+      function ask(text) {
+        if (!text.trim()) return;
+        pushMessage('user', text.replace(/[<>&]/g, ''), null);
+
+        const scenario = SCENARIOS.find((item) => item.match.test(text)) || FALLBACK;
+        window.setTimeout(() => {
+          if (scenario.apply) scenario.apply();
+          render();
+          pushMessage('ai', scenario.reply, scenario.did);
+        }, 380);
+      }
+
+      chatForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        ask(chatInput.value);
+        chatInput.value = '';
+      });
+
+      chatInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          chatForm.requestSubmit();
+        }
+      });
+
+      const SUGGESTIONS = ['Разбей по возрасту', 'Покажи NPS', 'Разрез по регионам', 'Переключи на индекс', 'Применить вес'];
+      const suggestBox = document.getElementById('chat-suggest');
+      SUGGESTIONS.forEach((text) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = text;
+        button.addEventListener('click', () => ask(text));
+        suggestBox.append(button);
+      });
+
+      pushMessage('ai',
+        'Здесь можно попросить любой расчёт словами — я соберу таблицу слева. ' +
+        'Всё, что настроено в ручном режиме (типы, перекодировки, веса, фильтры), уже учтено.', null);
+
+      render();
+    </script>
+  </body>
+</html>
