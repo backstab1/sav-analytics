@@ -33,6 +33,8 @@ __pycache__/
 dist/
 build/
 coverage/
+.coverage
+coverage.xml
 .pytest_cache/
 
 # IDE, OS and local agent files

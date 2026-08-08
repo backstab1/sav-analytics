@@ -97,9 +97,14 @@ def test_rejects_non_sav_extension(tmp_path: Path) -> None:
     try:
         with TestClient(app) as client:
             response = client.post(
-                "/api/projects", files={"file": ("data.csv", b"a,b\n1,2", "text/csv")}
+                "/api/projects",
+                headers={"X-Request-ID": "upload-test-1"},
+                files={"file": ("data.csv", b"a,b\n1,2", "text/csv")},
             )
         assert response.status_code == 422
+        assert response.json()["error_code"] == "UNPROCESSABLE_ENTITY"
+        assert response.json()["request_id"] == "upload-test-1"
+        assert response.headers["X-Request-ID"] == "upload-test-1"
     finally:
         app.dependency_overrides.clear()
 
@@ -115,6 +120,8 @@ def test_rejects_corrupted_sav_with_json_error(tmp_path: Path) -> None:
             )
         assert response.status_code == 422
         assert response.headers["content-type"].startswith("application/json")
+        assert response.json()["error_code"] == "UNPROCESSABLE_ENTITY"
+        assert response.json()["request_id"]
         assert "SPSS SAV" in response.json()["detail"]
     finally:
         app.dependency_overrides.clear()
@@ -185,6 +192,26 @@ def test_question_configuration_and_preview_are_persisted(tmp_path: Path) -> Non
         app.dependency_overrides.clear()
 
 
+def test_request_validation_and_revision_errors_have_stable_codes(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=1024)
+    app.dependency_overrides[get_repository] = lambda: repository
+    try:
+        with TestClient(app) as client:
+            validation = client.post("/api/projects")
+            invalid_revision = client.post(
+                "/api/projects",
+                headers={"If-Match": "not-a-revision"},
+            )
+        assert validation.status_code == 422
+        assert validation.json()["error_code"] == "REQUEST_VALIDATION_FAILED"
+        assert validation.json()["request_id"]
+        assert invalid_revision.status_code == 400
+        assert invalid_revision.json()["error_code"] == "INVALID_CONFIGURATION_REVISION"
+        assert invalid_revision.json()["request_id"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_question_update_rejects_unsupported_report_types(tmp_path: Path) -> None:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
     app.dependency_overrides[get_repository] = lambda: repository
@@ -235,6 +262,8 @@ def test_configuration_revision_rejects_stale_update(tmp_path: Path) -> None:
             assert updated.status_code == 200
             assert updated.json()["configuration"]["revision"] == initial_revision + 1
             assert stale.status_code == 409
+            assert stale.json()["error_code"] == "CONFIGURATION_CONFLICT"
+            assert stale.json()["request_id"]
             assert "другой вкладке" in stale.json()["detail"]
             persisted = client.get(f"/api/projects/{project_id}").json()
             question = next(
@@ -244,6 +273,29 @@ def test_configuration_revision_rejects_stale_update(tmp_path: Path) -> None:
             )
             assert question["label"] == "Первая правка"
             assert persisted["configuration"]["revision"] == initial_revision + 1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_unexpected_api_error_is_safe_and_traceable(tmp_path: Path, monkeypatch) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=1024)
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    def fail(_project_id):
+        raise RuntimeError("secret filesystem path")
+
+    monkeypatch.setattr(repository, "get", fail)
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get(
+                "/api/projects/00000000-0000-0000-0000-000000000001",
+                headers={"X-Request-ID": "diagnostic-42"},
+            )
+        assert response.status_code == 500
+        assert response.json()["error_code"] == "INTERNAL_ERROR"
+        assert response.json()["request_id"] == "diagnostic-42"
+        assert response.headers["X-Request-ID"] == "diagnostic-42"
+        assert "secret" not in response.text
     finally:
         app.dependency_overrides.clear()
 

@@ -71,9 +71,11 @@
 `counted_value` для dichotomy MR, построчные базы grouped-вопросов, SPSS user-missing
 для NPS/CSAT и явную блокировку незавершённых типов. В P0.2 уже добавлены проверка
 ссылочной целостности, optimistic locking по ревизии конфигурации, типизированный
-контракт с отдельной `schema_version` и immutable-артефакты. Job и download теперь
-привязаны к `configuration_revision`/`cache_key`/`artifact_id`; скачивание не запускает
-расчёт. Следующий срез — безопасный контракт ошибок и автоматические ворота P0.3.
+контракт с отдельной `schema_version`, immutable-артефакты и безопасный API-контракт
+`error_code`/`request_id`. Job и download теперь привязаны к
+`configuration_revision`/`cache_key`/`artifact_id`; скачивание не запускает расчёт.
+В P0.3 добавлен базовый CI с coverage 85%, инкрементальным mypy и Docker smoke,
+а зависимости зафиксированы в `uv.lock`. Следующий срез — golden fixtures и полный smoke.
 
 #### P0.1. Единая модель данных и расчётов
 
@@ -99,12 +101,13 @@
   идентификатору артефакта. Download endpoint не должен строить новый отчёт при
   cache miss или после изменения настроек. **Реализовано.**
 - Добавить безопасные пользовательские коды ошибок; traceback оставлять только в
-  серверном структурированном логе с request/job ID.
+  серверном структурированном логе с request/job ID. **Реализовано.**
 
 #### P0.3. Автоматические ворота качества
 
 - Добавить CI для Ruff, pytest, coverage, type checking, Docker build и boot smoke.
-- Зафиксировать зависимости воспроизводимым lock-файлом.
+  **Базовый gate реализован; type checking пока охватывает P0-контракты.**
+- Зафиксировать зависимости воспроизводимым lock-файлом. **Реализовано через `uv.lock`.**
 - Создать независимые синтетические SAV/SPSS/R golden fixtures: MR с
   `counted_value != 1`, complementary missing, user-missing `99`, single, scale,
   numeric, matrix, веса, волны, NPS и CSAT.

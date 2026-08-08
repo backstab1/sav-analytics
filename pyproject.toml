@@ -23,7 +23,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<1",
+  "mypy>=1.17,<2",
   "pytest>=8.3,<9",
+  "pytest-cov>=6,<8",
   "ruff>=0.11,<1",
 ]
 
@@ -43,3 +45,16 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_configs = true
+
+[tool.coverage.run]
+source = ["sav_analytics"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true

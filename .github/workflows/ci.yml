@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          version: "0.12.3"
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Incremental P0 type check
+        run: >-
+          uv run mypy --follow-imports=skip
+          src/sav_analytics/api.py
+          src/sav_analytics/api_errors.py
+          src/sav_analytics/project_models.py
+          src/sav_analytics/report_cache.py
+          src/sav_analytics/report_jobs.py
+          src/sav_analytics/configuration_revision.py
+      - name: Tests and coverage gate
+        run: uv run pytest --cov=sav_analytics --cov-report=term-missing
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build --tag sav-analytics:ci .
+      - name: Start container
+        run: docker run --detach --name sav-analytics-ci --publish 8000:8000 sav-analytics:ci
+      - name: Check health endpoint
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs sav-analytics-ci
+          exit 1
+      - name: Show logs on failure
+        if: failure()
+        run: docker logs sav-analytics-ci
+      - name: Stop container
+        if: always()
+        run: docker rm --force sav-analytics-ci
