@@ -75,7 +75,9 @@
 `error_code`/`request_id`. Job и download теперь привязаны к
 `configuration_revision`/`cache_key`/`artifact_id`; скачивание не запускает расчёт.
 В P0.3 добавлен базовый CI с coverage 85%, инкрементальным mypy и Docker smoke,
-а зависимости зафиксированы в `uv.lock`. Следующий срез — golden fixtures и полный smoke.
+а зависимости зафиксированы в `uv.lock`. Base R golden для z/Welch/Subgroup-Rest и
+полный SAV → API → immutable XLSX/TXT smoke уже работают. Следующий срез — расширенные
+goldens для MR/user-missing/весов/волн и настоящий браузерный smoke.
 
 #### P0.1. Единая модель данных и расчётов
 
@@ -110,9 +112,11 @@
 - Зафиксировать зависимости воспроизводимым lock-файлом. **Реализовано через `uv.lock`.**
 - Создать независимые синтетические SAV/SPSS/R golden fixtures: MR с
   `counted_value != 1`, complementary missing, user-missing `99`, single, scale,
-  numeric, matrix, веса, волны, NPS и CSAT.
+  numeric, matrix, веса, волны, NPS и CSAT. **Base R z/Welch/Subgroup-Rest реализован;
+  расширенные случаи остаются в работе.**
 - Проверять не только отдельные формулы, но и полный `statistics.txt`, числовые
-  значения/структуру XLSX и причины каждого пропущенного теста.
+  значения/структуру XLSX и причины каждого пропущенного теста. **Полный нормализованный
+  SHA `statistics.txt` и структура immutable XLSX добавлены для базового pipeline.**
 - Добавить браузерный smoke: upload → structure → recoding → filter → banner/weight
   → prepare → download → проверка XLSX/TXT.
 - Добавить тесты повреждённого cache, dangling references, конкурентной записи и

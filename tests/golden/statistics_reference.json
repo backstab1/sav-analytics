@@ -1,0 +1,68 @@
+{
+  "provenance": {
+    "engine": "Base R",
+    "script": "statistics_reference.R",
+    "methodology": "pooled two-sided z-test, unpooled Wald CI, Welch two-sample t-test",
+    "reference_locked_on": "2026-08-09"
+  },
+  "proportion_cases": [
+    {
+      "id": "standard",
+      "successes": [70, 50],
+      "bases": [100, 100],
+      "comparisons": 1,
+      "performed": true,
+      "statistic": 2.886751345948128,
+      "p_value": 0.003892417122778628,
+      "difference": 0.2,
+      "alpha": 0.05,
+      "confidence_interval": [0.06706877501808317, 0.33293122498191674],
+      "expected_frequencies": [60.0, 40.0, 60.0, 40.0]
+    },
+    {
+      "id": "subgroup_vs_rest",
+      "successes": [42, 20],
+      "bases": [60, 40],
+      "comparisons": 1,
+      "performed": true,
+      "statistic": 2.0185893307574663,
+      "p_value": 0.04352992086961164,
+      "difference": 0.2,
+      "alpha": 0.05,
+      "confidence_interval": [0.006469063192037106, 0.3935309368079628],
+      "expected_frequencies": [37.2, 22.8, 24.8, 15.2]
+    },
+    {
+      "id": "bonferroni_four_comparisons",
+      "successes": [63, 49],
+      "bases": [100, 100],
+      "comparisons": 4,
+      "performed": true,
+      "statistic": 1.9943100880436644,
+      "p_value": 0.04611817746898452,
+      "difference": 0.14,
+      "alpha": 0.0125,
+      "confidence_interval": [-0.0335860381374985, 0.3135860381374985],
+      "expected_frequencies": [56.0, 44.0, 56.0, 44.0]
+    },
+    {
+      "id": "small_expected_frequency",
+      "successes": [1, 8],
+      "bases": [30, 30],
+      "comparisons": 1,
+      "performed": false,
+      "difference": -0.23333333333333334,
+      "alpha": 0.05,
+      "expected_frequencies": [4.5, 25.5, 4.5, 25.5]
+    }
+  ],
+  "welch_case": {
+    "group_a": [10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16],
+    "group_b": [8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10],
+    "statistic": 7.930393205635306,
+    "degrees_of_freedom": 73.63388322026942,
+    "p_value": 1.806579313114011e-11,
+    "difference": 3.078947368421053,
+    "confidence_interval": [2.3052854231025406, 3.8526093137395656]
+  }
+}

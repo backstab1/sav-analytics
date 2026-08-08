@@ -113,10 +113,12 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py
 ```
 
-Сейчас набор содержит 77 pytest-кейсов для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 83 pytest-кейса для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, структуры XLSX и
 эталонных расчётов z-test, Welch t-test и Subgroup/Rest, включая регрессии
-multiple-response `counted_value`, построчных баз и SPSS user-missing.
+multiple-response `counted_value`, построчных баз и SPSS user-missing. Численные
+golden-эталоны воспроизводятся отдельным Base R скриптом, а полный pipeline защищён
+snapshot полного `statistics.txt` и проверкой immutable XLSX.
 
 ## Устройство проекта
 
