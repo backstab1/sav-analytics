@@ -63,6 +63,7 @@ class QuestionInspection:
     items: list[dict[str, str]] = field(default_factory=list)
     special_values: list[Any] = field(default_factory=list)
     special_items: list[str] = field(default_factory=list)
+    multiple_response: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)

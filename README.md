@@ -111,9 +111,10 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
-Сейчас набор содержит 58 тестов для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 71 pytest-кейс для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, структуры XLSX и
-эталонных расчётов z-test, Welch t-test и Subgroup/Rest.
+эталонных расчётов z-test, Welch t-test и Subgroup/Rest, включая регрессии
+multiple-response `counted_value`, построчных баз и SPSS user-missing.
 
 ## Устройство проекта
 
@@ -143,11 +144,15 @@ src/sav_analytics/
 ```
 
 Подробная постановка задачи находится в [docs/requirements.md](docs/requirements.md),
-целевая production-архитектура — в [docs/architecture.md](docs/architecture.md).
+актуальный порядок разработки — в [docs/roadmap.md](docs/roadmap.md), а целевая
+production-архитектура — в [docs/architecture.md](docs/architecture.md).
 Эти документы описывают и будущие функции, поэтому не всё перечисленное там уже реализовано.
 
 ## Что пока не реализовано
 
+- полноценные расчёты и отчётные блоки для categorical multiple и ranking;
+- единый экран preflight/настроек отчёта и неизменяемая история его версий;
+- поиск, сортировка, корзина проектов, autosave и локальный Undo/`Ctrl+Z`;
 - пользователи, роли и авторизация;
 - PostgreSQL, Redis, очередь фоновых расчётов и версионирование отчётов;
 - ручной выбор и изменение порядка включённых волн, расчёт raking отдельно внутри волн,

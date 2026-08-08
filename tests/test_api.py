@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from uuid import UUID
 
+import pandas as pd
+import pyreadstat
 import pytest
 from fastapi.testclient import TestClient
 
@@ -148,6 +150,67 @@ def test_question_configuration_and_preview_are_persisted(tmp_path: Path) -> Non
 
             persisted = client.get(f"/api/projects/{project_id}").json()
             assert persisted["configuration"]["questions"][0]["code"] == codes[-1]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_question_update_rejects_unsupported_report_types(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            for question_type in ("multiple_choice_categorical", "ranking"):
+                response = client.patch(
+                    f"/api/projects/{project_id}/questions/Q1",
+                    json={"question_type": question_type},
+                )
+                assert response.status_code == 422
+                assert "не поддерживается" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_nps_accepts_labelled_spss_user_missing_outside_scale(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "nps_missing.sav"
+    frame = pd.DataFrame({"NPS": [0, 7, 10, 99]})
+    pyreadstat.write_sav(
+        frame,
+        source,
+        variable_value_labels={
+            "NPS": {0: "0", 7: "7", 10: "10", 99: "Затрудняюсь ответить"}
+        },
+        missing_ranges={"NPS": [99]},
+        variable_measure={"NPS": "scale"},
+    )
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("nps.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+
+            response = client.patch(
+                f"/api/projects/{project_id}/questions/NPS",
+                json={"special_metric": "nps"},
+            )
+
+            assert response.status_code == 200
+            question = next(
+                item
+                for item in response.json()["configuration"]["questions"]
+                if item["code"] == "NPS"
+            )
+            assert question["special_metric"] == "nps"
+            assert question["valid_count"] == 3
+            assert question["missing_count"] == 1
     finally:
         app.dependency_overrides.clear()
 

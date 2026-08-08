@@ -8,6 +8,12 @@ import pandas as pd
 import pyreadstat
 
 from .models import QuestionType
+from .multiple_response import (
+    MultipleResponseError,
+    answered_mask,
+    response_definition,
+    selected_mask,
+)
 
 
 class ToplineError(ValueError):
@@ -37,15 +43,18 @@ def calculate_preview(
     variable_by_name = {item["name"]: item for item in variables}
 
     if question_type is QuestionType.MULTIPLE_DICHOTOMY:
-        return {
-            **base,
-            **_multiple_preview(
-                frame,
-                source_variables,
-                variable_by_name,
-                question.get("special_items", []),
-            ),
-        }
+        try:
+            return {
+                **base,
+                **_multiple_preview(
+                    frame,
+                    question,
+                    variable_by_name,
+                    question.get("special_items", []),
+                ),
+            }
+        except MultipleResponseError as exc:
+            raise ToplineError(str(exc)) from exc
     if question_type is QuestionType.MATRIX:
         return {
             **base,
@@ -56,6 +65,11 @@ def calculate_preview(
                 question.get("special_values", []),
             ),
         }
+    if question_type in {
+        QuestionType.MULTIPLE_CATEGORICAL,
+        QuestionType.RANKING,
+    }:
+        raise ToplineError("Этот тип вопроса пока не поддерживается в расчётах.")
     if len(source_variables) != 1:
         raise ToplineError("Для этого типа вопроса ожидается одна исходная переменная.")
     series = frame[source_variables[0]]
@@ -109,16 +123,16 @@ def _categorical_preview(
 
 def _multiple_preview(
     frame: pd.DataFrame,
-    source_variables: list[str],
+    question: dict[str, Any],
     variable_by_name: dict[str, dict[str, Any]],
     special_items: list[str],
 ) -> dict[str, Any]:
-    answered = frame[source_variables].notna().any(axis=1)
+    source_variables = question["source_variables"]
+    answered = answered_mask(frame, question)
     valid_base = int(answered.sum())
     rows = []
     for name in source_variables:
-        series = frame[name]
-        count = int(series.eq(1).sum())
+        count = int(selected_mask(frame, question, name).sum())
         variable = variable_by_name[name]
         rows.append(
             {
@@ -130,11 +144,16 @@ def _multiple_preview(
                 "is_special": name in special_items,
             }
         )
-    warnings = ["Для автоматически найденной дихотомии выбранным считается код 1."]
+    counted_value = response_definition(question).get("counted_value")
+    warnings = [f"Выбранным считается код {counted_value}."]
     special = [name for name in special_items if name in source_variables]
     ordinary = [name for name in source_variables if name not in special]
     if special and ordinary:
-        conflicting = frame[special].eq(1).any(axis=1) & frame[ordinary].eq(1).any(axis=1)
+        conflicting = pd.concat(
+            [selected_mask(frame, question, name) for name in special], axis=1
+        ).any(axis=1) & pd.concat(
+            [selected_mask(frame, question, name) for name in ordinary], axis=1
+        ).any(axis=1)
         conflict_count = int(conflicting.sum())
         if conflict_count:
             warnings.append(
@@ -170,7 +189,7 @@ def _matrix_preview(
             }
         )
     return {
-        "valid_base": max((item["valid_base"] for item in items), default=0),
+        "valid_base": int(frame[source_variables].notna().any(axis=1).sum()),
         "rows": [],
         "statistics": None,
         "items": items,

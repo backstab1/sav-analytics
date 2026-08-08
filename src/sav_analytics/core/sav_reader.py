@@ -45,7 +45,9 @@ def inspect_sav(path: str | Path) -> SavInspection:
 
     variables = [_inspect_variable(frame[name], name, metadata) for name in frame.columns]
     explicit_sets = _read_multiple_response_sets(metadata)
-    questions, grouping_warnings = _build_questions(frame, variables, explicit_sets)
+    questions, grouping_warnings = _build_questions(
+        frame, variables, explicit_sets, metadata
+    )
     warnings = grouping_warnings
     if not variables:
         warnings.append("В SAV не найдено ни одной переменной.")
@@ -65,8 +67,6 @@ def _inspect_variable(series: pd.Series, name: str, metadata: Any) -> VariableIn
     value_labels_map = getattr(metadata, "variable_value_labels", {}) or {}
     formats = getattr(metadata, "original_variable_types", {}) or {}
     measures = getattr(metadata, "variable_measure", {}) or {}
-    missing_ranges = getattr(metadata, "missing_ranges", {}) or {}
-    missing_values = getattr(metadata, "missing_user_values", {}) or {}
 
     value_labels = value_labels_map.get(name, {}) or {}
     original_format = formats.get(name)
@@ -74,24 +74,7 @@ def _inspect_variable(series: pd.Series, name: str, metadata: Any) -> VariableIn
     role = infer_role(name, original_format)
 
     metadata_warnings: list[str] = []
-    missing_mask = series.isna().copy()
-    for value in missing_values.get(name, []) or []:
-        try:
-            missing_mask |= series.eq(value)
-        except (TypeError, ValueError):
-            metadata_warnings.append(
-                "Пользовательское пропущенное значение несовместимо с форматом переменной."
-            )
-    for value_range in missing_ranges.get(name, []) or []:
-        lower = value_range.get("lo")
-        upper = value_range.get("hi")
-        if lower is not None and upper is not None:
-            try:
-                missing_mask |= series.between(lower, upper, inclusive="both")
-            except (TypeError, ValueError):
-                metadata_warnings.append(
-                    "Диапазон пользовательских пропусков несовместим с форматом переменной."
-                )
+    missing_mask = spss_missing_mask(series, name, metadata, metadata_warnings)
 
     analysis_series = series.mask(missing_mask)
     variable_label = str(labels.get(name) or name).strip()
@@ -127,11 +110,17 @@ def _read_multiple_response_sets(metadata: Any) -> list[dict[str, Any]]:
     raw_sets = getattr(metadata, "mr_sets", {}) or {}
     result: list[dict[str, Any]] = []
     for name, definition in raw_sets.items():
+        response_type = str(definition.get("type") or "unknown").upper()
+        dichotomy_set = bool(
+            definition.get("is_dichotomy", response_type == "D")
+        )
         result.append(
             {
                 "name": str(name),
                 "label": str(definition.get("label") or name),
-                "type": str(definition.get("type") or "unknown"),
+                "type": response_type,
+                "encoding": "dichotomy" if dichotomy_set else "categorical",
+                "is_dichotomy": dichotomy_set,
                 "variables": list(definition.get("variable_list") or []),
                 "counted_value": _json_scalar(definition.get("counted_value")),
                 "source": "spss_metadata",
@@ -144,20 +133,31 @@ def _build_questions(
     frame: pd.DataFrame,
     variables: list[VariableInspection],
     explicit_sets: list[dict[str, Any]],
+    metadata: Any,
 ) -> tuple[list[QuestionInspection], list[str]]:
     by_name = {variable.name: variable for variable in variables}
-    grouped: dict[str, tuple[list[str], str, QuestionType]] = {}
+    grouped: dict[str, dict[str, Any]] = {}
     consumed: set[str] = set()
     warnings: list[str] = []
 
     for response_set in explicit_sets:
         members = [name for name in response_set["variables"] if name in by_name]
         if len(members) >= 2:
-            grouped[response_set["name"].lstrip("$")] = (
-                members,
-                "metadata",
-                QuestionType.MULTIPLE_DICHOTOMY,
-            )
+            dichotomy_set = response_set["encoding"] == "dichotomy"
+            grouped[response_set["name"].lstrip("$")] = {
+                "members": members,
+                "source": "metadata",
+                "question_type": (
+                    QuestionType.MULTIPLE_DICHOTOMY
+                    if dichotomy_set
+                    else QuestionType.MULTIPLE_CATEGORICAL
+                ),
+                "multiple_response": {
+                    "encoding": response_set["encoding"],
+                    "counted_value": response_set["counted_value"],
+                    "source": "spss_metadata",
+                },
+            }
             consumed.update(members)
 
     candidates: dict[str, list[str]] = defaultdict(list)
@@ -170,7 +170,13 @@ def _build_questions(
 
     for prefix, members in candidates.items():
         all_dichotomies = all(
-            is_dichotomy(frame[name].dropna().unique()) for name in members
+            is_dichotomy(
+                frame[name]
+                .mask(spss_missing_mask(frame[name], name, metadata))
+                .dropna()
+                .unique()
+            )
+            for name in members
         )
         if len(members) < 2:
             continue
@@ -198,7 +204,20 @@ def _build_questions(
             group_type = QuestionType.MATRIX
         else:
             continue
-        grouped[prefix] = (members, "name_pattern", group_type)
+        grouped[prefix] = {
+            "members": members,
+            "source": "name_pattern",
+            "question_type": group_type,
+            "multiple_response": (
+                {
+                    "encoding": "dichotomy",
+                    "counted_value": 1,
+                    "source": "name_pattern",
+                }
+                if group_type is QuestionType.MULTIPLE_DICHOTOMY
+                else None
+            ),
+        }
         consumed.update(members)
         group_label = "множественный вопрос" if all_dichotomies else "матрица"
         warnings.append(
@@ -209,17 +228,43 @@ def _build_questions(
     questions: list[QuestionInspection] = []
     emitted_groups: set[str] = set()
     group_by_member = {
-        member: (code, members, source, group_type)
-        for code, (members, source, group_type) in grouped.items()
-        for member in members
+        member: (code, definition)
+        for code, definition in grouped.items()
+        for member in definition["members"]
     }
     for variable in variables:
         group = group_by_member.get(variable.name)
         if group:
-            code, members, source, group_type = group
+            code, definition = group
+            members = definition["members"]
+            source = definition["source"]
+            group_type = definition["question_type"]
             if code in emitted_groups:
                 continue
             emitted_groups.add(code)
+            valid_rows = pd.concat(
+                [
+                    ~spss_missing_mask(frame[name], name, metadata)
+                    for name in members
+                ],
+                axis=1,
+            ).any(axis=1)
+            unsupported = group_type is QuestionType.MULTIPLE_CATEGORICAL
+            missing_counted_value = (
+                group_type is QuestionType.MULTIPLE_DICHOTOMY
+                and definition["multiple_response"].get("counted_value") is None
+            )
+            group_warnings = (
+                [] if source == "metadata" else ["Автоматически собранная группа."]
+            )
+            if unsupported:
+                group_warnings.append(
+                    "Категориальное представление multiple-response пока не поддерживается."
+                )
+            if missing_counted_value:
+                group_warnings.append(
+                    "В metadata multiple-response не задан код выбранного ответа."
+                )
             questions.append(
                 QuestionInspection(
                     code=code,
@@ -227,11 +272,11 @@ def _build_questions(
                     question_type=group_type,
                     role=VariableRole.QUESTION,
                     source_variables=members,
-                    valid_count=max(by_name[name].valid_count for name in members),
-                    missing_count=min(by_name[name].missing_count for name in members),
-                    included_in_report=True,
+                    valid_count=int(valid_rows.sum()),
+                    missing_count=int((~valid_rows).sum()),
+                    included_in_report=not unsupported and not missing_counted_value,
                     recognition="metadata" if source == "metadata" else "auto_review",
-                    warnings=[] if source == "metadata" else ["Автоматически собранная группа."],
+                    warnings=group_warnings,
                     items=[
                         {"variable": name, "label": by_name[name].label} for name in members
                     ],
@@ -239,6 +284,7 @@ def _build_questions(
                     special_items=[
                         name for name in members if is_special_label(by_name[name].label)
                     ],
+                    multiple_response=definition.get("multiple_response"),
                 )
             )
             continue
@@ -267,6 +313,37 @@ def _build_questions(
             )
         )
     return questions, warnings
+
+
+def spss_missing_mask(
+    series: pd.Series,
+    name: str,
+    metadata: Any,
+    warnings: list[str] | None = None,
+) -> pd.Series:
+    """Return system and user-missing rows using SPSS metadata."""
+    result = series.isna().copy()
+    missing_values = getattr(metadata, "missing_user_values", {}) or {}
+    missing_ranges = getattr(metadata, "missing_ranges", {}) or {}
+    definitions = [
+        *(missing_values.get(name, []) or []),
+        *(missing_ranges.get(name, []) or []),
+    ]
+    for definition in definitions:
+        try:
+            if isinstance(definition, dict):
+                lower = definition.get("lo")
+                upper = definition.get("hi")
+                if lower is not None and upper is not None:
+                    result |= series.between(lower, upper, inclusive="both")
+            else:
+                result |= series.eq(definition)
+        except (TypeError, ValueError):
+            if warnings is not None:
+                warnings.append(
+                    "Пользовательский пропуск несовместим с форматом переменной."
+                )
+    return result.fillna(False)
 
 
 def _common_label(labels: list[str]) -> str | None:

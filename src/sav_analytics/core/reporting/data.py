@@ -10,6 +10,7 @@ import pyreadstat
 
 from ..banner import build_banner_columns
 from ..filtering import evaluate_filter_frame
+from ..multiple_response import response_definition
 from ..weighting import WeightingError, calculate_raking
 from .models import ReportError
 
@@ -77,6 +78,33 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
     questions = [
         question for question in configuration["questions"] if question["included_in_report"]
     ]
+    unsupported = [
+        question["code"]
+        for question in questions
+        if question["question_type"]
+        in {"multiple_choice_categorical", "ranking"}
+    ]
+    if unsupported:
+        raise ReportError(
+            "Отчёт содержит пока не поддерживаемые типы вопросов: "
+            + ", ".join(unsupported)
+            + ". Исключите их из отчёта."
+        )
+    invalid_multiple = [
+        question["code"]
+        for question in questions
+        if question["question_type"] == "multiple_choice_dichotomy"
+        and (
+            response_definition(question).get("encoding") != "dichotomy"
+            or response_definition(question).get("counted_value") is None
+        )
+    ]
+    if invalid_multiple:
+        raise ReportError(
+            "Не задан код выбранного ответа multiple-response: "
+            + ", ".join(invalid_multiple)
+            + "."
+        )
     variables = {item["name"]: item for item in project["inspection"]["variables"]}
     filters = {item["id"]: item for item in configuration.get("filters", [])}
     filter_questions = [question for question in questions if question["missing_count"] > 0]

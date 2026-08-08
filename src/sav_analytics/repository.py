@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
+import pandas as pd
 import pyreadstat
 
-from .core.sav_reader import SavReadError, inspect_sav
+from .core.sav_reader import SavReadError, inspect_sav, spss_missing_mask
 
-STRUCTURE_VERSION = 5
+STRUCTURE_VERSION = 6
 
 
 class ProjectNotFoundError(LookupError):
@@ -111,6 +112,15 @@ class ProjectRepository:
             raise ProjectNotFoundError(code) from exc
         final_role = changes.get("role", question["role"])
         final_type = changes.get("question_type", question["question_type"])
+        unsupported_types = {"multiple_choice_categorical", "ranking"}
+        if changes.get("question_type") in unsupported_types:
+            raise InvalidUploadError(
+                "Этот тип вопроса пока не поддерживается в расчётах и отчёте."
+            )
+        if final_type in unsupported_types and changes.get("included_in_report") is True:
+            raise InvalidUploadError(
+                "Пока этот тип вопроса нельзя включить в отчёт."
+            )
         if final_role == "wave":
             if final_type != "single_choice" or len(question["source_variables"]) != 1:
                 raise InvalidUploadError("Переменная волны должна быть одиночным single choice.")
@@ -126,14 +136,22 @@ class ProjectRepository:
                 item for item in project["inspection"]["variables"] if item["name"] == variable_name
             )
             labelled = [item["value"] for item in variable.get("value_labels", [])]
-            frame, _ = pyreadstat.read_sav(
+            frame, metadata = pyreadstat.read_sav(
                 self.source_path(project_id),
                 usecols=[variable_name],
                 apply_value_formats=False,
-                user_missing=False,
+                user_missing=True,
                 dates_as_pandas_datetime=False,
             )
-            observed = frame[variable_name].dropna().tolist()
+            observed_series = frame[variable_name]
+            observed = observed_series.mask(
+                spss_missing_mask(observed_series, variable_name, metadata)
+            ).dropna().tolist()
+            if labelled:
+                labelled_series = pd.Series(labelled)
+                labelled = labelled_series.mask(
+                    spss_missing_mask(labelled_series, variable_name, metadata)
+                ).dropna().tolist()
             try:
                 values = {float(value) for value in [*labelled, *observed]}
             except (TypeError, ValueError) as exc:

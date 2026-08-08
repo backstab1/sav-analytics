@@ -1,10 +1,16 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pyreadstat
 
 from sav_analytics.core.models import QuestionType, VariableRole
-from sav_analytics.core.sav_reader import inspect_sav
+from sav_analytics.core.sav_reader import (
+    _build_questions,
+    _inspect_variable,
+    _read_multiple_response_sets,
+    inspect_sav,
+)
 
 
 def write_fixture(path: Path) -> None:
@@ -57,6 +63,25 @@ def write_grouped_fixture(path: Path) -> None:
         },
         variable_value_labels={"Q5_1": scale_labels, "Q5_2": scale_labels},
         variable_measure={"Q5_1": "scale", "Q5_2": "scale"},
+    )
+
+
+def write_counted_value_fixture(path: Path) -> None:
+    frame = pd.DataFrame(
+        {
+            "MR_1": [2, 1, 2, float("nan")],
+            "MR_2": [1, 2, 2, float("nan")],
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        path,
+        column_labels={"MR_1": "Марки: Альфа", "MR_2": "Марки: Бета"},
+        variable_value_labels={
+            "MR_1": {1: "Не выбрано", 2: "Выбрано"},
+            "MR_2": {1: "Не выбрано", 2: "Выбрано"},
+        },
+        variable_measure={"MR_1": "nominal", "MR_2": "nominal"},
     )
 
 
@@ -175,3 +200,74 @@ def test_sparse_numbered_response_slots_are_not_mistaken_for_scales(
     assert questions["CHOICE_2"].question_type is QuestionType.SINGLE_CHOICE
     assert not any(question.code == "CHOICE" for question in result.questions)
     assert any("позицион" in warning for warning in result.warnings)
+
+
+def test_metadata_multiple_response_preserves_counted_value_and_rowwise_base() -> None:
+    frame = pd.DataFrame(
+        {
+            "M1": [2, float("nan"), 2, float("nan")],
+            "M2": [float("nan"), 2, 1, float("nan")],
+        }
+    )
+    metadata = SimpleNamespace(
+        column_names_to_labels={"M1": "Марки: Альфа", "M2": "Марки: Бета"},
+        variable_value_labels={},
+        original_variable_types={},
+        variable_measure={"M1": "nominal", "M2": "nominal"},
+        missing_ranges={},
+        missing_user_values={},
+        mr_sets={
+            "$BRANDS": {
+                "type": "D",
+                "is_dichotomy": True,
+                "counted_value": 2,
+                "label": "Марки",
+                "variable_list": ["M1", "M2"],
+            }
+        },
+    )
+    variables = [_inspect_variable(frame[name], name, metadata) for name in frame]
+    response_sets = _read_multiple_response_sets(metadata)
+
+    questions, _ = _build_questions(frame, variables, response_sets, metadata)
+
+    question = questions[0]
+    assert question.question_type is QuestionType.MULTIPLE_DICHOTOMY
+    assert question.multiple_response == {
+        "encoding": "dichotomy",
+        "counted_value": 2,
+        "source": "spss_metadata",
+    }
+    assert question.valid_count == 3
+    assert question.missing_count == 1
+
+
+def test_metadata_categorical_multiple_is_excluded_until_supported() -> None:
+    frame = pd.DataFrame({"SLOT1": [1, 2], "SLOT2": [2, 1]})
+    metadata = SimpleNamespace(
+        column_names_to_labels={},
+        variable_value_labels={},
+        original_variable_types={},
+        variable_measure={},
+        missing_ranges={},
+        missing_user_values={},
+        mr_sets={
+            "$CHOICES": {
+                "type": "C",
+                "is_dichotomy": False,
+                "counted_value": None,
+                "label": "Выборы",
+                "variable_list": ["SLOT1", "SLOT2"],
+            }
+        },
+    )
+    variables = [_inspect_variable(frame[name], name, metadata) for name in frame]
+
+    questions, _ = _build_questions(
+        frame, variables, _read_multiple_response_sets(metadata), metadata
+    )
+
+    question = questions[0]
+    assert question.question_type is QuestionType.MULTIPLE_CATEGORICAL
+    assert not question.included_in_report
+    assert any("не поддерживается" in warning for warning in question.warnings)

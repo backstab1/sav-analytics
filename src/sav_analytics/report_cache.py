@@ -13,7 +13,7 @@ from uuid import UUID
 from .core.report import build_topline_artifacts
 from .repository import ProjectRepository
 
-REPORT_CACHE_VERSION = 4
+REPORT_CACHE_VERSION = 5
 _locks_guard = threading.Lock()
 _locks: dict[str, threading.Lock] = {}
 

@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from ..filtering import evaluate_filter_frame
+from ..multiple_response import answered_mask, selected_mask
 from ..statistics import StatisticalTestResult, effective_sample_size
 from .models import ReportError, StatisticalAuditEntry
 from .statistics import (
@@ -123,9 +124,9 @@ def _write_question_rows(
     question_type = question["question_type"]
     sources = question["source_variables"]
     if question_type == "multiple_choice_dichotomy":
-        answered = frame[sources].notna().any(axis=1)
+        answered = answered_mask(frame, question)
         for name in sources:
-            selected = frame[name].eq(1)
+            selected = selected_mask(frame, question, name)
             row = _write_metric_row(
                 sheet,
                 row,

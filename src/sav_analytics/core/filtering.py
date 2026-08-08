@@ -6,6 +6,12 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
+from .multiple_response import (
+    MultipleResponseError,
+    answered_mask,
+    selected_mask,
+)
+
 
 class FilterError(ValueError):
     pass
@@ -140,19 +146,20 @@ def _evaluate_condition(
     if condition["source"]["kind"] == "question" and resolved.get(
         "question_type", ""
     ).startswith("multiple_choice"):
-        selected = []
-        for name in condition.get("values", []):
-            if name not in resolved["source_variables"]:
-                raise FilterError(f"Вариант {name} не входит в multiple-response.")
-            series = frame[name]
-            selected.append(series.notna() & (series != 0))
+        try:
+            selected = [
+                selected_mask(frame, resolved, name)
+                for name in condition.get("values", [])
+            ]
+            available = answered_mask(frame, resolved)
+        except MultipleResponseError as exc:
+            raise FilterError(str(exc)) from exc
         if operator in {"selected", "selected_any"}:
             return pd.concat(selected, axis=1).any(axis=1)
         if operator == "selected_all":
             return pd.concat(selected, axis=1).all(axis=1)
         if operator == "selected_none":
-            return ~pd.concat(selected, axis=1).any(axis=1)
-        available = frame[resolved["source_variables"]].notna().any(axis=1)
+            return available & ~pd.concat(selected, axis=1).any(axis=1)
         return available if operator == "filled" else ~available
 
     series = _source_series(condition["source"], resolved, frame)

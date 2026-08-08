@@ -20,7 +20,7 @@ from sav_analytics.core.report import (
     build_topline_xlsx,
 )
 from sav_analytics.core.sav_reader import inspect_sav
-from tests.test_sav_reader import write_fixture
+from tests.test_sav_reader import write_counted_value_fixture, write_fixture
 
 
 def test_vectorized_unweighted_proportion_matches_legacy_path_exactly() -> None:
@@ -106,6 +106,65 @@ def test_topline_workbook_has_required_sheets_and_numeric_cells(tmp_path: Path) 
         main_xml = archive.read("xl/worksheets/sheet1.xml")
         assert b'<c r="B4" s=' in main_xml
         assert b'<v>4</v>' in main_xml
+
+
+def test_topline_multiple_uses_configured_counted_value(tmp_path: Path) -> None:
+    source = tmp_path / "counted_value.sav"
+    write_counted_value_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    question = {
+        "code": "MR",
+        "label": "Марки",
+        "question_type": "multiple_choice_dichotomy",
+        "role": "question",
+        "source_variables": ["MR_1", "MR_2"],
+        "valid_count": 3,
+        "missing_count": 1,
+        "included_in_report": True,
+        "special_items": [],
+        "multiple_response": {"encoding": "dichotomy", "counted_value": 2},
+    }
+    inspection["questions"] = [question]
+    project = {
+        "name": "Counted value",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [],
+            "report_filter_id": None,
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+
+    assert _cell_value(content, "Марки: Альфа", "B") == pytest.approx(50)
+
+
+@pytest.mark.parametrize("question_type", ["multiple_choice_categorical", "ranking"])
+def test_report_rejects_included_unsupported_question_type(
+    tmp_path: Path, question_type: str
+) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    question = next(item for item in inspection["questions"] if item["code"] == "Q1")
+    question["question_type"] = question_type
+    project = {
+        "name": "Unsupported",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [],
+            "report_filter_id": None,
+        },
+    }
+
+    with pytest.raises(ReportError, match="не поддерживаемые типы"):
+        build_topline_xlsx(source, project)
 
 
 def test_topline_uses_selected_banner_from_multiple_saved_banners(tmp_path: Path) -> None:
