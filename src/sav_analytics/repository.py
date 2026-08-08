@@ -19,6 +19,7 @@ from .configuration_revision import (
 )
 from .core.configuration_integrity import ensure_not_referenced
 from .core.sav_reader import SavReadError, inspect_sav, spss_missing_mask
+from .project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
 
 STRUCTURE_VERSION = 6
 
@@ -70,6 +71,7 @@ class ProjectRepository:
                 "source": {"size": size, "sha256": digest.hexdigest()},
                 "inspection": inspection.to_dict(),
                 "configuration": {
+                    "schema_version": CONFIGURATION_SCHEMA_VERSION,
                     "structure_version": STRUCTURE_VERSION,
                     "revision": 1,
                     "questions": inspection.to_dict()["questions"],
@@ -82,6 +84,7 @@ class ProjectRepository:
                     "updated_at": created_at,
                 },
             }
+            validate_stored_project(project)
             (temporary / "project.json").write_text(
                 json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
             )
@@ -110,6 +113,7 @@ class ProjectRepository:
         self._ensure_configuration(project)
         if project["configuration"].get("structure_version", 0) < STRUCTURE_VERSION:
             project = self._refresh_structure_data(project_id, project)
+        validate_stored_project(project)
         return project
 
     def update_question(self, project_id: UUID, code: str, changes: dict) -> dict:
@@ -552,6 +556,9 @@ class ProjectRepository:
         project["configuration"].setdefault("filters", [])
         project["configuration"].setdefault("calculated_weights", [])
         project["configuration"].setdefault("report_filter_id", None)
+        project["configuration"].setdefault(
+            "schema_version", CONFIGURATION_SCHEMA_VERSION
+        )
         project["configuration"].setdefault("revision", 1)
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")
@@ -586,6 +593,7 @@ class ProjectRepository:
                 )
             project["configuration"]["revision"] = current_revision + 1
             project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+            validate_stored_project(project)
             temporary.write_text(
                 json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
             )

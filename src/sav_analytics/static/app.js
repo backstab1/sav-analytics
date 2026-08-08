@@ -1978,8 +1978,13 @@ async function downloadPreparedReport(event) {
       throw new Error(result.error || "Не удалось сформировать отчёт.");
     }
     progress.value = 100;
+    const downloadKind = link.id === "download-statistics" ? "statistics" : "topline";
+    const preparedUrl = result.downloads?.[downloadKind];
+    if (!preparedUrl) {
+      throw new Error("Сервер не вернул ссылку на подготовленный отчёт.");
+    }
     const preparedLink = document.createElement("a");
-    preparedLink.href = link.href;
+    preparedLink.href = preparedUrl;
     document.body.append(preparedLink);
     preparedLink.click();
     preparedLink.remove();

@@ -111,7 +111,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
-Сейчас набор содержит 74 pytest-кейса для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 75 pytest-кейсов для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, структуры XLSX и
 эталонных расчётов z-test, Welch t-test и Subgroup/Rest, включая регрессии
 multiple-response `counted_value`, построчных баз и SPSS user-missing.
@@ -123,8 +123,11 @@ src/sav_analytics/
 ├── api.py             # сборка FastAPI, обработка ошибок и подключение роутеров
 ├── api_dependencies.py # зависимости HTTP-слоя
 ├── api_schemas.py     # Pydantic-модели запросов
+├── project_models.py  # версионированный контракт сохраняемого проекта
 ├── routers/           # projects, questions, recodings, banners, filters, weights, reports
 ├── repository.py      # локальное хранилище проектов и конфигураций
+├── report_cache.py    # immutable-артефакты отчёта по cache key
+├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту
 ├── settings.py        # переменные окружения
 ├── core/
 │   ├── sav_reader.py  # чтение SAV и построение структуры

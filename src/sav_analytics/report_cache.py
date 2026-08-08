@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -13,9 +14,14 @@ from uuid import UUID
 from .core.report import build_topline_artifacts
 from .repository import ProjectRepository
 
-REPORT_CACHE_VERSION = 5
+REPORT_CACHE_VERSION = 6
+_ARTIFACT_ID = re.compile(r"^[0-9a-f]{64}$")
 _locks_guard = threading.Lock()
 _locks: dict[str, threading.Lock] = {}
+
+
+class ReportArtifactNotFoundError(LookupError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -23,6 +29,9 @@ class PreparedReport:
     topline_path: Path
     statistics_path: Path
     cached: bool
+    cache_key: str
+    artifact_id: str
+    configuration_revision: int
 
 
 def prepare_report(
@@ -31,8 +40,8 @@ def prepare_report(
     project: dict[str, Any],
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> PreparedReport:
-    cache_key = _cache_key(project)
-    lock_key = f"{repository.root.resolve()}::{project_id}"
+    cache_key = report_cache_key(project)
+    lock_key = f"{repository.root.resolve()}::{project_id}::{cache_key}"
     with _locks_guard:
         lock = _locks.setdefault(lock_key, threading.Lock())
 
@@ -41,14 +50,15 @@ def prepare_report(
         if cached is not None:
             return cached
 
-        cache_dir = repository.report_cache_dir(project_id)
-        cache_dir.mkdir(exist_ok=True)
-        topline_path = cache_dir / "topline.xlsx"
-        statistics_path = cache_dir / "statistics.txt"
-        manifest_path = cache_dir / "manifest.json"
-        topline_temporary = cache_dir / ".topline.xlsx.tmp"
-        statistics_temporary = cache_dir / ".statistics.txt.tmp"
-        manifest_temporary = cache_dir / ".manifest.json.tmp"
+        artifact_dir = _artifact_dir(repository, project_id, cache_key)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        topline_path = artifact_dir / "topline.xlsx"
+        statistics_path = artifact_dir / "statistics.txt"
+        manifest_path = artifact_dir / "manifest.json"
+        topline_temporary = artifact_dir / ".topline.xlsx.tmp"
+        statistics_temporary = artifact_dir / ".statistics.txt.tmp"
+        manifest_temporary = artifact_dir / ".manifest.json.tmp"
+        revision = _configuration_revision(project)
 
         try:
             with statistics_temporary.open("w", encoding="utf-8", newline="\n") as stream:
@@ -59,19 +69,38 @@ def prepare_report(
                     progress_callback=progress_callback,
                 )
             topline_temporary.write_bytes(artifacts.xlsx)
+            manifest = {
+                "artifact_id": cache_key,
+                "cache_key": cache_key,
+                "cache_version": REPORT_CACHE_VERSION,
+                "configuration_revision": revision,
+                "source_sha256": project.get("source", {}).get("sha256"),
+                "files": {
+                    "topline.xlsx": _file_metadata(topline_temporary),
+                    "statistics.txt": _file_metadata(statistics_temporary),
+                },
+            }
             manifest_temporary.write_text(
-                json.dumps({"cache_key": cache_key}, ensure_ascii=False),
+                json.dumps(manifest, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
             os.replace(topline_temporary, topline_path)
             os.replace(statistics_temporary, statistics_path)
+            # The manifest is the commit marker and is always installed last.
             os.replace(manifest_temporary, manifest_path)
         finally:
             topline_temporary.unlink(missing_ok=True)
             statistics_temporary.unlink(missing_ok=True)
             manifest_temporary.unlink(missing_ok=True)
 
-        return PreparedReport(topline_path, statistics_path, cached=False)
+        return PreparedReport(
+            topline_path=topline_path,
+            statistics_path=statistics_path,
+            cached=False,
+            cache_key=cache_key,
+            artifact_id=cache_key,
+            configuration_revision=revision,
+        )
 
 
 def get_cached_report(
@@ -82,31 +111,20 @@ def get_cached_report(
     return _cached_report(repository, project_id, report_cache_key(project))
 
 
-def report_cache_key(project: dict[str, Any]) -> str:
-    return _cache_key(project)
-
-
-def _cached_report(
+def get_report_artifact(
     repository: ProjectRepository,
     project_id: UUID,
-    cache_key: str,
-) -> PreparedReport | None:
-    cache_dir = repository.report_cache_dir(project_id)
-    topline_path = cache_dir / "topline.xlsx"
-    statistics_path = cache_dir / "statistics.txt"
-    manifest_path = cache_dir / "manifest.json"
-    if not topline_path.is_file() or not statistics_path.is_file() or not manifest_path.is_file():
-        return None
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if manifest.get("cache_key") != cache_key:
-        return None
-    return PreparedReport(topline_path, statistics_path, cached=True)
+    artifact_id: str,
+) -> PreparedReport:
+    if not _ARTIFACT_ID.fullmatch(artifact_id):
+        raise ReportArtifactNotFoundError(artifact_id)
+    prepared = _cached_report(repository, project_id, artifact_id)
+    if prepared is None:
+        raise ReportArtifactNotFoundError(artifact_id)
+    return prepared
 
 
-def _cache_key(project: dict[str, Any]) -> str:
+def report_cache_key(project: dict[str, Any]) -> str:
     payload = {
         "version": REPORT_CACHE_VERSION,
         "source_sha256": project.get("source", {}).get("sha256"),
@@ -119,3 +137,48 @@ def _cache_key(project: dict[str, Any]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _cached_report(
+    repository: ProjectRepository,
+    project_id: UUID,
+    cache_key: str,
+) -> PreparedReport | None:
+    artifact_dir = _artifact_dir(repository, project_id, cache_key)
+    topline_path = artifact_dir / "topline.xlsx"
+    statistics_path = artifact_dir / "statistics.txt"
+    manifest_path = artifact_dir / "manifest.json"
+    if not topline_path.is_file() or not statistics_path.is_file() or not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        revision = int(manifest["configuration_revision"])
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return None
+    if manifest.get("cache_key") != cache_key or manifest.get("artifact_id") != cache_key:
+        return None
+    return PreparedReport(
+        topline_path=topline_path,
+        statistics_path=statistics_path,
+        cached=True,
+        cache_key=cache_key,
+        artifact_id=cache_key,
+        configuration_revision=revision,
+    )
+
+
+def _artifact_dir(
+    repository: ProjectRepository,
+    project_id: UUID,
+    artifact_id: str,
+) -> Path:
+    return repository.report_cache_dir(project_id) / "artifacts" / artifact_id
+
+
+def _configuration_revision(project: dict[str, Any]) -> int:
+    return int(project.get("configuration", {}).get("revision", 1))
+
+
+def _file_metadata(path: Path) -> dict[str, Any]:
+    content = path.read_bytes()
+    return {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}

@@ -3,7 +3,7 @@ from pathlib import Path
 from uuid import UUID
 
 from sav_analytics.core.report import ToplineArtifacts
-from sav_analytics.report_cache import prepare_report
+from sav_analytics.report_cache import get_report_artifact, prepare_report
 from sav_analytics.repository import ProjectRepository
 from tests.test_sav_reader import write_fixture
 
@@ -32,10 +32,16 @@ def test_report_cache_is_reused_and_invalidated_after_configuration_change(
     second = prepare_report(repository, project_id, project)
     assert first.cached is False
     assert second.cached is True
+    assert first.artifact_id == second.artifact_id
+    assert first.configuration_revision == project["configuration"]["revision"]
     assert calls == 1
 
     question = project["configuration"]["questions"][0]
     updated = repository.update_question(project_id, question["code"], {"label": "Changed"})
     third = prepare_report(repository, project_id, updated)
     assert third.cached is False
+    assert third.artifact_id != first.artifact_id
+    assert third.topline_path != first.topline_path
+    assert first.topline_path.read_bytes() == b"xlsx"
+    assert get_report_artifact(repository, project_id, first.artifact_id).cached is True
     assert calls == 2

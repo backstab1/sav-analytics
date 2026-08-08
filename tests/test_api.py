@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 from uuid import UUID
 
@@ -10,6 +11,18 @@ from fastapi.testclient import TestClient
 from sav_analytics.api import app, get_repository
 from sav_analytics.repository import STRUCTURE_VERSION, ProjectRepository
 from tests.test_sav_reader import write_fixture, write_grouped_fixture
+
+
+def _prepare_report(client: TestClient, project_id: str) -> dict:
+    result = client.post(f"/api/projects/{project_id}/reports/prepare").json()
+    deadline = time.monotonic() + 10
+    while result["status"] in {"queued", "running"} and time.monotonic() < deadline:
+        time.sleep(0.01)
+        result = client.get(
+            f"/api/projects/{project_id}/reports/jobs/{result['job_id']}"
+        ).json()
+    assert result["status"] == "complete"
+    return result
 
 
 def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> None:
@@ -28,28 +41,46 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             project = response.json()
             assert project["name"] == "Тестовый проект"
             assert project["inspection"]["row_count"] == 4
-            report = client.get(f"/api/projects/{project['id']}/reports/topline.xlsx")
+            assert project["configuration"]["schema_version"] == 1
+            not_prepared = client.get(
+                f"/api/projects/{project['id']}/reports/topline.xlsx"
+            )
+            assert not_prepared.status_code == 409
+            prepared = _prepare_report(client, project["id"])
+            assert prepared["configuration_revision"] == 1
+            assert prepared["artifact_id"] == prepared["cache_key"]
+            report = client.get(prepared["downloads"]["topline"])
             assert report.status_code == 200
             assert report.content.startswith(b"PK")
             assert report.headers["content-type"].startswith(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            statistics = client.get(
-                f"/api/projects/{project['id']}/reports/statistics.txt"
-            )
+            statistics = client.get(prepared["downloads"]["statistics"])
             assert statistics.status_code == 200
             assert statistics.headers["content-type"].startswith("text/plain")
-            prepared = client.post(f"/api/projects/{project['id']}/reports/prepare")
-            assert prepared.status_code == 200
-            assert prepared.json()["cached"] is True
-            assert prepared.json()["status"] == "complete"
+            prepared_again = client.post(
+                f"/api/projects/{project['id']}/reports/prepare"
+            )
+            assert prepared_again.status_code == 200
+            assert prepared_again.json()["cached"] is True
+            assert prepared_again.json()["status"] == "complete"
             job = client.get(
                 f"/api/projects/{project['id']}/reports/jobs/"
-                f"{prepared.json()['job_id']}"
+                f"{prepared_again.json()['job_id']}"
             )
             assert job.status_code == 200
             assert job.json()["progress"] == 100
             assert "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА" in statistics.text
+            changed = client.patch(
+                f"/api/projects/{project['id']}/questions/Q1",
+                headers={"If-Match": "1"},
+                json={"label": "Изменённый вопрос"},
+            )
+            assert changed.status_code == 200
+            assert client.get(
+                f"/api/projects/{project['id']}/reports/topline.xlsx"
+            ).status_code == 409
+            assert client.get(prepared["downloads"]["topline"]).status_code == 200
             technical_preview = client.get(
                 f"/api/projects/{project['id']}/questions/id/preview"
             )
@@ -395,6 +426,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
 
     migrated = repository.get(project_id)
 
+    assert migrated["configuration"]["schema_version"] == 1
     matrix = next(
         question
         for question in migrated["configuration"]["questions"]
@@ -748,7 +780,8 @@ def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None
                 },
             )
             assert banner.status_code == 201
-            report = client.get(f"/api/projects/{project_id}/reports/topline.xlsx")
+            prepared = _prepare_report(client, project_id)
+            report = client.get(prepared["downloads"]["topline"])
             assert report.status_code == 200
             blocked = client.delete(
                 f"/api/projects/{project_id}/weights/{weight['id']}"

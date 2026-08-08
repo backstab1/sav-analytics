@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from ..api_dependencies import get_repository
-from ..core.banner import BannerError
-from ..core.filtering import FilterError
-from ..core.report import ReportError
-from ..report_cache import prepare_report
+from ..report_cache import (
+    PreparedReport,
+    ReportArtifactNotFoundError,
+    get_cached_report,
+    get_report_artifact,
+)
 from ..report_jobs import get_report_job, start_report_job
 from ..repository import ProjectNotFoundError, ProjectRepository
 
@@ -38,17 +40,76 @@ def report_job_status(project_id: UUID, job_id: UUID) -> dict:
 
 
 @router.get("/topline.xlsx")
-def download_topline(
+def download_current_topline(
     project_id: UUID,
     repository: Annotated[ProjectRepository, Depends(get_repository)],
 ) -> FileResponse:
+    project, prepared = _current_prepared_report(repository, project_id)
+    return _topline_response(project, prepared)
+
+
+@router.get("/statistics.txt")
+def download_current_statistics(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    project, prepared = _current_prepared_report(repository, project_id)
+    return _statistics_response(project, prepared)
+
+
+@router.get("/artifacts/{artifact_id}/topline.xlsx")
+def download_artifact_topline(
+    project_id: UUID,
+    artifact_id: str,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    project, prepared = _prepared_artifact(repository, project_id, artifact_id)
+    return _topline_response(project, prepared)
+
+
+@router.get("/artifacts/{artifact_id}/statistics.txt")
+def download_artifact_statistics(
+    project_id: UUID,
+    artifact_id: str,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    project, prepared = _prepared_artifact(repository, project_id, artifact_id)
+    return _statistics_response(project, prepared)
+
+
+def _current_prepared_report(
+    repository: ProjectRepository,
+    project_id: UUID,
+) -> tuple[dict, PreparedReport]:
     try:
         project = repository.get(project_id)
-        prepared = prepare_report(repository, project_id, project)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
-    except (ReportError, BannerError, FilterError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    prepared = get_cached_report(repository, project_id, project)
+    if prepared is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Для текущей версии настроек отчёт ещё не подготовлен.",
+        )
+    return project, prepared
+
+
+def _prepared_artifact(
+    repository: ProjectRepository,
+    project_id: UUID,
+    artifact_id: str,
+) -> tuple[dict, PreparedReport]:
+    try:
+        project = repository.get(project_id)
+        prepared = get_report_artifact(repository, project_id, artifact_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except ReportArtifactNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Артефакт отчёта не найден.") from exc
+    return project, prepared
+
+
+def _topline_response(project: dict, prepared: PreparedReport) -> FileResponse:
     return FileResponse(
         prepared.topline_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -56,18 +117,7 @@ def download_topline(
     )
 
 
-@router.get("/statistics.txt")
-def download_statistics(
-    project_id: UUID,
-    repository: Annotated[ProjectRepository, Depends(get_repository)],
-) -> FileResponse:
-    try:
-        project = repository.get(project_id)
-        prepared = prepare_report(repository, project_id, project)
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
-    except (ReportError, BannerError, FilterError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+def _statistics_response(project: dict, prepared: PreparedReport) -> FileResponse:
     return FileResponse(
         prepared.statistics_path,
         media_type="text/plain; charset=utf-8",
