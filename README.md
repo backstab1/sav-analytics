@@ -111,7 +111,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
-Сейчас набор содержит 71 pytest-кейс для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 74 pytest-кейса для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, структуры XLSX и
 эталонных расчётов z-test, Welch t-test и Subgroup/Rest, включая регрессии
 multiple-response `counted_value`, построчных баз и SPSS user-missing.

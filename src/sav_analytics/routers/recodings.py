@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
 from ..api_schemas import RecodeDefinition
+from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.recoding import RecodingError, calculate_recode_preview, validate_recode
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
@@ -58,6 +59,8 @@ def delete_recoding(
         return repository.delete_recoding(project_id, recoding_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или перекодировка не найдены.") from exc
+    except ConfigurationIntegrityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{recoding_id}/preview")

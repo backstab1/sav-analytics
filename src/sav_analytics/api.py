@@ -7,10 +7,51 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from .api_dependencies import get_repository, get_settings
+from .configuration_revision import (
+    ConfigurationConflictError,
+    bind_expected_revision,
+    reset_expected_revision,
+)
 from .routers import banners, filters, projects, questions, recodings, reports, weights
 
 app = FastAPI(title="sav-analytics API", version="0.1.0")
 logger = logging.getLogger(__name__)
+
+
+@app.middleware("http")
+async def configuration_revision_context(request: Request, call_next):
+    raw_revision = request.headers.get("If-Match")
+    if raw_revision is None:
+        expected_revision = None
+    else:
+        normalized = raw_revision.strip().strip('"')
+        try:
+            expected_revision = int(normalized)
+        except ValueError:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "Заголовок If-Match должен содержать номер ревизии."},
+            )
+        if expected_revision < 1:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "Номер ревизии должен быть положительным."},
+            )
+    token = bind_expected_revision(expected_revision)
+    try:
+        return await call_next(request)
+    finally:
+        reset_expected_revision(token)
+
+
+@app.exception_handler(ConfigurationConflictError)
+async def configuration_conflict_handler(
+    _request: Request, exc: ConfigurationConflictError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)},
+    )
 
 
 @app.exception_handler(Exception)

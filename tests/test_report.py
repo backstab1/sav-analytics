@@ -167,6 +167,44 @@ def test_report_rejects_included_unsupported_question_type(
         build_topline_xlsx(source, project)
 
 
+def test_report_rejects_dangling_configuration_reference(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "name": "Dangling reference",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [
+                {
+                    "id": "broken-filter",
+                    "name": "Повреждённый",
+                    "rule": {
+                        "operator": "and",
+                        "items": [
+                            {
+                                "source": {
+                                    "kind": "recoding",
+                                    "ref": "missing-recoding",
+                                },
+                                "operator": "eq",
+                                "values": ["Категория"],
+                            }
+                        ],
+                    },
+                }
+            ],
+            "report_filter_id": None,
+        },
+    }
+
+    with pytest.raises(ReportError, match="повреждённые ссылки"):
+        build_topline_xlsx(source, project)
+
+
 def test_topline_uses_selected_banner_from_multiple_saved_banners(tmp_path: Path) -> None:
     source = tmp_path / "fixture.sav"
     write_fixture(source)

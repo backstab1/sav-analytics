@@ -9,6 +9,10 @@ import pandas as pd
 import pyreadstat
 
 from ..banner import build_banner_columns
+from ..configuration_integrity import (
+    ConfigurationIntegrityError,
+    validate_configuration_references,
+)
 from ..filtering import evaluate_filter_frame
 from ..multiple_response import response_definition
 from ..weighting import WeightingError, calculate_raking
@@ -40,6 +44,10 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
         dates_as_pandas_datetime=False,
     )
     configuration = project["configuration"]
+    try:
+        validate_configuration_references(configuration)
+    except ConfigurationIntegrityError as exc:
+        raise ReportError(str(exc)) from exc
     global_mask = pd.Series(True, index=frame.index)
     report_filter_id = configuration.get("report_filter_id")
     if report_filter_id:

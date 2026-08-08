@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from ..api_dependencies import get_repository
 from ..api_schemas import CalculatedWeightDefinition
+from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.weighting import WeightingError, build_raking_export, calculate_raking_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
@@ -60,7 +61,7 @@ def delete_calculated_weight(
         return repository.delete_calculated_weight(project_id, weight_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
-    except InvalidUploadError as exc:
+    except (InvalidUploadError, ConfigurationIntegrityError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

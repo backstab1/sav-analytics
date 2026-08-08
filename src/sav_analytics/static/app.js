@@ -2000,6 +2000,14 @@ async function downloadPreparedReport(event) {
 }
 
 async function api(url, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const projectPrefix = currentProject ? `/api/projects/${currentProject.id}` : null;
+  const revision = currentProject?.configuration?.revision;
+  if (projectPrefix && url.startsWith(projectPrefix) && method !== "GET" && revision) {
+    const headers = new Headers(options.headers || {});
+    headers.set("If-Match", String(revision));
+    options = { ...options, headers };
+  }
   const response = await fetch(url, options);
   const responseText = await response.text();
   let payload;

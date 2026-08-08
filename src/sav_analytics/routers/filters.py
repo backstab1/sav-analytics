@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
 from ..api_schemas import FilterDefinition, QuestionBaseUpdate
+from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.filtering import FilterError, calculate_filter_preview, validate_filter
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
@@ -58,7 +59,7 @@ def delete_filter(
         return repository.delete_filter(project_id, filter_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или фильтр не найдены.") from exc
-    except InvalidUploadError as exc:
+    except (InvalidUploadError, ConfigurationIntegrityError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

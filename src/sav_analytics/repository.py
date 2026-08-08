@@ -6,12 +6,18 @@ import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Lock
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
 import pandas as pd
 import pyreadstat
 
+from .configuration_revision import (
+    ConfigurationConflictError,
+    current_expected_revision,
+)
+from .core.configuration_integrity import ensure_not_referenced
 from .core.sav_reader import SavReadError, inspect_sav, spss_missing_mask
 
 STRUCTURE_VERSION = 6
@@ -29,6 +35,8 @@ class ProjectRepository:
     def __init__(self, root: Path, max_upload_bytes: int) -> None:
         self.root = root
         self.max_upload_bytes = max_upload_bytes
+        self._project_locks: dict[str, Lock] = {}
+        self._project_locks_guard = Lock()
         self.root.mkdir(parents=True, exist_ok=True)
 
     def create(self, name: str, original_filename: str, source: BinaryIO) -> dict:
@@ -63,6 +71,7 @@ class ProjectRepository:
                 "inspection": inspection.to_dict(),
                 "configuration": {
                     "structure_version": STRUCTURE_VERSION,
+                    "revision": 1,
                     "questions": inspection.to_dict()["questions"],
                     "recodings": [],
                     "banners": [],
@@ -218,10 +227,14 @@ class ProjectRepository:
 
     def delete_recoding(self, project_id: UUID, recoding_id: UUID) -> dict:
         project = self.get(project_id)
+        identifier = str(recoding_id)
         recodings = project["configuration"]["recodings"]
-        filtered = [item for item in recodings if item["id"] != str(recoding_id)]
+        filtered = [item for item in recodings if item["id"] != identifier]
         if len(filtered) == len(recodings):
-            raise ProjectNotFoundError(str(recoding_id))
+            raise ProjectNotFoundError(identifier)
+        ensure_not_referenced(
+            project["configuration"], "recoding", identifier, "Перекодировка"
+        )
         project["configuration"]["recodings"] = filtered
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
@@ -386,17 +399,16 @@ class ProjectRepository:
     def delete_calculated_weight(self, project_id: UUID, weight_id: UUID) -> dict:
         project = self.get(project_id)
         identifier = str(weight_id)
-        if any(
-            banner.get("calculated_weight_id") == identifier
-            for banner in project["configuration"]["banners"]
-        ):
-            raise InvalidUploadError(
-                "Рассчитанный вес используется в баннере и пока не может быть удалён."
-            )
         weights = project["configuration"]["calculated_weights"]
         filtered = [item for item in weights if item["id"] != identifier]
         if len(filtered) == len(weights):
             raise ProjectNotFoundError(identifier)
+        ensure_not_referenced(
+            project["configuration"],
+            "calculated_weight",
+            identifier,
+            "Рассчитанный вес",
+        )
         project["configuration"]["calculated_weights"] = filtered
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
@@ -438,21 +450,13 @@ class ProjectRepository:
     def delete_filter(self, project_id: UUID, filter_id: UUID) -> dict:
         project = self.get(project_id)
         identifier = str(filter_id)
-        if any(
-            question.get("base_filter_id") == identifier
-            for question in project["configuration"]["questions"]
-        ):
-            raise InvalidUploadError(
-                "Фильтр назначен как база вопроса и пока не может быть удалён."
-            )
-        if project["configuration"].get("report_filter_id") == identifier:
-            raise InvalidUploadError(
-                "Фильтр используется как общий фильтр отчёта и пока не может быть удалён."
-            )
         filters = project["configuration"]["filters"]
         filtered = [item for item in filters if item["id"] != identifier]
         if len(filtered) == len(filters):
             raise ProjectNotFoundError(identifier)
+        ensure_not_referenced(
+            project["configuration"], "filter", identifier, "Фильтр"
+        )
         project["configuration"]["filters"] = filtered
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
@@ -548,6 +552,7 @@ class ProjectRepository:
         project["configuration"].setdefault("filters", [])
         project["configuration"].setdefault("calculated_weights", [])
         project["configuration"].setdefault("report_filter_id", None)
+        project["configuration"].setdefault("revision", 1)
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")
 
@@ -566,7 +571,27 @@ class ProjectRepository:
         project_dir = self.root / str(project_id)
         target = project_dir / "project.json"
         temporary = project_dir / ".project.json.tmp"
-        temporary.write_text(
-            json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        os.replace(temporary, target)
+        with self._project_lock(project_id):
+            current = self._read(target)
+            current_revision = int(current.get("configuration", {}).get("revision", 1))
+            expected_revision = current_expected_revision()
+            if expected_revision is None:
+                expected_revision = int(project["configuration"].get("revision", 1))
+            if (
+                expected_revision != current_revision
+            ):
+                raise ConfigurationConflictError(
+                    "Проект уже изменён в другой вкладке или запросе. "
+                    "Обновите проект и повторите действие."
+                )
+            project["configuration"]["revision"] = current_revision + 1
+            project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+            temporary.write_text(
+                json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            os.replace(temporary, target)
+
+    def _project_lock(self, project_id: UUID) -> Lock:
+        identifier = str(project_id)
+        with self._project_locks_guard:
+            return self._project_locks.setdefault(identifier, Lock())

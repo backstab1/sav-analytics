@@ -176,6 +176,47 @@ def test_question_update_rejects_unsupported_report_types(tmp_path: Path) -> Non
         app.dependency_overrides.clear()
 
 
+def test_configuration_revision_rejects_stale_update(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            project_id = project["id"]
+            initial_revision = project["configuration"]["revision"]
+
+            updated = client.patch(
+                f"/api/projects/{project_id}/questions/Q1",
+                headers={"If-Match": str(initial_revision)},
+                json={"label": "Первая правка"},
+            )
+            stale = client.patch(
+                f"/api/projects/{project_id}/questions/Q1",
+                headers={"If-Match": str(initial_revision)},
+                json={"label": "Устаревшая правка"},
+            )
+
+            assert updated.status_code == 200
+            assert updated.json()["configuration"]["revision"] == initial_revision + 1
+            assert stale.status_code == 409
+            assert "другой вкладке" in stale.json()["detail"]
+            persisted = client.get(f"/api/projects/{project_id}").json()
+            question = next(
+                item
+                for item in persisted["configuration"]["questions"]
+                if item["code"] == "Q1"
+            )
+            assert question["label"] == "Первая правка"
+            assert persisted["configuration"]["revision"] == initial_revision + 1
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_nps_accepts_labelled_spss_user_missing_outside_scale(tmp_path: Path) -> None:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
     app.dependency_overrides[get_repository] = lambda: repository
@@ -448,6 +489,85 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
             assert deleted.status_code == 200
             assert len(deleted.json()["configuration"]["banners"]) == 1
             assert deleted.json()["configuration"]["report_banner_id"] == second_id
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_recoding_delete_is_blocked_by_banner_and_filter_dependencies(
+    tmp_path: Path,
+) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            recoding = client.post(
+                f"/api/projects/{project_id}/recodings",
+                json={
+                    "mode": "ranges",
+                    "code": "SCORE_GROUP",
+                    "name": "Группы оценки",
+                    "source_variable": "Q2",
+                    "categories": [
+                        {"label": "Низкая", "lower": 0, "upper": 7},
+                        {"label": "Высокая", "lower": 8, "upper": 10},
+                    ],
+                },
+            ).json()["configuration"]["recodings"][0]
+            saved_filter = client.post(
+                f"/api/projects/{project_id}/filters",
+                json={
+                    "name": "Высокая оценка",
+                    "rule": {
+                        "operator": "and",
+                        "items": [
+                            {
+                                "source": {"kind": "recoding", "ref": recoding["id"]},
+                                "operator": "eq",
+                                "values": ["Высокая"],
+                            }
+                        ],
+                    },
+                },
+            ).json()["configuration"]["filters"][0]
+            saved_banner = client.post(
+                f"/api/projects/{project_id}/banners",
+                json={
+                    "name": "Оценка",
+                    "blocks": [
+                        {
+                            "sources": [
+                                {"kind": "recoding", "ref": recoding["id"]}
+                            ]
+                        }
+                    ],
+                },
+            ).json()["configuration"]["banners"][0]
+
+            blocked = client.delete(
+                f"/api/projects/{project_id}/recodings/{recoding['id']}"
+            )
+
+            assert blocked.status_code == 422
+            assert "баннер «Оценка»" in blocked.json()["detail"]
+            assert "фильтр «Высокая оценка»" in blocked.json()["detail"]
+
+            assert client.delete(
+                f"/api/projects/{project_id}/filters/{saved_filter['id']}"
+            ).status_code == 200
+            assert client.delete(
+                f"/api/projects/{project_id}/banners/{saved_banner['id']}"
+            ).status_code == 200
+            deleted = client.delete(
+                f"/api/projects/{project_id}/recodings/{recoding['id']}"
+            )
+            assert deleted.status_code == 200
+            assert deleted.json()["configuration"]["recodings"] == []
     finally:
         app.dependency_overrides.clear()
 
