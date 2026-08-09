@@ -310,6 +310,19 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
 }
 .summary-state b.set { color: var(--c-brand); }
 
+/* The project bar added a second 48px header tier. Reclaim that space on the
+   manual workspace so the structure table keeps its original useful height. */
+#screen-manual:has(#workspace:not([hidden])) { padding-top: var(--s-4); }
+#screen-manual:has(#workspace:not([hidden])) .workspace-head { margin-bottom: var(--s-3); }
+#screen-manual:has(#workspace:not([hidden])) .workspace-title p { margin-bottom: 4px; }
+#screen-manual:has(#workspace:not([hidden])) .workspace-head h1 { font-size: var(--t-2xl); }
+#screen-manual:has(#workspace:not([hidden])) .summary { gap: 6px; }
+#screen-manual:has(#workspace:not([hidden])) .summary article,
+#screen-manual:has(#workspace:not([hidden])) .summary .summary-filter {
+  min-width: 100px; padding: 10px 16px;
+}
+#screen-manual:has(#workspace:not([hidden])) .summary strong { font-size: var(--t-lg); }
+
 /* Grid: table + drawer */
 .workspace-grid {
   display: grid;
@@ -474,7 +487,11 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
 /* ================================================================
    TABLE
    ================================================================ */
-.table-wrap { overflow: auto; background: transparent; border: 0; max-height: calc(100vh - 300px); }
+.table-wrap {
+  overflow: auto; background: transparent; border: 0;
+  max-height: calc(100vh - 250px);
+  max-height: calc(100dvh - 250px);
+}
 table { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
 th, td { padding: 12px 22px; text-align: left; border-bottom: 1px solid var(--c-border); vertical-align: middle; }
 th {
