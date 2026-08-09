@@ -1,0 +1,19 @@
+{
+  "multiple_response_counted_value": {
+    "counted_value": 2,
+    "rows": [[2, 1], [1, 2], [2, 2], [null, null]],
+    "valid_base": 3,
+    "selected_counts": [2, 2],
+    "selected_percent_valid": [0.6666666666666666, 0.6666666666666666],
+    "selected_first_filter_count": 2,
+    "selected_none_first_filter_count": 1,
+    "topline_main_first_percent": 50.0
+  },
+  "spss_user_missing_nps": {
+    "values": [0, 7, 10, 99],
+    "user_missing": 99,
+    "valid_base": 3,
+    "missing_base": 1,
+    "nps": 0.0
+  }
+}

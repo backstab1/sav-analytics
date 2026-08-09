@@ -75,9 +75,11 @@
 `error_code`/`request_id`. Job и download теперь привязаны к
 `configuration_revision`/`cache_key`/`artifact_id`; скачивание не запускает расчёт.
 В P0.3 добавлен базовый CI с branch coverage 80%, инкрементальным mypy и Docker smoke,
-а зависимости зафиксированы в `uv.lock`. Base R golden для z/Welch/Subgroup-Rest и
-полный SAV → API → immutable XLSX/TXT smoke уже работают. Следующий срез — расширенные
-goldens для MR/user-missing/весов/волн и настоящий браузерный smoke.
+а зависимости зафиксированы в `uv.lock`. Base R golden теперь покрывает обычные и
+взвешенные z/Welch, Subgroup-Rest и NPS balance; сквозные golden cases проверяют MR
+`counted_value=2` и SPSS user-missing `99`. Полный SAV → API → immutable XLSX/TXT smoke
+также работает. Следующий срез — goldens для волн и расширенного NPS/CSAT pipeline,
+затем настоящий браузерный smoke.
 
 #### P0.1. Единая модель данных и расчётов
 
@@ -112,8 +114,10 @@ goldens для MR/user-missing/весов/волн и настоящий бра�
 - Зафиксировать зависимости воспроизводимым lock-файлом. **Реализовано через `uv.lock`.**
 - Создать независимые синтетические SAV/SPSS/R golden fixtures: MR с
   `counted_value != 1`, complementary missing, user-missing `99`, single, scale,
-  numeric, matrix, веса, волны, NPS и CSAT. **Base R z/Welch/Subgroup-Rest реализован;
-  расширенные случаи остаются в работе.**
+  numeric, matrix, веса, волны, NPS и CSAT. **Реализованы Base R cases для обычных и
+  взвешенных z/Welch, Subgroup-Rest и NPS balance, а также pipeline cases для MR
+  `counted_value=2` и SPSS user-missing `99`; волны и расширенный NPS/CSAT остаются
+  в работе.**
 - Проверять не только отдельные формулы, но и полный `statistics.txt`, числовые
   значения/структуру XLSX и причины каждого пропущенного теста. **Полный нормализованный
   SHA `statistics.txt` и структура immutable XLSX добавлены для базового pipeline.**

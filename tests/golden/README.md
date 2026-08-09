@@ -22,5 +22,6 @@ pytest tests/test_golden_statistics.py
 независимым статистическим источником. Обновлять этот SHA допустимо только после
 проверки чисел по независимому reference и осознанного просмотра изменения формата.
 
-Текущий пакет покрывает базовые z/Welch/Subgroup-Rest сценарии. MR edge cases,
-SPSS user-missing, веса, волны, NPS и CSAT расширяются отдельными golden cases.
+Текущий пакет покрывает z/Welch/Subgroup-Rest, приближённые weighted z/Welch,
+NPS balance, MR `counted_value=2` и SPSS user-missing `99`. Волны и расширенные
+NPS/CSAT pipeline-сценарии добавляются отдельными golden cases.
