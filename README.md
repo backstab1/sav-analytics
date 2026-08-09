@@ -113,12 +113,31 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py
 ```
 
-Сейчас набор содержит 83 pytest-кейса для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 85 pytest-кейсов для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, структуры XLSX и
 эталонных расчётов z-test, Welch t-test и Subgroup/Rest, включая регрессии
 multiple-response `counted_value`, построчных баз и SPSS user-missing. Численные
 golden-эталоны воспроизводятся отдельным Base R скриптом, а полный pipeline защищён
 snapshot полного `statistics.txt` и проверкой immutable XLSX.
+
+Покрытие считается тем же прогоном:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
+```
+
+Сейчас покрыто 81,75% строк, порог падения сборки — 80%, он задан в `pyproject.toml`.
+
+### CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускается на push в `main`,
+на каждый pull request и вручную. В нём две задачи:
+
+- **Линтер и тесты** — `ruff check .` и `pytest` с покрытием на Python 3.12.
+  Отчёты `coverage.xml`, `htmlcov/` и `junit.xml` сохраняются как артефакт на 14 дней,
+  таблица покрытия попадает в сводку запуска.
+- **Сборка образа** — сборка `Dockerfile` с кэшем buildx, затем запуск контейнера
+  и проверка ответа `/api/health`. Образ никуда не публикуется.
 
 ## Устройство проекта
 
@@ -155,6 +174,11 @@ src/sav_analytics/
 production-архитектура — в [docs/architecture.md](docs/architecture.md).
 Эти документы описывают и будущие функции, поэтому не всё перечисленное там уже реализовано.
 
+Схождения и расхождения теста Subgroup/Rest с SPSS Custom Tables разобраны
+в [docs/spss-conformance.md](docs/spss-conformance.md).
+Что готово, что осталось до запуска и сколько это займёт — в
+[docs/roadmap.md](docs/roadmap.md).
+
 ## Что пока не реализовано
 
 - полноценные расчёты и отчётные блоки для categorical multiple и ranking;
@@ -162,11 +186,12 @@ production-архитектура — в [docs/architecture.md](docs/architectur
 - поиск, сортировка, корзина проектов, autosave и локальный Undo/`Ctrl+Z`;
 - пользователи, роли и авторизация;
 - PostgreSQL, Redis, очередь фоновых расчётов и версионирование отчётов;
+- e2e-проверка связки интерфейса и API;
 - ручной выбор и изменение порядка включённых волн, расчёт raking отдельно внутри волн,
   цели по проектным перекодировкам;
 - корреляции;
 - ручное создание и разгруппировка структуры вопросов;
-- production-развёртывание, резервное копирование и CI/CD.
+- production-развёртывание, резервное копирование и CD (CI уже есть).
 
 ## Конфиденциальность
 

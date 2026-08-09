@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, TextIO
@@ -165,18 +166,22 @@ def _balance_result(
         minimum_base=settings["minimum_base"],
     )
 
-def _pairwise_balance_note(
-    scores: pd.Series,
+def _pairwise_note(
     column: dict[str, Any],
-    eligible_mask: pd.Series,
     columns: list[dict[str, Any]],
-    settings: dict[str, Any],
     audit_entries: list[StatisticalAuditEntry],
     audit_context: tuple[str, str, str],
     row_label: str,
-    method: str,
     cache: dict[tuple[int, int], StatisticalTestResult | None],
+    run_pair: Callable[[int, int], StatisticalTestResult | None],
 ) -> str | None:
+    """Обойти пары колонок внутри блока баннера и собрать примечание к строке.
+
+    ``run_pair`` считает тест для пары позиций и возвращает None, если хотя бы
+    одна группа пуста — тогда в аудит попадает запись с причиной вместо
+    результата. Тест выполняется один раз на пару и переиспользуется из кэша
+    в обратную сторону через :func:`_reverse_test_result`.
+    """
     if not column.get("compare_pairwise"):
         return None
     current_position = _column_position(columns, column)
@@ -186,16 +191,7 @@ def _pairwise_balance_note(
             continue
         pair = tuple(sorted((current_position, position)))
         if pair not in cache:
-            left, right = (columns[pair[0]], columns[pair[1]])
-            cache[pair] = _balance_result(
-                scores,
-                left["mask"] & eligible_mask,
-                right["mask"] & eligible_mask,
-                settings,
-                columns,
-                left,
-                method,
-            )
+            cache[pair] = run_pair(*pair)
         result = cache[pair]
         if current_position > position:
             result = _reverse_test_result(result)
@@ -218,6 +214,36 @@ def _pairwise_balance_note(
                 (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
             )
     return _format_pairwise_note(findings)
+
+def _pairwise_balance_note(
+    scores: pd.Series,
+    column: dict[str, Any],
+    eligible_mask: pd.Series,
+    columns: list[dict[str, Any]],
+    settings: dict[str, Any],
+    audit_entries: list[StatisticalAuditEntry],
+    audit_context: tuple[str, str, str],
+    row_label: str,
+    method: str,
+    cache: dict[tuple[int, int], StatisticalTestResult | None],
+) -> str | None:
+    def run_pair(
+        left_position: int, right_position: int
+    ) -> StatisticalTestResult | None:
+        left, right = (columns[left_position], columns[right_position])
+        return _balance_result(
+            scores,
+            left["mask"] & eligible_mask,
+            right["mask"] & eligible_mask,
+            settings,
+            columns,
+            left,
+            method,
+        )
+
+    return _pairwise_note(
+        column, columns, audit_entries, audit_context, row_label, cache, run_pair
+    )
 
 def _proportion_test(
     outcome: pd.Series,
@@ -460,101 +486,52 @@ def _pairwise_proportion_note(
     cache: dict[tuple[int, int], StatisticalTestResult | None],
     vectorized: _UnweightedProportionContext | None = None,
 ) -> str | None:
-    if not column.get("compare_pairwise"):
-        return None
     selected = outcome.fillna(False).astype(bool) if vectorized is None else None
-    current_position = _column_position(columns, column)
-    current_mask = column["mask"] & eligible_mask if vectorized is None else None
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
-    findings: list[tuple[str, str]] = []
-    for position, other in enumerate(columns):
-        if other is column or other.get("block_index") != column.get("block_index"):
-            continue
-        other_mask = other["mask"] & eligible_mask if vectorized is None else None
-        current_empty = (
-            not current_mask.any()
-            if vectorized is None
-            else vectorized.bases[current_position] == 0
-        )
-        other_empty = (
-            not other_mask.any()
-            if vectorized is None
-            else vectorized.bases[position] == 0
-        )
-        if current_empty or other_empty:
-            if current_position < position:
-                audit_entries.append(
-                    StatisticalAuditEntry(
-                        sheet=audit_context[0],
-                        question_code=audit_context[1],
-                        question_label=audit_context[2],
-                        row_label=row_label,
-                        comparison="Pairwise",
-                        group_a=_column_title(current_position, column),
-                        group_b=_column_title(position, other),
-                        result=None,
-                        reason="Пустая группа.",
-                    )
-                )
-            continue
-        pair = tuple(sorted((current_position, position)))
-        if pair not in cache:
-            weights = settings["weights"]
-            if vectorized is not None:
-                cache[pair] = proportion_z_test(
-                    vectorized.successes[pair[0]],
-                    vectorized.bases[pair[0]],
-                    vectorized.successes[pair[1]],
-                    vectorized.bases[pair[1]],
-                    confidence_level=settings["confidence_level"],
-                    comparisons=comparisons,
-                    minimum_base=settings["minimum_base"],
-                )
-            elif weights is not None:
-                left_mask = columns[pair[0]]["mask"] & eligible_mask
-                right_mask = columns[pair[1]]["mask"] & eligible_mask
-                cache[pair] = weighted_proportion_z_test(
-                    selected[left_mask],
-                    weights[left_mask],
-                    selected[right_mask],
-                    weights[right_mask],
-                    confidence_level=settings["confidence_level"],
-                    comparisons=comparisons,
-                    minimum_base=settings["minimum_base"],
-                )
-            else:
-                left_mask = columns[pair[0]]["mask"] & eligible_mask
-                right_mask = columns[pair[1]]["mask"] & eligible_mask
-                cache[pair] = proportion_z_test(
-                    int((selected & left_mask).sum()),
-                    int(left_mask.sum()),
-                    int((selected & right_mask).sum()),
-                    int(right_mask.sum()),
-                    confidence_level=settings["confidence_level"],
-                    comparisons=comparisons,
-                    minimum_base=settings["minimum_base"],
-                )
-        result = cache[pair]
-        if current_position > position:
-            result = _reverse_test_result(result)
-        if current_position < position:
-            audit_entries.append(
-                StatisticalAuditEntry(
-                    sheet=audit_context[0],
-                    question_code=audit_context[1],
-                    question_label=audit_context[2],
-                    row_label=row_label,
-                    comparison="Pairwise",
-                    group_a=_column_title(current_position, column),
-                    group_b=_column_title(position, other),
-                    result=result,
-                )
+
+    def run_pair(
+        left_position: int, right_position: int
+    ) -> StatisticalTestResult | None:
+        if vectorized is not None:
+            if not vectorized.bases[left_position] or not vectorized.bases[right_position]:
+                return None
+            return proportion_z_test(
+                vectorized.successes[left_position],
+                vectorized.bases[left_position],
+                vectorized.successes[right_position],
+                vectorized.bases[right_position],
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
             )
-        if result.significant and result.direction in {"higher", "lower"}:
-            findings.append(
-                (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
+        left_mask = columns[left_position]["mask"] & eligible_mask
+        right_mask = columns[right_position]["mask"] & eligible_mask
+        if not left_mask.any() or not right_mask.any():
+            return None
+        weights = settings["weights"]
+        if weights is not None:
+            return weighted_proportion_z_test(
+                selected[left_mask],
+                weights[left_mask],
+                selected[right_mask],
+                weights[right_mask],
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
             )
-    return _format_pairwise_note(findings)
+        return proportion_z_test(
+            int((selected & left_mask).sum()),
+            int(left_mask.sum()),
+            int((selected & right_mask).sum()),
+            int(right_mask.sum()),
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+
+    return _pairwise_note(
+        column, columns, audit_entries, audit_context, row_label, cache, run_pair
+    )
 
 def _pairwise_mean_note(
     series: pd.Series,
@@ -568,98 +545,47 @@ def _pairwise_mean_note(
     cache: dict[tuple[int, int], StatisticalTestResult | None],
     vectorized: _UnweightedMeanContext | None = None,
 ) -> str | None:
-    if not column.get("compare_pairwise"):
-        return None
-    current_position = _column_position(columns, column)
-    current = (
-        vectorized.samples[current_position]
-        if vectorized is not None
-        else pd.to_numeric(series[column["mask"] & base_mask], errors="coerce").dropna()
-    )
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
-    findings: list[tuple[str, str]] = []
-    for position, other in enumerate(columns):
-        if other is column or other.get("block_index") != column.get("block_index"):
-            continue
-        other_values = (
-            vectorized.samples[position]
-            if vectorized is not None
-            else pd.to_numeric(
-                series[other["mask"] & base_mask], errors="coerce"
+
+    def run_pair(
+        left_position: int, right_position: int
+    ) -> StatisticalTestResult | None:
+        if vectorized is not None:
+            left = vectorized.samples[left_position]
+            right = vectorized.samples[right_position]
+            if not left.size or not right.size:
+                return None
+        else:
+            left = pd.to_numeric(
+                series[columns[left_position]["mask"] & base_mask], errors="coerce"
             ).dropna()
-        )
-        current_empty = current.size == 0 if vectorized is not None else current.empty
-        other_empty = (
-            other_values.size == 0 if vectorized is not None else other_values.empty
-        )
-        if current_empty or other_empty:
-            if current_position < position:
-                audit_entries.append(
-                    StatisticalAuditEntry(
-                        sheet=audit_context[0],
-                        question_code=audit_context[1],
-                        question_label=audit_context[2],
-                        row_label=row_label,
-                        comparison="Pairwise",
-                        group_a=_column_title(current_position, column),
-                        group_b=_column_title(position, other),
-                        result=None,
-                        reason="Пустая группа.",
-                    )
-                )
-            continue
-        pair = tuple(sorted((current_position, position)))
-        if pair not in cache:
-            if vectorized is not None:
-                left = vectorized.samples[pair[0]]
-                right = vectorized.samples[pair[1]]
-            else:
-                left = pd.to_numeric(
-                    series[columns[pair[0]]["mask"] & base_mask], errors="coerce"
-                ).dropna()
-                right = pd.to_numeric(
-                    series[columns[pair[1]]["mask"] & base_mask], errors="coerce"
-                ).dropna()
-            weights = settings["weights"]
-            if weights is not None:
-                cache[pair] = weighted_welch_t_test(
-                    left,
-                    weights.loc[left.index],
-                    right,
-                    weights.loc[right.index],
-                    confidence_level=settings["confidence_level"],
-                    comparisons=comparisons,
-                    minimum_base=settings["minimum_base"],
-                )
-            else:
-                cache[pair] = welch_t_test(
-                    left,
-                    right,
-                    confidence_level=settings["confidence_level"],
-                    comparisons=comparisons,
-                    minimum_base=settings["minimum_base"],
-                )
-        result = cache[pair]
-        if current_position > position:
-            result = _reverse_test_result(result)
-        if current_position < position:
-            audit_entries.append(
-                StatisticalAuditEntry(
-                    sheet=audit_context[0],
-                    question_code=audit_context[1],
-                    question_label=audit_context[2],
-                    row_label=row_label,
-                    comparison="Pairwise",
-                    group_a=_column_title(current_position, column),
-                    group_b=_column_title(position, other),
-                    result=result,
-                )
+            right = pd.to_numeric(
+                series[columns[right_position]["mask"] & base_mask], errors="coerce"
+            ).dropna()
+            if left.empty or right.empty:
+                return None
+        weights = settings["weights"]
+        if weights is not None:
+            return weighted_welch_t_test(
+                left,
+                weights.loc[left.index],
+                right,
+                weights.loc[right.index],
+                confidence_level=settings["confidence_level"],
+                comparisons=comparisons,
+                minimum_base=settings["minimum_base"],
             )
-        if result.significant and result.direction in {"higher", "lower"}:
-            findings.append(
-                (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
-            )
-    return _format_pairwise_note(findings)
+        return welch_t_test(
+            left,
+            right,
+            confidence_level=settings["confidence_level"],
+            comparisons=comparisons,
+            minimum_base=settings["minimum_base"],
+        )
+
+    return _pairwise_note(
+        column, columns, audit_entries, audit_context, row_label, cache, run_pair
+    )
 
 def _format_pairwise_note(findings: list[tuple[str, str]]) -> str | None:
     lines = []

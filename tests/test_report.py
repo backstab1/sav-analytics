@@ -104,7 +104,7 @@ def test_topline_workbook_has_required_sheets_and_numeric_cells(tmp_path: Path) 
         ]
         assert names == ["topline_main", "topline_filter", "Содержание"]
         main_xml = archive.read("xl/worksheets/sheet1.xml")
-        assert b'<c r="B4" s=' in main_xml
+        assert b'<c r="B5" s=' in main_xml
         assert b'<v>4</v>' in main_xml
 
 
@@ -287,7 +287,7 @@ def test_topline_applies_report_filter_to_total_base(tmp_path: Path) -> None:
 
     with ZipFile(BytesIO(content)) as archive:
         main_xml = archive.read("xl/worksheets/sheet1.xml")
-        assert b'<c r="B4" s=' in main_xml
+        assert b'<c r="B5" s=' in main_xml
         assert b'<v>2</v>' in main_xml
 
 
@@ -341,8 +341,8 @@ def test_topline_marks_significant_subgroup_vs_rest_cells(tmp_path: Path) -> Non
 
     content = build_topline_xlsx(source, project)
 
-    assert _cell_fill(content, "Да", "C") == "FFD9EAD3"
-    assert _cell_fill(content, "Да", "D") == "FFF4CCCC"
+    assert _cell_font_color(content, "Да", "C") == "FF17724A"
+    assert _cell_font_color(content, "Да", "D") == "FFAE382B"
     comments = _comments(content)
     assert "Значимо выше: C — Вторая" in comments
     assert "Значимо ниже: B — Первая" in comments
@@ -398,7 +398,7 @@ def test_topline_marks_small_subgroup_base_gray(tmp_path: Path) -> None:
 
     content = build_topline_xlsx(source, project)
 
-    assert _cell_fill(content, "Да", "C") == "FFD9D9D9"
+    assert _cell_font_color(content, "Да", "C") == "FFA8B0AC"
     audit = build_statistics_txt(source, project)
     assert "Статус: пропущен" in audit
     assert "Невзвешенная база одной из групп ниже установленного порога" in audit
@@ -456,8 +456,8 @@ def test_topline_compares_each_wave_with_previous_and_writes_arrow(tmp_path: Pat
     content = build_topline_xlsx(source, project)
     audit = build_statistics_txt(source, project)
 
-    assert "↑" in _cell_num_format(content, "Да", "D")
-    assert "↓" in _cell_num_format(content, "Да", "E")
+    assert "▴" in _cell_num_format(content, "Да", "D")
+    assert "▾" in _cell_num_format(content, "Да", "E")
     assert "Wave: D — 2025 vs C — 2024" in audit
     assert "Wave: E — 2026 vs D — 2025" in audit
     assert "Решение: значимо; направление=higher" in audit
@@ -763,7 +763,7 @@ def test_topline_applies_calculated_raking_weight(tmp_path: Path) -> None:
     assert "Вес: Целевой вес (raking/IPF)" in audit
 
 
-def _cell_fill(content: bytes, row_label: str, column: str) -> str | None:
+def _cell_font_color(content: bytes, row_label: str, column: str) -> str | None:
     namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     with ZipFile(BytesIO(content)) as archive:
         shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
@@ -786,9 +786,9 @@ def _cell_fill(content: bytes, row_label: str, column: str) -> str | None:
         style_index = int(target.attrib["s"])
         styles = ElementTree.fromstring(archive.read("xl/styles.xml"))
         cell_formats = styles.find("m:cellXfs", namespace)
-        fills = styles.find("m:fills", namespace)
-        fill_index = int(cell_formats[style_index].attrib["fillId"])
-        color = fills[fill_index].find("m:patternFill/m:fgColor", namespace)
+        fonts = styles.find("m:fonts", namespace)
+        font_index = int(cell_formats[style_index].attrib["fontId"])
+        color = fonts[font_index].find("m:color", namespace)
         return color.attrib.get("rgb") if color is not None else None
 
 

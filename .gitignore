@@ -33,9 +33,13 @@ __pycache__/
 dist/
 build/
 coverage/
+htmlcov/
 .coverage
+.coverage.*
 coverage.xml
+junit.xml
 .pytest_cache/
+.ruff_cache/
 
 # IDE, OS and local agent files
 .idea/

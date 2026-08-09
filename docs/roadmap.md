@@ -1,8 +1,8 @@
 # Roadmap `sav-analytics`
 
 **Актуализировано:** 8 августа 2026 года  
-**Базовый снимок:** `main@4e4b1caa484c5ac210f06f7b09d1de193f04cec1`  
-**Проверка снимка:** 62 pytest-кейса проходят, `ruff check .` проходит.
+**Базовый снимок:** `main@c8b80fac10667e592239f7930a20a463842a4da7`
+**Проверка снимка:** 85 pytest-кейсов проходят, `ruff check .` и P0-mypy проходят.
 
 Этот документ является актуальным планом разработки. `requirements.md` задаёт
 продуктовый и методологический контракт, `architecture.md` — целевую архитектуру,
@@ -74,7 +74,7 @@
 контракт с отдельной `schema_version`, immutable-артефакты и безопасный API-контракт
 `error_code`/`request_id`. Job и download теперь привязаны к
 `configuration_revision`/`cache_key`/`artifact_id`; скачивание не запускает расчёт.
-В P0.3 добавлен базовый CI с coverage 85%, инкрементальным mypy и Docker smoke,
+В P0.3 добавлен базовый CI с branch coverage 80%, инкрементальным mypy и Docker smoke,
 а зависимости зафиксированы в `uv.lock`. Base R golden для z/Welch/Subgroup-Rest и
 полный SAV → API → immutable XLSX/TXT smoke уже работают. Следующий срез — расширенные
 goldens для MR/user-missing/весов/волн и настоящий браузерный smoke.

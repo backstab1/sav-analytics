@@ -39,6 +39,19 @@ filterwarnings = [
   "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
 ]
 
+[tool.coverage.run]
+source = ["sav_analytics"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 80
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -50,11 +63,3 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.12"
 ignore_missing_imports = true
 warn_unused_configs = true
-
-[tool.coverage.run]
-source = ["sav_analytics"]
-
-[tool.coverage.report]
-fail_under = 85
-show_missing = true
-skip_covered = true

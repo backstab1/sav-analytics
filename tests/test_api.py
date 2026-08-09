@@ -841,3 +841,77 @@ def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None
             assert blocked.status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_saving_a_question_clears_the_review_status(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "grouped.sav"
+    write_grouped_fixture(source)
+
+    def question(payload: dict, code: str) -> dict:
+        return next(
+            item for item in payload["configuration"]["questions"] if item["code"] == code
+        )
+
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                data={"name": "Проверка групп"},
+                files={"file": ("grouped.sav", stream, "application/octet-stream")},
+            ).json()
+            project_id = project["id"]
+            grouped = next(
+                item
+                for item in project["configuration"]["questions"]
+                if item["recognition"] == "auto_review"
+            )
+            code = grouped["code"]
+
+            saved = client.patch(
+                f"/api/projects/{project_id}/questions/{code}",
+                json={"label": "Проверенный блок"},
+            )
+            assert saved.status_code == 200
+            assert question(saved.json(), code)["recognition"] == "manual"
+
+            refreshed = client.post(f"/api/projects/{project_id}/structure/refresh")
+            assert refreshed.status_code == 200
+            assert question(refreshed.json(), code)["recognition"] == "manual"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_saving_keeps_metadata_recognition_untouched(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                data={"name": "Метаданные"},
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            before = next(
+                item
+                for item in project["configuration"]["questions"]
+                if item["code"] == "Q1"
+            )["recognition"]
+            assert before != "auto_review"
+
+            updated = client.patch(
+                f"/api/projects/{project['id']}/questions/Q1",
+                json={"label": "Пол"},
+            )
+            assert updated.status_code == 200
+            after = next(
+                item
+                for item in updated.json()["configuration"]["questions"]
+                if item["code"] == "Q1"
+            )["recognition"]
+            assert after == before
+    finally:
+        app.dependency_overrides.clear()
