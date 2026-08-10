@@ -89,6 +89,12 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m uvicorn sav_analytics.api:app --reload
 ```
 
+CI ставит зависимости из `uv.lock`. Чтобы получить в точности те же версии локально:
+
+```powershell
+uv sync --locked --extra dev
+```
+
 Откройте [http://127.0.0.1:8000](http://127.0.0.1:8000). Интерактивная документация
 API доступна по адресу [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
@@ -134,9 +140,11 @@ snapshot полного `statistics.txt` и проверкой immutable XLSX.
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускается на push в `main`,
 на каждый pull request и вручную. В нём две задачи:
 
-- **Линтер и тесты** — `ruff check .` и `pytest` с покрытием на Python 3.12.
-  Отчёты `coverage.xml`, `htmlcov/` и `junit.xml` сохраняются как артефакт на 14 дней,
-  таблица покрытия попадает в сводку запуска.
+- **Линтер, типы и тесты** — `ruff check .`, инкрементальный `mypy` по P0-модулям и
+  `pytest` с покрытием на Python 3.12. Зависимости ставятся из `uv.lock`
+  (`uv sync --locked`), поэтому сборка воспроизводима. Отчёты `coverage.xml`,
+  `htmlcov/` и `junit.xml` сохраняются как артефакт на 14 дней, таблица покрытия
+  попадает в сводку запуска.
 - **Сборка образа** — сборка `Dockerfile` с кэшем buildx, затем запуск контейнера
   и проверка ответа `/api/health`. Образ никуда не публикуется.
 

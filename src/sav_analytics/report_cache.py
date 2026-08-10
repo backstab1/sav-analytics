@@ -14,8 +14,16 @@ from uuid import UUID
 from .core.report import build_topline_artifacts
 from .repository import ProjectRepository
 
-REPORT_CACHE_VERSION = 6
-_ARTIFACT_ID = re.compile(r"^[0-9a-f]{64}$")
+REPORT_CACHE_VERSION = 7
+
+# Идентификатор артефакта становится именем каталога внутри
+# projects/<uuid>/reports/artifacts/, поэтому его длина попадает в путь. Полные
+# 64 знака sha256 доводили путь до предела Windows в 260 символов при вложенном
+# SAV_ANALYTICS_DATA_DIR, и создание каталога падало с WinError 3. Ключи
+# различаются в пределах одного проекта, где их десятки, а не миллиарды: 64 бит
+# хватает с колоссальным запасом.
+_ARTIFACT_ID_LENGTH = 16
+_ARTIFACT_ID = re.compile(rf"^[0-9a-f]{{{_ARTIFACT_ID_LENGTH}}}$")
 _locks_guard = threading.Lock()
 _locks: dict[str, threading.Lock] = {}
 
@@ -136,7 +144,7 @@ def report_cache_key(project: dict[str, Any]) -> str:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return hashlib.sha256(encoded).hexdigest()[:_ARTIFACT_ID_LENGTH]
 
 
 def _cached_report(

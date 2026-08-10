@@ -41,12 +41,30 @@
     });
     syncContextbar();
     if (name === "builder") builder.activate();
+    if (name === "manual") syncTableHeight();
     window.scrollTo(0, 0);
   }
 
   navButtons.forEach(button => {
     button.addEventListener("click", () => showScreen(button.dataset.screen));
   });
+
+  /* Таблица структуры должна упираться в нижний край экрана, а не за него.
+     Её верх зависит от высоты шапки рабочей области, а та — от длины названия
+     проекта: при переносе заголовка на вторую строку любая заранее записанная
+     константа промахивается. Поэтому меряем и отдаём результат в CSS. */
+  const BOTTOM_GAP = 20;
+  const tableWrap = document.querySelector("#table-wrap");
+
+  function syncTableHeight() {
+    if (!tableWrap || !tableWrap.offsetParent) return;
+    tableWrap.style.removeProperty("--table-max-height");
+    const top = tableWrap.getBoundingClientRect().top + window.scrollY;
+    const available = Math.round(window.innerHeight - top - BOTTOM_GAP);
+    tableWrap.style.setProperty("--table-max-height", `${Math.max(available, 240)}px`);
+  }
+
+  window.addEventListener("resize", syncTableHeight);
 
   document.querySelectorAll(".lp-demo").forEach(button => {
     button.addEventListener("click", () => {
@@ -483,10 +501,15 @@
       projectOpen = open;
       syncContextbar();
       if (!open) builder.setVariables([], 0);
+      /* app.js рисует проект до того, как снимет hidden с #workspace, поэтому
+         мерить можно только здесь — раньше таблица ещё не в раскладке. */
+      else syncTableHeight();
     },
-    /* Вызывается из app.js после разбора проекта. */
+    /* Вызывается из app.js после разбора проекта: к этому моменту шапка
+       рабочей области отрисована и её высоту наконец можно измерить. */
     setProjectVariables(items, respondents) {
       builder.setVariables(items, respondents);
+      syncTableHeight();
     },
   };
 
