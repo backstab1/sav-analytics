@@ -30,6 +30,16 @@ dev = [
   "ruff>=0.11,<1",
 ]
 
+[tool.uv]
+# Лок пересобирают на Windows, а CI и образ — Linux. Без этого списка резолвер
+# берёт версию, у которой на момент блокировки есть колесо только под текущую
+# платформу: так `greenlet` из зависимостей playwright увёл лок в состояние,
+# которое невозможно установить на Linux. `uv lock --check` такое не ловит — он
+# сверяет лок с pyproject, но не устанавливаемость на другой платформе.
+required-environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sav_analytics"]
 
