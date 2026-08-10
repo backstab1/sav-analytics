@@ -14,6 +14,7 @@ from ..statistics import (
     balance_z_test,
     proportion_z_test,
     subgroup_vs_rest_z_test,
+    subgroup_vs_total_z_test,
     weighted_proportion_z_test,
     weighted_welch_t_test,
     welch_t_test,
@@ -86,6 +87,45 @@ def _unweighted_proportion_context(
         successes,
     )
 
+def _comparison_scheme_line(banner: dict[str, Any]) -> str:
+    """Строка шапки аудита: с кем сравнивались подгруппы."""
+    if (banner.get("compare_target") or "rest") == "total":
+        return (
+            "Схема сравнения: подгруппа против Total. Total включает саму подгруппу, "
+            "поэтому выборки пересекаются, различия систематически занижены, а вывод "
+            "сдвинут в сторону «незначимо». Режим включён вручную ради совпадения с "
+            "клиентскими макросами; статистически корректная схема — против остальных."
+        )
+    return (
+        "Схема сравнения: подгруппа против остальных респондентов блока "
+        "(Rest = Total − Subgroup). Total остаётся описательной колонкой и в тестах "
+        "не участвует."
+    )
+
+
+def _compares_with_total(column: dict[str, Any]) -> bool:
+    """Клиентская схема «подгруппа против Total» вместо непересекающегося Rest."""
+    return column.get("compare_target") == "total"
+
+
+def _reference_mask(
+    total_mask: Any,
+    column_mask: Any,
+    eligible_mask: Any,
+    column: dict[str, Any],
+) -> Any:
+    """Маска группы, с которой сравнивают.
+
+    Для Rest это дополнение подгруппы внутри Total, для Total — весь Total
+    целиком, включая саму подгруппу. Второй вариант пересекается с подгруппой
+    и потому занижает различие; он существует ради совпадения с клиентскими
+    макросами и всюду помечается в аудите.
+    """
+    if _compares_with_total(column):
+        return total_mask & eligible_mask
+    return total_mask & ~column_mask & eligible_mask
+
+
 def _unweighted_proportion_test(
     context: _UnweightedProportionContext,
     position: int,
@@ -96,14 +136,15 @@ def _unweighted_proportion_test(
     if not column.get("compare_to_total"):
         return None
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
-    total = context.column_masks[0] & context.eligible
-    rest = total & ~context.column_masks[position]
+    reference = _reference_mask(
+        context.column_masks[0], context.column_masks[position], context.eligible, column
+    )
     try:
         return proportion_z_test(
             context.successes[position],
             context.bases[position],
-            int(np.count_nonzero(context.selected & rest)),
-            int(np.count_nonzero(rest)),
+            int(np.count_nonzero(context.selected & reference)),
+            int(np.count_nonzero(reference)),
             confidence_level=settings["confidence_level"],
             comparisons=comparisons,
             minimum_base=settings["minimum_base"],
@@ -274,17 +315,24 @@ def _proportion_test(
         weights = settings["weights"]
         if weights is not None:
             subgroup_mask = total_mask & column["mask"] & eligible_mask
-            rest_mask = total_mask & ~column["mask"] & eligible_mask
+            reference_mask = _reference_mask(
+                total_mask, column["mask"], eligible_mask, column
+            )
             return weighted_proportion_z_test(
                 outcome[subgroup_mask],
                 weights[subgroup_mask],
-                outcome[rest_mask],
-                weights[rest_mask],
+                outcome[reference_mask],
+                weights[reference_mask],
                 confidence_level=settings["confidence_level"],
                 comparisons=comparisons,
                 minimum_base=settings["minimum_base"],
             )
-        return subgroup_vs_rest_z_test(
+        compare = (
+            subgroup_vs_total_z_test
+            if _compares_with_total(column)
+            else subgroup_vs_rest_z_test
+        )
+        return compare(
             outcome.fillna(False),
             total_mask,
             column["mask"],
@@ -307,9 +355,9 @@ def _mean_test(
     if not column.get("compare_to_total"):
         return None
     subgroup_mask = total_mask & column["mask"] & base_mask
-    rest_mask = total_mask & ~column["mask"] & base_mask
+    reference_mask = _reference_mask(total_mask, column["mask"], base_mask, column)
     subgroup = pd.to_numeric(series[subgroup_mask], errors="coerce").dropna()
-    rest = pd.to_numeric(series[rest_mask], errors="coerce").dropna()
+    rest = pd.to_numeric(series[reference_mask], errors="coerce").dropna()
     if subgroup.empty or rest.empty:
         return None
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
@@ -653,17 +701,25 @@ def _record_total_comparison(
     if not column.get("compare_to_total"):
         return
     position = _column_position(columns, column)
+    if _compares_with_total(column):
+        comparison = "Subgroup/Total (пересекающиеся выборки)"
+        group_b = "Total — включая саму подгруппу"
+        reason = "Пустая подгруппа или Total."
+    else:
+        comparison = "Subgroup/Rest"
+        group_b = f"Rest({_excel_column_name(position + 1)}) — Total − {column['label']}"
+        reason = "Пустая подгруппа или Rest."
     audit_entries.append(
         StatisticalAuditEntry(
             sheet=audit_context[0],
             question_code=audit_context[1],
             question_label=audit_context[2],
             row_label=row_label,
-            comparison="Subgroup/Rest",
+            comparison=comparison,
             group_a=_column_title(position, column),
-            group_b=f"Rest({_excel_column_name(position + 1)}) — Total − {column['label']}",
+            group_b=group_b,
             result=result,
-            reason="Пустая подгруппа или Rest." if result is None else None,
+            reason=reason if result is None else None,
         )
     )
 
@@ -713,6 +769,8 @@ class _StatisticsAuditWriter:
             f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
             f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
             f"Порог малой базы: N < {settings['minimum_base']}",
+            "",
+            _comparison_scheme_line(banner),
             "",
             *_AUDIT_NOTES,
         ]
@@ -772,6 +830,8 @@ def _render_statistics_txt(
         f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
         f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
         f"Порог малой базы: N < {settings['minimum_base']}",
+        "",
+        _comparison_scheme_line(banner),
         "",
         *_AUDIT_NOTES,
     ]

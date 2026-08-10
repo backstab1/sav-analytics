@@ -94,6 +94,7 @@ def build_banner_columns(
         compare_to_total = any(
             block.get("compare_to_total", False) for block in definition["blocks"]
         )
+    compare_target = definition.get("compare_target") or "rest"
     compare_pairwise = definition.get("compare_pairwise")
     if compare_pairwise is None:
         compare_pairwise = any(
@@ -129,6 +130,7 @@ def build_banner_columns(
                     ),
                     "block_index": block_index,
                     "compare_to_total": compare_to_total,
+                    "compare_target": compare_target,
                     "compare_pairwise": compare_pairwise,
                     "wave_value": wave_value,
                     "wave_peer_key": tuple(dimension_keys),

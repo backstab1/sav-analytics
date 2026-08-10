@@ -7,6 +7,7 @@ from sav_analytics.core.statistics import (
     effective_sample_size,
     proportion_z_test,
     subgroup_vs_rest_z_test,
+    subgroup_vs_total_z_test,
     weighted_proportion_z_test,
     weighted_welch_t_test,
     welch_t_test,
@@ -170,3 +171,65 @@ def test_weighted_welch_with_uniform_weights_matches_unweighted_result() -> None
     assert weighted.effective_bases == pytest.approx((42, 38))
     assert weighted.statistic == pytest.approx(unweighted.statistic)
     assert weighted.p_value == pytest.approx(unweighted.p_value)
+
+
+def _masks(subgroup_size: int, rest_size: int) -> tuple[list[bool], list[bool]]:
+    total = [True] * (subgroup_size + rest_size)
+    subgroup = [True] * subgroup_size + [False] * rest_size
+    return total, subgroup
+
+
+def test_subgroup_vs_total_is_the_naive_overlapping_comparison() -> None:
+    """Клиентская схема сравнивает подгруппу с Total, который её же содержит."""
+    subgroup_size, rest_size = 1989, 623
+    outcome = (
+        [True] * 318 + [False] * (subgroup_size - 318)
+        + [True] * 131 + [False] * (rest_size - 131)
+    )
+    total, subgroup = _masks(subgroup_size, rest_size)
+
+    against_total = subgroup_vs_total_z_test(outcome, total, subgroup)
+    against_rest = subgroup_vs_rest_z_test(outcome, total, subgroup)
+
+    # Обе группы теста берутся из Total целиком, поэтому знаменатель — вся база.
+    assert against_total.group_bases == (subgroup_size, subgroup_size + rest_size)
+    assert against_rest.group_bases == (subgroup_size, rest_size)
+
+    # Пересечение занижает различие: тот же набор данных перестаёт быть значимым.
+    assert abs(against_total.statistic) < abs(against_rest.statistic)
+    assert against_rest.significant is True
+    assert against_total.significant is False
+
+
+def test_overlap_corrected_total_comparison_equals_the_rest_comparison() -> None:
+    """Корректный учёт пересечения не даёт ничего нового по сравнению с Rest.
+
+    ``p_subgroup - p_total = (n_rest / n_total) * (p_subgroup - p_rest)``, и
+    стандартная ошибка масштабируется тем же множителем, поэтому z совпадает
+    тождественно. Это и есть причина, по которой «правильного сравнения с
+    Total» отдельно не существует, а режим `total` оставлен наивным.
+    """
+    subgroup_size, rest_size = 1989, 623
+    outcome = (
+        [True] * 318 + [False] * (subgroup_size - 318)
+        + [True] * 131 + [False] * (rest_size - 131)
+    )
+    total, subgroup = _masks(subgroup_size, rest_size)
+
+    against_rest = subgroup_vs_rest_z_test(outcome, total, subgroup)
+
+    scale = rest_size / (subgroup_size + rest_size)
+    difference_to_total = scale * against_rest.difference
+    standard_error = against_rest.difference / against_rest.statistic
+    corrected_statistic = difference_to_total / (scale * standard_error)
+
+    assert corrected_statistic == pytest.approx(against_rest.statistic)
+
+
+def test_subgroup_vs_total_rejects_a_subgroup_outside_total() -> None:
+    outcome = [True, False, True, False]
+    total = [True, True, False, False]
+    subgroup = [True, False, False, True]
+
+    with pytest.raises(ValueError, match="Subgroup должен полностью входить в Total"):
+        subgroup_vs_total_z_test(outcome, total, subgroup)

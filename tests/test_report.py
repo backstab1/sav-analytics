@@ -867,3 +867,118 @@ def _cell_num_format(content: bytes, row_label: str, column: str) -> str:
             for item in styles.findall("m:numFmts/m:numFmt", namespace)
         }
         return custom_formats.get(num_format_id, num_format_id)
+
+
+def test_banner_compare_target_total_uses_the_overlapping_scheme(tmp_path: Path) -> None:
+    """Режим `total` сравнивает подгруппу с базой, которая её содержит.
+
+    Данные подобраны так, что против остальных различие значимо, а против
+    Total — уже нет: ровно тот эффект занижения, ради совпадения с клиентскими
+    макросами которого режим и добавлен.
+    """
+    source = tmp_path / "compare_target.sav"
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * 60 + [2] * 40,
+            "OUTCOME": [1] * 42 + [2] * 18 + [1] * 20 + [2] * 20,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"GROUP": "Группа", "OUTCOME": "Результат"},
+        variable_value_labels={
+            "GROUP": {1: "Первая", 2: "Вторая"},
+            "OUTCOME": {1: "Да", 2: "Нет"},
+        },
+        variable_measure={"GROUP": "nominal", "OUTCOME": "nominal"},
+    )
+    inspection = inspect_sav(source).to_dict()
+
+    def project_with(target: str) -> dict:
+        return {
+            "name": "Схема сравнения",
+            "inspection": inspection,
+            "configuration": {
+                "questions": inspection["questions"],
+                "recodings": [],
+                "filters": [],
+                "report_filter_id": None,
+                "banners": [
+                    {
+                        "name": "Основной",
+                        "confidence_level": 0.95,
+                        "bonferroni": False,
+                        "minimum_base": 30,
+                        "compare_to_total": True,
+                        "compare_target": target,
+                        "blocks": [
+                            {
+                                "label": "Группа",
+                                "sources": [{"kind": "question", "ref": "GROUP"}],
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+
+    against_rest = build_statistics_txt(source, project_with("rest"))
+    against_total = build_statistics_txt(source, project_with("total"))
+
+    assert "Subgroup/Rest: B — Первая vs Rest(B)" in against_rest
+    assert "подгруппа против остальных респондентов блока" in against_rest
+
+    assert "Subgroup/Total (пересекающиеся выборки)" in against_total
+    assert "Total — включая саму подгруппу" in against_total
+    assert "выборки пересекаются, различия систематически занижены" in against_total
+
+    # Пометка в Excel следует за тестом, поэтому смена схемы её снимает:
+    # значение остаётся обычным цветом текста, а не зелёным «выше остальных».
+    marked = _cell_font_color(build_topline_xlsx(source, project_with("rest")), "Да", "C")
+    assert marked == "FF17724A"
+    assert _cell_font_color(build_topline_xlsx(source, project_with("total")), "Да", "C") not in {
+        "FF17724A",
+        "FFAE382B",
+    }
+
+
+def test_banner_defaults_to_the_rest_comparison(tmp_path: Path) -> None:
+    """Проекты без явной схемы продолжают сравниваться с остальными."""
+    source = tmp_path / "default_target.sav"
+    frame = pd.DataFrame({"GROUP": [1] * 60 + [2] * 40, "OUTCOME": [1] * 42 + [2] * 58})
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"GROUP": "Группа", "OUTCOME": "Результат"},
+        variable_value_labels={"GROUP": {1: "Первая", 2: "Вторая"}, "OUTCOME": {1: "Да", 2: "Нет"}},
+        variable_measure={"GROUP": "nominal", "OUTCOME": "nominal"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "name": "По умолчанию",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "filters": [],
+            "report_filter_id": None,
+            "banners": [
+                {
+                    "name": "Основной",
+                    "confidence_level": 0.95,
+                    "bonferroni": False,
+                    "minimum_base": 30,
+                    "compare_to_total": True,
+                    "blocks": [
+                        {"label": "Группа", "sources": [{"kind": "question", "ref": "GROUP"}]}
+                    ],
+                }
+            ],
+        },
+    }
+
+    audit = build_statistics_txt(source, project)
+
+    assert "Subgroup/Rest" in audit
+    assert "Subgroup/Total" not in audit

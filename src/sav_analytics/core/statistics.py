@@ -164,6 +164,55 @@ def subgroup_vs_rest_z_test(
     )
 
 
+def subgroup_vs_total_z_test(
+    outcome: Iterable[bool],
+    total_mask: Iterable[bool],
+    subgroup_mask: Iterable[bool],
+    *,
+    eligible_mask: Iterable[bool] | None = None,
+    confidence_level: float = 0.95,
+    comparisons: int = 1,
+    minimum_base: int = 30,
+) -> StatisticalTestResult:
+    """Compare a subgroup with the Total that contains it, as client macros do.
+
+    Статистически это не тест независимых выборок: подгруппа входит в Total и
+    смещает его к себе, поэтому различие систематически занижается и вывод
+    сдвинут в сторону «незначимо». Схема существует только ради совпадения с
+    клиентскими макросами, которые считают именно так.
+
+    Корректный учёт пересечения давал бы ровно тот же z, что и
+    ``subgroup_vs_rest_z_test``: и разница долей, и её стандартная ошибка
+    масштабируются одним множителем ``n_rest / n_total``. Поэтому отдельного
+    «правильного сравнения с Total» не существует — есть Rest.
+    """
+    selected = np.asarray(list(outcome), dtype=bool)
+    total = np.asarray(list(total_mask), dtype=bool)
+    subgroup = np.asarray(list(subgroup_mask), dtype=bool)
+    if not len(selected) or len(total) != len(selected) or len(subgroup) != len(selected):
+        raise ValueError("Outcome, Total и Subgroup должны иметь одинаковую ненулевую длину.")
+    if np.any(subgroup & ~total):
+        raise ValueError("Subgroup должен полностью входить в Total.")
+    if eligible_mask is None:
+        eligible = np.ones(len(selected), dtype=bool)
+    else:
+        eligible = np.asarray(list(eligible_mask), dtype=bool)
+        if len(eligible) != len(selected):
+            raise ValueError("Маска валидной базы должна иметь ту же длину, что и данные.")
+
+    subgroup_base_mask = total & subgroup & eligible
+    total_base_mask = total & eligible
+    return proportion_z_test(
+        int((selected & subgroup_base_mask).sum()),
+        int(subgroup_base_mask.sum()),
+        int((selected & total_base_mask).sum()),
+        int(total_base_mask.sum()),
+        confidence_level=confidence_level,
+        comparisons=comparisons,
+        minimum_base=minimum_base,
+    )
+
+
 def welch_t_test(
     values_a: Iterable[float],
     values_b: Iterable[float],

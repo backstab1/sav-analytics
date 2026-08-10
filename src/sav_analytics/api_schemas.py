@@ -74,6 +74,9 @@ class BannerDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
     blocks: list[BannerBlock] = Field(min_length=1, max_length=50)
     compare_to_total: bool = False
+    # С кем сравнивается подгруппа: с непересекающимся остатком (по умолчанию)
+    # или с самим Total, как это делают клиентские макросы.
+    compare_target: Literal["rest", "total"] = "rest"
     compare_pairwise: bool = False
     confidence_level: float = Field(default=0.95, gt=0, lt=1)
     bonferroni: bool = False

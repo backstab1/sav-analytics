@@ -1734,3 +1734,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   .nav-screens .nav-action { padding: 7px 10px; font-size: var(--t-xs); }
   .export-toggle span:not(.export-caret) { display: none; }
 }
+
+/* Предупреждающая подпись под выбором схемы сравнения. */
+.warning-hint { color: var(--c-warn-ink); font-weight: 500; }

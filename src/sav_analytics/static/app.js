@@ -571,6 +571,7 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     name: document.querySelector("#banner-name").value.trim(),
     blocks,
     compare_to_total: document.querySelector("#banner-compare-total").checked,
+    compare_target: document.querySelector("#banner-compare-target").value,
     compare_pairwise: document.querySelector("#banner-compare-pairwise").checked,
     confidence_level: Number(document.querySelector("#banner-confidence").value) / 100,
     bonferroni: document.querySelector("#banner-bonferroni").checked,
@@ -1639,6 +1640,8 @@ function openBanner(bannerId = null) {
   document.querySelector("#banner-name").value = banner?.name || `Баннер ${configuredBanners().length + 1}`;
   document.querySelector("#banner-confidence").value = (banner?.confidence_level || 0.95) * 100;
   document.querySelector("#banner-compare-total").checked = banner?.compare_to_total ?? banner?.blocks.some(block => block.compare_to_total) ?? false;
+  document.querySelector("#banner-compare-target").value = banner?.compare_target || "rest";
+  syncCompareTargetHint();
   document.querySelector("#banner-compare-pairwise").checked = banner?.compare_pairwise ?? banner?.blocks.some(block => block.compare_pairwise) ?? false;
   document.querySelector("#banner-bonferroni").checked = banner?.bonferroni || false;
   document.querySelector("#banner-minimum-base").value = banner?.minimum_base || 30;
@@ -2050,6 +2053,22 @@ function valueLabelsForQuestion(question) {
 function containsComparable(values, expected) {
   return values.some(value => String(value) === String(expected));
 }
+
+// Схема сравнения меняет смысл цветных пометок в Excel, поэтому объясняем
+// выбор прямо под селектором, а не только в документации.
+function syncCompareTargetHint() {
+  const select = document.querySelector("#banner-compare-target");
+  const hint = document.querySelector("#banner-compare-target-help");
+  const enabled = document.querySelector("#banner-compare-total").checked;
+  document.querySelector("#banner-compare-target-label").hidden = !enabled;
+  hint.textContent = select.value === "total"
+    ? "Total включает саму подгруппу: выборки пересекаются, различия занижаются и часть реальных отличий останется без пометки. Выбирайте, только если этого требует шаблон заказчика."
+    : "Подгруппа сравнивается с теми, кто в неё не вошёл. Total остаётся описательной колонкой и в тестах не участвует.";
+  hint.classList.toggle("warning-hint", select.value === "total");
+}
+
+document.querySelector("#banner-compare-target").addEventListener("change", syncCompareTargetHint);
+document.querySelector("#banner-compare-total").addEventListener("change", syncCompareTargetHint);
 
 async function refreshStructure() {
   if (!currentProject || !confirm("Заново распознать multiple и matrix? Названия и настройки существующих блоков будут сохранены, где это возможно.")) return;
