@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260810-manual-scroll-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260810-header-cleanup-2" />
   </head>
   <body>
     <!-- Ярус 1 — глобальный: не зависит от того, открыт ли проект. -->
@@ -26,6 +26,7 @@
       </a>
       <nav id="screen-nav" class="nav-screens" aria-label="Экраны">
         <button type="button" data-screen="home">Главная<span class="nav-wip">В РАЗРАБОТКЕ</span></button>
+        <button id="new-project" class="nav-action" type="button">Новый проект</button>
         <button type="button" data-screen="manual" aria-current="page">Ручной режим</button>
         <button type="button" data-screen="builder">AI-конструктор</button>
       </nav>
@@ -37,25 +38,6 @@
         </span>
       </div>
     </header>
-
-    <!-- Ярус 2 — проектный: появляется только там, где есть открытый проект.
-         Идентификаторы внутри прежние, поэтому app.js продолжает ими управлять. -->
-    <div id="contextbar" class="contextbar" hidden>
-      <div id="topbar-project" class="topbar-project" hidden>
-        <div class="project-chip"><strong id="topbar-project-name"></strong></div>
-      </div>
-      <div id="topbar-actions" class="head-actions topbar-actions" hidden>
-        <button id="new-project" class="text-button">Новый проект</button>
-        <a id="download-source" class="topbar-icon link-button" href="#" aria-label="Скачать исходный SAV" title="Скачать исходный SAV">
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </a>
-        <button id="refresh-structure" class="topbar-icon" title="Заново найти multiple и matrix, сохранив ручные настройки" aria-label="Перераспознать структуру">
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15.5 6.5V3.8m0 0h-2.7m2.7 0-2.1 2.1a5.5 5.5 0 1 0 1.3 5.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </button>
-        <a id="download-statistics" class="secondary link-button" href="#">Статистика</a>
-        <a id="download-report" class="report-button link-button" href="#">Скачать Excel</a>
-      </div>
-    </div>
 
     <main>
       <!-- ================= Экран «Главная» — заглушка под лендинг ================= -->
@@ -109,7 +91,22 @@
         <div class="workspace-grid">
           <div class="structure-panel">
             <div class="panel-box">
-            <div class="tabs"><button class="active" data-view="questions">Структура</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button><button data-view="weights">Веса</button></div>
+            <div class="panel-head">
+              <div class="tabs"><button class="active" data-view="questions">Структура</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button><button data-view="weights">Веса</button></div>
+              <div class="export-menu">
+                <button id="export-toggle" class="export-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  Выгрузка<span class="export-caret" aria-hidden="true"></span>
+                </button>
+                <div id="export-list" class="export-list" role="menu" hidden>
+                  <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
+                  <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
+                  <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
+                  <div class="export-sep" role="separator"></div>
+                  <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
+                </div>
+              </div>
+            </div>
             <div id="structure-toolbar" class="recode-toolbar"><div><strong>Представление структуры</strong><small>Настраивайте логические вопросы или проверяйте исходные столбцы SAV.</small></div><div class="structure-toolbar-actions"><span id="structure-search-count" class="search-count" aria-live="polite" hidden></span><div class="search-field"><svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg><input id="structure-search" type="text" placeholder="Поиск по коду и названию" autocomplete="off" aria-label="Поиск по структуре массива" /><button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button></div><div class="structure-view-switch"><button type="button" data-structure-mode="questions" class="active">Логические вопросы</button><button type="button" data-structure-mode="variables">Столбцы SAV</button></div></div></div>
             <div id="recode-toolbar" class="recode-toolbar" hidden><div><strong>Производные переменные</strong><small>Создавайте независимые группировки числовых переменных.</small></div><button id="new-recoding" type="button">+ Новая перекодировка</button></div>
             <div id="banner-toolbar" class="recode-toolbar" hidden><div><strong>Баннеры отчёта</strong><small>Total добавляется всегда. Нажмите «В Excel» на нужной карточке.</small></div><button id="new-banner" type="button">+ Новый баннер</button></div>
@@ -296,7 +293,7 @@
     </main>
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260810-manual-scroll-2" defer></script>
-    <script src="/app.js?v=20260810-manual-scroll-2" defer></script>
+    <script src="/shell.js?v=20260810-header-cleanup-2" defer></script>
+    <script src="/app.js?v=20260810-header-cleanup-2" defer></script>
   </body>
 </html>

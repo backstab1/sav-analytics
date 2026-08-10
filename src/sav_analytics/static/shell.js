@@ -11,27 +11,15 @@
 (() => {
   "use strict";
 
-  const SCREENS = {
-    // context: нужен ли второй ярус. У лендинга проекта нет, поэтому нет и яруса.
-    home: { context: false },
-    manual: { context: true },
-    builder: { context: true },
-  };
+  const SCREENS = { home: {}, manual: {}, builder: {} };
 
   const nav = document.querySelector("#screen-nav");
-  const contextbar = document.querySelector("#contextbar");
+  // Кнопка «Новый проект» стоит в том же ряду, но экраном не является,
+  // поэтому выбирается только по data-screen.
   const navButtons = Array.from(nav.querySelectorAll("button[data-screen]"));
-
-  let activeScreen = "manual";
-  let projectOpen = false;
-
-  function syncContextbar() {
-    contextbar.hidden = !(SCREENS[activeScreen].context && projectOpen);
-  }
 
   function showScreen(name) {
     if (!SCREENS[name]) return;
-    activeScreen = name;
     navButtons.forEach(button => {
       if (button.dataset.screen === name) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
@@ -39,7 +27,6 @@
     Object.keys(SCREENS).forEach(key => {
       document.querySelector(`#screen-${key}`).hidden = key !== name;
     });
-    syncContextbar();
     if (name === "builder") builder.activate();
     window.scrollTo(0, 0);
   }
@@ -47,6 +34,48 @@
   navButtons.forEach(button => {
     button.addEventListener("click", () => showScreen(button.dataset.screen));
   });
+
+  /* «Новый проект» стоит в том же ряду и сбрасывает проект силами app.js, но
+     сам по себе экрана не меняет: нажатие с лендинга или из конструктора
+     выглядело бы как «ничего не произошло». Переводим на ручной режим. */
+  document.querySelector("#new-project").addEventListener("click", () => showScreen("manual"));
+
+  /* Техническое меню в углу шапки панели: выгрузки и перераспознавание.
+     Держим здесь, а не в app.js, потому что это поведение оболочки, а не
+     работы с проектом; app.js по-прежнему слушает сами пункты по их id. */
+  const exportToggle = document.querySelector("#export-toggle");
+  const exportList = document.querySelector("#export-list");
+
+  function closeExportMenu() {
+    if (!exportList || exportList.hidden) return;
+    exportList.hidden = true;
+    exportToggle.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleExportMenu() {
+    const open = exportList.hidden;
+    exportList.hidden = !open;
+    exportToggle.setAttribute("aria-expanded", String(open));
+    if (open) exportList.querySelector("[role=menuitem]").focus();
+  }
+
+  if (exportToggle) {
+    exportToggle.addEventListener("click", event => {
+      event.stopPropagation();
+      toggleExportMenu();
+    });
+    // Пункты закрывают меню сами: скачивание уже началось, держать его открытым
+    // незачем, а «Перераспознать» показывает confirm поверх.
+    exportList.addEventListener("click", event => {
+      if (event.target.closest("[role=menuitem]")) closeExportMenu();
+    });
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".export-menu")) closeExportMenu();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") closeExportMenu();
+    });
+  }
 
   document.querySelectorAll(".lp-demo").forEach(button => {
     button.addEventListener("click", () => {
@@ -480,9 +509,10 @@
     showScreen,
     /* Вызывается из app.js: проект открыли или закрыли. */
     setProjectOpen(open) {
-      projectOpen = open;
-      syncContextbar();
-      if (!open) builder.setVariables([], 0);
+      if (!open) {
+        builder.setVariables([], 0);
+        closeExportMenu();
+      }
     },
     /* Вызывается из app.js после разбора проекта. */
     setProjectVariables(items, respondents) {

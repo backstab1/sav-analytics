@@ -109,8 +109,6 @@ document.querySelector("#new-project").addEventListener("click", () => {
   weightEditor.hidden = true;
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
-  document.querySelector("#topbar-project").hidden = true;
-  document.querySelector("#topbar-actions").hidden = true;
   window.Shell.setProjectOpen(false);
   window.scrollTo(0, 0);
   form.reset();
@@ -835,8 +833,6 @@ function showProject(project) {
   renderProject();
   document.querySelector("#start").hidden = true;
   document.querySelector("#workspace").hidden = false;
-  document.querySelector("#topbar-project").hidden = false;
-  document.querySelector("#topbar-actions").hidden = false;
   window.Shell.setProjectOpen(true);
   window.scrollTo(0, 0);
 }
@@ -845,7 +841,6 @@ function renderProject() {
   const inspection = currentProject.inspection;
   const questions = configuredQuestions();
   document.querySelector("#project-name").textContent = currentProject.name;
-  setHeadingText(document.querySelector("#topbar-project-name"), currentProject.name);
   document.querySelector("#download-source").href = `/api/projects/${currentProject.id}/source`;
   document.querySelector("#download-report").href = `/api/projects/${currentProject.id}/reports/topline.xlsx`;
   document.querySelector("#download-statistics").href = `/api/projects/${currentProject.id}/reports/statistics.txt`;

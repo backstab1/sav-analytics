@@ -57,12 +57,11 @@
   --font-body: Inter, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
 
   /* Effects */
-  /* Высоты ярусов шапки. Всё, что должно уместиться под ними, считается
-     отсюда: раньше 54 и 48 были рассыпаны по файлу, и добавление второго
-     яруса тихо разъехалось сразу в шести местах. */
+  /* Высота шапки. Всё, что должно уместиться под ней, считается отсюда:
+     раньше это число было рассыпано по файлу, и одно его изменение тихо
+     разъезжалось сразу в шести местах. */
   --bar-1: 54px;
-  --bar-2: 48px;
-  --bars: calc(var(--bar-1) + var(--bar-2));
+  --bars: var(--bar-1);
   --drawer-top: calc(var(--bars) + 16px);
   /* Высота липкого окна редактора: столько остаётся между нижним краем
      шапки и низом экрана. Все панели редактора одной высоты, поэтому в
@@ -116,18 +115,7 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
 }
 .brand svg { width: 25px; height: 25px; flex-shrink: 0; }
 .brand span { color: var(--c-brand); }
-.topbar-project { flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
 .appbar-sep { width: 1px; height: 20px; background: var(--c-border-strong); flex-shrink: 0; }
-.project-chip { overflow: hidden; color: var(--c-ink-2); font-size: var(--t-sm); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.project-chip strong { color: var(--c-ink); font-weight: 600; }
-.topbar-actions { margin-left: auto; flex-shrink: 0; flex-wrap: nowrap; }
-.topbar-actions > button, .topbar-actions > .link-button { padding: 7px 14px; font-size: var(--t-xs); }
-.topbar-actions > .topbar-icon {
-  width: 30px; height: 30px; padding: 0; border-radius: 50%;
-  background: var(--c-surface-soft); color: var(--c-ink-2);
-}
-.topbar-actions > .topbar-icon:hover { background: #ececef; color: var(--c-brand); }
-.topbar-icon svg { width: 17px; height: 17px; }
 
 /* Отступы переехали с main на .screen-pad: конструктору нужна вся ширина,
    а лендингу и ручному режиму — прежняя колонка. */
@@ -171,8 +159,6 @@ button:focus-visible, .link-button:focus-visible, .project-card:focus-visible,
 }
 .icon-button:hover { background: #ececef; color: var(--c-ink); }
 
-.report-button { background: var(--c-brand); color: #fff; }
-.report-button:hover { background: var(--c-brand-hover); }
 
 .danger-button { background: transparent; color: var(--c-danger); font-weight: 500; }
 .danger-button:hover { background: var(--c-danger-tint); }
@@ -254,7 +240,6 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
 .workspace-title { min-width: 220px; }
 .workspace-title p { margin-bottom: var(--s-2); }
 .workspace-head h1 { font-size: var(--t-3xl); }
-.head-actions { display: flex; gap: 9px; align-items: center; }
 .link-button { padding: 9px 20px; font-size: var(--t-sm); font-weight: 600; }
 .link-button[aria-disabled="true"] { cursor: wait; opacity: 0.55; pointer-events: none; }
 .report-feedback {
@@ -1202,8 +1187,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   .screen-pad { padding-top: var(--s-5); }
   .workspace-head { flex-direction: column; align-items: flex-start; }
   .summary-cards > * { flex: 1 1 44%; }
-  .topbar-project { display: none; }
-  .topbar-actions { margin-left: auto; gap: 6px; }
   .upload-card { padding: var(--s-4); }
   .form-row { grid-template-columns: 1fr; }
   .recode-toolbar { align-items: flex-start; flex-wrap: wrap; }
@@ -1232,7 +1215,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 @media (max-width: 620px) {
   .screen-pad { padding-right: var(--s-4); padding-left: var(--s-4); }
   .appbar { padding-right: var(--s-4); padding-left: var(--s-4); }
-  .topbar-actions > .topbar-icon { display: none; }
   .summary-cards { display: grid; grid-template-columns: 1fr 1fr; }
   .question-editor { --editor-pad: var(--s-4); padding: var(--s-4); }
   .range-row { grid-template-columns: minmax(100px, 1fr) 56px 10px 56px 28px; }
@@ -1456,7 +1438,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
    Три уровня навигации, у каждого своя форма, иначе они сливаются:
      .nav-screens — глобальные экраны, залитая капсула;
-     .contextbar  — не вкладки вовсе, а кнопки текущего проекта;
      .tabs        — виды внутри панели, единственные с подчёркиванием.
 
    Классы конструктора с приставкой bld-: в этом файле плоские имена уже
@@ -1490,14 +1471,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .account-name small { color: var(--c-ink-3); font-size: 10px; }
 
 /* ---------- Ярус 2: панель проекта ---------- */
-.contextbar {
-  height: var(--bar-2); padding: 0 var(--page-gutter);
-  background: var(--c-surface); border-bottom: 1px solid var(--c-border);
-  display: flex; align-items: center; gap: var(--s-4);
-  position: sticky; top: var(--bar-1); z-index: 89;
-}
-.contextbar .topbar-project { flex: 0 1 auto; }
-.contextbar .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
 /* ---------- Экран «Главная» ---------- */
 .lp-hero { display: grid; justify-items: center; gap: var(--s-4); padding: var(--s-7) 0 var(--s-6); text-align: center; }
@@ -1704,4 +1677,60 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   .nav-screens button { padding: 7px 10px; font-size: var(--t-xs); }
   .nav-wip { display: none; }
   .account-name { display: none; }
+}
+
+/* ---------- «Новый проект» в верхнем ряду ----------
+   Это действие, а не экран, поэтому не подсвечивается как текущий раздел. */
+.nav-screens .nav-action {
+  padding: 7px 14px; border-radius: var(--r-pill);
+  background: transparent; color: var(--c-brand);
+  font-size: var(--t-sm); font-weight: 600;
+}
+.nav-screens .nav-action:hover { background: var(--c-brand-tint); color: var(--c-brand-hover); transform: none; }
+
+/* ---------- Шапка панели: вкладки видов и техническое меню ---------- */
+.panel-head {
+  display: flex; align-items: flex-end; gap: var(--s-4);
+  border-bottom: 1px solid var(--c-border);
+}
+.panel-head .tabs { flex: 1; min-width: 0; border-bottom: 0; }
+.export-menu { position: relative; flex-shrink: 0; padding: 0 12px 8px 0; }
+.export-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: var(--r-1);
+  background: var(--c-surface-soft); color: var(--c-ink-2);
+  font-size: var(--t-xs); font-weight: 600;
+}
+.export-toggle:hover { background: #ececef; color: var(--c-ink); }
+.export-toggle svg { width: 15px; height: 15px; }
+.export-toggle[aria-expanded="true"] { background: var(--c-brand-tint); color: var(--c-brand); }
+.export-caret {
+  width: 0; height: 0; margin-left: 1px;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+}
+
+.export-list {
+  position: absolute; right: 12px; top: calc(100% + 2px); z-index: 30;
+  min-width: 228px; padding: 6px;
+  display: grid; gap: 1px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-drawer);
+  animation: drawer-rise 160ms var(--ease);
+}
+.export-item {
+  display: block; width: 100%; padding: 9px 12px; border-radius: 6px;
+  background: transparent; color: var(--c-ink);
+  font-size: var(--t-sm); font-weight: 500; text-align: left; text-decoration: none;
+  white-space: nowrap;
+}
+.export-item:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
+.export-item[aria-disabled="true"] { color: var(--c-ink-4); cursor: not-allowed; }
+.export-sep { height: 1px; margin: 5px 6px; background: var(--c-border); }
+
+@media (max-width: 900px) {
+  .nav-screens .nav-action { padding: 7px 10px; font-size: var(--t-xs); }
+  .export-toggle span:not(.export-caret) { display: none; }
 }
