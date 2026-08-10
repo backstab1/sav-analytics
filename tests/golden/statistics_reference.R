@@ -77,6 +77,21 @@ balance_reference <- function(a, b, confidence = 0.95) {
        variances = variances, interval = interval)
 }
 
+
+weighted_balance_reference <- function(a, wa, b, wb, confidence = 0.95) {
+  estimates <- c(weighted.mean(a, wa), weighted.mean(b, wb))
+  variances <- c(weighted.mean(abs(a), wa) - estimates[1]^2,
+                 weighted.mean(abs(b), wb) - estimates[2]^2)
+  effective <- c(kish_base(wa), kish_base(wb))
+  difference <- estimates[1] - estimates[2]
+  se <- sqrt(variances[1] / effective[1] + variances[2] / effective[2])
+  z <- difference / se
+  p <- 2 * pnorm(-abs(z))
+  interval <- difference + c(-1, 1) * qnorm(1 - (1 - confidence) / 2) * se
+  list(z = z, p = p, difference = difference, estimates = estimates,
+       variances = variances, effective = effective, interval = interval)
+}
+
 references <- list(
   proportion = proportion_reference(70, 100, 50, 100),
   subgroup_rest = proportion_reference(42, 60, 20, 40),
@@ -97,6 +112,24 @@ references <- list(
   nps_balance = balance_reference(
     c(rep(-1, 10), rep(0, 20), rep(1, 70)),
     c(rep(-1, 30), rep(0, 30), rep(1, 40))
+  ),
+  # CSAT считается тем же критерием баланса, что и NPS: 1-2 дают -1, 3 даёт 0,
+  # 4-5 дают +1. Отдельный кейс нужен, потому что разметка баллов другая.
+  csat_balance = balance_reference(
+    c(rep(-1, 18), rep(0, 27), rep(1, 55)),
+    c(rep(-1, 34), rep(0, 26), rep(1, 40))
+  ),
+  # Взвешенный баланс: путь, у которого эталона не было вовсе.
+  weighted_nps_balance = weighted_balance_reference(
+    c(rep(-1, 10), rep(0, 20), rep(1, 70)), c(rep(2, 30), rep(1, 70)),
+    c(rep(-1, 30), rep(0, 30), rep(1, 40)), c(rep(1, 60), rep(3, 40))
+  ),
+  # Волны сравниваются как две независимые выборки: доли обычным z-test,
+  # средние - Welch. Числа взяты как две волны одного трекера.
+  wave_proportion = proportion_reference(268, 500, 214, 480),
+  wave_welch = welch_reference(
+    7 + (0:499 %% 4),
+    6 + (0:479 %% 5)
   )
 )
 

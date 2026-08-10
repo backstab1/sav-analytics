@@ -1,103 +1,408 @@
 {
   "provenance": {
-    "engine": "Base R",
+    "engine": "Base R 4.6.1",
     "script": "statistics_reference.R",
-    "methodology": "pooled two-sided z-test, unpooled Wald CI, Welch two-sample t-test",
-    "reference_locked_on": "2026-08-09"
+    "methodology": "pooled two-sided z-test, unpooled Wald CI, Welch two-sample t-test, NPS/CSAT balance z-test with Kish effective bases when weighted",
+    "reference_locked_on": "2026-08-10"
   },
   "proportion_cases": [
     {
       "id": "standard",
-      "successes": [70, 50],
-      "bases": [100, 100],
+      "successes": [
+        70,
+        50
+      ],
+      "bases": [
+        100,
+        100
+      ],
       "comparisons": 1,
       "performed": true,
       "statistic": 2.886751345948128,
       "p_value": 0.003892417122778628,
       "difference": 0.2,
       "alpha": 0.05,
-      "confidence_interval": [0.06706877501808317, 0.33293122498191674],
-      "expected_frequencies": [60.0, 40.0, 60.0, 40.0]
+      "confidence_interval": [
+        0.06706877501808317,
+        0.33293122498191674
+      ],
+      "expected_frequencies": [
+        60.0,
+        40.0,
+        60.0,
+        40.0
+      ]
     },
     {
       "id": "subgroup_vs_rest",
-      "successes": [42, 20],
-      "bases": [60, 40],
+      "successes": [
+        42,
+        20
+      ],
+      "bases": [
+        60,
+        40
+      ],
       "comparisons": 1,
       "performed": true,
       "statistic": 2.0185893307574663,
       "p_value": 0.04352992086961164,
       "difference": 0.2,
       "alpha": 0.05,
-      "confidence_interval": [0.006469063192037106, 0.3935309368079628],
-      "expected_frequencies": [37.2, 22.8, 24.8, 15.2]
+      "confidence_interval": [
+        0.006469063192037106,
+        0.3935309368079628
+      ],
+      "expected_frequencies": [
+        37.2,
+        22.8,
+        24.8,
+        15.2
+      ]
     },
     {
       "id": "bonferroni_four_comparisons",
-      "successes": [63, 49],
-      "bases": [100, 100],
+      "successes": [
+        63,
+        49
+      ],
+      "bases": [
+        100,
+        100
+      ],
       "comparisons": 4,
       "performed": true,
       "statistic": 1.9943100880436644,
       "p_value": 0.04611817746898452,
       "difference": 0.14,
       "alpha": 0.0125,
-      "confidence_interval": [-0.0335860381374985, 0.3135860381374985],
-      "expected_frequencies": [56.0, 44.0, 56.0, 44.0]
+      "confidence_interval": [
+        -0.0335860381374985,
+        0.3135860381374985
+      ],
+      "expected_frequencies": [
+        56.0,
+        44.0,
+        56.0,
+        44.0
+      ]
     },
     {
       "id": "small_expected_frequency",
-      "successes": [1, 8],
-      "bases": [30, 30],
+      "successes": [
+        1,
+        8
+      ],
+      "bases": [
+        30,
+        30
+      ],
       "comparisons": 1,
       "performed": false,
       "difference": -0.23333333333333334,
       "alpha": 0.05,
-      "expected_frequencies": [4.5, 25.5, 4.5, 25.5]
+      "expected_frequencies": [
+        4.5,
+        25.5,
+        4.5,
+        25.5
+      ]
     }
   ],
   "welch_case": {
-    "group_a": [10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16, 10, 11, 12, 13, 14, 15, 16],
-    "group_b": [8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10, 11, 12, 8, 9, 10],
+    "group_a": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "group_b": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      8,
+      9,
+      10,
+      11,
+      12,
+      8,
+      9,
+      10,
+      11,
+      12,
+      8,
+      9,
+      10,
+      11,
+      12,
+      8,
+      9,
+      10,
+      11,
+      12,
+      8,
+      9,
+      10,
+      11,
+      12,
+      8,
+      9,
+      10,
+      11,
+      12,
+      8,
+      9,
+      10
+    ],
     "statistic": 7.930393205635306,
     "degrees_of_freedom": 73.63388322026942,
     "p_value": 1.806579313114011e-11,
     "difference": 3.078947368421053,
-    "confidence_interval": [2.3052854231025406, 3.8526093137395656]
+    "confidence_interval": [
+      2.3052854231025406,
+      3.8526093137395656
+    ]
   },
   "weighted_proportion_case": {
-    "outcome_a": {"selected": 20, "not_selected": 20},
-    "weights_a": {"selected": 2.0, "not_selected": 1.0},
-    "outcome_b": {"selected": 12, "not_selected": 28},
-    "weights_b": {"selected": 1.0, "not_selected": 1.0},
+    "outcome_a": {
+      "selected": 20,
+      "not_selected": 20
+    },
+    "weights_a": {
+      "selected": 2.0,
+      "not_selected": 1.0
+    },
+    "outcome_b": {
+      "selected": 12,
+      "not_selected": 28
+    },
+    "weights_b": {
+      "selected": 1.0,
+      "not_selected": 1.0
+    },
     "statistic": 3.196525891929827,
     "p_value": 0.0013909334231701665,
     "difference": 0.36666666666666664,
-    "confidence_interval": [0.15719025372630485, 0.5761430796070284],
-    "group_estimates": [0.6666666666666666, 0.3],
-    "effective_bases": [36.0, 40.0],
-    "weight_sums": [60.0, 40.0]
+    "confidence_interval": [
+      0.15719025372630485,
+      0.5761430796070284
+    ],
+    "group_estimates": [
+      0.6666666666666666,
+      0.3
+    ],
+    "effective_bases": [
+      36.0,
+      40.0
+    ],
+    "weight_sums": [
+      60.0,
+      40.0
+    ]
   },
   "weighted_welch_case": {
-    "weights_a": {"first_count": 21, "first_weight": 2.0, "remaining_weight": 1.0},
+    "weights_a": {
+      "first_count": 21,
+      "first_weight": 2.0,
+      "remaining_weight": 1.0
+    },
     "weight_b": 1.0,
     "statistic": 7.652776996091788,
     "degrees_of_freedom": 65.92135942514584,
     "p_value": 1.1150492293630225e-10,
     "difference": 3.078947368421053,
-    "confidence_interval": [2.2756502581199562, 3.88224447872215],
-    "group_estimates": [13.0, 9.921052631578947],
-    "group_variances": [4.108695652173913, 2.0206258890469413],
-    "effective_bases": [37.8, 38.0]
+    "confidence_interval": [
+      2.2756502581199562,
+      3.88224447872215
+    ],
+    "group_estimates": [
+      13.0,
+      9.921052631578947
+    ],
+    "group_variances": [
+      4.108695652173913,
+      2.0206258890469413
+    ],
+    "effective_bases": [
+      37.8,
+      38.0
+    ]
   },
   "nps_balance_case": {
-    "group_a_counts": {"detractor": 10, "passive": 20, "promoter": 70},
-    "group_b_counts": {"detractor": 30, "passive": 30, "promoter": 40},
+    "group_a_counts": {
+      "detractor": 10,
+      "passive": 20,
+      "promoter": 70
+    },
+    "group_b_counts": {
+      "detractor": 30,
+      "passive": 30,
+      "promoter": 40
+    },
     "statistic": 4.703604341917987,
     "p_value": 2.5560836985037922e-06,
     "difference": 0.5,
-    "confidence_interval": [0.2916529705663083, 0.7083470294336918],
-    "group_estimates": [0.6, 0.1],
-    "group_variances": [0.44, 0.69]
-  }
+    "confidence_interval": [
+      0.2916529705663083,
+      0.7083470294336918
+    ],
+    "group_estimates": [
+      0.6,
+      0.1
+    ],
+    "group_variances": [
+      0.44,
+      0.69
+    ]
+  },
+  "csat_balance_case": {
+    "group_a_counts": {
+      "dissatisfied": 18,
+      "neutral": 27,
+      "satisfied": 55
+    },
+    "group_b_counts": {
+      "dissatisfied": 34,
+      "neutral": 26,
+      "satisfied": 40
+    },
+    "statistic": 2.68854631887991,
+    "p_value": 0.00717638787918815,
+    "difference": 0.31,
+    "group_estimates": [
+      0.37,
+      0.06
+    ],
+    "group_variances": [
+      0.5931,
+      0.7364
+    ],
+    "confidence_interval": [
+      0.0840084182516341,
+      0.535991581748366
+    ]
+  },
+  "weighted_balance_case": {
+    "group_a": {
+      "detractor": 10,
+      "passive": 20,
+      "promoter": 70,
+      "weight_first_30": 2.0,
+      "weight_rest": 1.0
+    },
+    "group_b": {
+      "detractor": 30,
+      "passive": 30,
+      "promoter": 40,
+      "weight_first_60": 1.0,
+      "weight_rest": 3.0
+    },
+    "statistic": -0.98644690003552,
+    "p_value": 0.323913860094312,
+    "difference": -0.115384615384615,
+    "group_estimates": [
+      0.384615384615385,
+      0.5
+    ],
+    "group_variances": [
+      0.544378698224852,
+      0.583333333333333
+    ],
+    "effective_bases": [
+      88.9473684210526,
+      77.1428571428571
+    ],
+    "confidence_interval": [
+      -0.344641446660287,
+      0.113872215891056
+    ]
+  },
+  "wave_cases": [
+    {
+      "id": "wave_proportion",
+      "successes": [
+        268,
+        214
+      ],
+      "bases": [
+        500,
+        480
+      ],
+      "comparisons": 1,
+      "statistic": 2.82245146767471,
+      "p_value": 0.00476580346774692,
+      "difference": 0.0901666666666667,
+      "confidence_interval": [
+        0.0278124285414154,
+        0.152520904791918
+      ],
+      "expected_frequencies": [
+        245.918367346939,
+        254.081632653061,
+        236.081632653061,
+        243.918367346939
+      ]
+    },
+    {
+      "id": "wave_welch",
+      "sample_a": {
+        "offset": 7,
+        "size": 500,
+        "cycle": 4
+      },
+      "sample_b": {
+        "offset": 6,
+        "size": 480,
+        "cycle": 5
+      },
+      "statistic": 6.11743792889152,
+      "degrees_of_freedom": 911.297632974838,
+      "p_value": 1.40996515252064e-09,
+      "difference": 0.5,
+      "confidence_interval": [
+        0.339592114473338,
+        0.660407885526662
+      ]
+    }
+  ]
 }
