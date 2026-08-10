@@ -34,6 +34,8 @@ dist/
 build/
 coverage/
 htmlcov/
+playwright-artifacts/
+test-results/
 .coverage
 .coverage.*
 coverage.xml

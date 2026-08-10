@@ -76,6 +76,38 @@ jobs:
             junit.xml
           retention-days: 14
 
+  browser:
+    name: Браузерный сценарий
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          version: "0.12.3"
+
+      - name: Установить зафиксированные зависимости
+        run: uv sync --locked --extra dev
+
+      - name: Поставить Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Сквозной сценарий аналитика
+        run: uv run pytest -m browser --tracing=retain-on-failure --output=playwright-artifacts
+
+      - name: Сохранить трассировку упавшего сценария
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace
+          path: playwright-artifacts/
+          retention-days: 14
+
   docker:
     name: Сборка образа
     runs-on: ubuntu-latest

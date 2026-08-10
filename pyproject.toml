@@ -25,6 +25,7 @@ dev = [
   "httpx>=0.28,<1",
   "mypy>=1.17,<2",
   "pytest>=8.3,<9",
+  "pytest-playwright>=0.7,<1",
   "pytest-cov>=6,<8",
   "ruff>=0.11,<1",
 ]
@@ -33,8 +34,13 @@ dev = [
 packages = ["src/sav_analytics"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+# Браузерные тесты требуют скачанных бинарников Chromium, поэтому по умолчанию
+# не собираются: обычный `pytest` должен работать на чистом checkout.
+addopts = "-q -m 'not browser'"
 testpaths = ["tests"]
+markers = [
+  "browser: сквозной сценарий в настоящем браузере (нужен `playwright install chromium`)",
+]
 filterwarnings = [
   "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
 ]

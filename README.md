@@ -119,7 +119,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py
 ```
 
-Сейчас набор содержит 90 pytest-кейсов для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 102 pytest-кейса для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, структуры XLSX и
 эталонных расчётов обычных и взвешенных z-test/Welch t-test, Subgroup/Rest и NPS balance,
 включая сквозные регрессии multiple-response `counted_value`, построчных баз и SPSS
@@ -127,24 +127,36 @@ user-missing. Численные
 golden-эталоны воспроизводятся отдельным Base R скриптом, а полный pipeline защищён
 snapshot полного `statistics.txt` и проверкой immutable XLSX.
 
+Браузерные тесты по умолчанию не собираются: обычный `pytest` должен работать на
+чистом checkout без скачанных бинарников. Чтобы прогнать их локально:
+
+```powershell
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe -m pytest -m browser
+```
+
 Покрытие считается тем же прогоном:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
 ```
 
-Сейчас покрыто 83,67% с учётом ветвлений, порог падения сборки — 80%, он задан в `pyproject.toml`.
+Сейчас покрыто 83,74% с учётом ветвлений, порог падения сборки — 80%, он задан в `pyproject.toml`.
 
 ### CI
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускается на push в `main`,
-на каждый pull request и вручную. В нём две задачи:
+на каждый pull request и вручную. В нём три задачи:
 
 - **Линтер, типы и тесты** — `ruff check .`, инкрементальный `mypy` по P0-модулям и
   `pytest` с покрытием на Python 3.12. Зависимости ставятся из `uv.lock`
   (`uv sync --locked`), поэтому сборка воспроизводима. Отчёты `coverage.xml`,
   `htmlcov/` и `junit.xml` сохраняются как артефакт на 14 дней, таблица покрытия
   попадает в сводку запуска.
+- **Браузерный сценарий** — Playwright гоняет полный путь аналитика в настоящем
+  Chromium: загрузка SAV, правка вопроса, перекодировка, фильтр, баннер, подготовка
+  отчёта и скачивание обоих файлов с проверкой их содержимого. При падении
+  трассировка сохраняется артефактом.
 - **Сборка образа** — сборка `Dockerfile` с кэшем buildx, затем запуск контейнера
   и проверка ответа `/api/health`. Образ никуда не публикуется.
 

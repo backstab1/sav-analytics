@@ -165,6 +165,8 @@ def _cached_report(
         return None
     if manifest.get("cache_key") != cache_key or manifest.get("artifact_id") != cache_key:
         return None
+    if not _files_match_manifest(artifact_dir, manifest):
+        return None
     return PreparedReport(
         topline_path=topline_path,
         statistics_path=statistics_path,
@@ -173,6 +175,32 @@ def _cached_report(
         artifact_id=cache_key,
         configuration_revision=revision,
     )
+
+
+def _files_match_manifest(artifact_dir: Path, manifest: dict[str, Any]) -> bool:
+    """Сверить файлы артефакта с тем, что записал собравший его job.
+
+    Манифест всегда хранил размер и sha256 обоих файлов, но никто их не читал:
+    достаточно было существования файлов, и обрезанный или подменённый XLSX
+    выдавался как готовый отчёт — в том числе на скачивание. Размера мало,
+    подмена той же длины ловится только суммой.
+    """
+    recorded = manifest.get("files")
+    if not isinstance(recorded, dict) or not recorded:
+        return False
+    for name, expected in recorded.items():
+        if not isinstance(expected, dict):
+            return False
+        path = artifact_dir / name
+        try:
+            content = path.read_bytes()
+        except OSError:
+            return False
+        if len(content) != expected.get("size"):
+            return False
+        if hashlib.sha256(content).hexdigest() != expected.get("sha256"):
+            return False
+    return True
 
 
 def _artifact_dir(
