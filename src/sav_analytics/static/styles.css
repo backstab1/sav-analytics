@@ -64,6 +64,10 @@
   --bar-2: 48px;
   --bars: calc(var(--bar-1) + var(--bar-2));
   --drawer-top: calc(var(--bars) + 16px);
+  /* Высота липкого окна редактора: столько остаётся между нижним краем
+     шапки и низом экрана. Все панели редактора одной высоты, поэтому в
+     конце прокрутки их низ приходит вровень с низом левой панели. */
+  --drawer-height: calc(100dvh - var(--drawer-top) - 16px);
 
   --focus-ring: 0 0 0 3px rgba(29,122,79,.12);
   --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
@@ -351,7 +355,7 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
    ================================================================ */
 .panel-box {
   background: var(--c-surface); border-radius: var(--r-3);
-  box-shadow: var(--shadow-card); overflow: hidden;
+  box-shadow: var(--shadow-card); overflow: clip;
 }
 
 /* Card collection used by the configuration screens. */
@@ -495,18 +499,16 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
 /* ================================================================
    TABLE
    ================================================================ */
-/* Высоту задаёт shell.js по фактическому положению таблицы: шапка рабочей
-   области меняет высоту от длины названия проекта, поэтому константа здесь
-   всегда либо режет таблицу, либо роняет её за нижний край экрана.
-   Значение ниже — запасное, до первого замера. */
+/* Таблица не ограничена по высоте: список вопросов разворачивается целиком,
+   а листается страница. overflow оставляем visible — иначе .table-wrap станет
+   контейнером прокрутки и шапка таблицы перестанет липнуть к окну. */
 .table-wrap {
-  overflow: auto; background: transparent; border: 0;
-  max-height: var(--table-max-height, calc(100dvh - var(--bars) - 240px));
+  overflow: visible; background: transparent; border: 0;
 }
 table { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
 th, td { padding: 12px 22px; text-align: left; border-bottom: 1px solid var(--c-border); vertical-align: middle; }
 th {
-  position: sticky; top: 0; z-index: 2;
+  position: sticky; top: var(--bars); z-index: 2;
   color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em;
   background: rgba(255,255,255,.92);
@@ -620,7 +622,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    ================================================================ */
 .question-editor {
   position: sticky; top: var(--drawer-top);
-  max-height: calc(100dvh - var(--bars) - 32px);
+  max-height: var(--drawer-height);
   overflow: auto;
   min-width: 0; width: 100%;
   --editor-pad: 20px;
@@ -707,7 +709,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Structure editor: scrollable body with a fixed action row. */
 .structure-editor {
   display: flex; flex-direction: column;
-  height: calc(100dvh - var(--bars) - 71px); min-height: 480px;
+  height: var(--drawer-height); min-height: 480px;
   overflow: hidden; padding-bottom: 0;
 }
 .structure-editor .editor-head { position: static; flex: 0 0 auto; }
@@ -735,7 +737,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Recoding editor follows the same split body/action layout. */
 .recode-editor {
   display: flex; flex-direction: column;
-  height: calc(100dvh - var(--bars) - 141px); min-height: 480px;
+  height: var(--drawer-height); min-height: 480px;
   overflow: hidden; padding-bottom: 0;
 }
 .recode-editor .editor-head { position: static; flex: 0 0 auto; }
@@ -830,7 +832,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 .banner-editor {
   display: flex; flex-direction: column;
-  height: calc(100dvh - var(--bars) - 32px); max-height: calc(100dvh - var(--bars) - 32px); min-height: 0;
+  height: var(--drawer-height); max-height: var(--drawer-height); min-height: 0;
   overflow: hidden; padding-bottom: 0;
 }
 .banner-editor .editor-head { position: static; flex: 0 0 auto; }
@@ -886,7 +888,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Weight editor */
 .weight-editor {
   display: flex; flex-direction: column;
-  height: calc(100dvh - var(--bars) - 141px); min-height: 440px;
+  height: var(--drawer-height); min-height: 440px;
   overflow: hidden; padding-bottom: 0;
 }
 .weight-editor[hidden] { display: none; }
@@ -944,7 +946,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Filter editor */
 .filter-editor {
   display: flex; flex-direction: column;
-  height: calc(100dvh - var(--bars) - 32px); max-height: calc(100dvh - var(--bars) - 32px); min-height: 0;
+  height: var(--drawer-height); max-height: var(--drawer-height); min-height: 0;
   overflow: hidden; padding-bottom: 0;
 }
 .filter-editor .editor-head { position: static; flex: 0 0 auto; }
