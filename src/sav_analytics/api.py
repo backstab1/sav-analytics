@@ -23,7 +23,16 @@ from .configuration_revision import (
 )
 from .core.preflight import PreflightBlockedError
 from .project_models import InvalidStoredProjectError
-from .routers import banners, filters, projects, questions, recodings, reports, weights
+from .routers import (
+    banners,
+    filters,
+    projects,
+    questions,
+    recodings,
+    report_settings,
+    reports,
+    weights,
+)
 
 app = FastAPI(title="sav-analytics API", version="0.1.0")
 logger = logging.getLogger(__name__)
@@ -164,6 +173,7 @@ for router in (
     banners.router,
     filters.router,
     weights.router,
+    report_settings.router,
     reports.router,
 ):
     app.include_router(router)

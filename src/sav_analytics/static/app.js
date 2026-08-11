@@ -10,6 +10,7 @@ const recodeEditor = document.querySelector("#recode-editor");
 const bannerEditor = document.querySelector("#banner-editor");
 const filterEditor = document.querySelector("#filter-editor");
 const weightEditor = document.querySelector("#weight-editor");
+const reportSettingsForm = document.querySelector("#report-settings-form");
 const notApplicableEditor = document.querySelector("#not-applicable-editor");
 let currentProject = null;
 let currentQuestionCode = null;
@@ -29,6 +30,19 @@ const filterPreviewCache = new Map();
 const filterPreviewRequests = new Map();
 let filterCardHydration = null;
 let filterPreviewTimer = null;
+
+const defaultReportSettings = Object.freeze({
+  compare_to_total: false,
+  compare_target: "rest",
+  compare_pairwise: false,
+  confidence_level: 0.95,
+  bonferroni: false,
+  minimum_base: 30,
+  weight_variable: null,
+  calculated_weight_id: null,
+  wave_comparison: "none",
+  wave_control_value: null,
+});
 
 const typeLabels = {
   single_choice: "Один ответ",
@@ -108,6 +122,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   bannerEditor.hidden = true;
   filterEditor.hidden = true;
   weightEditor.hidden = true;
+  reportSettingsForm.hidden = true;
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
   window.Shell.setProjectOpen(false);
@@ -176,6 +191,9 @@ document.querySelector("#add-weight-dimension").addEventListener("click", () => 
 document.querySelector("#delete-weight").addEventListener("click", deleteWeight);
 document.querySelector("#refresh-weight-preview").addEventListener("click", loadWeightPreview);
 document.querySelector("#weight-trimming").addEventListener("change", renderWeightTrimming);
+document.querySelector("#report-wave-comparison").addEventListener("change", syncReportWaveControl);
+document.querySelector("#report-compare-target").addEventListener("change", syncReportCompareTargetHint);
+document.querySelector("#report-compare-subgroups").addEventListener("change", syncReportCompareTargetHint);
 document.querySelector("#weight-dimension-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-weight-dimension]");
   if (button) button.closest(".weight-dimension").remove();
@@ -239,7 +257,7 @@ document.querySelector("#summary").addEventListener("click", event => {
       button.classList.toggle("active", button.dataset.structureMode === "questions");
     });
     document.querySelector("#structure-toolbar").hidden = false;
-    ["#recode-toolbar", "#banner-toolbar", "#filter-toolbar", "#weight-toolbar"]
+    ["#recode-toolbar", "#banner-toolbar", "#filter-toolbar", "#weight-toolbar", "#report-settings-toolbar"]
       .forEach(selector => { document.querySelector(selector).hidden = true; });
   }
   renderSummary(currentProject.inspection, configuredQuestions());
@@ -383,6 +401,7 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   document.querySelector("#structure-toolbar").hidden = currentView !== "questions";
   document.querySelector("#filter-toolbar").hidden = currentView !== "filters";
   document.querySelector("#weight-toolbar").hidden = currentView !== "weights";
+  document.querySelector("#report-settings-toolbar").hidden = currentView !== "report-settings";
   if (currentView === "recodings") {
     editor.hidden = true;
     bannerEditor.hidden = true;
@@ -565,24 +584,9 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     showError(bannerError, error);
     return;
   }
-  const weightSelection = document.querySelector("#banner-weight").value;
-  const waveMode = document.querySelector("#banner-wave-comparison").value;
-  const waveControl = document.querySelector("#banner-wave-control").value;
   const payload = {
     name: document.querySelector("#banner-name").value.trim(),
     blocks,
-    compare_to_total: document.querySelector("#banner-compare-total").checked,
-    compare_target: document.querySelector("#banner-compare-target").value,
-    compare_pairwise: document.querySelector("#banner-compare-pairwise").checked,
-    confidence_level: Number(document.querySelector("#banner-confidence").value) / 100,
-    bonferroni: document.querySelector("#banner-bonferroni").checked,
-    minimum_base: Number(document.querySelector("#banner-minimum-base").value),
-    weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
-    calculated_weight_id: weightSelection.startsWith("calculated:") ? weightSelection.slice(11) : null,
-    wave_comparison: waveMode,
-    wave_control_value: waveMode === "control" && waveControl
-      ? JSON.parse(waveControl)
-      : null,
   };
   setBusy(saveButton, true, "Сохраняем…");
   try {
@@ -605,6 +609,46 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     showError(bannerError, error);
   } finally {
     setBusy(saveButton, false, "Сохранить");
+  }
+});
+
+reportSettingsForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-report-settings");
+  const settingsError = document.querySelector("#report-settings-error");
+  const weightSelection = document.querySelector("#report-weight").value;
+  const waveMode = document.querySelector("#report-wave-comparison").value;
+  const waveControl = document.querySelector("#report-wave-control").value;
+  const payload = {
+    compare_to_total: document.querySelector("#report-compare-subgroups").checked,
+    compare_target: document.querySelector("#report-compare-target").value,
+    compare_pairwise: document.querySelector("#report-compare-pairwise").checked,
+    confidence_level: Number(document.querySelector("#report-confidence").value) / 100,
+    bonferroni: document.querySelector("#report-bonferroni").checked,
+    minimum_base: Number(document.querySelector("#report-minimum-base").value),
+    weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
+    calculated_weight_id: weightSelection.startsWith("calculated:")
+      ? weightSelection.slice(11)
+      : null,
+    wave_comparison: waveMode,
+    wave_control_value: waveMode === "control" && waveControl
+      ? JSON.parse(waveControl)
+      : null,
+  };
+  settingsError.hidden = true;
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    renderProject();
+    showToast("Настройки отчёта сохранены");
+  } catch (error) {
+    showError(settingsError, error);
+  } finally {
+    setBusy(saveButton, false, "Сохранить настройки");
   }
 });
 
@@ -827,6 +871,8 @@ function showProject(project) {
   document.querySelector("#structure-toolbar").hidden = false;
   document.querySelector("#filter-toolbar").hidden = true;
   document.querySelector("#weight-toolbar").hidden = true;
+  document.querySelector("#report-settings-toolbar").hidden = true;
+  reportSettingsForm.hidden = true;
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
   });
@@ -901,11 +947,12 @@ function renderSummary(inspection, questions) {
 function reportStateLine() {
   const banner = configuredBanners().find(item => item.id === selectedReportBannerId());
   const filter = configuredFilters().find(item => item.id === selectedReportFilterId());
+  const settings = configuredReportSettings();
   const parts = [
     banner
       ? ["Баннер", banner.name, true]
       : ["Баннер", "только Total", false],
-    ["Вес", bannerWeightLabel(banner), Boolean(banner && (banner.weight_variable || banner.calculated_weight_id))],
+    ["Вес", reportWeightLabel(settings), Boolean(settings.weight_variable || settings.calculated_weight_id)],
     filter ? ["Общий фильтр", filter.name, true] : ["Общий фильтр", "нет", false],
   ];
   return parts.map(([label, value, set]) =>
@@ -913,14 +960,54 @@ function reportStateLine() {
   ).join("");
 }
 
-function bannerWeightLabel(banner) {
-  if (!banner) return "нет";
-  if (banner.calculated_weight_id) {
-    const weight = configuredWeights().find(item => item.id === banner.calculated_weight_id);
+function reportWeightLabel(settings) {
+  if (settings.calculated_weight_id) {
+    const weight = configuredWeights().find(item => item.id === settings.calculated_weight_id);
     return weight ? weight.name : "рассчитанный";
   }
-  if (banner.weight_variable) return banner.weight_variable;
+  if (settings.weight_variable) return settings.weight_variable;
   return "нет";
+}
+
+function renderReportSettings() {
+  const settings = configuredReportSettings();
+  document.querySelector("#report-confidence").value = settings.confidence_level * 100;
+  document.querySelector("#report-minimum-base").value = settings.minimum_base;
+  document.querySelector("#report-compare-subgroups").checked = settings.compare_to_total;
+  document.querySelector("#report-compare-target").value = settings.compare_target;
+  document.querySelector("#report-compare-pairwise").checked = settings.compare_pairwise;
+  document.querySelector("#report-bonferroni").checked = settings.bonferroni;
+  document.querySelector("#report-wave-comparison").value = settings.wave_comparison;
+
+  const selectedWeight = settings.calculated_weight_id
+    ? `calculated:${settings.calculated_weight_id}`
+    : settings.weight_variable ? `ready:${settings.weight_variable}` : "";
+  const readyOptions = currentProject.inspection.variables
+    .filter(variable => variable.storage_type === "numeric")
+    .map(variable => `<option value="ready:${escapeAttribute(variable.name)}" ${selectedWeight === `ready:${variable.name}` ? "selected" : ""}>Готовый: ${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`)
+    .join("");
+  const calculatedOptions = configuredWeights()
+    .map(weight => `<option value="calculated:${weight.id}" ${selectedWeight === `calculated:${weight.id}` ? "selected" : ""}>Рассчитанный: ${escapeHtml(weight.name)}</option>`)
+    .join("");
+  document.querySelector("#report-weight").innerHTML =
+    '<option value="">Без веса</option>' + readyOptions + calculatedOptions;
+
+  const waveQuestion = configuredQuestions().find(question => question.role === "wave");
+  const waveVariable = waveQuestion
+    ? currentProject.inspection.variables.find(
+      variable => variable.name === waveQuestion.source_variables?.[0]
+    )
+    : null;
+  document.querySelector("#report-wave-control").innerHTML =
+    (waveVariable?.value_labels || []).map(item => {
+      const selected = String(item.value) === String(settings.wave_control_value)
+        ? "selected"
+        : "";
+      return `<option value="${escapeAttribute(JSON.stringify(item.value))}" ${selected}>${escapeHtml(item.label)}</option>`;
+    }).join("");
+  document.querySelector("#report-settings-error").hidden = true;
+  syncReportWaveControl();
+  syncReportCompareTargetHint();
 }
 
 function renderTable() {
@@ -928,8 +1015,14 @@ function renderTable() {
   const tableWrap = document.querySelector("#table-wrap");
   const entityList = document.querySelector("#entity-list");
   const cardView = currentView === "recodings" || currentView === "banners" || currentView === "filters" || currentView === "weights";
-  tableWrap.hidden = cardView;
+  const settingsView = currentView === "report-settings";
+  tableWrap.hidden = cardView || settingsView;
   entityList.hidden = !cardView;
+  reportSettingsForm.hidden = !settingsView;
+  if (settingsView) {
+    renderReportSettings();
+    return;
+  }
   if (currentView === "questions" && structureMode === "variables") {
     renderPhysicalVariables();
     return;
@@ -1016,7 +1109,7 @@ function renderBannerCards(banners) {
     const active = banner.id === activeBannerId;
     return `<article class="banner-card ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${escapeAttribute(banner.id)}">
       <span class="banner-card-head"><strong title="${escapeAttribute(banner.name)}">${escapeHtml(banner.name)}</strong><button type="button" class="badge-active ${active ? "active" : ""}" data-report-banner-id="${escapeAttribute(banner.id)}" data-active="${active}" title="${active ? "Оставить в Excel только Total" : "Использовать этот баннер в Excel"}">В Excel</button></span>
-      <span class="banner-meta"><span>Блоков <b>${banner.blocks.length}</b></span><span>Колонок <b>${columnCount}</b></span><span>Доверие <b>${formatPercent(banner.confidence_level || 0.95)}</b></span><span>Малая база &lt; <b>${banner.minimum_base || 30}</b></span></span>
+      <span class="banner-meta"><span>Блоков <b>${banner.blocks.length}</b></span><span>Колонок <b>${columnCount}</b></span></span>
       <span class="block-chips">${chips}</span>
     </article>`;
   }).join("") : '<div class="empty-state">Баннеров пока нет. В Excel будет только Total.</div>';
@@ -1640,37 +1733,6 @@ function openBanner(bannerId = null) {
   const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
   setHeadingText(document.querySelector("#banner-editor-title"), banner?.name || "Новый баннер");
   document.querySelector("#banner-name").value = banner?.name || `Баннер ${configuredBanners().length + 1}`;
-  document.querySelector("#banner-confidence").value = (banner?.confidence_level || 0.95) * 100;
-  document.querySelector("#banner-compare-total").checked = banner?.compare_to_total ?? banner?.blocks.some(block => block.compare_to_total) ?? false;
-  document.querySelector("#banner-compare-target").value = banner?.compare_target || "rest";
-  syncCompareTargetHint();
-  document.querySelector("#banner-compare-pairwise").checked = banner?.compare_pairwise ?? banner?.blocks.some(block => block.compare_pairwise) ?? false;
-  document.querySelector("#banner-bonferroni").checked = banner?.bonferroni || false;
-  document.querySelector("#banner-minimum-base").value = banner?.minimum_base || 30;
-  const waveMode = banner?.wave_comparison || "none";
-  document.querySelector("#banner-wave-comparison").value = waveMode;
-  const waveQuestion = currentProject.configuration.questions.find(question => question.role === "wave");
-  const waveVariable = waveQuestion
-    ? currentProject.inspection.variables.find(variable => variable.name === waveQuestion.source_variables?.[0])
-    : null;
-  const controlSelect = document.querySelector("#banner-wave-control");
-  controlSelect.innerHTML = (waveVariable?.value_labels || []).map(item => {
-    const selected = String(item.value) === String(banner?.wave_control_value) ? "selected" : "";
-    return `<option value="${escapeAttribute(JSON.stringify(item.value))}" ${selected}>${escapeHtml(item.label)}</option>`;
-  }).join("");
-  document.querySelector("#banner-wave-control-label").hidden = waveMode !== "control";
-  const weightSelect = document.querySelector("#banner-weight");
-  const selectedWeight = banner?.calculated_weight_id
-    ? `calculated:${banner.calculated_weight_id}`
-    : banner?.weight_variable ? `ready:${banner.weight_variable}` : "";
-  const readyOptions = currentProject.inspection.variables
-    .filter(variable => variable.storage_type === "numeric")
-    .map(variable => `<option value="ready:${escapeAttribute(variable.name)}" ${selectedWeight === `ready:${variable.name}` ? "selected" : ""}>Готовый: ${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`)
-    .join("");
-  const calculatedOptions = configuredWeights()
-    .map(weight => `<option value="calculated:${weight.id}" ${selectedWeight === `calculated:${weight.id}` ? "selected" : ""}>Рассчитанный: ${escapeHtml(weight.name)}</option>`)
-    .join("");
-  weightSelect.innerHTML = '<option value="">Без веса</option>' + readyOptions + calculatedOptions;
   const list = document.querySelector("#banner-block-list");
   list.innerHTML = "";
   if (banner) banner.blocks.forEach(block => addBannerBlock(block));
@@ -1685,10 +1747,6 @@ function openBanner(bannerId = null) {
   renderTable();
   if (banner) loadBannerPreview();
 }
-
-document.querySelector("#banner-wave-comparison").addEventListener("change", event => {
-  document.querySelector("#banner-wave-control-label").hidden = event.target.value !== "control";
-});
 
 function closeBanner() {
   if (bannerFormDirty && !confirm("Есть несохранённые изменения. Закрыть редактор без сохранения?")) return;
@@ -1764,7 +1822,7 @@ async function loadBannerPreview() {
 }
 
 function renderBannerPreview(preview) {
-  const minimumBase = configuredBanners().find(item => item.id === currentBannerId)?.minimum_base || 30;
+  const minimumBase = configuredReportSettings().minimum_base;
   document.querySelector("#banner-preview-count").textContent = `${preview.columns.length} колонок`;
   return `<div class="col-preview">${preview.columns.map((column, index) => {
     const label = index === 0 ? "Total" : `${column.block ? `${column.block} · ` : ""}${column.label}`;
@@ -2178,19 +2236,25 @@ function containsComparable(values, expected) {
 
 // Схема сравнения меняет смысл цветных пометок в Excel, поэтому объясняем
 // выбор прямо под селектором, а не только в документации.
-function syncCompareTargetHint() {
-  const select = document.querySelector("#banner-compare-target");
-  const hint = document.querySelector("#banner-compare-target-help");
-  const enabled = document.querySelector("#banner-compare-total").checked;
-  document.querySelector("#banner-compare-target-label").hidden = !enabled;
-  hint.textContent = select.value === "total"
-    ? "Total включает саму подгруппу: выборки пересекаются, различия занижаются и часть реальных отличий останется без пометки. Выбирайте, только если этого требует шаблон заказчика."
-    : "Подгруппа сравнивается с теми, кто в неё не вошёл. Total остаётся описательной колонкой и в тестах не участвует.";
-  hint.classList.toggle("warning-hint", select.value === "total");
+function syncReportWaveControl() {
+  const mode = document.querySelector("#report-wave-comparison").value;
+  document.querySelector("#report-wave-control-label").hidden = mode !== "control";
 }
 
-document.querySelector("#banner-compare-target").addEventListener("change", syncCompareTargetHint);
-document.querySelector("#banner-compare-total").addEventListener("change", syncCompareTargetHint);
+function syncReportCompareTargetHint() {
+  const select = document.querySelector("#report-compare-target");
+  const hint = document.querySelector("#report-compare-target-help");
+  const enabled = document.querySelector("#report-compare-subgroups").checked;
+  const label = document.querySelector("#report-compare-target-label");
+  select.disabled = !enabled;
+  label.classList.toggle("disabled-setting", !enabled);
+  hint.textContent = !enabled
+    ? "Включите сравнение подгрупп, чтобы выбрать референсную группу."
+    : select.value === "total"
+    ? "Total включает саму подгруппу: выборки пересекаются, различия занижаются и часть реальных отличий останется без пометки. Выбирайте, только если этого требует шаблон заказчика."
+    : "Подгруппа сравнивается с теми, кто в неё не вошёл. Total остаётся описательной колонкой и в тестах не участвует.";
+  hint.classList.toggle("warning-hint", enabled && select.value === "total");
+}
 
 async function refreshStructure() {
   if (!currentProject || !confirm("Заново распознать multiple и matrix? Названия и настройки существующих блоков будут сохранены, где это возможно.")) return;
@@ -2262,6 +2326,33 @@ function configuredRecodings() {
 
 function configuredBanners() {
   return currentProject.configuration?.banners || [];
+}
+
+function configuredReportSettings() {
+  const activeBanner = configuredBanners().find(
+    banner => banner.id === selectedReportBannerId()
+  ) || {};
+  const legacy = {};
+  Object.keys(defaultReportSettings).forEach(key => {
+    if (Object.prototype.hasOwnProperty.call(activeBanner, key)) {
+      legacy[key] = activeBanner[key];
+    }
+  });
+  if (!Object.prototype.hasOwnProperty.call(activeBanner, "compare_to_total")) {
+    legacy.compare_to_total = activeBanner.blocks?.some(
+      block => block.compare_to_total
+    ) || false;
+  }
+  if (!Object.prototype.hasOwnProperty.call(activeBanner, "compare_pairwise")) {
+    legacy.compare_pairwise = activeBanner.blocks?.some(
+      block => block.compare_pairwise
+    ) || false;
+  }
+  return {
+    ...defaultReportSettings,
+    ...legacy,
+    ...(currentProject.configuration?.report_settings || {}),
+  };
 }
 
 function configuredFilters() {

@@ -19,6 +19,7 @@ from sav_analytics.core.report import (
     build_statistics_txt,
     build_topline_xlsx,
 )
+from sav_analytics.core.reporting.data import prepare_report_data
 from sav_analytics.core.sav_reader import inspect_sav
 from tests.test_sav_reader import write_counted_value_fixture, write_fixture
 
@@ -249,6 +250,62 @@ def test_topline_uses_selected_banner_from_multiple_saved_banners(tmp_path: Path
         shared_strings = archive.read("xl/sharedStrings.xml")
         assert b"GENDER BLOCK" in shared_strings
         assert b"OLDER BLOCK" not in shared_strings
+
+
+def test_global_report_settings_override_values_on_legacy_banner(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "name": "Глобальные настройки",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "filters": [],
+            "calculated_weights": [],
+            "report_filter_id": None,
+            "report_banner_id": "gender",
+            "report_settings": {
+                "compare_to_total": True,
+                "compare_target": "rest",
+                "compare_pairwise": True,
+                "confidence_level": 0.9,
+                "bonferroni": True,
+                "minimum_base": 2,
+                "weight_variable": None,
+                "calculated_weight_id": None,
+                "wave_comparison": "none",
+                "wave_control_value": None,
+            },
+            "banners": [
+                {
+                    "id": "gender",
+                    "name": "Пол",
+                    "compare_to_total": False,
+                    "compare_pairwise": False,
+                    "confidence_level": 0.95,
+                    "minimum_base": 30,
+                    "blocks": [
+                        {
+                            "label": "Пол",
+                            "sources": [{"kind": "question", "ref": "Q1"}],
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+    data = prepare_report_data(source, project)
+
+    assert data.statistical_settings["confidence_level"] == 0.9
+    assert data.statistical_settings["minimum_base"] == 2
+    assert data.statistical_settings["bonferroni"] is True
+    assert data.active_banner["compare_to_total"] is True
+    assert data.active_banner["compare_pairwise"] is True
+    assert all(column["compare_to_total"] for column in data.columns[1:])
+    assert all(column["compare_pairwise"] for column in data.columns[1:])
 
 
 def test_topline_applies_report_filter_to_total_base(tmp_path: Path) -> None:

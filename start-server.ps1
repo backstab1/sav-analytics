@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $projectPath = $PSScriptRoot
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
 $appBaseUrl = "http://127.0.0.1:8000"
-$appUrl = "$appBaseUrl/?v=20260802-weights-4"
+$appUrl = "$appBaseUrl/?v=20260812-report-settings-1"
 $healthUrl = "$appBaseUrl/api/health"
 
 Set-Location $projectPath
@@ -44,7 +44,7 @@ Write-Host "The server works while this window is open."
 Write-Host "Press Ctrl+C or close this window to stop it."
 Write-Host ""
 
-& $pythonPath -m uvicorn sav_analytics.api:app --app-dir src --host 127.0.0.1 --port 8000
+& $pythonPath -m uvicorn sav_analytics.api:app --app-dir src --host 127.0.0.1 --port 8000 --reload
 
 Write-Host ""
 Write-Host "Server stopped."

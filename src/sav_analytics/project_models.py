@@ -40,6 +40,19 @@ class StoredConfigurationEntity(_StoredModel):
     id: UUID
 
 
+class StoredReportSettings(_StoredModel):
+    compare_to_total: bool
+    compare_target: Literal["rest", "total"]
+    compare_pairwise: bool
+    confidence_level: float = Field(gt=0, lt=1)
+    bonferroni: bool
+    minimum_base: int = Field(ge=1, le=100_000)
+    weight_variable: str | None
+    calculated_weight_id: UUID | None
+    wave_comparison: Literal["none", "previous", "control"]
+    wave_control_value: str | int | float | None
+
+
 class StoredConfiguration(_StoredModel):
     schema_version: Literal[1]
     structure_version: int = Field(ge=1)
@@ -51,6 +64,7 @@ class StoredConfiguration(_StoredModel):
     calculated_weights: list[StoredConfigurationEntity]
     report_banner_id: UUID | None
     report_filter_id: UUID | None
+    report_settings: StoredReportSettings
     updated_at: datetime
 
 

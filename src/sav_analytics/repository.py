@@ -18,6 +18,11 @@ from .configuration_revision import (
     current_expected_revision,
 )
 from .core.configuration_integrity import ensure_not_referenced
+from .core.report_settings import (
+    DEFAULT_REPORT_SETTINGS,
+    REPORT_SETTING_KEYS,
+    resolved_report_settings,
+)
 from .core.sav_reader import SavReadError, inspect_sav, spss_missing_mask
 from .project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
 
@@ -81,6 +86,7 @@ class ProjectRepository:
                     "filters": [],
                     "calculated_weights": [],
                     "report_filter_id": None,
+                    "report_settings": DEFAULT_REPORT_SETTINGS.copy(),
                     "updated_at": created_at,
                 },
             }
@@ -354,6 +360,7 @@ class ProjectRepository:
         banner_id = str(uuid4())
         project["configuration"]["banners"].append({"id": banner_id, **definition})
         project["configuration"]["report_banner_id"] = banner_id
+        self._apply_legacy_banner_report_settings(project, definition)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
@@ -368,6 +375,8 @@ class ProjectRepository:
         except StopIteration as exc:
             raise ProjectNotFoundError(str(banner_id)) from exc
         banners[index] = {"id": str(banner_id), **definition}
+        if project["configuration"].get("report_banner_id") == str(banner_id):
+            self._apply_legacy_banner_report_settings(project, definition)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
@@ -410,6 +419,13 @@ class ProjectRepository:
         ):
             raise ProjectNotFoundError(identifier)
         project["configuration"]["report_banner_id"] = identifier
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_report_settings(self, project_id: UUID, settings: dict) -> dict:
+        project = self.get(project_id)
+        project["configuration"]["report_settings"] = settings
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
@@ -580,17 +596,22 @@ class ProjectRepository:
                 "основной баннер",
             }:
                 banner["name"] = f"Баннер {index}"
-            banner.setdefault(
-                "compare_to_total",
-                any(block.get("compare_to_total", False) for block in banner["blocks"]),
-            )
-            banner.setdefault(
-                "compare_pairwise",
-                any(block.get("compare_pairwise", False) for block in banner["blocks"]),
-            )
         if "report_banner_id" not in project["configuration"]:
             project["configuration"]["report_banner_id"] = (
                 banners[-1]["id"] if banners else None
+            )
+        if "report_settings" not in project["configuration"]:
+            active_banner_id = project["configuration"].get("report_banner_id")
+            active_banner = next(
+                (
+                    banner
+                    for banner in banners
+                    if banner.get("id") == active_banner_id
+                ),
+                banners[-1] if banners else None,
+            )
+            project["configuration"]["report_settings"] = resolved_report_settings(
+                project["configuration"], active_banner
             )
         project["configuration"].setdefault("filters", [])
         project["configuration"].setdefault("calculated_weights", [])
@@ -612,6 +633,16 @@ class ProjectRepository:
         )
         if duplicate:
             raise InvalidUploadError("Код перекодировки уже используется в этом проекте.")
+
+    @staticmethod
+    def _apply_legacy_banner_report_settings(project: dict, definition: dict) -> None:
+        updates = {
+            key: definition[key]
+            for key in REPORT_SETTING_KEYS
+            if key in definition
+        }
+        if updates:
+            project["configuration"]["report_settings"].update(updates)
 
     def _write_project(self, project_id: UUID, project: dict) -> None:
         project_dir = self.root / str(project_id)

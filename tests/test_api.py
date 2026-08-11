@@ -42,6 +42,18 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             assert project["name"] == "Тестовый проект"
             assert project["inspection"]["row_count"] == 4
             assert project["configuration"]["schema_version"] == 1
+            assert project["configuration"]["report_settings"] == {
+                "compare_to_total": False,
+                "compare_target": "rest",
+                "compare_pairwise": False,
+                "confidence_level": 0.95,
+                "bonferroni": False,
+                "minimum_base": 30,
+                "weight_variable": None,
+                "calculated_weight_id": None,
+                "wave_comparison": "none",
+                "wave_control_value": None,
+            }
             not_prepared = client.get(
                 f"/api/projects/{project['id']}/reports/topline.xlsx"
             )
@@ -459,6 +471,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
     metadata_path = tmp_path / "projects" / created["id"] / "project.json"
     legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
     legacy["configuration"].pop("structure_version")
+    legacy["configuration"].pop("report_settings")
     legacy["configuration"]["questions"] = [
         {
             "code": variable["name"],
@@ -479,6 +492,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
     migrated = repository.get(project_id)
 
     assert migrated["configuration"]["schema_version"] == 1
+    assert migrated["configuration"]["report_settings"]["confidence_level"] == 0.95
     matrix = next(
         question
         for question in migrated["configuration"]["questions"]
@@ -487,6 +501,49 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
     assert matrix["source_variables"] == ["Q5_1", "Q5_2"]
     assert not matrix["included_in_report"]
     assert migrated["configuration"]["structure_version"] == STRUCTURE_VERSION
+
+
+def test_legacy_banner_settings_are_exposed_as_report_settings(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    with source.open("rb") as stream:
+        created = repository.create("Legacy banner", "fixture.sav", stream)
+
+    banner_id = "00000000-0000-0000-0000-000000000001"
+    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
+    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy["configuration"].pop("report_settings")
+    legacy["configuration"]["report_banner_id"] = banner_id
+    legacy["configuration"]["banners"] = [
+        {
+            "id": banner_id,
+            "name": "Пол",
+            "blocks": [
+                {
+                    "label": "Пол",
+                    "sources": [{"kind": "question", "ref": "Q1"}],
+                }
+            ],
+            "compare_to_total": True,
+            "compare_target": "total",
+            "compare_pairwise": True,
+            "confidence_level": 0.9,
+            "bonferroni": True,
+            "minimum_base": 25,
+        }
+    ]
+    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+
+    migrated = repository.get(UUID(created["id"]))
+
+    settings = migrated["configuration"]["report_settings"]
+    assert settings["confidence_level"] == 0.9
+    assert settings["minimum_base"] == 25
+    assert settings["compare_to_total"] is True
+    assert settings["compare_target"] == "total"
+    assert settings["compare_pairwise"] is True
+    assert settings["bonferroni"] is True
 
 
 def test_preflight_blocks_prepare_and_reports_the_reason(tmp_path: Path) -> None:
@@ -702,6 +759,66 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
         app.dependency_overrides.clear()
 
 
+def test_report_settings_are_saved_separately_from_banner(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            created = client.post(
+                f"/api/projects/{project_id}/banners",
+                json={
+                    "name": "Пол",
+                    "blocks": [
+                        {
+                            "label": "Пол",
+                            "sources": [{"kind": "question", "ref": "Q1"}],
+                        }
+                    ],
+                },
+            )
+            assert created.status_code == 201
+            banner = created.json()["configuration"]["banners"][0]
+            assert set(banner) == {"id", "name", "blocks"}
+
+            invalid_wave = client.put(
+                f"/api/projects/{project_id}/report-settings",
+                json={"wave_comparison": "previous"},
+            )
+            assert invalid_wave.status_code == 422
+            assert "роли «Волна»" in invalid_wave.json()["detail"]
+
+            updated = client.put(
+                f"/api/projects/{project_id}/report-settings",
+                json={
+                    "compare_to_total": True,
+                    "compare_target": "rest",
+                    "compare_pairwise": True,
+                    "confidence_level": 0.9,
+                    "bonferroni": True,
+                    "minimum_base": 25,
+                    "weight_variable": None,
+                    "calculated_weight_id": None,
+                    "wave_comparison": "none",
+                    "wave_control_value": None,
+                },
+            )
+            assert updated.status_code == 200
+            configuration = updated.json()["configuration"]
+            assert configuration["report_settings"]["confidence_level"] == 0.9
+            assert configuration["report_settings"]["minimum_base"] == 25
+            assert configuration["report_settings"]["compare_to_total"] is True
+            assert configuration["report_settings"]["compare_pairwise"] is True
+            assert set(configuration["banners"][0]) == {"id", "name", "blocks"}
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_recoding_delete_is_blocked_by_banner_and_filter_dependencies(
     tmp_path: Path,
 ) -> None:
@@ -894,7 +1011,7 @@ def test_filter_crud_preview_and_question_base(tmp_path: Path) -> None:
         app.dependency_overrides.clear()
 
 
-def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None:
+def test_calculated_weight_crud_preview_and_report_usage(tmp_path: Path) -> None:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
     app.dependency_overrides[get_repository] = lambda: repository
     source = tmp_path / "fixture.sav"
@@ -947,7 +1064,6 @@ def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None
                 f"/api/projects/{project_id}/banners",
                 json={
                     "name": "Основной",
-                    "calculated_weight_id": weight["id"],
                     "blocks": [
                         {
                             "label": "Пол",
@@ -957,6 +1073,11 @@ def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None
                 },
             )
             assert banner.status_code == 201
+            report_settings = client.put(
+                f"/api/projects/{project_id}/report-settings",
+                json={"calculated_weight_id": weight["id"]},
+            )
+            assert report_settings.status_code == 200
             prepared = _prepare_report(client, project_id)
             report = client.get(prepared["downloads"]["topline"])
             assert report.status_code == 200
@@ -964,6 +1085,7 @@ def test_calculated_weight_crud_preview_and_banner_usage(tmp_path: Path) -> None
                 f"/api/projects/{project_id}/weights/{weight['id']}"
             )
             assert blocked.status_code == 422
+            assert "настройка отчёта" in blocked.json()["detail"]
     finally:
         app.dependency_overrides.clear()
 

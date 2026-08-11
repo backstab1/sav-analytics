@@ -77,6 +77,16 @@ def find_references(
                         f"баннер «{banner.get('name') or banner.get('id')}»",
                     )
                 )
+        if str(
+            (configuration.get("report_settings") or {}).get("calculated_weight_id") or ""
+        ) == identifier:
+            references.append(
+                ConfigurationReference(
+                    target_kind,
+                    identifier,
+                    "настройка отчёта",
+                )
+            )
     return _unique_references(references)
 
 
@@ -146,6 +156,11 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
     report_banner_id = configuration.get("report_banner_id")
     if report_banner_id and str(report_banner_id) not in banners:
         problems.append("выбранный баннер отчёта не найден")
+    report_weight_id = (configuration.get("report_settings") or {}).get(
+        "calculated_weight_id"
+    )
+    if report_weight_id and str(report_weight_id) not in weights:
+        problems.append("рассчитанный вес в настройках отчёта не найден")
 
     if problems:
         raise ConfigurationIntegrityError(

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260811-not-applicable-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260812-report-settings-1" />
   </head>
   <body>
     <!-- Ярус 1 — глобальный: не зависит от того, открыт ли проект. -->
@@ -92,7 +92,7 @@
           <div class="structure-panel">
             <div class="panel-box">
             <div class="panel-head">
-              <div class="tabs"><button class="active" data-view="questions">Структура</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button><button data-view="weights">Веса</button></div>
+              <div class="tabs"><button class="active" data-view="questions">Структура</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button><button data-view="weights">Веса</button><button data-view="report-settings">Настройка отчёта</button></div>
               <div class="export-menu">
                 <button id="export-toggle" class="export-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
                   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -112,6 +112,37 @@
             <div id="banner-toolbar" class="recode-toolbar" hidden><div><strong>Баннеры отчёта</strong><small>Total добавляется всегда. Нажмите «В Excel» на нужной карточке.</small></div><button id="new-banner" type="button">+ Новый баннер</button></div>
             <div id="filter-toolbar" class="recode-toolbar" hidden><div><strong>Именованные правила</strong><small>Назначайте правила базой отдельным вопросам. «В Excel» применяет правило ко всему отчёту.</small></div><button id="new-filter" type="button">+ Новое правило</button></div>
             <div id="weight-toolbar" class="recode-toolbar" hidden><div><strong>Рассчитанные веса</strong><small>Настройте целевые распределения и рассчитайте вес методом raking/IPF.</small></div><button id="new-weight" type="button">+ Новый вес</button></div>
+            <div id="report-settings-toolbar" class="recode-toolbar" hidden><div><strong>Настройка отчёта</strong><small>Общие параметры расчёта применяются к выбранному баннеру и всему Excel-отчёту.</small></div></div>
+            <form id="report-settings-form" class="report-settings-form" hidden>
+              <div class="report-settings-grid">
+                <section class="report-settings-card">
+                  <div class="report-settings-card-head"><h3>Расчёт отчёта</h3><small>Точность тестов, малая база и вес</small></div>
+                  <div class="report-settings-fields">
+                    <div class="banner-field-row"><label>Уровень доверия, %<input id="report-confidence" type="number" min="0.01" max="99.99" step="0.01" value="95" required /></label><label>Порог малой базы<input id="report-minimum-base" type="number" min="1" max="100000" value="30" required /></label></div>
+                    <label>Вес отчёта<select id="report-weight"><option value="">Без веса</option></select></label>
+                  </div>
+                </section>
+                <section class="report-settings-card">
+                  <div class="report-settings-card-head"><h3>Сравнение волн</h3><small>Динамика между периодами исследования</small></div>
+                  <div class="report-settings-fields">
+                    <label>Схема сравнения<select id="report-wave-comparison"><option value="none">Не сравнивать</option><option value="previous">С предыдущей волной</option><option value="control">С контрольной волной</option></select></label>
+                    <label id="report-wave-control-label" hidden>Контрольная волна<select id="report-wave-control"></select></label>
+                  </div>
+                </section>
+                <section class="report-settings-card report-comparison-card">
+                  <div class="report-settings-card-head"><h3>Статистические сравнения</h3><small>Какие значимые отличия отмечать в отчёте</small></div>
+                  <div class="report-comparison-layout">
+                    <div class="settings-block report-toggle-settings"><label class="tgl-row"><span><strong>Сравнивать подгруппы</strong><small>Отмечать значимые отличия в отчёте</small></span><span class="tgl"><input id="report-compare-subgroups" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label><label class="tgl-row"><span><strong>Попарные сравнения</strong><small>Между подгруппами блока</small></span><span class="tgl"><input id="report-compare-pairwise" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label><label class="tgl-row"><span><strong>Поправка Bonferroni</strong><small>Для множественных сравнений</small></span><span class="tgl"><input id="report-bonferroni" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label></div>
+                    <label id="report-compare-target-label">С кем сравнивать подгруппы<select id="report-compare-target">
+                      <option value="rest">С остальными (Rest) — статистически корректно</option>
+                      <option value="total">С Total — как в клиентских макросах</option>
+                    </select><small id="report-compare-target-help"></small></label>
+                  </div>
+                </section>
+              </div>
+              <p id="report-settings-error" class="error" hidden></p>
+              <div class="report-settings-actions"><button id="save-report-settings" type="submit">Сохранить настройки</button></div>
+            </form>
             <div id="entity-list" class="entity-list" hidden></div>
             <div id="table-wrap" class="table-wrap">
               <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
@@ -196,14 +227,6 @@
             <form id="banner-form">
               <div class="editor-scroll">
                 <label>Название баннера<input id="banner-name" required maxlength="500" /></label>
-                <div class="banner-field-row"><label>Уровень доверия, %<input id="banner-confidence" type="number" min="0.01" max="99.99" step="0.01" value="95" required /></label><label>Порог малой базы<input id="banner-minimum-base" type="number" min="1" max="100000" value="30" required /></label></div>
-                <div class="banner-field-row"><label>Вес отчёта<select id="banner-weight"><option value="">Без веса</option></select></label><label>Сравнение волн<select id="banner-wave-comparison"><option value="none">Не сравнивать</option><option value="previous">С предыдущей волной</option><option value="control">С контрольной волной</option></select></label></div>
-                <label id="banner-wave-control-label" hidden>Контрольная волна<select id="banner-wave-control"></select></label>
-                <div class="settings-block banner-toggle-settings"><label class="tgl-row"><span><strong>Сравнивать подгруппы</strong><small>Отмечать значимые отличия в отчёте</small></span><span class="tgl"><input id="banner-compare-total" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label><label class="tgl-row"><span><strong>Попарные сравнения</strong><small>Между подгруппами блока</small></span><span class="tgl"><input id="banner-compare-pairwise" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label><label class="tgl-row"><span><strong>Поправка Bonferroni</strong><small>Для множественных сравнений</small></span><span class="tgl"><input id="banner-bonferroni" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label></div>
-                <label id="banner-compare-target-label">С кем сравнивать подгруппу<select id="banner-compare-target">
-                  <option value="rest">С остальными (Rest) — статистически корректно</option>
-                  <option value="total">С Total — как в клиентских макросах</option>
-                </select><small id="banner-compare-target-help"></small></label>
                 <div class="range-heading"><strong>Блоки колонок</strong></div>
                 <div id="banner-block-list" class="banner-block-list blocks"></div>
                 <button id="add-banner-block" class="secondary compact-button add-block" type="button">+ Добавить блок</button>
@@ -311,7 +334,7 @@
     </main>
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260811-not-applicable-1" defer></script>
-    <script src="/app.js?v=20260811-not-applicable-1" defer></script>
+    <script src="/shell.js?v=20260812-report-settings-1" defer></script>
+    <script src="/app.js?v=20260812-report-settings-1" defer></script>
   </body>
 </html>

@@ -161,16 +161,26 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     page.click("#save-filter")
     expect(page.locator("#entity-list")).to_contain_text("Только женщины", timeout=UI_TIMEOUT)
 
-    # Баннер с блоком по полу и включённым сравнением подгрупп.
+    # Баннер теперь описывает только колонки отчёта.
     _open_view(page, "banners")
     page.click("#new-banner")
     expect(page.locator("#banner-editor")).to_be_visible(timeout=UI_TIMEOUT)
     page.fill("#banner-name", "Пол")
     page.locator("#banner-block-list select").first.select_option("question:SEX")
-    page.locator("#banner-compare-total").check()
-    expect(page.locator("#banner-compare-target")).to_be_visible(timeout=UI_TIMEOUT)
     page.click("#save-banner")
     expect(page.locator("#banner-preview")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
+
+    # Статистические параметры живут отдельно и применяются ко всему отчёту.
+    _open_view(page, "report-settings")
+    expect(page.locator("#report-settings-form")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#report-compare-target")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#report-compare-target")).to_be_disabled()
+    page.locator("#report-compare-subgroups").check()
+    expect(page.locator("#report-compare-target")).to_be_enabled()
+    page.click("#save-report-settings")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Настройки отчёта сохранены", timeout=UI_TIMEOUT
+    )
 
     # Подготовка и скачивание обоих артефактов.
     page.click("#export-toggle")

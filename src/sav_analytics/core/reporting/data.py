@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
-from ..banner import build_banner_columns
+from ..banner import BannerError, build_banner_columns
 from ..configuration_integrity import (
     ConfigurationIntegrityError,
     validate_configuration_references,
@@ -16,6 +16,7 @@ from ..configuration_integrity import (
 from ..filtering import evaluate_filter_frame
 from ..multiple_response import response_definition
 from ..not_applicable import not_applicable_values
+from ..report_settings import resolved_report_settings
 from ..weighting import WeightingError, calculate_raking
 from .models import ReportError
 
@@ -64,14 +65,22 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
     active_banner_id = configuration.get("report_banner_id")
     if "report_banner_id" not in configuration and banners:
         active_banner = banners[-1]
-        columns = build_banner_columns(frame, active_banner, project)
     elif active_banner_id and banners:
         active_banner = next(
             (banner for banner in banners if banner.get("id") == active_banner_id), banners[-1]
         )
-        columns = build_banner_columns(frame, active_banner, project)
     else:
         active_banner = {}
+    report_settings = resolved_report_settings(configuration, active_banner)
+    if active_banner:
+        # Comparison metadata belongs to the report, but banner-column building
+        # still needs it to annotate each generated subgroup.
+        active_banner = {**active_banner, **report_settings}
+        try:
+            columns = build_banner_columns(frame, active_banner, project)
+        except BannerError as exc:
+            raise ReportError(str(exc)) from exc
+    else:
         columns = [
             {
                 "key": "total",
@@ -131,18 +140,18 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
     ]
     weights, weight_label = _report_weights(
         frame,
-        active_banner.get("weight_variable"),
-        active_banner.get("calculated_weight_id"),
+        report_settings.get("weight_variable"),
+        report_settings.get("calculated_weight_id"),
         configuration,
     )
     statistical_settings = {
-        "confidence_level": active_banner.get("confidence_level", 0.95),
-        "bonferroni": active_banner.get("bonferroni", False),
-        "minimum_base": active_banner.get("minimum_base", 30),
+        "confidence_level": report_settings["confidence_level"],
+        "bonferroni": report_settings["bonferroni"],
+        "minimum_base": report_settings["minimum_base"],
         "weight_label": weight_label,
         "weights": weights,
-        "wave_comparison": active_banner.get("wave_comparison", "none"),
-        "wave_control_value": active_banner.get("wave_control_value"),
+        "wave_comparison": report_settings["wave_comparison"],
+        "wave_control_value": report_settings.get("wave_control_value"),
     }
     return ReportData(
         frame=frame,

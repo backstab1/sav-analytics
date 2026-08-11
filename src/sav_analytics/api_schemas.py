@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -86,9 +86,7 @@ class BannerBlock(BaseModel):
     sources: list[BannerSource] = Field(min_length=1, max_length=2)
 
 
-class BannerDefinition(BaseModel):
-    name: str = Field(min_length=1, max_length=500)
-    blocks: list[BannerBlock] = Field(min_length=1, max_length=50)
+class ReportSettingsDefinition(BaseModel):
     compare_to_total: bool = False
     # С кем сравнивается подгруппа: с непересекающимся остатком (по умолчанию)
     # или с самим Total, как это делают клиентские макросы.
@@ -103,12 +101,24 @@ class BannerDefinition(BaseModel):
     wave_control_value: str | int | float | None = None
 
     @model_validator(mode="after")
-    def validate_weight_selection(self) -> BannerDefinition:
+    def validate_weight_selection(self) -> Self:
         if self.weight_variable and self.calculated_weight_id:
             raise ValueError("Выберите готовый или рассчитанный вес, но не оба сразу.")
         if self.wave_comparison == "control" and self.wave_control_value is None:
             raise ValueError("Для контрольного сравнения выберите контрольную волну.")
         return self
+
+
+class BannerDefinition(ReportSettingsDefinition):
+    """Структура баннера.
+
+    Поля настроек отчёта унаследованы только для чтения старых клиентов API.
+    Новый интерфейс сохраняет их через отдельный endpoint и отправляет сюда
+    исключительно название и блоки колонок.
+    """
+
+    name: str = Field(min_length=1, max_length=500)
+    blocks: list[BannerBlock] = Field(min_length=1, max_length=50)
 
 
 class ReportBannerUpdate(BaseModel):
