@@ -43,8 +43,10 @@
 - объединение категорий в новые группы;
 - проверка пересекающихся правил и предпросмотр результата;
 - обычные и двухуровневые вложенные баннеры;
-- единые для всего баннера правила Subgroup/Rest и попарных тестов: confidence level,
-  порог малой базы и опциональная поправка Bonferroni;
+- отдельная вкладка настроек отчёта: схема сравнения Subgroup/Rest и попарных тестов,
+  confidence level, порог малой базы, поправка Bonferroni, выбор веса и сравнение волн.
+  Они хранятся в `configuration.report_settings` и действуют на весь отчёт; баннер
+  отвечает только за название и блоки колонок;
 - попарные сравнения подгрупп внутри блока с результатами в примечаниях Excel;
 - сравнение независимых волн с предыдущей или выбранной контрольной волной, включая
   одинаковые подгруппы вложенного баннера, стрелки в Excel и аудит тестов;
@@ -133,7 +135,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py
 ```
 
-Сейчас набор содержит 123 pytest-кейса для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 126 pytest-кейсов для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, проверки конфигурации
 до сборки, структуры XLSX и
 эталонных расчётов обычных и взвешенных z-test/Welch t-test, Subgroup/Rest,
@@ -157,7 +159,7 @@ snapshot полного `statistics.txt` и проверкой immutable XLSX.
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
 ```
 
-Сейчас покрыто 84,16% с учётом ветвлений, порог падения сборки — 80%, он задан в `pyproject.toml`.
+Сейчас покрыто 84,06% с учётом ветвлений, порог падения сборки — 80%, он задан в `pyproject.toml`.
 
 ### CI
 
@@ -184,7 +186,7 @@ src/sav_analytics/
 ├── api_dependencies.py # зависимости HTTP-слоя
 ├── api_schemas.py     # Pydantic-модели запросов
 ├── project_models.py  # версионированный контракт сохраняемого проекта
-├── routers/           # projects, questions, recodings, banners, filters, weights, reports
+├── routers/           # projects, questions, recodings, banners, filters, weights, reports, report_settings
 ├── repository.py      # локальное хранилище проектов и конфигураций
 ├── report_cache.py    # immutable-артефакты отчёта по cache key
 ├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту
@@ -195,6 +197,9 @@ src/sav_analytics/
 │   ├── topline.py     # предпросмотр распределений и статистик
 │   ├── recoding.py    # перекодировки
 │   ├── banner.py      # баннерные колонки
+│   ├── report_settings.py # общие настройки расчёта и чтение старых проектов
+│   ├── preflight.py   # проверка конфигурации до запуска сборки
+│   ├── not_applicable.py  # коды пропуска по ветке анкеты и поиск кандидатов
 │   ├── filtering.py   # базы и фильтры
 │   ├── report.py      # совместимый публичный фасад отчётов
 │   └── reporting/
