@@ -21,6 +21,7 @@ from .configuration_revision import (
     bind_expected_revision,
     reset_expected_revision,
 )
+from .core.preflight import PreflightBlockedError
 from .project_models import InvalidStoredProjectError
 from .routers import banners, filters, projects, questions, recodings, reports, weights
 
@@ -98,6 +99,18 @@ async def configuration_conflict_handler(
         request,
         status_code=status.HTTP_409_CONFLICT,
         error_code="CONFIGURATION_CONFLICT",
+        detail=str(exc),
+    )
+
+
+@app.exception_handler(PreflightBlockedError)
+async def preflight_blocked_handler(
+    request: Request, exc: PreflightBlockedError
+) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=422,
+        error_code="REPORT_PREFLIGHT_FAILED",
         detail=str(exc),
     )
 

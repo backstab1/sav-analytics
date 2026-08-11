@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from ..api_dependencies import get_repository
+from ..core.preflight import PreflightBlockedError, run_preflight
 from ..report_cache import (
     PreparedReport,
     ReportArtifactNotFoundError,
@@ -19,6 +20,19 @@ from ..repository import ProjectNotFoundError, ProjectRepository
 router = APIRouter(prefix="/api/projects/{project_id}/reports", tags=["reports"])
 
 
+@router.get("/preflight")
+def report_preflight(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    return run_preflight(source, project).to_dict()
+
+
 @router.post("/prepare")
 def prepare_project_report(
     project_id: UUID,
@@ -28,6 +42,12 @@ def prepare_project_report(
         project = repository.get(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    # Готовый артефакт этой ревизии уже прошёл проверку при сборке, а повторный
+    # preflight стоил бы лишнего чтения SAV на каждом скачивании.
+    if get_cached_report(repository, project_id, project) is None:
+        report = run_preflight(repository.source_path(project_id), project)
+        if not report.can_prepare:
+            raise PreflightBlockedError(report)
     return start_report_job(repository, project_id, project)
 
 

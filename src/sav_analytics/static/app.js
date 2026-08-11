@@ -2189,13 +2189,32 @@ async function downloadPreparedReport(event) {
     progress.max = 100;
     feedback.append(progress);
   }
+  let findings = document.querySelector("#report-findings");
+  if (!findings) {
+    findings = document.createElement("ul");
+    findings.id = "report-findings";
+    findings.className = "report-findings";
+    feedback.append(findings);
+  }
+  findings.innerHTML = "";
+  findings.hidden = true;
   progress.hidden = false;
   progress.value = 0;
   downloads.forEach(item => item.setAttribute("aria-disabled", "true"));
   link.textContent = "Формируется…";
-  status.textContent = "Готовим Excel и статистику. Для большого отчёта это может занять около минуты.";
+  status.textContent = "Проверяем настройки отчёта…";
   status.classList.remove("error");
+  let keepOpen = false;
   try {
+    // Проверка идёт до запуска: ошибки конфигурации должны быть видны сразу,
+    // а не через минуту ожидания сборки.
+    const preflight = await api(`/api/projects/${currentProject.id}/reports/preflight`);
+    keepOpen = renderPreflightFindings(findings, preflight);
+    if (!preflight.can_prepare) {
+      progress.hidden = true;
+      throw new Error("Отчёт не сформирован: сначала исправьте ошибки настройки.");
+    }
+    status.textContent = "Готовим Excel и статистику. Для большого отчёта это может занять около минуты.";
     let result = await api(`/api/projects/${currentProject.id}/reports/prepare`, {
       method: "POST",
     });
@@ -2227,14 +2246,35 @@ async function downloadPreparedReport(event) {
   } catch (error) {
     status.textContent = error.message;
     status.classList.add("error");
+    keepOpen = true;
   } finally {
     downloads.forEach(item => item.setAttribute("aria-disabled", "false"));
     link.textContent = link.dataset.defaultLabel;
-    window.setTimeout(() => {
+    // Найденные проблемы и ошибки остаются на экране: их нужно прочитать,
+    // а не поймать взглядом за три секунды.
+    if (!keepOpen) {
+      window.setTimeout(() => {
+        progress.hidden = true;
+        feedback.hidden = true;
+      }, 3500);
+    } else {
       progress.hidden = true;
-      feedback.hidden = true;
-    }, 3500);
+    }
   }
+}
+
+// Возвращает true, если есть что читать и панель не надо закрывать по таймеру.
+function renderPreflightFindings(container, preflight) {
+  const rows = [
+    ...(preflight.errors || []).map(item => ({ item, kind: "error" })),
+    ...(preflight.warnings || []).map(item => ({ item, kind: "warning" })),
+  ];
+  container.hidden = rows.length === 0;
+  container.innerHTML = rows.map(({ item, kind }) => {
+    const label = kind === "error" ? "Ошибка" : "Предупреждение";
+    return `<li class="finding finding-${kind}"><b>${label}</b>${escapeHtml(item.message)}</li>`;
+  }).join("");
+  return rows.length > 0;
 }
 
 async function api(url, options = {}) {

@@ -489,6 +489,61 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
     assert migrated["configuration"]["structure_version"] == STRUCTURE_VERSION
 
 
+def test_preflight_blocks_prepare_and_reports_the_reason(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+
+            clean = client.get(f"/api/projects/{project_id}/reports/preflight")
+            assert clean.status_code == 200
+            assert clean.json()["can_prepare"] is True
+            assert clean.json()["errors"] == []
+            assert _prepare_report(client, project_id)["status"] == "complete"
+
+            empty_filter = client.post(
+                f"/api/projects/{project_id}/filters",
+                json={
+                    "name": "Пустой",
+                    "rule": {
+                        "operator": "and",
+                        "items": [
+                            {
+                                "source": {"kind": "question", "ref": "Q1"},
+                                "operator": "eq",
+                                "values": [999],
+                            }
+                        ],
+                    },
+                },
+            ).json()["configuration"]["filters"][0]
+            assigned = client.put(
+                f"/api/projects/{project_id}/report-filter",
+                json={"filter_id": empty_filter["id"]},
+            )
+            assert assigned.status_code == 200
+
+            checked = client.get(f"/api/projects/{project_id}/reports/preflight")
+            assert checked.status_code == 200
+            assert checked.json()["can_prepare"] is False
+            assert checked.json()["errors"][0]["code"] == "REPORT_NOT_BUILDABLE"
+
+            # Сборка не должна запускаться и падать внутри задачи: отказ приходит
+            # сразу и с понятной причиной.
+            blocked = client.post(f"/api/projects/{project_id}/reports/prepare")
+            assert blocked.status_code == 422
+            assert blocked.json()["error_code"] == "REPORT_PREFLIGHT_FAILED"
+            assert "пустую выборку" in blocked.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
     app.dependency_overrides[get_repository] = lambda: repository

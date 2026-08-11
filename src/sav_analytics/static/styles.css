@@ -252,6 +252,25 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
 .report-status.error { margin: 0; color: var(--c-danger); }
 .report-progress { width: 100%; height: 6px; accent-color: var(--c-brand); border-radius: var(--r-pill); }
 
+/* Результат проверки конфигурации: занимает всю ширину панели под статусом. */
+.report-findings {
+  grid-column: 1 / -1; display: grid; gap: 6px;
+  margin: 4px 0 0; padding: 0; list-style: none;
+}
+.report-findings .finding {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; align-items: baseline;
+  padding: 7px 11px; border-radius: var(--r-1);
+  font-size: var(--t-sm); line-height: 1.45;
+}
+.report-findings .finding b {
+  font-size: var(--t-xs); font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; white-space: nowrap;
+}
+.report-findings .finding-error { background: color-mix(in srgb, var(--c-danger) 9%, transparent); }
+.report-findings .finding-error b { color: var(--c-danger); }
+.report-findings .finding-warning { background: var(--c-surface-soft); }
+.report-findings .finding-warning b { color: var(--c-ink-3); }
+
 /* Summary — compact stat cards */
 /* min-width: блок сводки переносится на свою строку целиком,
    а не роняет последнюю карточку отдельно. */

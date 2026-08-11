@@ -30,6 +30,9 @@ class ReportData:
     filters: dict[str, dict[str, Any]]
     filter_questions: list[dict[str, Any]]
     statistical_settings: dict[str, Any]
+    # Категории с нулевой базой в Excel не выводятся, но исчезать бесследно они
+    # не должны: preflight предупреждает о них до запуска.
+    empty_columns: list[str]
 
     @property
     def total_steps(self) -> int:
@@ -81,6 +84,9 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
     for column in columns:
         column["mask"] = column["mask"] & global_mask
         column["base"] = int(column["mask"].sum())
+    empty_columns = [
+        column["label"] for index, column in enumerate(columns) if index and not column["base"]
+    ]
     columns = [column for index, column in enumerate(columns) if index == 0 or column["base"]]
 
     questions = [
@@ -141,6 +147,7 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
         filters=filters,
         filter_questions=filter_questions,
         statistical_settings=statistical_settings,
+        empty_columns=empty_columns,
     )
 
 
