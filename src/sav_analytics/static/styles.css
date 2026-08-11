@@ -870,6 +870,26 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .banner-editor .editor-actions button { width: 100%; }
 .banner-editor .range-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .banner-editor .range-heading small { text-align: right; }
+/* Панель найденных кодов «не применимо». Группа — это вопросы, у которых код
+   стоит ровно у одних и тех же респондентов. */
+.na-intro { margin: 0 0 4px; font-size: var(--t-sm); line-height: 1.5; }
+.na-groups { display: grid; gap: 10px; }
+.na-group {
+  display: grid; gap: 8px; padding: 12px 14px;
+  background: var(--c-surface-soft); border-radius: var(--r-1);
+}
+.na-group.na-marked { background: color-mix(in srgb, var(--c-brand) 8%, transparent); }
+.na-group-head { align-items: start; gap: 9px; font-size: var(--t-sm); line-height: 1.45; }
+.na-group-head code { padding: 1px 5px; background: var(--c-surface); border-radius: 5px; }
+.na-group-body { display: grid; gap: 3px; padding-left: 25px; }
+.na-group-body p {
+  display: grid; grid-template-columns: minmax(60px, auto) minmax(0, 1fr); gap: 8px;
+  margin: 0; color: var(--c-ink-3); font-size: var(--t-xs);
+}
+.na-group-body span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#not-applicable-list em { margin-left: auto; color: var(--c-ink-3); font-style: normal; }
+#not-applicable-list .checkbox { display: flex; align-items: baseline; gap: 7px; }
+
 .banner-field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .banner-field-row > label { min-width: 0; }
 .banner-editor .banner-toggle-settings { padding: 2px 14px; background: var(--c-surface-soft); border-radius: 10px; }

@@ -10,6 +10,7 @@ const recodeEditor = document.querySelector("#recode-editor");
 const bannerEditor = document.querySelector("#banner-editor");
 const filterEditor = document.querySelector("#filter-editor");
 const weightEditor = document.querySelector("#weight-editor");
+const notApplicableEditor = document.querySelector("#not-applicable-editor");
 let currentProject = null;
 let currentQuestionCode = null;
 let currentRecodingId = null;
@@ -754,6 +755,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
           included_in_report: document.querySelector("#question-included").checked,
           special_metric: document.querySelector("#question-special-metric").value,
           ...collectSpecialAnswers(),
+          ...collectNotApplicable(),
         }),
       },
     );
@@ -2020,6 +2022,126 @@ function renderSpecialAnswers(question) {
   list.innerHTML = labels.map(item => `<label class="checkbox"><input type="checkbox" data-special-value="${escapeAttribute(JSON.stringify(item.value))}" ${containsComparable(question.special_values || [], item.value) ? "checked" : ""} /> <code>${escapeHtml(item.value)}</code> ${escapeHtml(item.label)}</label>`).join("");
 }
 
+document.querySelector("#find-not-applicable").addEventListener("click", async () => {
+  if (!currentProject) return;
+  const button = document.querySelector("#find-not-applicable");
+  const container = document.querySelector("#not-applicable-groups");
+  const errorBox = document.querySelector("#not-applicable-error");
+  errorBox.hidden = true;
+  [editor, recodeEditor, bannerEditor, filterEditor, weightEditor]
+    .forEach(panel => { panel.hidden = true; });
+  notApplicableEditor.hidden = false;
+  container.innerHTML = '<p class="muted">Ищем…</p>';
+  setBusy(button, true, "Ищем…");
+  try {
+    const found = await api(`/api/projects/${currentProject.id}/questions/not-applicable-suggestions`);
+    container.innerHTML = renderNotApplicableGroups(found.groups || []);
+  } catch (error) {
+    container.innerHTML = "";
+    showError(errorBox, error);
+  } finally {
+    setBusy(button, false, "Пропуски по анкете");
+  }
+});
+
+document.querySelector("#close-not-applicable").addEventListener("click", () => {
+  notApplicableEditor.hidden = true;
+});
+
+function renderNotApplicableGroups(groups) {
+  if (!groups.length) {
+    return '<p class="muted">Кандидатов не нашлось. Если заглушка всё же есть, отметьте её в карточке вопроса — по данным она неотличима от осмысленного значения.</p>';
+  }
+  return groups.map((group, index) => {
+    const codes = [...new Set(group.candidates.map(item => item.value))]
+      .map(value => `<code>${escapeHtml(value)}</code>`).join(" ");
+    const marked = group.candidates.every(item => item.already_marked);
+    const kind = group.candidates.length > 1
+      ? `Блок из ${group.candidates.length} вопросов`
+      : "Один вопрос";
+    const rows = group.candidates.map(item =>
+      `<p><code>${escapeHtml(item.question_code)}</code><span title="${escapeAttribute(item.question_label)}">${escapeHtml(item.question_label)}</span></p>`
+    ).join("");
+    const payload = escapeAttribute(JSON.stringify(
+      group.candidates.map(item => ({ code: item.question_code, value: item.value }))
+    ));
+    return `<article class="na-group ${marked ? "na-marked" : ""}">
+      <label class="checkbox na-group-head">
+        <input type="checkbox" data-na-group="${index}" data-na-payload="${payload}" ${marked ? "checked" : ""} />
+        <span><strong>${kind}</strong> · код ${codes} у одних и тех же <b>${group.respondents.toLocaleString("ru-RU")}</b> чел. (${formatPercent(group.share)})</span>
+      </label>
+      <div class="na-group-body">${rows}</div>
+    </article>`;
+  }).join("");
+}
+
+document.querySelector("#not-applicable-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = document.querySelector("#apply-not-applicable");
+  const errorBox = document.querySelector("#not-applicable-error");
+  errorBox.hidden = true;
+  // Помечаются выбранные группы, снимается пометка с невыбранных: панель
+  // показывает итоговое состояние, а не только добавления.
+  const marks = new Map();
+  document.querySelectorAll("[data-na-group]").forEach(checkbox => {
+    JSON.parse(checkbox.dataset.naPayload).forEach(({ code, value }) => {
+      const current = marks.get(code) || new Set();
+      if (checkbox.checked) current.add(value);
+      marks.set(code, current);
+    });
+  });
+  if (!marks.size) {
+    showError(errorBox, new Error("Нечего применять: кандидатов нет."));
+    return;
+  }
+  setBusy(button, true, "Помечаем…");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/questions/not-applicable`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        marks: [...marks].map(([code, values]) => ({ code, values: [...values] })),
+      }),
+    });
+    renderProject();
+    showToast("Коды помечены");
+    notApplicableEditor.hidden = true;
+  } catch (error) {
+    showError(errorBox, error);
+  } finally {
+    setBusy(button, false, "Пометить выбранные");
+  }
+});
+
+// Коды «не применимо» берутся из предпросмотра, а не из value labels: заглушка
+// как раз тем и опознаётся, что подписи у неё нет.
+function renderNotApplicable(question, preview) {
+  const section = document.querySelector("#not-applicable");
+  const list = document.querySelector("#not-applicable-list");
+  const rows = preview?.rows || [];
+  const supported = ["single_choice", "scale"].includes(question.question_type);
+  section.hidden = !supported || rows.length === 0;
+  if (section.hidden) {
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = rows.map(row => {
+    const checked = row.is_not_applicable ? "checked" : "";
+    const value = escapeAttribute(JSON.stringify(row.value));
+    return `<label class="checkbox"><input type="checkbox" data-not-applicable="${value}" ${checked} /> <code>${escapeHtml(row.value)}</code> ${escapeHtml(row.label)} <em>${row.count.toLocaleString("ru-RU")}</em></label>`;
+  }).join("");
+}
+
+function collectNotApplicable() {
+  // Панель скрыта — тип вопроса пометку не поддерживает, и поле не отправляется,
+  // чтобы не затереть уже сохранённое значение пустым списком.
+  if (document.querySelector("#not-applicable").hidden) return {};
+  return {
+    not_applicable_values: [...document.querySelectorAll("[data-not-applicable]:checked")]
+      .map(item => JSON.parse(item.dataset.notApplicable)),
+  };
+}
+
 function collectSpecialAnswers() {
   const type = document.querySelector("#question-type").value;
   if (type === "multiple_choice_dichotomy") {
@@ -2094,8 +2216,10 @@ async function loadPreview() {
   try {
     const preview = await api(`/api/projects/${currentProject.id}/questions/${encodeURIComponent(currentQuestionCode)}/preview`);
     container.innerHTML = renderPreview(preview);
+    renderNotApplicable(findQuestion(currentQuestionCode), preview);
   } catch (error) {
     container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+    document.querySelector("#not-applicable").hidden = true;
   }
 }
 

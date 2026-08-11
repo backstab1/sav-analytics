@@ -134,6 +134,13 @@ class ProjectRepository:
             raise InvalidUploadError(
                 "Пока этот тип вопроса нельзя включить в отчёт."
             )
+        if changes.get("not_applicable_values") and final_type == "multiple_choice_dichotomy":
+            # У дихотомии выбор описывается counted_value, а не распределением
+            # значений, поэтому пометка кода здесь ничего бы не изменила.
+            raise InvalidUploadError(
+                "Для multiple-response пропуск задаётся кодом выбранного ответа, "
+                "а не пометкой «не применимо»."
+            )
         if final_role == "wave":
             if final_type != "single_choice" or len(question["source_variables"]) != 1:
                 raise InvalidUploadError("Переменная волны должна быть одиночным single choice.")
@@ -181,6 +188,25 @@ class ProjectRepository:
         if question.get("recognition") == "auto_review":
             question["recognition"] = "manual"
         question.update(changes)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def mark_not_applicable(self, project_id: UUID, marks: list[dict]) -> dict:
+        """Проставить коды «не применимо» сразу нескольким вопросам."""
+        project = self.get(project_id)
+        questions = {item["code"]: item for item in project["configuration"]["questions"]}
+        for mark in marks:
+            question = questions.get(mark["code"])
+            if question is None:
+                raise ProjectNotFoundError(mark["code"])
+            if mark["values"] and question["question_type"] == "multiple_choice_dichotomy":
+                raise InvalidUploadError(
+                    "Для multiple-response пропуск задаётся кодом выбранного ответа, "
+                    "а не пометкой «не применимо»."
+                )
+        for mark in marks:
+            questions[mark["code"]]["not_applicable_values"] = list(mark["values"])
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
@@ -281,6 +307,7 @@ class ProjectRepository:
             "special_values",
             "special_items",
             "special_metric",
+            "not_applicable_values",
             "base_filter_id",
         }
         for detected in refreshed["questions"]:

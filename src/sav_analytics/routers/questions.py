@@ -6,11 +6,46 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..api_dependencies import get_repository
-from ..api_schemas import QuestionBaseUpdate, QuestionOrder, QuestionUpdate
+from ..api_schemas import (
+    NotApplicableUpdate,
+    QuestionBaseUpdate,
+    QuestionOrder,
+    QuestionUpdate,
+)
+from ..core.not_applicable import suggest_not_applicable_codes
 from ..core.topline import ToplineError, calculate_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(prefix="/api/projects/{project_id}/questions", tags=["questions"])
+
+
+@router.get("/not-applicable-suggestions")
+def not_applicable_suggestions(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    groups = suggest_not_applicable_codes(source, project)
+    return {"groups": [group.to_dict() for group in groups]}
+
+
+@router.post("/not-applicable")
+def mark_not_applicable(
+    project_id: UUID,
+    update: NotApplicableUpdate,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    marks = [mark.model_dump(mode="json") for mark in update.marks]
+    try:
+        return repository.mark_not_applicable(project_id, marks)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.patch("/{code}")

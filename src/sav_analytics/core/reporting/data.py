@@ -15,6 +15,7 @@ from ..configuration_integrity import (
 )
 from ..filtering import evaluate_filter_frame
 from ..multiple_response import response_definition
+from ..not_applicable import not_applicable_values
 from ..weighting import WeightingError, calculate_raking
 from .models import ReportError
 
@@ -121,7 +122,13 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
         )
     variables = {item["name"]: item for item in project["inspection"]["variables"]}
     filters = {item["id"]: item for item in configuration.get("filters", [])}
-    filter_questions = [question for question in questions if question["missing_count"] > 0]
+    # «Задавался не всем» — это и объявленный пропуск SPSS, и код, который
+    # пользователь пометил как «не применимо»: для отчёта они равнозначны.
+    filter_questions = [
+        question
+        for question in questions
+        if question["missing_count"] > 0 or not_applicable_values(question)
+    ]
     weights, weight_label = _report_weights(
         frame,
         active_banner.get("weight_variable"),

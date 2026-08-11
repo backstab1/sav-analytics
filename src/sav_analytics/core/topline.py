@@ -76,7 +76,11 @@ def calculate_preview(
     if question_type in {QuestionType.SINGLE_CHOICE, QuestionType.SCALE}:
         special_values = question.get("special_values", [])
         result = _categorical_preview(
-            series, variable_by_name[source_variables[0]], len(frame), special_values
+            series,
+            variable_by_name[source_variables[0]],
+            len(frame),
+            special_values,
+            question.get("not_applicable_values", []),
         )
         if question_type is QuestionType.SCALE:
             result["statistics"] = _numeric_statistics(series, special_values)
@@ -96,6 +100,7 @@ def _categorical_preview(
     variable: dict[str, Any],
     total_base: int,
     special_values: list[Any] | None = None,
+    not_applicable: list[Any] | None = None,
 ) -> dict[str, Any]:
     valid = series.dropna()
     valid_base = len(valid)
@@ -116,6 +121,7 @@ def _categorical_preview(
                 "percent_main": _ratio(count, total_base),
                 "percent_filter": _ratio(count, valid_base),
                 "is_special": _contains_value(special_values or [], value),
+                "is_not_applicable": _contains_value(not_applicable or [], value),
             }
         )
     return {"valid_base": valid_base, "rows": rows, "statistics": None}

@@ -10,6 +10,7 @@ import pandas as pd
 
 from ..filtering import evaluate_filter_frame
 from ..multiple_response import answered_mask, selected_mask
+from ..not_applicable import applicable_series, excludes
 from ..statistics import StatisticalTestResult, effective_sample_size
 from .data import ReportData
 from .models import ReportError, StatisticalAuditEntry
@@ -259,9 +260,11 @@ def _write_question_rows(
         return row
     if question_type == "matrix":
         for name in sources:
-            working = _scale_series(frame[name], special_values)
+            item = applicable_series(frame[name], question)
+            working = _scale_series(item, special_values)
             row = _write_subquestion(context, row, variables[name]["label"])
-            row = _write_distribution(context, row, frame[name], variables[name])
+            row = _write_valid_base_row(context, row, item.notna())
+            row = _write_distribution(context, row, item, variables[name], question)
             row = _write_numeric_metric(context, row, "Среднее", working)
             row = _write_scale_aggregates(
                 context, row, working, variables[name], special_values
@@ -269,7 +272,8 @@ def _write_question_rows(
         return row
     if len(sources) != 1:
         return row
-    series = frame[sources[0]]
+    series = applicable_series(frame[sources[0]], question)
+    row = _write_valid_base_row(context, row, series.notna())
     if question_type == "numeric":
         metrics = [
             ("Среднее", "mean"),
@@ -282,7 +286,7 @@ def _write_question_rows(
         for label, metric in metrics:
             row = _write_numeric_metric(context, row, label, series, metric)
         return row
-    row = _write_distribution(context, row, series, variables[sources[0]])
+    row = _write_distribution(context, row, series, variables[sources[0]], question)
     if question_type == "scale":
         special_metric = question.get("special_metric", "none")
         if special_metric in {"nps", "csat"}:
@@ -293,6 +297,26 @@ def _write_question_rows(
             context, row, working, variables[sources[0]], special_values
         )
     return row
+
+def _write_valid_base_row(context: _RowContext, row: int, valid: pd.Series) -> int:
+    """Строка валидной базы вопроса на `topline_filter`.
+
+    Шапка листа показывает базу колонки баннера — одну на весь лист. На
+    `topline_filter` знаменатель у каждого вопроса свой, и без этой строки
+    читатель видел бы проценты от одного числа рядом с другим числом в шапке.
+    """
+    if not context.valid_denominator:
+        return row
+    eligible = context.base_mask & valid
+    context.sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
+    context.sheet.write(row, 0, "Валидная база, N", context.formats.derived_label())
+    for index, column in enumerate(context.columns, start=1):
+        base = int((column["mask"] & eligible).sum())
+        context.sheet.write_number(row, index, base, context.formats.base(
+            separated=context.separated(index)
+        ))
+    return row + 1
+
 
 def _write_subquestion(context: _RowContext, row: int, label: str) -> int:
     """Подпись подвопроса матрицы — полосой во всю ширину баннера."""
@@ -393,10 +417,15 @@ def _write_distribution(
     row: int,
     series: pd.Series,
     variable: dict[str, Any],
+    question: dict[str, Any] | None = None,
 ) -> int:
     labels = {str(item["value"]): item["label"] for item in variable["value_labels"]}
     values = [item["value"] for item in variable["value_labels"]]
     values.extend(value for value in series.dropna().unique() if str(value) not in labels)
+    if question is not None:
+        # Серия уже очищена, но подписанный код мог прийти из value labels:
+        # помеченный ответ не должен оставаться пустой строкой в отчёте.
+        values = [value for value in values if not excludes(question, value)]
     try:
         values = sorted(values, key=float)
     except (TypeError, ValueError):

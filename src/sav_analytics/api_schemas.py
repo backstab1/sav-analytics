@@ -16,10 +16,26 @@ class QuestionUpdate(BaseModel):
     special_values: list[str | int | float] | None = None
     special_items: list[str] | None = None
     special_metric: Literal["none", "nps", "csat"] | None = None
+    # Коды, которыми в массиве помечен пропуск по ветке анкеты. В отличие от
+    # special_values они убираются и из распределения, и из валидной базы.
+    not_applicable_values: list[str | int | float] | None = Field(
+        default=None, max_length=100
+    )
 
 
 class QuestionOrder(BaseModel):
     codes: list[str]
+
+
+class NotApplicableMark(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    values: list[str | int | float] = Field(default_factory=list, max_length=100)
+
+
+class NotApplicableUpdate(BaseModel):
+    # Подтверждение идёт группой: заглушка обычно лежит сразу в десятках
+    # вопросов, и поштучные запросы конфликтовали бы по ревизии конфигурации.
+    marks: list[NotApplicableMark] = Field(min_length=1, max_length=500)
 
 
 class RangeCategory(BaseModel):

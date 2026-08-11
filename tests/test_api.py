@@ -544,6 +544,76 @@ def test_preflight_blocks_prepare_and_reports_the_reason(tmp_path: Path) -> None
         app.dependency_overrides.clear()
 
 
+def test_not_applicable_marks_a_whole_group_in_one_revision(tmp_path: Path) -> None:
+    """Заглушка лежит сразу в нескольких вопросах, поэтому пометка — одна запись."""
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "skip.sav"
+    frame = pd.DataFrame(
+        {
+            "ST_TRUD": [11] * 20 + [41] * 40 + [0] * 40,
+            "TIP_DG": [1] * 20 + [2] * 40 + [0] * 40,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"ST_TRUD": "Статус", "TIP_DG": "Оформление"},
+        variable_value_labels={
+            "ST_TRUD": {11: "Работодатели", 41: "Наемные"},
+            "TIP_DG": {1: "Договор", 2: "Устно"},
+        },
+        variable_measure={"ST_TRUD": "nominal", "TIP_DG": "nominal"},
+    )
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("skip.sav", stream, "application/octet-stream")},
+            ).json()
+            project_id = project["id"]
+
+            suggestions = client.get(
+                f"/api/projects/{project_id}/questions/not-applicable-suggestions"
+            )
+            assert suggestions.status_code == 200
+            groups = suggestions.json()["groups"]
+            assert len(groups) == 1
+            assert groups[0]["respondents"] == 40
+            assert {item["question_code"] for item in groups[0]["candidates"]} == {
+                "ST_TRUD",
+                "TIP_DG",
+            }
+
+            before = project["configuration"]["revision"]
+            applied = client.post(
+                f"/api/projects/{project_id}/questions/not-applicable",
+                headers={"If-Match": str(before)},
+                json={
+                    "marks": [
+                        {"code": item["question_code"], "values": [item["value"]]}
+                        for item in groups[0]["candidates"]
+                    ]
+                },
+            )
+            assert applied.status_code == 200
+            configuration = applied.json()["configuration"]
+            # Оба вопроса помечены, но ревизия выросла ровно на один шаг.
+            assert configuration["revision"] == before + 1
+            marked = {
+                item["code"]: item.get("not_applicable_values")
+                for item in configuration["questions"]
+            }
+            assert marked == {"ST_TRUD": [0], "TIP_DG": [0]}
+
+            confirmed = client.get(
+                f"/api/projects/{project_id}/questions/not-applicable-suggestions"
+            ).json()["groups"][0]
+            assert all(item["already_marked"] for item in confirmed["candidates"])
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
     app.dependency_overrides[get_repository] = lambda: repository
