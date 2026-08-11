@@ -125,8 +125,9 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py
 ```
 
-Сейчас набор содержит 106 pytest-кейсов для импорта SAV, распознавания структуры, API,
-перекодировок, баннеров, вложенных фильтров, предпросмотров, структуры XLSX и
+Сейчас набор содержит 114 pytest-кейсов для импорта SAV, распознавания структуры, API,
+перекодировок, баннеров, вложенных фильтров, предпросмотров, проверки конфигурации
+до сборки, структуры XLSX и
 эталонных расчётов обычных и взвешенных z-test/Welch t-test, Subgroup/Rest,
 NPS и CSAT balance, взвешенного баланса и сравнения волн,
 включая сквозные регрессии multiple-response `counted_value`, построчных баз и SPSS
@@ -148,7 +149,7 @@ snapshot полного `statistics.txt` и проверкой immutable XLSX.
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
 ```
 
-Сейчас покрыто 83,74% с учётом ветвлений, порог падения сборки — 80%, он задан в `pyproject.toml`.
+Сейчас покрыто 84,01% с учётом ветвлений, порог падения сборки — 80%, он задан в `pyproject.toml`.
 
 ### CI
 
