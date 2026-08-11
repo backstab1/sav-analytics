@@ -116,10 +116,38 @@ class ProjectRepository:
         if not metadata_path.is_file():
             raise ProjectNotFoundError(str(project_id))
         project = self._read(metadata_path)
+        stored_schema = int(project.get("configuration", {}).get("schema_version", 1))
         self._ensure_configuration(project)
+        if stored_schema < CONFIGURATION_SCHEMA_VERSION:
+            project = self._migrate_configuration(
+                project_id, project, metadata_path, stored_schema
+            )
         if project["configuration"].get("structure_version", 0) < STRUCTURE_VERSION:
             project = self._refresh_structure_data(project_id, project)
         validate_stored_project(project)
+        return project
+
+    def _migrate_configuration(
+        self, project_id: UUID, project: dict, metadata_path: Path, stored_schema: int
+    ) -> dict:
+        """Перевести проект на текущую схему и записать результат.
+
+        `_ensure_configuration` уже собрал `report_settings` — из нового поля или,
+        для схемы 1, с активного баннера. Здесь остаётся убрать прежние копии,
+        чтобы у настройки было одно место, и зафиксировать версию.
+
+        Перед первой перезаписью рядом кладётся копия исходного файла: если
+        приложение придётся откатить на версию, которая новую схему не читает,
+        восстанавливать будет откуда.
+        """
+        backup = metadata_path.with_suffix(f".v{stored_schema}.bak")
+        if not backup.exists():
+            shutil.copy2(metadata_path, backup)
+        for banner in project["configuration"]["banners"]:
+            for key in REPORT_SETTING_KEYS:
+                banner.pop(key, None)
+        project["configuration"]["schema_version"] = CONFIGURATION_SCHEMA_VERSION
+        self._write_project(project_id, project)
         return project
 
     def update_question(self, project_id: UUID, code: str, changes: dict) -> dict:
@@ -358,7 +386,9 @@ class ProjectRepository:
     def create_banner(self, project_id: UUID, definition: dict) -> dict:
         project = self.get(project_id)
         banner_id = str(uuid4())
-        project["configuration"]["banners"].append({"id": banner_id, **definition})
+        project["configuration"]["banners"].append(
+            {"id": banner_id, **self._banner_fields(definition)}
+        )
         project["configuration"]["report_banner_id"] = banner_id
         self._apply_legacy_banner_report_settings(project, definition)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
@@ -374,7 +404,7 @@ class ProjectRepository:
             )
         except StopIteration as exc:
             raise ProjectNotFoundError(str(banner_id)) from exc
-        banners[index] = {"id": str(banner_id), **definition}
+        banners[index] = {"id": str(banner_id), **self._banner_fields(definition)}
         if project["configuration"].get("report_banner_id") == str(banner_id):
             self._apply_legacy_banner_report_settings(project, definition)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
@@ -633,6 +663,20 @@ class ProjectRepository:
         )
         if duplicate:
             raise InvalidUploadError("Код перекодировки уже используется в этом проекте.")
+
+    @staticmethod
+    def _banner_fields(definition: dict) -> dict:
+        """Оставить от присланного баннера только то, что баннером и является.
+
+        `BannerDefinition` наследует поля настроек отчёта, чтобы принимать запросы
+        старых клиентов. Переносятся они в `report_settings`, а в баннер попадать не
+        должны: иначе у одного значения снова окажется два места хранения.
+        """
+        return {
+            key: value
+            for key, value in definition.items()
+            if key not in REPORT_SETTING_KEYS
+        }
 
     @staticmethod
     def _apply_legacy_banner_report_settings(project: dict, definition: dict) -> None:

@@ -41,7 +41,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             project = response.json()
             assert project["name"] == "Тестовый проект"
             assert project["inspection"]["row_count"] == 4
-            assert project["configuration"]["schema_version"] == 1
+            assert project["configuration"]["schema_version"] == 2
             assert project["configuration"]["report_settings"] == {
                 "compare_to_total": False,
                 "compare_target": "rest",
@@ -491,7 +491,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
 
     migrated = repository.get(project_id)
 
-    assert migrated["configuration"]["schema_version"] == 1
+    assert migrated["configuration"]["schema_version"] == 2
     assert migrated["configuration"]["report_settings"]["confidence_level"] == 0.95
     matrix = next(
         question
@@ -671,6 +671,67 @@ def test_not_applicable_marks_a_whole_group_in_one_revision(tmp_path: Path) -> N
         app.dependency_overrides.clear()
 
 
+def test_schema_1_settings_move_off_the_banner_and_leave_a_backup(
+    tmp_path: Path,
+) -> None:
+    """Миграция берёт значения активного баннера и оставляет копию исходного файла."""
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    with source.open("rb") as stream:
+        created = repository.create("Схема 1", "fixture.sav", stream)
+
+    project_id = UUID(created["id"])
+    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
+    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy["configuration"]["schema_version"] = 1
+    legacy["configuration"].pop("report_settings")
+    legacy["configuration"]["banners"] = [
+        {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "name": "Неактивный",
+            "confidence_level": 0.99,
+            "minimum_base": 100,
+            "blocks": [{"sources": [{"kind": "question", "ref": "Q1"}]}],
+        },
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "name": "Активный",
+            "confidence_level": 0.9,
+            "minimum_base": 50,
+            "bonferroni": True,
+            "compare_target": "total",
+            "blocks": [{"sources": [{"kind": "question", "ref": "Q1"}]}],
+        },
+    ]
+    legacy["configuration"]["report_banner_id"] = "22222222-2222-2222-2222-222222222222"
+    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+
+    migrated = repository.get(project_id)
+    configuration = migrated["configuration"]
+
+    assert configuration["schema_version"] == 2
+    # Источник — активный баннер: именно его значения применял расчёт до схемы 2.
+    assert configuration["report_settings"]["confidence_level"] == 0.9
+    assert configuration["report_settings"]["minimum_base"] == 50
+    assert configuration["report_settings"]["bonferroni"] is True
+    assert configuration["report_settings"]["compare_target"] == "total"
+    for banner in configuration["banners"]:
+        assert set(banner) == {"id", "name", "blocks"}
+
+    backup = metadata_path.with_suffix(".v1.bak")
+    assert backup.is_file()
+    saved = json.loads(backup.read_text(encoding="utf-8"))
+    assert saved["configuration"]["schema_version"] == 1
+    assert saved["configuration"]["banners"][1]["confidence_level"] == 0.9
+
+    # Файл на диске переписан, повторное открытие ничего не меняет и копию не трогает.
+    stored = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert stored["configuration"]["schema_version"] == 2
+    revision = stored["configuration"]["revision"]
+    assert repository.get(project_id)["configuration"]["revision"] == revision
+
+
 def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
     app.dependency_overrides[get_repository] = lambda: repository
@@ -738,9 +799,13 @@ def test_banner_crud_and_nested_preview(tmp_path: Path) -> None:
             second_configuration = second.json()["configuration"]
             second_id = second_configuration["banners"][1]["id"]
             assert second_configuration["report_banner_id"] == second_id
-            assert second_configuration["banners"][1]["compare_to_total"] is True
-            assert second_configuration["banners"][1]["compare_pairwise"] is True
-            assert "compare_to_total" not in second_configuration["banners"][1]["blocks"][0]
+            # Старый клиент прислал настройки на баннере: они попадают в настройки
+            # отчёта, а в самом баннере не сохраняются — у значения одно место.
+            assert second_configuration["report_settings"]["compare_to_total"] is True
+            assert second_configuration["report_settings"]["compare_pairwise"] is True
+            saved_banner = second_configuration["banners"][1]
+            assert set(saved_banner) == {"id", "name", "blocks"}
+            assert "compare_to_total" not in saved_banner["blocks"][0]
 
             selected = client.put(
                 f"/api/projects/{project_id}/report-banner",

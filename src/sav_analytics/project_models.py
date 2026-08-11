@@ -8,7 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .core.models import QuestionType, VariableRole
 
-CONFIGURATION_SCHEMA_VERSION = 1
+# 1 — настройки расчёта хранились на каждом баннере.
+# 2 — они живут только в configuration.report_settings, баннер несёт название и блоки.
+CONFIGURATION_SCHEMA_VERSION = 2
 
 
 class InvalidStoredProjectError(ValueError):
@@ -54,7 +56,10 @@ class StoredReportSettings(_StoredModel):
 
 
 class StoredConfiguration(_StoredModel):
-    schema_version: Literal[1]
+    # Диапазон, а не точный Literal: код версии N обязан открывать файлы всех
+    # прежних версий, иначе откат приложения делает уже мигрированные проекты
+    # нечитаемыми. Файл новее самого кода читать нечем — его отвергаем.
+    schema_version: int = Field(ge=1, le=CONFIGURATION_SCHEMA_VERSION)
     structure_version: int = Field(ge=1)
     revision: int = Field(ge=1)
     questions: list[StoredQuestion]

@@ -68,15 +68,8 @@ def find_references(
                 )
             )
     if target_kind == "calculated_weight":
-        for banner in configuration.get("banners", []):
-            if str(banner.get("calculated_weight_id") or "") == identifier:
-                references.append(
-                    ConfigurationReference(
-                        target_kind,
-                        identifier,
-                        f"баннер «{banner.get('name') or banner.get('id')}»",
-                    )
-                )
+        # Вес выбирается только в настройках отчёта. Копия на баннере осталась бы
+        # от схемы 1 и блокировала удаление веса, который ни на что не влияет.
         if str(
             (configuration.get("report_settings") or {}).get("calculated_weight_id") or ""
         ) == identifier:
@@ -126,12 +119,6 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
                         f"баннер «{banner_label}» ссылается на отсутствующий источник "
                         f"{kind}:{reference}"
                     )
-        weight_id = banner.get("calculated_weight_id")
-        if weight_id and str(weight_id) not in weights:
-            problems.append(
-                f"баннер «{banner_label}» ссылается на отсутствующий рассчитанный вес"
-            )
-
     for definition in configuration.get("filters", []):
         filter_label = definition.get("name") or definition.get("id")
         for source in _filter_sources(definition.get("rule", {})):
