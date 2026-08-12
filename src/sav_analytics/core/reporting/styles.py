@@ -42,6 +42,11 @@ COMMENT_BOX = {
     "height": 88,
 }
 
+#: При включённом выводе p-value в примечание уходит полный протокол теста —
+#: тот же текст, что в `statistics.txt`. Коробка под сводку из двух строк для
+#: него мала, и Excel обрезает содержимое, а не прокручивает его.
+COMMENT_BOX_DETAILED = {**COMMENT_BOX, "width": 340, "height": 320}
+
 
 class ReportFormats:
     """Форматы книги, собираемые по требованию.
@@ -96,19 +101,23 @@ class ReportFormats:
     def column_letter(self) -> Any:
         return self.get(font_size=8, font_color=MUTED, align="center")
 
-    def base(self, *, separated: bool = False) -> Any:
+    def base(self, *, separated: bool = False, rule: bool = True) -> Any:
+        """Строка базы в шапке.
+
+        При включённом весе таких строк две, и линейка под шапкой принадлежит
+        нижней из них: ``rule=False`` убирает её у верхней.
+        """
         return self.get(
             font_size=9,
             font_color=MUTED,
             align="center",
             num_format="#,##0",
-            bottom=2,
-            bottom_color=RULE,
+            **self._rule(rule),
             **self._divider(separated),
         )
 
-    def base_label(self) -> Any:
-        return self.get(font_size=8, font_color=MUTED, bottom=2, bottom_color=RULE)
+    def base_label(self, *, rule: bool = True) -> Any:
+        return self.get(font_size=8, font_color=MUTED, **self._rule(rule))
 
     # ------------------------------------------------------------------- тело
     def question(self) -> Any:
@@ -229,6 +238,9 @@ class ReportFormats:
 
     def _divider(self, separated: bool) -> dict[str, Any]:
         return {"left": 1, "left_color": HAIR} if separated else {}
+
+    def _rule(self, rule: bool) -> dict[str, Any]:
+        return {"bottom": 2, "bottom_color": RULE} if rule else {}
 
 
 def _formats(workbook: Any) -> ReportFormats:

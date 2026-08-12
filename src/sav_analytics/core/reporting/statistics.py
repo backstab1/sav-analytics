@@ -229,18 +229,22 @@ def _pairwise_note(
     row_label: str,
     cache: dict[tuple[int, int], StatisticalTestResult | None],
     run_pair: Callable[[int, int], StatisticalTestResult | None],
-) -> str | None:
-    """Обойти пары колонок внутри блока баннера и собрать примечание к строке.
+) -> list[StatisticalAuditEntry]:
+    """Обойти пары колонок внутри блока баннера и собрать записи для строки.
 
     ``run_pair`` считает тест для пары позиций и возвращает None, если хотя бы
     одна группа пуста — тогда в аудит попадает запись с причиной вместо
     результата. Тест выполняется один раз на пару и переиспользуется из кэша
     в обратную сторону через :func:`_reverse_test_result`.
+
+    Возвращаются записи со стороны текущей колонки — все пары блока, включая
+    те, что уже ушли в аудит в обратном направлении: примечание пишется на
+    конкретную ячейку и читается от неё.
     """
     if not column.get("compare_pairwise"):
-        return None
+        return []
     current_position = _column_position(columns, column)
-    findings: list[tuple[str, str]] = []
+    entries: list[StatisticalAuditEntry] = []
     for position, other in enumerate(columns):
         if other is column or other.get("block_index") != column.get("block_index"):
             continue
@@ -250,27 +254,23 @@ def _pairwise_note(
         result = cache[pair]
         if current_position > position:
             result = _reverse_test_result(result)
+        entry = StatisticalAuditEntry(
+            sheet=audit_context[0],
+            question_code=audit_context[1],
+            question_label=audit_context[2],
+            row_label=row_label,
+            comparison="Pairwise",
+            group_a=_column_title(current_position, column),
+            group_b=_column_title(position, other),
+            result=result,
+            reason="Пустая группа." if result is None else None,
+        )
+        entries.append(entry)
         if current_position < position:
-            audit_entries.append(
-                StatisticalAuditEntry(
-                    sheet=audit_context[0],
-                    question_code=audit_context[1],
-                    question_label=audit_context[2],
-                    row_label=row_label,
-                    comparison="Pairwise",
-                    group_a=_column_title(current_position, column),
-                    group_b=_column_title(position, other),
-                    result=result,
-                    reason="Пустая группа." if result is None else None,
-                )
-            )
-        if result is not None and result.significant and result.direction in {"higher", "lower"}:
-            findings.append(
-                (result.direction, f"{_excel_column_name(position + 1)} — {other['label']}")
-            )
-    return _format_pairwise_note(findings)
+            audit_entries.append(entry)
+    return entries
 
-def _pairwise_balance_note(
+def _pairwise_balance_entries(
     scores: pd.Series,
     column: dict[str, Any],
     eligible_mask: pd.Series,
@@ -281,7 +281,7 @@ def _pairwise_balance_note(
     row_label: str,
     method: str,
     cache: dict[tuple[int, int], StatisticalTestResult | None],
-) -> str | None:
+) -> list[StatisticalAuditEntry]:
     def run_pair(
         left_position: int, right_position: int
     ) -> StatisticalTestResult | None:
@@ -513,22 +513,22 @@ def _record_wave_comparison(
     columns: list[dict[str, Any]],
     target: dict[str, Any] | None,
     result: StatisticalTestResult | None,
-) -> None:
+) -> StatisticalAuditEntry | None:
     if target is None:
-        return
-    audit_entries.append(
-        StatisticalAuditEntry(
-            sheet=audit_context[0],
-            question_code=audit_context[1],
-            question_label=audit_context[2],
-            row_label=row_label,
-            comparison="Wave",
-            group_a=_worksheet_column_title(_column_position(columns, column), column),
-            group_b=_worksheet_column_title(_column_position(columns, target), target),
-            result=result,
-            reason="Пустая сравниваемая волна." if result is None else None,
-        )
+        return None
+    entry = StatisticalAuditEntry(
+        sheet=audit_context[0],
+        question_code=audit_context[1],
+        question_label=audit_context[2],
+        row_label=row_label,
+        comparison="Wave",
+        group_a=_worksheet_column_title(_column_position(columns, column), column),
+        group_b=_worksheet_column_title(_column_position(columns, target), target),
+        result=result,
+        reason="Пустая сравниваемая волна." if result is None else None,
     )
+    audit_entries.append(entry)
+    return entry
 
 def _values_equal(left: Any, right: Any) -> bool:
     try:
@@ -536,7 +536,7 @@ def _values_equal(left: Any, right: Any) -> bool:
     except (TypeError, ValueError):
         return False
 
-def _pairwise_proportion_note(
+def _pairwise_proportion_entries(
     outcome: pd.Series,
     column: dict[str, Any],
     eligible_mask: pd.Series,
@@ -547,7 +547,7 @@ def _pairwise_proportion_note(
     row_label: str,
     cache: dict[tuple[int, int], StatisticalTestResult | None],
     vectorized: _UnweightedProportionContext | None = None,
-) -> str | None:
+) -> list[StatisticalAuditEntry]:
     selected = outcome.fillna(False).astype(bool) if vectorized is None else None
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
 
@@ -595,7 +595,7 @@ def _pairwise_proportion_note(
         column, columns, audit_entries, audit_context, row_label, cache, run_pair
     )
 
-def _pairwise_mean_note(
+def _pairwise_mean_entries(
     series: pd.Series,
     column: dict[str, Any],
     base_mask: pd.Series,
@@ -606,7 +606,7 @@ def _pairwise_mean_note(
     row_label: str,
     cache: dict[tuple[int, int], StatisticalTestResult | None],
     vectorized: _UnweightedMeanContext | None = None,
-) -> str | None:
+) -> list[StatisticalAuditEntry]:
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
 
     def run_pair(
@@ -649,15 +649,41 @@ def _pairwise_mean_note(
         column, columns, audit_entries, audit_context, row_label, cache, run_pair
     )
 
-def _format_pairwise_note(findings: list[tuple[str, str]]) -> str | None:
+def _format_pairwise_note(entries: list[StatisticalAuditEntry]) -> str | None:
+    """Короткая сводка попарных сравнений: с кем ячейка расходится значимо."""
     lines = []
-    higher = [label for direction, label in findings if direction == "higher"]
-    lower = [label for direction, label in findings if direction == "lower"]
-    if higher:
-        lines.append("Значимо выше: " + ", ".join(higher))
-    if lower:
-        lines.append("Значимо ниже: " + ", ".join(lower))
+    for direction, caption in (("higher", "Значимо выше"), ("lower", "Значимо ниже")):
+        labels = [
+            entry.group_b
+            for entry in entries
+            if entry.result is not None
+            and entry.result.significant
+            and entry.result.direction == direction
+        ]
+        if labels:
+            lines.append(f"{caption}: " + ", ".join(labels))
     return "\n".join(lines) or None
+
+
+def cell_note(
+    settings: dict[str, Any],
+    entries: list[StatisticalAuditEntry],
+    pairwise: list[StatisticalAuditEntry],
+) -> str | None:
+    """Примечание к ячейке: сводка попарных сравнений и, по настройке, детали.
+
+    Детали рендерятся тем же кодом, что и `statistics.txt`, поэтому примечание
+    не может разойтись с аудитом. Без включённой настройки поведение прежнее —
+    только сводка, иначе примечание встанет почти на каждую посчитанную ячейку
+    и утяжелит книгу.
+    """
+    blocks = [note for note in (_format_pairwise_note(pairwise),) if note]
+    if settings["show_p_values"]:
+        blocks.extend(
+            "\n".join(line.strip() for line in _render_audit_entry(entry))
+            for entry in (*entries, *pairwise)
+        )
+    return "\n\n".join(blocks) or None
 
 def _reverse_test_result(
     result: StatisticalTestResult | None,
@@ -697,9 +723,14 @@ def _record_total_comparison(
     column: dict[str, Any],
     columns: list[dict[str, Any]],
     result: StatisticalTestResult | None,
-) -> None:
+) -> StatisticalAuditEntry | None:
+    """Записать сравнение в аудит и вернуть ту же запись для примечания.
+
+    Примечание к ячейке и `statistics.txt` рендерятся из одного объекта, иначе
+    две формулировки одного теста рано или поздно разъедутся.
+    """
     if not column.get("compare_to_total"):
-        return
+        return None
     position = _column_position(columns, column)
     if _compares_with_total(column):
         comparison = "Subgroup/Total (пересекающиеся выборки)"
@@ -709,19 +740,19 @@ def _record_total_comparison(
         comparison = "Subgroup/Rest"
         group_b = f"Rest({_excel_column_name(position + 1)}) — Total − {column['label']}"
         reason = "Пустая подгруппа или Rest."
-    audit_entries.append(
-        StatisticalAuditEntry(
-            sheet=audit_context[0],
-            question_code=audit_context[1],
-            question_label=audit_context[2],
-            row_label=row_label,
-            comparison=comparison,
-            group_a=_column_title(position, column),
-            group_b=group_b,
-            result=result,
-            reason=reason if result is None else None,
-        )
+    entry = StatisticalAuditEntry(
+        sheet=audit_context[0],
+        question_code=audit_context[1],
+        question_label=audit_context[2],
+        row_label=row_label,
+        comparison=comparison,
+        group_a=_column_title(position, column),
+        group_b=group_b,
+        result=result,
+        reason=reason if result is None else None,
     )
+    audit_entries.append(entry)
+    return entry
 
 def _column_title(position: int, column: dict[str, Any]) -> str:
     return f"{_excel_column_name(position + 1)} — {column['label']}"

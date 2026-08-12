@@ -8,6 +8,7 @@ DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "compare_pairwise": False,
     "confidence_level": 0.95,
     "bonferroni": False,
+    "show_p_values": False,
     "minimum_base": 30,
     "weight_variable": None,
     "calculated_weight_id": None,

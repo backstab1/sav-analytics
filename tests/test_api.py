@@ -48,6 +48,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
                 "compare_pairwise": False,
                 "confidence_level": 0.95,
                 "bonferroni": False,
+                "show_p_values": False,
                 "minimum_base": 30,
                 "weight_variable": None,
                 "calculated_weight_id": None,
@@ -866,6 +867,7 @@ def test_report_settings_are_saved_separately_from_banner(tmp_path: Path) -> Non
                     "compare_pairwise": True,
                     "confidence_level": 0.9,
                     "bonferroni": True,
+                    "show_p_values": True,
                     "minimum_base": 25,
                     "weight_variable": None,
                     "calculated_weight_id": None,
@@ -879,6 +881,7 @@ def test_report_settings_are_saved_separately_from_banner(tmp_path: Path) -> Non
             assert configuration["report_settings"]["minimum_base"] == 25
             assert configuration["report_settings"]["compare_to_total"] is True
             assert configuration["report_settings"]["compare_pairwise"] is True
+            assert configuration["report_settings"]["show_p_values"] is True
             assert set(configuration["banners"][0]) == {"id", "name", "blocks"}
     finally:
         app.dependency_overrides.clear()

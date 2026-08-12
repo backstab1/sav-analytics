@@ -147,6 +147,7 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
     statistical_settings = {
         "confidence_level": report_settings["confidence_level"],
         "bonferroni": report_settings["bonferroni"],
+        "show_p_values": report_settings["show_p_values"],
         "minimum_base": report_settings["minimum_base"],
         "weight_label": weight_label,
         "weights": weights,

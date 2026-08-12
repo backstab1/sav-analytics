@@ -17,9 +17,9 @@ from .models import ReportError, StatisticalAuditEntry
 from .statistics import (
     _balance_result,
     _mean_test,
-    _pairwise_balance_note,
-    _pairwise_mean_note,
-    _pairwise_proportion_note,
+    _pairwise_balance_entries,
+    _pairwise_mean_entries,
+    _pairwise_proportion_entries,
     _proportion_test,
     _record_total_comparison,
     _record_wave_comparison,
@@ -31,11 +31,13 @@ from .statistics import (
     _wave_mean_test,
     _wave_proportion_test,
     _wave_target,
+    cell_note,
 )
 from .styles import (
     BAR,
     COLUMN_WIDTH,
     COMMENT_BOX,
+    COMMENT_BOX_DETAILED,
     DEFAULT_ROW_HEIGHT,
     LABEL_WIDTH,
     OUTLINE_DETAIL,
@@ -116,6 +118,7 @@ def _write_topline(
             sheet.merge_range(1, start, 1, end, label.upper(), formats.block())
         else:
             sheet.write(1, start, label.upper(), formats.block())
+    weights = statistical_settings["weights"]
     sheet.set_row(1, 14)
     sheet.set_row(2, QUESTION_HEIGHT)
     sheet.set_row(3, 12)
@@ -124,13 +127,30 @@ def _write_topline(
         separated = index in separators
         sheet.write(2, index, column["label"], formats.column_label(separated=separated))
         sheet.write(3, index, _excel_column_name(index), formats.column_letter())
-        sheet.write_number(4, index, column["base"], formats.base(separated=separated))
-    sheet.write(4, 0, "База, N", formats.base_label())
-    sheet.freeze_panes(5, 1)
+        sheet.write_number(
+            4, index, column["base"], formats.base(separated=separated, rule=weights is None)
+        )
+    sheet.write(4, 0, "База, N", formats.base_label(rule=weights is None))
+    header_rows = 5
+    if weights is not None:
+        # Доли и средние при включённом весе считаются от суммы весов, а не от
+        # числа строк. Невзвешенный N остаётся: по нему проверяется порог малой
+        # базы и он же нужен, чтобы читатель видел, на скольких людях всё стоит.
+        sheet.set_row(5, 16)
+        sheet.write(5, 0, "База, взвеш.", formats.base_label())
+        for index, column in enumerate(columns, start=1):
+            sheet.write_number(
+                5,
+                index,
+                _weighted_base(column["mask"], weights),
+                formats.base(separated=index in separators),
+            )
+        header_rows = 6
+    sheet.freeze_panes(header_rows, 1)
     # Кнопка сворачивания стоит на строке вопроса, то есть над её показателями.
     sheet.outline_settings(True, False, False, True)
 
-    row = 5
+    row = header_rows
     positions: dict[str, int] = {}
     for question in questions:
         audit_start = len(audit_entries)
@@ -298,6 +318,28 @@ def _write_question_rows(
         )
     return row
 
+def _write_cell_note(
+    context: _RowContext,
+    row: int,
+    index: int,
+    comparisons: list[StatisticalAuditEntry | None],
+    pairwise: list[StatisticalAuditEntry],
+) -> None:
+    """Примечание к ячейке, если для неё есть что сказать.
+
+    Сравнения с тоталом и волной несут в книге только цвет и стрелку, поэтому
+    в примечание они попадают лишь при включённом выводе p-value: иначе
+    примечание встало бы на каждую посчитанную ячейку без нового содержания.
+    """
+    note = cell_note(
+        context.settings, [entry for entry in comparisons if entry], pairwise
+    )
+    if not note:
+        return
+    box = COMMENT_BOX_DETAILED if context.settings["show_p_values"] else COMMENT_BOX
+    context.sheet.write_comment(row, index, note, box)
+
+
 def _write_valid_base_row(context: _RowContext, row: int, valid: pd.Series) -> int:
     """Строка валидной базы вопроса на `topline_filter`.
 
@@ -315,6 +357,22 @@ def _write_valid_base_row(context: _RowContext, row: int, valid: pd.Series) -> i
         context.sheet.write_number(row, index, base, context.formats.base(
             separated=context.separated(index)
         ))
+    weights = context.settings["weights"]
+    if weights is None:
+        return row + 1
+    # Знаменатель взвешенных долей этого вопроса — тоже сумма весов, а не строк.
+    # Без этой строки на листе рядом стояли бы взвешенные проценты и
+    # невзвешенная база, из которой они не выводятся.
+    row += 1
+    context.sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
+    context.sheet.write(row, 0, "Валидная база, взвеш.", context.formats.derived_label())
+    for index, column in enumerate(context.columns, start=1):
+        context.sheet.write_number(
+            row,
+            index,
+            _weighted_base(column["mask"] & eligible, weights),
+            context.formats.base(separated=context.separated(index)),
+        )
     return row + 1
 
 
@@ -496,13 +554,13 @@ def _write_metric_row(
                 columns,
                 statistical_settings,
             )
-        _record_total_comparison(
+        total_entry = _record_total_comparison(
             audit_entries, audit_context, label, column, columns, result
         )
         wave_target, wave_result = _wave_proportion_test(
             outcome, column, eligible_mask, columns, statistical_settings
         )
-        _record_wave_comparison(
+        wave_entry = _record_wave_comparison(
             audit_entries, audit_context, label, column, columns, wave_target, wave_result
         )
         separated = context.separated(index)
@@ -522,7 +580,7 @@ def _write_metric_row(
                 derived=derived,
             )
             sheet.write_number(row, index, value * 100, cell_format)
-        note = _pairwise_proportion_note(
+        pairwise = _pairwise_proportion_entries(
             outcome,
             column,
             eligible_mask,
@@ -534,8 +592,9 @@ def _write_metric_row(
             pairwise_cache,
             vectorized,
         )
-        if note:
-            sheet.write_comment(row, index, note, COMMENT_BOX)
+        _write_cell_note(
+            context, row, index, [total_entry, wave_entry], pairwise
+        )
     return row + 1
 
 def _write_numeric_metric(
@@ -584,6 +643,7 @@ def _write_numeric_metric(
             std = float(numeric.std(ddof=1)) if len(numeric) > 1 else None
             value = std / math.sqrt(len(numeric)) if std is not None else None
         result = None
+        total_entry = None
         if metric == "mean":
             result = (
                 _unweighted_mean_test(
@@ -603,16 +663,17 @@ def _write_numeric_metric(
                     statistical_settings,
                 )
             )
-            _record_total_comparison(
+            total_entry = _record_total_comparison(
                 audit_entries, audit_context, label, column, columns, result
             )
         wave_target = None
         wave_result = None
+        wave_entry = None
         if metric == "mean":
             wave_target, wave_result = _wave_mean_test(
                 series, column, base_mask, columns, statistical_settings
             )
-            _record_wave_comparison(
+            wave_entry = _record_wave_comparison(
                 audit_entries,
                 audit_context,
                 label,
@@ -639,7 +700,7 @@ def _write_numeric_metric(
             )
             sheet.write_number(row, index, value, cell_format)
         if metric == "mean":
-            note = _pairwise_mean_note(
+            pairwise = _pairwise_mean_entries(
                 series,
                 column,
                 base_mask,
@@ -651,8 +712,9 @@ def _write_numeric_metric(
                 pairwise_cache,
                 mean_context,
             )
-            if note:
-                sheet.write_comment(row, index, note, {"author": "sav-analytics"})
+            _write_cell_note(
+                context, row, index, [total_entry, wave_entry], pairwise
+            )
     return row + 1
 
 def _write_balance_metric_row(
@@ -686,6 +748,7 @@ def _write_balance_metric_row(
                 / weights[current_mask].sum()
             )
         total_result = None
+        total_entry = None
         if column.get("compare_to_total"):
             total_result = _balance_result(
                 scores,
@@ -696,11 +759,12 @@ def _write_balance_metric_row(
                 column,
                 method,
             )
-            _record_total_comparison(
+            total_entry = _record_total_comparison(
                 audit_entries, audit_context, label, column, columns, total_result
             )
         wave_target = _wave_target(column, columns, settings)
         wave_result = None
+        wave_entry = None
         if wave_target is not None:
             wave_result = _balance_result(
                 scores,
@@ -711,7 +775,7 @@ def _write_balance_metric_row(
                 column,
                 method,
             )
-            _record_wave_comparison(
+            wave_entry = _record_wave_comparison(
                 audit_entries,
                 audit_context,
                 label,
@@ -720,7 +784,7 @@ def _write_balance_metric_row(
                 wave_target,
                 wave_result,
             )
-        pairwise_note = _pairwise_balance_note(
+        pairwise = _pairwise_balance_entries(
             scores,
             column,
             eligible_mask,
@@ -749,8 +813,7 @@ def _write_balance_metric_row(
                 derived=True,
             )
             sheet.write_number(row, index, value * 100, cell_format)
-        if pairwise_note:
-            sheet.write_comment(row, index, pairwise_note, {"author": "sav-analytics"})
+        _write_cell_note(context, row, index, [total_entry, wave_entry], pairwise)
     return row + 1
 
 LEGEND = (
@@ -828,6 +891,15 @@ def _excel_column_name(index: int) -> str:
 
 def _ratio(numerator: Any, denominator: int) -> float | None:
     return float(numerator) / denominator if denominator else None
+
+def _weighted_base(mask: pd.Series, weights: pd.Series) -> int:
+    """Взвешенная база — сумма весов, целым числом.
+
+    Веса нормированы на среднее, поэтому сумма сопоставима с невзвешенным `N`
+    и читается как «столько респондентов эта группа представляет». Дробная
+    часть смысла не несёт, а в шапке рядом с целым `N` только мешает.
+    """
+    return int(round(float(weights[mask].sum())))
 
 def _weighted_ratio(outcome: pd.Series, mask: pd.Series, weights: pd.Series) -> float | None:
     selected_weights = weights[mask]

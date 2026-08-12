@@ -94,6 +94,9 @@ class ReportSettingsDefinition(BaseModel):
     compare_pairwise: bool = False
     confidence_level: float = Field(default=0.95, gt=0, lt=1)
     bonferroni: bool = False
+    # Выключен по умолчанию: примечание с полными деталями теста ставится на
+    # каждую посчитанную ячейку и заметно утяжеляет книгу.
+    show_p_values: bool = False
     minimum_base: int = Field(default=30, ge=1, le=100_000)
     weight_variable: str | None = Field(default=None, max_length=64)
     calculated_weight_id: UUID | None = None

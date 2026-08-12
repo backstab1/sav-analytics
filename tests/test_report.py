@@ -855,12 +855,41 @@ def _comments(content: bytes) -> str:
         return "\n".join(root.itertext())
 
 
-def _cell_value(content: bytes, row_label: str, column: str) -> float:
+def _cell_comment(content: bytes, row_label: str, column: str) -> str | None:
+    namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(BytesIO(content)) as archive:
+        if "xl/comments1.xml" not in archive.namelist():
+            return None
+        shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+        shared = ["".join(item.itertext()) for item in shared_root.findall("m:si", namespace)]
+        sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        target_row = next(
+            cell.attrib["r"][1:]
+            for cell in sheet.findall(".//m:c", namespace)
+            if cell.attrib["r"].startswith("A")
+            and cell.attrib.get("t") == "s"
+            and shared[int(cell.find("m:v", namespace).text)] == row_label
+        )
+        comments = ElementTree.fromstring(archive.read("xl/comments1.xml"))
+        found = next(
+            (
+                comment
+                for comment in comments.findall(".//m:comment", namespace)
+                if comment.attrib["ref"] == f"{column}{target_row}"
+            ),
+            None,
+        )
+        return "".join(found.itertext()) if found is not None else None
+
+
+def _cell_value(content: bytes, row_label: str, column: str, sheet_index: int = 1) -> float:
     namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     with ZipFile(BytesIO(content)) as archive:
         shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
         shared = ["".join(item.itertext()) for item in shared_root.findall("m:si", namespace)]
-        sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        sheet = ElementTree.fromstring(
+            archive.read(f"xl/worksheets/sheet{sheet_index}.xml")
+        )
         target_row = next(
             cell.attrib["r"][1:]
             for cell in sheet.findall(".//m:c", namespace)
@@ -924,6 +953,309 @@ def _cell_num_format(content: bytes, row_label: str, column: str) -> str:
             for item in styles.findall("m:numFmts/m:numFmt", namespace)
         }
         return custom_formats.get(num_format_id, num_format_id)
+
+
+def _row_labels(content: bytes, sheet_index: int = 1) -> list[str]:
+    namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(BytesIO(content)) as archive:
+        shared_root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+        shared = ["".join(item.itertext()) for item in shared_root.findall("m:si", namespace)]
+        sheet = ElementTree.fromstring(
+            archive.read(f"xl/worksheets/sheet{sheet_index}.xml")
+        )
+        return [
+            shared[int(cell.find("m:v", namespace).text)]
+            for cell in sheet.findall(".//m:c", namespace)
+            if cell.attrib["r"].startswith("A") and cell.attrib.get("t") == "s"
+        ]
+
+
+def _weighted_base_project(source: Path) -> dict:
+    """Проект на фикстуре, где вес заметно перевешивает первую подгруппу."""
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * 40 + [2] * 40,
+            "OUTCOME": [1] * 20 + [2] * 20 + [1] * 12 + [2] * 28,
+            "W": [2.0] * 20 + [1.0] * 60,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        variable_value_labels={
+            "GROUP": {1: "Первая", 2: "Вторая"},
+            "OUTCOME": {1: "Да", 2: "Нет"},
+        },
+        variable_measure={"GROUP": "nominal", "OUTCOME": "nominal", "W": "scale"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    return {
+        "name": "Вес",
+        "original_filename": "weighted.sav",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "filters": [],
+            "report_filter_id": None,
+            "banners": [
+                {
+                    "name": "Основной",
+                    "blocks": [
+                        {
+                            "label": "Группа",
+                            "sources": [{"kind": "question", "ref": "GROUP"}],
+                            "compare_to_total": True,
+                            "compare_pairwise": False,
+                        }
+                    ],
+                }
+            ],
+            "report_settings": {
+                "confidence_level": 0.95,
+                "bonferroni": False,
+                "minimum_base": 30,
+                "weight_variable": "W",
+            },
+        },
+    }
+
+
+def _significance_project(source: Path, **settings: object) -> dict:
+    """Две группы, различие между которыми значимо: 70% против 50%."""
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * 60 + [2] * 40,
+            "OUTCOME": [1] * 42 + [2] * 18 + [1] * 20 + [2] * 20,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"GROUP": "Группа", "OUTCOME": "Результат"},
+        variable_value_labels={
+            "GROUP": {1: "Первая", 2: "Вторая"},
+            "OUTCOME": {1: "Да", 2: "Нет"},
+        },
+        variable_measure={"GROUP": "nominal", "OUTCOME": "nominal"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    return {
+        "name": "p-value",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "filters": [],
+            "report_filter_id": None,
+            "banners": [
+                {
+                    "name": "Основной",
+                    "blocks": [
+                        {
+                            "label": "Группа",
+                            "sources": [{"kind": "question", "ref": "GROUP"}],
+                        }
+                    ],
+                }
+            ],
+            "report_settings": {
+                "confidence_level": 0.95,
+                "bonferroni": False,
+                "minimum_base": 30,
+                "compare_to_total": True,
+                "compare_pairwise": True,
+                **settings,
+            },
+        },
+    }
+
+
+def test_p_value_toggle_writes_the_full_test_into_the_cell_comment(
+    tmp_path: Path,
+) -> None:
+    """Включённый вывод переносит в примечание весь протокол теста.
+
+    Колонка C листа — подгруппа «Первая»; в буквах баннера она B, поэтому
+    сравнение с остатком подписано `Rest(B)`.
+    """
+    source = tmp_path / "p_values.sav"
+    project = _significance_project(source, show_p_values=True)
+
+    comment = _cell_comment(build_topline_xlsx(source, project), "Да", "C")
+
+    assert comment is not None
+    # Сводка остаётся первой: включённые детали не должны мешать быстрому чтению.
+    assert comment.startswith("Значимо выше: C — Вторая")
+    assert "Subgroup/Rest: B — Первая vs Rest(B) — Total − Первая" in comment
+    assert "Pairwise: B — Первая vs C — Вторая" in comment
+    assert "Метод: z-test" in comment
+    assert "Базы: N1=60; N2=40" in comment
+    assert "p-value=" in comment
+    assert "Скорректированный alpha: 0.050000" in comment
+    assert "Решение: значимо; направление=higher" in comment
+
+
+def test_cell_comment_repeats_the_audit_word_for_word(tmp_path: Path) -> None:
+    """Примечание и `statistics.txt` рендерятся из одной записи.
+
+    Проверяется по колонке подгруппы «Первая»: её попарное сравнение уходит
+    в аудит в том же направлении, в каком читается от ячейки.
+    """
+    source = tmp_path / "p_values.sav"
+    project = _significance_project(source, show_p_values=True)
+    content = build_topline_xlsx(source, project)
+    audit = build_statistics_txt(source, project)
+
+    comment = _cell_comment(content, "Да", "C")
+    detail_lines = [
+        line
+        for line in comment.splitlines()
+        if line and not line.startswith(("Значимо выше", "Значимо ниже"))
+    ]
+    audit_lines = {line.strip() for line in audit.splitlines()}
+
+    assert len(detail_lines) > 20
+    assert not [line for line in detail_lines if line not in audit_lines]
+
+
+def test_p_value_toggle_off_leaves_only_the_pairwise_summary(tmp_path: Path) -> None:
+    source = tmp_path / "p_values.sav"
+    project = _significance_project(source)
+
+    comment = _cell_comment(build_topline_xlsx(source, project), "Да", "C")
+
+    assert comment == "Значимо выше: C — Вторая"
+
+
+def test_total_comparison_gets_a_comment_only_with_p_values_on(
+    tmp_path: Path,
+) -> None:
+    """Без попарных сравнений примечания раньше не было вовсе.
+
+    Отличие от остатка несёт только цвет цифры, и до появления настройки
+    объяснить его в книге было нечем — число и его причина жили в разных файлах.
+    """
+    source = tmp_path / "p_values.sav"
+    project = _significance_project(source, compare_pairwise=False)
+
+    assert _cell_comment(build_topline_xlsx(source, project), "Да", "C") is None
+
+    project["configuration"]["report_settings"]["show_p_values"] = True
+    comment = _cell_comment(build_topline_xlsx(source, project), "Да", "C")
+
+    assert comment is not None
+    assert comment.startswith("Subgroup/Rest: B — Первая vs Rest(B)")
+    assert "Pairwise" not in comment
+
+
+def test_skipped_test_explains_itself_in_the_cell_comment(tmp_path: Path) -> None:
+    """Причина пропуска теста доходит до книги, а не только до аудита.
+
+    Положительных ответов на всю выборку три, объединённая доля 3%, и
+    ожидаемая частота успеха опускается ниже 5 — z-тест не проводится.
+    """
+    source = tmp_path / "skipped.sav"
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * 60 + [2] * 40,
+            "OUTCOME": [1] * 3 + [2] * 57 + [2] * 40,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        variable_value_labels={
+            "GROUP": {1: "Первая", 2: "Вторая"},
+            "OUTCOME": {1: "Да", 2: "Нет"},
+        },
+        variable_measure={"GROUP": "nominal", "OUTCOME": "nominal"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    project = _significance_project(tmp_path / "unused.sav", show_p_values=True)
+    project["inspection"] = inspection
+    project["configuration"]["questions"] = inspection["questions"]
+
+    comment = _cell_comment(build_topline_xlsx(source, project), "Да", "C")
+
+    assert comment is not None
+    assert "Ожидаемые частоты 2×2" in comment
+    assert (
+        "Статус: пропущен. Причина: Хотя бы одна ожидаемая частота таблицы 2×2 "
+        "меньше 5." in comment
+    )
+
+
+def test_header_shows_weighted_base_next_to_unweighted_n(tmp_path: Path) -> None:
+    """Шапка при включённом весе несёт обе базы.
+
+    Веса нормируются на среднее (1,25), поэтому вес 2,0 даёт 1,6, а 1,0 — 0,8.
+    Первая подгруппа набирает 20×1,6 + 20×0,8 = 48 при невзвешенных 40,
+    вторая — 40×0,8 = 32. Сумма по подгруппам равна взвешенному тоталу 80.
+    """
+    source = tmp_path / "weighted_base.sav"
+    project = _weighted_base_project(source)
+
+    content = build_topline_xlsx(source, project)
+
+    assert [
+        _cell_value(content, "База, N", column) for column in ("B", "C", "D")
+    ] == [80, 40, 40]
+    assert [
+        _cell_value(content, "База, взвеш.", column) for column in ("B", "C", "D")
+    ] == [80, 48, 32]
+
+
+def test_header_keeps_a_single_base_row_without_a_weight(tmp_path: Path) -> None:
+    source = tmp_path / "weighted_base.sav"
+    project = _weighted_base_project(source)
+    project["configuration"]["report_settings"]["weight_variable"] = None
+
+    content = build_topline_xlsx(source, project)
+
+    assert "База, N" in _row_labels(content)
+    assert "База, взвеш." not in _row_labels(content)
+    # Первая строка данных возвращается на место, которого ждёт лист без веса.
+    assert _cell_value(content, "Да", "B") == pytest.approx(40.0)
+
+
+def test_valid_base_row_gets_a_weighted_pair_on_the_filter_sheet(
+    tmp_path: Path,
+) -> None:
+    """Знаменатель взвешенных долей на `topline_filter` — сумма весов.
+
+    Вопрос задан первым двадцати респондентам каждой группы. Невзвешенная
+    валидная база обеих подгрупп одинакова — 20, а взвешенная расходится:
+    20×1,6 = 32 против 20×0,8 = 16.
+    """
+    source = tmp_path / "weighted_filter.sav"
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * 40 + [2] * 40,
+            "ASKED": [1.0] * 20 + [np.nan] * 20 + [1.0] * 20 + [np.nan] * 20,
+            "W": [2.0] * 20 + [1.0] * 60,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        variable_value_labels={"GROUP": {1: "Первая", 2: "Вторая"}, "ASKED": {1: "Да"}},
+        variable_measure={"GROUP": "nominal", "ASKED": "nominal", "W": "scale"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    project = _weighted_base_project(tmp_path / "unused.sav")
+    project["inspection"] = inspection
+    project["configuration"]["questions"] = inspection["questions"]
+
+    content = build_topline_xlsx(source, project)
+
+    assert [
+        _cell_value(content, "Валидная база, N", column, 2) for column in ("B", "C", "D")
+    ] == [40, 20, 20]
+    assert [
+        _cell_value(content, "Валидная база, взвеш.", column, 2)
+        for column in ("B", "C", "D")
+    ] == [48, 32, 16]
 
 
 def test_banner_compare_target_total_uses_the_overlapping_scheme(tmp_path: Path) -> None:

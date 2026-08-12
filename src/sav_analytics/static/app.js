@@ -37,6 +37,7 @@ const defaultReportSettings = Object.freeze({
   compare_pairwise: false,
   confidence_level: 0.95,
   bonferroni: false,
+  show_p_values: false,
   minimum_base: 30,
   weight_variable: null,
   calculated_weight_id: null,
@@ -658,6 +659,7 @@ reportSettingsForm.addEventListener("submit", async event => {
     compare_pairwise: document.querySelector("#report-compare-pairwise").checked,
     confidence_level: Number(document.querySelector("#report-confidence").value) / 100,
     bonferroni: document.querySelector("#report-bonferroni").checked,
+    show_p_values: document.querySelector("#report-show-p-values").checked,
     minimum_base: Number(document.querySelector("#report-minimum-base").value),
     weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
     calculated_weight_id: weightSelection.startsWith("calculated:")
@@ -1026,6 +1028,7 @@ function renderReportSettings() {
   document.querySelector("#report-compare-target").value = settings.compare_target;
   document.querySelector("#report-compare-pairwise").checked = settings.compare_pairwise;
   document.querySelector("#report-bonferroni").checked = settings.bonferroni;
+  document.querySelector("#report-show-p-values").checked = settings.show_p_values;
   document.querySelector("#report-wave-comparison").value = settings.wave_comparison;
 
   const selectedWeight = settings.calculated_weight_id
