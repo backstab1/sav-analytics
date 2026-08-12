@@ -122,7 +122,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   bannerEditor.hidden = true;
   filterEditor.hidden = true;
   weightEditor.hidden = true;
-  reportSettingsForm.hidden = true;
+  closeSheet();
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
   window.Shell.setProjectOpen(false);
@@ -257,7 +257,7 @@ document.querySelector("#summary").addEventListener("click", event => {
       button.classList.toggle("active", button.dataset.structureMode === "questions");
     });
     document.querySelector("#structure-toolbar").hidden = false;
-    ["#recode-toolbar", "#banner-toolbar", "#filter-toolbar", "#weight-toolbar", "#report-settings-toolbar"]
+    ["#recode-toolbar", "#banner-toolbar", "#filter-toolbar", "#weight-toolbar"]
       .forEach(selector => { document.querySelector(selector).hidden = true; });
   }
   renderSummary(currentProject.inspection, configuredQuestions());
@@ -300,9 +300,10 @@ function closeQuestionEditor() {
   if (currentProject) renderTable();
 }
 
-// Слайд-овер ведёт себя как модальное окно: закрывается по фону и Esc.
-const slideOverQuery = window.matchMedia("(max-width: 860px)");
-const bannerSlideOverQuery = window.matchMedia("(min-width: 861px) and (max-width: 1180px)");
+/* Ниже этой ширины инспектор перестаёт помещаться третьей колонкой и
+   выезжает поверх списка. Порог один на все инспекторы: раньше у
+   баннера был свой, потому что он был шире остальных. */
+const slideOverQuery = window.matchMedia("(max-width: 1080px)");
 
 function openEditors() {
   return [
@@ -315,22 +316,48 @@ function openEditors() {
 }
 
 function slideOverOpen() {
-  if (slideOverQuery.matches) return openEditors().length > 0;
-  if (bannerSlideOverQuery.matches) return !bannerEditor.hidden;
-  return false;
+  return slideOverQuery.matches && openEditors().length > 0;
 }
 
 function closeSlideOver() {
   if (!slideOverOpen()) return;
-  const closable = bannerSlideOverQuery.matches && !slideOverQuery.matches
-    ? openEditors().filter(([element]) => element === bannerEditor)
-    : openEditors();
-  closable.forEach(([, close]) => close());
+  openEditors().forEach(([, close]) => close());
 }
+
+/* ================================================================
+   Листы: настройка отчёта и пропуски по анкете
+   ================================================================ */
+const sheetVeil = document.querySelector("#sheet-veil");
+
+function openSheet(sheet) {
+  sheetVeil.querySelectorAll(".sheet").forEach(item => { item.hidden = item !== sheet; });
+  sheetVeil.hidden = false;
+}
+
+function closeSheet() {
+  if (sheetVeil.hidden) return;
+  sheetVeil.hidden = true;
+  sheetVeil.querySelectorAll(".sheet").forEach(item => { item.hidden = true; });
+}
+
+function openReportSettingsSheet() {
+  if (!currentProject) return;
+  renderReportSettings();
+  openSheet(reportSettingsForm);
+}
+
+sheetVeil.addEventListener("click", event => {
+  if (event.target === sheetVeil || event.target.closest("[data-close-sheet]")) closeSheet();
+});
 
 document.querySelector("#editor-backdrop").addEventListener("click", closeSlideOver);
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape") closeSlideOver();
+  if (event.key !== "Escape") return;
+  if (!sheetVeil.hidden) {
+    closeSheet();
+    return;
+  }
+  closeSlideOver();
 });
 document.querySelector("#banner-block-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-banner-block]");
@@ -393,6 +420,13 @@ document.querySelector("#filter-form").addEventListener("input", scheduleFilterP
 document.querySelector("#filter-form").addEventListener("change", scheduleFilterPreview);
 
 document.querySelectorAll(".tabs button[data-view]").forEach(button => button.addEventListener("click", () => {
+  // Настройка отчёта — не вид панели, а лист: это разовая конфигурация,
+  // а не список объектов, который просматривают. Раздел панели при этом
+  // не меняется, поэтому под листом остаётся то, что было.
+  if (button.dataset.view === "report-settings") {
+    openReportSettingsSheet();
+    return;
+  }
   document.querySelectorAll(".tabs button").forEach(item => item.classList.remove("active"));
   button.classList.add("active");
   currentView = button.dataset.view;
@@ -401,7 +435,6 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   document.querySelector("#structure-toolbar").hidden = currentView !== "questions";
   document.querySelector("#filter-toolbar").hidden = currentView !== "filters";
   document.querySelector("#weight-toolbar").hidden = currentView !== "weights";
-  document.querySelector("#report-settings-toolbar").hidden = currentView !== "report-settings";
   if (currentView === "recodings") {
     editor.hidden = true;
     bannerEditor.hidden = true;
@@ -644,6 +677,7 @@ reportSettingsForm.addEventListener("submit", async event => {
       body: JSON.stringify(payload),
     });
     renderProject();
+    closeSheet();
     showToast("Настройки отчёта сохранены");
   } catch (error) {
     showError(settingsError, error);
@@ -871,8 +905,7 @@ function showProject(project) {
   document.querySelector("#structure-toolbar").hidden = false;
   document.querySelector("#filter-toolbar").hidden = true;
   document.querySelector("#weight-toolbar").hidden = true;
-  document.querySelector("#report-settings-toolbar").hidden = true;
-  reportSettingsForm.hidden = true;
+  closeSheet();
   document.querySelectorAll(".tabs button").forEach(button => {
     button.classList.toggle("active", button.dataset.view === "questions");
   });
@@ -921,43 +954,59 @@ function questionStatus(question) {
   return question.recognition === "auto_review" ? "review" : "ready";
 }
 
+// Сводка живёт в шапке чипами: четыре карточки 100x56 во втором ярусе
+// стоили 77px высоты, а несли четыре числа.
 function renderSummary(inspection, questions) {
   const included = questions.filter(item => questionStatus(item) !== "excluded");
   const review = questions.filter(item => questionStatus(item) === "review");
   const excluded = questions.filter(item => questionStatus(item) === "excluded");
-  const cards = [
+  document.querySelector("#summary").innerHTML = [
     { value: inspection.row_count, label: "респондентов", key: null },
     { value: included.length, label: "в отчёте", key: "included" },
     { value: review.length, label: "проверить", key: "review", tone: "warn" },
     { value: excluded.length, label: "исключено", key: "excluded" },
-  ].map(card => {
-    const number = card.value.toLocaleString("ru-RU");
-    if (!card.key) return `<article><strong>${number}</strong><span>${card.label}</span></article>`;
-    const active = structureStatusFilter === card.key;
-    return `<button type="button" class="summary-filter ${card.tone || ""} ${active ? "active" : ""}"
-      data-status-filter="${card.key}" aria-pressed="${active}"
-      title="${active ? "Показать все вопросы" : `Показать только: ${card.label}`}"
-      ><strong>${number}</strong><span>${card.label}</span></button>`;
+  ].map(chip => {
+    const number = chip.value.toLocaleString("ru-RU");
+    if (!chip.key) return `<span class="bar-chip"><b>${number}</b>${chip.label}</span>`;
+    const active = structureStatusFilter === chip.key;
+    return `<button type="button" class="bar-chip ${chip.tone || ""} ${active ? "active" : ""}"
+      data-status-filter="${chip.key}" aria-pressed="${active}"
+      title="${active ? "Показать все вопросы" : `Показать только: ${chip.label}`}"
+      ><b>${number}</b>${chip.label}</button>`;
   }).join("");
-  document.querySelector("#summary").innerHTML =
-    `<div class="summary-cards">${cards}</div><div class="summary-state">${reportStateLine()}</div>`;
+  renderRailCounts(questions);
+  // Что уйдёт в Excel — подсказка на кнопке выгрузки. Раньше это была
+  // строка под карточками; в один ярус она не помещается, а нужна ровно
+  // в момент выгрузки.
+  document.querySelector("#export-toggle").title = reportStateSummary();
 }
 
-// Строка под карточками: что именно уйдёт в Excel при текущих настройках.
-function reportStateLine() {
+// Числа разделов в рельсе: раньше их вообще не было видно, пока не
+// откроешь вкладку.
+function renderRailCounts(questions) {
+  const counts = {
+    questions: questions.length,
+    recodings: configuredRecodings().length,
+    banners: configuredBanners().length,
+    filters: configuredFilters().length,
+    weights: configuredWeights().length,
+  };
+  document.querySelectorAll("#section-nav em[data-count]").forEach(slot => {
+    const value = counts[slot.dataset.count];
+    slot.textContent = value ? String(value) : "";
+  });
+}
+
+// Что именно уйдёт в Excel при текущих настройках — одной строкой.
+function reportStateSummary() {
   const banner = configuredBanners().find(item => item.id === selectedReportBannerId());
   const filter = configuredFilters().find(item => item.id === selectedReportFilterId());
   const settings = configuredReportSettings();
-  const parts = [
-    banner
-      ? ["Баннер", banner.name, true]
-      : ["Баннер", "только Total", false],
-    ["Вес", reportWeightLabel(settings), Boolean(settings.weight_variable || settings.calculated_weight_id)],
-    filter ? ["Общий фильтр", filter.name, true] : ["Общий фильтр", "нет", false],
-  ];
-  return parts.map(([label, value, set]) =>
-    `<span><em>${label}</em> <b class="${set ? "set" : ""}" title="${escapeAttribute(value)}">${escapeHtml(value)}</b></span>`
-  ).join("");
+  return [
+    `Баннер: ${banner ? banner.name : "только Total"}`,
+    `Вес: ${reportWeightLabel(settings)}`,
+    `Общий фильтр: ${filter ? filter.name : "нет"}`,
+  ].join("\n");
 }
 
 function reportWeightLabel(settings) {
@@ -1015,14 +1064,8 @@ function renderTable() {
   const tableWrap = document.querySelector("#table-wrap");
   const entityList = document.querySelector("#entity-list");
   const cardView = currentView === "recodings" || currentView === "banners" || currentView === "filters" || currentView === "weights";
-  const settingsView = currentView === "report-settings";
-  tableWrap.hidden = cardView || settingsView;
+  tableWrap.hidden = cardView;
   entityList.hidden = !cardView;
-  reportSettingsForm.hidden = !settingsView;
-  if (settingsView) {
-    renderReportSettings();
-    return;
-  }
   if (currentView === "questions" && structureMode === "variables") {
     renderPhysicalVariables();
     return;
@@ -1052,22 +1095,37 @@ function renderTable() {
     && matchesStructureSearch(question.code, question.label, originalQuestionLabel(question))
   );
   updateStructureSearchCount(questions.length, allQuestions.length);
-  document.querySelector("#table-head").innerHTML = "<th class=\"drag-cell\" aria-label=\"Порядок\"></th><th class=\"question-cell\">Вопрос</th><th class=\"type-column\">Тип</th><th class=\"count-column\">Перем.</th><th class=\"status-column\">Статус</th>";
+  // Код и база вынесены в свои колонки: раньше код был приклеен к
+  // названию, база не показывалась вовсе, и колонка «Вопрос» забирала
+  // 76% ширины ни на что.
+  const filters = configuredFilters();
+  document.querySelector("#table-head").innerHTML =
+    "<th class=\"drag-cell\" aria-label=\"Порядок\"></th>"
+    + "<th class=\"code-column\">Код</th>"
+    + "<th class=\"question-cell\">Вопрос</th>"
+    + "<th class=\"type-column\">Тип</th>"
+    + "<th class=\"count-column\">Перем.</th>"
+    + "<th class=\"base-column\">База</th>"
+    + "<th class=\"status-column\">Статус</th>";
   if (!questions.length) {
-    document.querySelector("#table-body").innerHTML = emptySearchRow(5, "Вопросы не найдены.");
+    document.querySelector("#table-body").innerHTML = emptySearchRow(7, "Вопросы не найдены.");
     return;
   }
   document.querySelector("#table-body").innerHTML = questions.map(question => {
     const sourceLabel = originalQuestionLabel(question);
     const warnings = (question.warnings || []).join(" · ");
     const title = `${question.code} — ${question.label}`;
+    const sub = warnings || sourceLabel;
+    const base = filters.find(item => item.id === question.base_filter_id);
     // Пока список отфильтрован, порядок менять нельзя: соседи в выдаче не соседи в отчёте.
     const draggable = structureFiltered() ? "false" : "true";
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
       <td class="drag-cell"><button type="button" class="drag-handle" draggable="${draggable}" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="${structureFiltered() ? "Сбросьте фильтр, чтобы менять порядок" : "Перетащите, чтобы изменить порядок"}"><span aria-hidden="true">⋮⋮</span></button></td>
-      <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</span>${sourceLabel ? `<span class="q-sub" title="${escapeAttribute(sourceLabel)}">${escapeHtml(sourceLabel)}</span>` : ""}${warnings ? `<span class="q-sub warning" title="${escapeAttribute(warnings)}">${escapeHtml(warnings)}</span>` : ""}</td>
+      <td class="code-column"><code>${escapeHtml(question.code)}</code></td>
+      <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</span>${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
       <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
       <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
+      <td class="base-column"><span class="base-cell ${base ? "" : "default"}" title="${escapeAttribute(base ? base.name : "Стандартная база")}">${escapeHtml(base ? base.name : "стандартная")}</span></td>
       <td class="status-column"><span class="status ${!question.included_in_report ? "excluded" : (question.recognition === "auto_review" ? "review" : "")}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "Готов") : "Исключён"}</span></td>
     </tr>`;
   }).join("");
@@ -2086,9 +2144,7 @@ document.querySelector("#find-not-applicable").addEventListener("click", async (
   const container = document.querySelector("#not-applicable-groups");
   const errorBox = document.querySelector("#not-applicable-error");
   errorBox.hidden = true;
-  [editor, recodeEditor, bannerEditor, filterEditor, weightEditor]
-    .forEach(panel => { panel.hidden = true; });
-  notApplicableEditor.hidden = false;
+  openSheet(notApplicableEditor);
   container.innerHTML = '<p class="muted">Ищем…</p>';
   setBusy(button, true, "Ищем…");
   try {
@@ -2102,9 +2158,7 @@ document.querySelector("#find-not-applicable").addEventListener("click", async (
   }
 });
 
-document.querySelector("#close-not-applicable").addEventListener("click", () => {
-  notApplicableEditor.hidden = true;
-});
+document.querySelector("#close-not-applicable").addEventListener("click", closeSheet);
 
 function renderNotApplicableGroups(groups) {
   if (!groups.length) {
@@ -2163,7 +2217,7 @@ document.querySelector("#not-applicable-form").addEventListener("submit", async 
     });
     renderProject();
     showToast("Коды помечены");
-    notApplicableEditor.hidden = true;
+    closeSheet();
   } catch (error) {
     showError(errorBox, error);
   } finally {

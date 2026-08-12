@@ -7,11 +7,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260812-report-settings-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260812-shell-v2" />
   </head>
   <body>
-    <!-- Ярус 1 — глобальный: не зависит от того, открыт ли проект. -->
-    <header class="appbar">
+    <!-- ================================================================
+         ЯРУС 1 — единственный. Бренд, экраны, проект, сводка, действия.
+         Раньше это были три яруса подряд: appbar, шапка проекта и шапка
+         панели. Всё, что оттуда осталось нужным, живёт здесь.
+         ================================================================ -->
+    <header class="bar">
       <a class="brand" href="/" aria-label="sav analytics — на главную">
         <svg viewBox="0 0 1024 1024" aria-hidden="true">
           <path fill="#1d7a4f" opacity=".1" d="M300 56C196 56 126 80 86 151 58 201 52 273 52 512s6 311 34 361c40 71 110 95 214 95h424c104 0 174-24 214-95 28-50 34-122 34-361s-6-311-34-361c-40-71-110-95-214-95H300Z" />
@@ -24,19 +28,47 @@
         </svg>
         sav<span>analytics</span>
       </a>
-      <nav id="screen-nav" class="nav-screens" aria-label="Экраны">
-        <button type="button" data-screen="home">Главная<span class="nav-wip">В РАЗРАБОТКЕ</span></button>
-        <button id="new-project" class="nav-action" type="button">Новый проект</button>
+
+      <nav id="screen-nav" class="screens" aria-label="Экраны">
+        <button type="button" data-screen="home" title="Главная — страница в разработке">Главная</button>
         <button type="button" data-screen="manual" aria-current="page">Ручной режим</button>
         <button type="button" data-screen="builder">AI-конструктор</button>
       </nav>
-      <div class="appbar-sep"></div>
-      <div class="account">
-        <span class="account-avatar" aria-hidden="true">ЛП</span>
-        <span class="account-name" title="Авторизации пока нет: приложение работает локально, без учётных записей">
-          <strong>Локальный пользователь</strong><small>без авторизации</small>
-        </span>
+
+      <div class="bar-sep project-only"></div>
+
+      <button id="project-switch" class="project project-only" type="button"
+              title="Открытый проект. Список проектов — «Новый проект».">
+        <b id="project-name"></b>
+        <svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </button>
+
+      <!-- Сводка: чипы в строку вместо четырёх карточек во втором ярусе.
+           Наполняется из app.js (renderSummary), клик фильтрует таблицу. -->
+      <div id="summary" class="bar-stats project-only"></div>
+
+      <div class="bar-grow"></div>
+
+      <button id="new-project" class="btn quiet compact" type="button">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
+        <span class="btn-text">Новый проект</span>
+      </button>
+
+      <div class="export-menu project-only">
+        <button id="export-toggle" class="btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <span class="btn-text">Выгрузка</span>
+        </button>
+        <div id="export-list" class="export-list" role="menu" hidden>
+          <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
+          <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
+          <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
+          <div class="export-sep" role="separator"></div>
+          <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
+        </div>
       </div>
+
+      <span class="avatar" title="Авторизации пока нет: приложение работает локально, без учётных записей">ЛП</span>
     </header>
 
     <main>
@@ -60,234 +92,295 @@
       </section>
 
       <!-- ================= Экран «Ручной режим» ================= -->
-      <section id="screen-manual" class="screen screen-pad">
-      <section id="start" class="hero">
-        <p class="eyebrow">НОВЫЙ ПРОЕКТ</p>
-        <h1>Разберите массив SPSS<br />до понятной структуры</h1>
-        <p class="lead">Загрузите SAV — приложение сохранит оригинал, прочитает метаданные и предложит типы вопросов.</p>
-        <form id="upload-form" class="upload-card">
-          <label class="name-field">Название проекта<input name="name" placeholder="Например, Трекер бренда · июль" /></label>
-          <label id="drop-zone" class="drop-zone">
-            <input id="file" name="file" type="file" accept=".sav" required />
-            <span class="upload-icon">↑</span>
-            <strong id="file-title">Перетащите SAV сюда</strong>
-            <small id="file-caption">или нажмите, чтобы выбрать файл</small>
-          </label>
-          <button id="submit" type="submit">Создать проект</button>
-          <p id="form-error" class="error" hidden></p>
-        </form>
-        <section id="project-library" class="project-library" hidden>
-          <div class="section-title"><p class="eyebrow">НЕДАВНИЕ ПРОЕКТЫ</p><button id="refresh-projects" class="text-button" type="button">Обновить</button></div>
-          <div id="project-list" class="project-list"></div>
-        </section>
-      </section>
+      <section id="screen-manual" class="screen">
 
-      <section id="workspace" class="workspace" hidden>
-        <div class="workspace-head">
-          <div class="workspace-title"><p class="eyebrow">СТРУКТУРА МАССИВА</p><h1 id="project-name"></h1></div>
-          <div id="summary" class="summary"></div>
-        </div>
-        <div id="report-feedback" class="report-feedback" aria-live="polite" hidden></div>
-        <div class="workspace-grid">
-          <div class="structure-panel">
-            <div class="panel-box">
-            <div class="panel-head">
-              <div class="tabs"><button class="active" data-view="questions">Структура</button><button data-view="recodings">Перекодировки</button><button data-view="banners">Баннеры</button><button data-view="filters">Базы и фильтры</button><button data-view="weights">Веса</button><button data-view="report-settings">Настройка отчёта</button></div>
-              <div class="export-menu">
-                <button id="export-toggle" class="export-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
-                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                  Выгрузка<span class="export-caret" aria-hidden="true"></span>
+        <section id="start" class="hero screen-pad">
+          <p class="eyebrow">НОВЫЙ ПРОЕКТ</p>
+          <h1>Разберите массив SPSS<br />до понятной структуры</h1>
+          <p class="lead">Загрузите SAV — приложение сохранит оригинал, прочитает метаданные и предложит типы вопросов.</p>
+          <form id="upload-form" class="upload-card">
+            <label class="name-field">Название проекта<input name="name" placeholder="Например, Трекер бренда · июль" /></label>
+            <label id="drop-zone" class="drop-zone">
+              <input id="file" name="file" type="file" accept=".sav" required />
+              <span class="upload-icon">↑</span>
+              <strong id="file-title">Перетащите SAV сюда</strong>
+              <small id="file-caption">или нажмите, чтобы выбрать файл</small>
+            </label>
+            <button id="submit" type="submit">Создать проект</button>
+            <p id="form-error" class="error" hidden></p>
+          </form>
+          <section id="project-library" class="project-library" hidden>
+            <div class="section-title"><p class="eyebrow">НЕДАВНИЕ ПРОЕКТЫ</p><button id="refresh-projects" class="text-button" type="button">Обновить</button></div>
+            <div id="project-list" class="project-list"></div>
+          </section>
+        </section>
+
+        <!-- ================================================================
+             РАБОЧАЯ ОБЛАСТЬ — рельс / список / инспектор.
+             Страница не прокручивается: прокручиваются панели.
+             ================================================================ -->
+        <section id="workspace" class="workspace" hidden>
+          <div id="app-shell" class="shell">
+
+            <nav class="rail" aria-label="Разделы конфигурации">
+              <div class="rail-group tabs" id="section-nav">
+                <p class="rail-cap">Конфигурация</p>
+                <button class="rail-item active" data-view="questions" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+                  <span>Структура</span><em data-count="questions"></em>
                 </button>
-                <div id="export-list" class="export-list" role="menu" hidden>
-                  <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
-                  <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
-                  <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
-                  <div class="export-sep" role="separator"></div>
-                  <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
+                <button class="rail-item" data-view="recodings" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 7h8l-2.4-2.4M16 13H8l2.4 2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <span>Перекодировки</span><em data-count="recodings"></em>
+                </button>
+                <button class="rail-item" data-view="banners" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="11" rx="2" stroke="currentColor" stroke-width="1.5" /><path d="M8 4.5v11M12.5 4.5v11" stroke="currentColor" stroke-width="1.4" /></svg>
+                  <span>Баннеры</span><em data-count="banners"></em>
+                </button>
+                <button class="rail-item" data-view="filters" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 5h13l-5 5.6V16l-3-1.6v-3.8L3.5 5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /></svg>
+                  <span>Базы и фильтры</span><em data-count="filters"></em>
+                </button>
+                <button class="rail-item" data-view="weights" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 4.5v11M5 8h10M6.6 8 4.5 13h4.2L6.6 8ZM13.4 8l-2.1 5h4.2l-2.1-5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg>
+                  <span>Веса</span><em data-count="weights"></em>
+                </button>
+              </div>
+
+              <div class="rail-foot">
+                <button id="find-not-applicable" class="rail-item" type="button" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.2 17 16H3l7-12.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M10 8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="10" cy="13.6" r=".9" fill="currentColor" /></svg>
+                  <span>Пропуски по анкете</span>
+                </button>
+                <!-- Настройки — лист, а не вкладка, но остаются разделом
+                     конфигурации, поэтому лежат в том же .tabs-контракте. -->
+                <div class="rail-group tabs">
+                  <button class="rail-item" data-view="report-settings" type="button">
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5" /><path d="M10 2.5v2m0 11v2M17.5 10h-2m-11 0h-2m12.3-5.3-1.4 1.4M6.6 13.4l-1.4 1.4m0-9.4 1.4 1.4m6.8 6.8 1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+                    <span>Настройка отчёта</span>
+                  </button>
                 </div>
               </div>
-            </div>
-            <div id="structure-toolbar" class="recode-toolbar"><div><strong>Представление структуры</strong><small>Настраивайте логические вопросы или проверяйте исходные столбцы SAV.</small></div><div class="structure-toolbar-actions"><span id="structure-search-count" class="search-count" aria-live="polite" hidden></span><div class="search-field"><svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg><input id="structure-search" type="text" placeholder="Поиск по коду и названию" autocomplete="off" aria-label="Поиск по структуре массива" /><button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button></div><button id="find-not-applicable" class="secondary compact-button" type="button" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">Пропуски по анкете</button><div class="structure-view-switch"><button type="button" data-structure-mode="questions" class="active">Логические вопросы</button><button type="button" data-structure-mode="variables">Столбцы SAV</button></div></div></div>
-            <div id="recode-toolbar" class="recode-toolbar" hidden><div><strong>Производные переменные</strong><small>Создавайте независимые группировки числовых переменных.</small></div><button id="new-recoding" type="button">+ Новая перекодировка</button></div>
-            <div id="banner-toolbar" class="recode-toolbar" hidden><div><strong>Баннеры отчёта</strong><small>Total добавляется всегда. Нажмите «В Excel» на нужной карточке.</small></div><button id="new-banner" type="button">+ Новый баннер</button></div>
-            <div id="filter-toolbar" class="recode-toolbar" hidden><div><strong>Именованные правила</strong><small>Назначайте правила базой отдельным вопросам. «В Excel» применяет правило ко всему отчёту.</small></div><button id="new-filter" type="button">+ Новое правило</button></div>
-            <div id="weight-toolbar" class="recode-toolbar" hidden><div><strong>Рассчитанные веса</strong><small>Настройте целевые распределения и рассчитайте вес методом raking/IPF.</small></div><button id="new-weight" type="button">+ Новый вес</button></div>
-            <div id="report-settings-toolbar" class="recode-toolbar" hidden><div><strong>Настройка отчёта</strong><small>Общие параметры расчёта применяются к выбранному баннеру и всему Excel-отчёту.</small></div></div>
-            <form id="report-settings-form" class="report-settings-form" hidden>
-              <div class="report-settings-grid">
-                <section class="report-settings-card">
-                  <div class="report-settings-card-head"><h3>Расчёт отчёта</h3><small>Точность тестов, малая база и вес</small></div>
-                  <div class="report-settings-fields">
-                    <div class="banner-field-row"><label>Уровень доверия, %<input id="report-confidence" type="number" min="0.01" max="99.99" step="0.01" value="95" required /></label><label>Порог малой базы<input id="report-minimum-base" type="number" min="1" max="100000" value="30" required /></label></div>
-                    <label>Вес отчёта<select id="report-weight"><option value="">Без веса</option></select></label>
+            </nav>
+
+            <div class="pane">
+              <!-- Один ряд действий вместо «шапка панели + тулбар». -->
+              <div class="pane-bar">
+                <div id="structure-toolbar" class="toolbar">
+                  <h2>Структура</h2>
+                  <span id="structure-search-count" class="toolbar-count" aria-live="polite" hidden></span>
+                  <div class="toolbar-grow"></div>
+                  <div class="search-field">
+                    <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+                    <input id="structure-search" type="text" placeholder="Код или название" autocomplete="off" aria-label="Поиск по структуре массива" />
+                    <button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button>
                   </div>
-                </section>
-                <section class="report-settings-card">
-                  <div class="report-settings-card-head"><h3>Сравнение волн</h3><small>Динамика между периодами исследования</small></div>
-                  <div class="report-settings-fields">
-                    <label>Схема сравнения<select id="report-wave-comparison"><option value="none">Не сравнивать</option><option value="previous">С предыдущей волной</option><option value="control">С контрольной волной</option></select></label>
-                    <label id="report-wave-control-label" hidden>Контрольная волна<select id="report-wave-control"></select></label>
+                  <div class="structure-view-switch">
+                    <button type="button" data-structure-mode="questions" class="active">Вопросы</button>
+                    <button type="button" data-structure-mode="variables">Столбцы SAV</button>
                   </div>
-                </section>
-                <section class="report-settings-card report-comparison-card">
-                  <div class="report-settings-card-head"><h3>Статистические сравнения</h3><small>Какие значимые отличия отмечать в отчёте</small></div>
-                  <div class="report-comparison-layout">
-                    <div class="settings-block report-toggle-settings"><label class="tgl-row"><span><strong>Сравнивать подгруппы</strong><small>Отмечать значимые отличия в отчёте</small></span><span class="tgl"><input id="report-compare-subgroups" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label><label class="tgl-row"><span><strong>Попарные сравнения</strong><small>Между подгруппами блока</small></span><span class="tgl"><input id="report-compare-pairwise" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label><label class="tgl-row"><span><strong>Поправка Bonferroni</strong><small>Для множественных сравнений</small></span><span class="tgl"><input id="report-bonferroni" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label></div>
-                    <label id="report-compare-target-label">С кем сравнивать подгруппы<select id="report-compare-target">
-                      <option value="rest">С остальными (Rest) — статистически корректно</option>
-                      <option value="total">С Total — как в клиентских макросах</option>
-                    </select><small id="report-compare-target-help"></small></label>
-                  </div>
-                </section>
+                </div>
+
+                <div id="recode-toolbar" class="toolbar" hidden>
+                  <h2>Перекодировки</h2>
+                  <span class="toolbar-hint">Независимые группировки числовых переменных</span>
+                  <div class="toolbar-grow"></div>
+                  <button id="new-recoding" class="btn compact" type="button">+ Новая перекодировка</button>
+                </div>
+
+                <div id="banner-toolbar" class="toolbar" hidden>
+                  <h2>Баннеры</h2>
+                  <span class="toolbar-hint">Total добавляется всегда</span>
+                  <div class="toolbar-grow"></div>
+                  <button id="new-banner" class="btn compact" type="button">+ Новый баннер</button>
+                </div>
+
+                <div id="filter-toolbar" class="toolbar" hidden>
+                  <h2>Базы и фильтры</h2>
+                  <span class="toolbar-hint">«В Excel» применяет правило ко всему отчёту</span>
+                  <div class="toolbar-grow"></div>
+                  <button id="new-filter" class="btn compact" type="button">+ Новое правило</button>
+                </div>
+
+                <div id="weight-toolbar" class="toolbar" hidden>
+                  <h2>Веса</h2>
+                  <span class="toolbar-hint">Raking / IPF по целевым распределениям</span>
+                  <div class="toolbar-grow"></div>
+                  <button id="new-weight" class="btn compact" type="button">+ Новый вес</button>
+                </div>
+
+                <!-- Тулбар настроек остаётся в контракте app.js, но виден не
+                     бывает: раздел открывается листом. -->
+                <div id="report-settings-toolbar" class="toolbar" hidden></div>
               </div>
-              <p id="report-settings-error" class="error" hidden></p>
-              <div class="report-settings-actions"><button id="save-report-settings" type="submit">Сохранить настройки</button></div>
-            </form>
-            <div id="entity-list" class="entity-list" hidden></div>
-            <div id="table-wrap" class="table-wrap">
-              <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
+
+              <div id="report-feedback" class="report-feedback" aria-live="polite" hidden></div>
+
+              <div class="pane-body scroll">
+                <div id="table-wrap" class="table-wrap">
+                  <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
+                </div>
+                <div id="entity-list" class="entity-list" hidden></div>
+              </div>
             </div>
-            </div>
+
+            <!-- ============================================================
+                 ИНСПЕКТОРЫ. Одна оболочка на все сущности: голова, тело со
+                 своей прокруткой, ряд действий. Высота — по содержимому,
+                 потолок — экран (см. .insp в styles.css).
+                 ============================================================ -->
+            <aside id="question-editor" class="insp structure-editor" hidden>
+              <div class="insp-head">
+                <div><p class="kicker">Вопрос</p><h3 id="editor-code"></h3></div>
+                <button id="close-editor" class="icon-button" type="button" aria-label="Закрыть редактор вопроса">×</button>
+              </div>
+              <form id="question-form">
+                <div class="insp-body editor-scroll scroll">
+                  <label class="f"><span id="question-label-caption">Название для отчёта</span><textarea id="question-label" rows="2" required></textarea><small id="question-label-help">Это название попадёт в содержание и топлайн Excel.</small></label>
+                  <div class="form-row">
+                    <label class="f">Тип вопроса<select id="question-type">
+                      <option value="single_choice">Один ответ</option>
+                      <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
+                      <option value="multiple_choice_categorical" disabled>Множественный — категории (скоро)</option>
+                      <option value="scale">Шкала</option>
+                      <option value="numeric">Числовой показатель</option>
+                      <option value="ranking" disabled>Ранжирование (скоро)</option>
+                      <option value="matrix">Матрица шкал</option>
+                      <option value="open_text">Открытый текст</option>
+                      <option value="technical">Технический</option>
+                    </select></label>
+                    <label class="f">Роль<select id="question-role">
+                      <option value="question">Обычный вопрос</option>
+                      <option value="id">ID</option>
+                      <option value="weight">Вес</option>
+                      <option value="wave">Волна</option>
+                      <option value="filter">Фильтрующая / маршрутная</option>
+                      <option value="technical">Техническая</option>
+                    </select></label>
+                  </div>
+                  <label class="tgl-row boxed question-report-toggle"><span><strong>Включить в отчёт</strong><small>Попадёт в топлайн и содержание Excel</small></span><span class="tgl"><input id="question-included" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
+                  <label id="special-metric-label" class="f" hidden>Специальный показатель<select id="question-special-metric"><option value="none">Нет</option><option value="nps">NPS (шкала 0–10)</option><option value="csat">CSAT (шкала 1–5)</option></select><small>Границы групп фиксированы и применяются автоматически.</small></label>
+                  <label class="f">Пользовательская база<select id="question-base-filter"><option value="">Стандартная база</option></select></label>
+                  <section id="question-members" class="question-members" hidden></section>
+                  <section id="special-answers" class="special-answers" hidden><div class="grp-cap"><strong>Исключить ответы</strong><small>Останутся в распределении, но не в средних</small></div><div id="special-answer-list"></div></section>
+                  <section id="not-applicable" class="special-answers" hidden><div class="grp-cap"><strong>Не применимо</strong><small>Код пропуска по ветке анкеты: ответ уходит из распределения, база Total сохраняется</small></div><div id="not-applicable-list"></div></section>
+                  <section class="preview"><div class="preview-title"><h3>Предпросмотр Total</h3><span class="preview-base" id="preview-base"></span></div><div id="preview-content" class="preview-content"><p class="muted">Выберите вопрос.</p></div></section>
+                  <p id="editor-error" class="error" hidden></p>
+                </div>
+                <div class="insp-foot editor-actions">
+                  <button id="save-question" type="submit">Сохранить</button>
+                  <button id="refresh-preview" class="secondary" type="button">Пересчитать</button>
+                </div>
+              </form>
+            </aside>
+
+            <aside id="recode-editor" class="insp recode-editor" hidden>
+              <div class="insp-head">
+                <div><p class="kicker">Перекодировка</p><h3 id="recode-editor-title">Новая</h3></div>
+                <button id="close-recode-editor" class="icon-button" type="button" aria-label="Закрыть редактор перекодировки">×</button>
+              </div>
+              <form id="recode-form">
+                <div class="insp-body editor-scroll scroll">
+                  <div class="form-row">
+                    <label class="f">Код переменной<input id="recode-code" required maxlength="64" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="AGE_GROUP" /></label>
+                    <label class="f">Способ<select id="recode-mode"><option value="ranges">Числовые диапазоны</option><option value="categories">Объединение категорий</option></select></label>
+                  </div>
+                  <label class="f">Название<input id="recode-name" required maxlength="500" placeholder="Возрастные группы" /></label>
+                  <label class="f">Исходная переменная<select id="recode-source" required></select></label>
+                  <section id="range-editor"><div class="range-heading grp-cap"><strong>Категории и диапазоны</strong><small>Пустая граница = открытый край</small></div><div id="range-list" class="range-list"></div><button id="add-range" class="secondary compact-button add-row-button" type="button">+ Добавить категорию</button></section>
+                  <section id="category-editor" hidden><div class="range-heading grp-cap"><strong>Новые категории</strong><small>Одно значение — одна группа</small></div><div id="category-group-list" class="category-group-list"></div><button id="add-category-group" class="secondary compact-button add-row-button" type="button">+ Добавить группу</button></section>
+                  <section class="preview"><div class="preview-title"><h3>Предпросмотр групп</h3><button id="refresh-recode-preview" class="text-button" type="button">Пересчитать</button></div><div id="recode-preview" class="preview-content"><p class="muted">Сохраните перекодировку для расчёта.</p></div></section>
+                  <p id="recode-error" class="error" hidden></p>
+                </div>
+                <div class="insp-foot editor-actions">
+                  <button id="save-recoding" type="submit">Сохранить</button>
+                  <span class="foot-grow"></span>
+                  <button id="delete-recoding" class="danger-button" type="button" hidden>Удалить</button>
+                </div>
+              </form>
+            </aside>
+
+            <aside id="banner-editor" class="insp banner-editor" hidden>
+              <div class="insp-head">
+                <div><p class="kicker">Баннер</p><h3 id="banner-editor-title">Новый</h3></div>
+                <button id="close-banner-editor" class="icon-button" type="button" aria-label="Закрыть редактор баннера">×</button>
+              </div>
+              <form id="banner-form">
+                <div class="insp-body editor-scroll scroll">
+                  <label class="f">Название баннера<input id="banner-name" required maxlength="500" /></label>
+                  <div class="range-heading grp-cap"><strong>Блоки колонок</strong></div>
+                  <div id="banner-block-list" class="banner-block-list blocks"></div>
+                  <button id="add-banner-block" class="secondary compact-button add-block" type="button">+ Добавить блок</button>
+                  <section class="banner-preview-section preview"><div class="preview-title"><h3>Колонки и базы</h3><small id="banner-preview-count"></small></div><div id="banner-preview" class="preview-content"><p class="muted">Сохраните баннер для расчёта.</p></div></section>
+                  <p id="banner-error" class="error" hidden></p>
+                </div>
+                <div class="insp-foot editor-actions">
+                  <p id="banner-unsaved-warning" class="unsaved-warning" role="status" hidden><span aria-hidden="true">!</span><span>Есть несохранённые изменения</span></p>
+                  <button id="save-banner" type="submit">Сохранить</button>
+                  <button id="refresh-banner-preview" class="secondary" type="button">Пересчитать</button>
+                  <span class="foot-grow"></span>
+                  <button id="delete-banner" class="danger-button" type="button" hidden>Удалить</button>
+                </div>
+              </form>
+            </aside>
+
+            <aside id="filter-editor" class="insp filter-editor" hidden>
+              <div class="insp-head">
+                <div><p class="kicker">База / фильтр</p><h3 id="filter-editor-title">Новое правило</h3></div>
+                <button id="close-filter-editor" class="icon-button" type="button" aria-label="Закрыть редактор фильтра">×</button>
+              </div>
+              <form id="filter-form">
+                <div class="insp-body editor-scroll scroll">
+                  <label class="f">Название правила<input id="filter-name" required maxlength="500" placeholder="Например, Покупатели категории" /></label>
+                  <select id="filter-operator" hidden><option value="and">И</option><option value="or">ИЛИ</option></select>
+                  <div class="range-heading grp-cap filter-builder-heading"><strong>Кого включить в выборку</strong><small>Соберите правило из условий</small></div>
+                  <div id="filter-condition-list" class="filter-condition-list"></div>
+                  <div class="filter-add-actions"><button id="add-filter-condition" type="button">+ Условие</button></div>
+                  <section class="filter-preview-section preview"><div class="preview-title"><h3>Получающаяся выборка</h3></div><div id="filter-preview" class="preview-content"><p class="muted">Сохраните правило для расчёта.</p></div></section>
+                  <p id="filter-error" class="error" hidden></p>
+                </div>
+                <div class="insp-foot editor-actions">
+                  <button id="save-filter" type="submit">Сохранить</button>
+                  <button id="copy-filter" class="secondary" type="button" hidden>Копия</button>
+                  <span class="foot-grow"></span>
+                  <button id="delete-filter" class="danger-button" type="button" hidden>Удалить</button>
+                </div>
+              </form>
+            </aside>
+
+            <aside id="weight-editor" class="insp weight-editor" hidden>
+              <div class="insp-head">
+                <div><p class="kicker">Raking / IPF</p><h3 id="weight-editor-title">Новый вес</h3></div>
+                <button id="close-weight-editor" class="icon-button" type="button" aria-label="Закрыть редактор весов">×</button>
+              </div>
+              <form id="weight-form">
+                <div class="insp-body editor-scroll scroll">
+                  <label class="f">Название веса<input id="weight-name" required maxlength="500" placeholder="Например, Вес по полу и возрасту" /></label>
+                  <section class="weight-limit-card">
+                    <label class="tgl-row boxed weight-toggle-setting"><span><strong>Ограничивать веса</strong><small>Обрезать экстремумы и подогнать цели заново</small></span><span class="tgl"><input id="weight-trimming" type="checkbox" checked /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
+                    <div id="weight-bound-fields" class="weight-bound-fields">
+                      <label><span>Минимум</span><span class="weight-bound-input"><input id="weight-lower" type="number" min="0.01" step="0.01" value="0.3" /><em>×</em></span></label>
+                      <span class="weight-bound-separator">—</span>
+                      <label><span>Максимум</span><span class="weight-bound-input"><input id="weight-upper" type="number" min="0.01" step="0.01" value="3" /><em>×</em></span></label>
+                    </div>
+                  </section>
+                  <div class="range-heading grp-cap weight-section-heading"><strong>Целевые распределения</strong><small>сумма = 100%</small></div>
+                  <div id="weight-dimension-list" class="weight-dimension-list rows"></div>
+                  <button id="add-weight-dimension" class="secondary compact-button add-dashed" type="button">+ Добавить распределение</button>
+                  <section id="weight-preview-section" class="preview weight-preview-section" hidden><div class="preview-title"><h3>Диагностика веса</h3><button id="refresh-weight-preview" class="text-button" type="button">Пересчитать</button></div><div id="weight-preview" class="preview-content"></div></section>
+                  <p id="weight-error" class="error" hidden></p>
+                </div>
+                <div class="insp-foot editor-actions">
+                  <button id="save-weight" type="submit">Рассчитать</button>
+                  <a id="download-weight" class="secondary link-button" href="#" hidden>Excel</a>
+                  <span class="foot-grow"></span>
+                  <button id="delete-weight" class="danger-button" type="button" hidden>Удалить</button>
+                </div>
+              </form>
+            </aside>
+
           </div>
-          <aside id="question-editor" class="question-editor structure-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">НАСТРОЙКА ВОПРОСА</p><h2 id="editor-code"></h2></div><button id="close-editor" class="icon-button" type="button" aria-label="Закрыть редактор вопроса">×</button></div>
-            <form id="question-form">
-              <div class="editor-scroll">
-                <label><span id="question-label-caption">Название для отчёта</span><textarea id="question-label" rows="4" required></textarea><small id="question-label-help">Это название попадёт в содержание и топлайн Excel.</small></label>
-                <div class="form-row">
-                  <label>Тип вопроса<select id="question-type">
-                    <option value="single_choice">Один ответ</option>
-                    <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
-                    <option value="multiple_choice_categorical" disabled>Множественный — категории (скоро)</option>
-                    <option value="scale">Шкала</option>
-                    <option value="numeric">Числовой показатель</option>
-                    <option value="ranking" disabled>Ранжирование (скоро)</option>
-                    <option value="matrix">Матрица шкал</option>
-                    <option value="open_text">Открытый текст</option>
-                    <option value="technical">Технический</option>
-                  </select></label>
-                  <label>Роль<select id="question-role">
-                    <option value="question">Обычный вопрос</option>
-                    <option value="id">ID</option>
-                    <option value="weight">Вес</option>
-                    <option value="wave">Волна</option>
-                    <option value="filter">Фильтрующая / маршрутная</option>
-                    <option value="technical">Техническая</option>
-                  </select></label>
-                </div>
-                <label class="tgl-row question-report-toggle"><span><strong>Включить в отчёт</strong><small>Попадёт в топлайн и содержание Excel</small></span><span class="tgl"><input id="question-included" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
-                <label id="special-metric-label" hidden>Специальный показатель<select id="question-special-metric"><option value="none">Нет</option><option value="nps">NPS (шкала 0–10)</option><option value="csat">CSAT (шкала 1–5)</option></select><small>Границы групп фиксированы и применяются автоматически.</small></label>
-                <label>Пользовательская база<select id="question-base-filter"><option value="">Стандартная база</option></select></label>
-                <section id="question-members" class="question-members" hidden></section>
-                <section id="special-answers" class="special-answers" hidden><div><strong>Исключить ответы</strong><small>Отмеченные ответы останутся в распределении, но будут исключены из средних. Для multiple проверяется совместный выбор.</small></div><div id="special-answer-list"></div></section>
-                <section id="not-applicable" class="special-answers" hidden><div><strong>Не применимо</strong><small>Код, которым в массиве помечен пропуск по ветке анкеты. Такой ответ исчезает из распределения, на topline_main эти люди остаются в базе Total, а вопрос уходит и на topline_filter с валидной базой.</small></div><div id="not-applicable-list"></div></section>
-                <section class="preview"><div class="preview-title"><h3>Предпросмотр Total</h3><span class="preview-base" id="preview-base"></span></div><div id="preview-content" class="preview-content"><p class="muted">Выберите вопрос.</p></div></section>
-                <p id="editor-error" class="error" hidden></p>
-              </div>
-              <div class="editor-actions">
-                <button id="save-question" type="submit">Сохранить</button>
-                <button id="refresh-preview" class="secondary" type="button">Пересчитать</button>
-              </div>
-            </form>
-          </aside>
-          <aside id="not-applicable-editor" class="question-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">ПРОПУСКИ ПО АНКЕТЕ</p><h2>Найденные коды</h2></div><button id="close-not-applicable" class="icon-button" type="button" aria-label="Закрыть панель">×</button></div>
-            <form id="not-applicable-form">
-              <div class="editor-scroll">
-                <p class="muted na-intro">Предлагаются только коды без подписи у переменных, где подписаны хотя бы две категории, и только вне диапазона подписанных кодов. Подписанный ноль и переменные вовсе без подписей не предлагаются — там заглушку от настоящего нуля по данным не отличить, отметьте её в карточке вопроса вручную.</p>
-                <div id="not-applicable-groups" class="na-groups"></div>
-                <p id="not-applicable-error" class="error" hidden></p>
-              </div>
-              <div class="editor-actions">
-                <button id="apply-not-applicable" type="submit">Пометить выбранные</button>
-              </div>
-            </form>
-          </aside>
-          <aside id="recode-editor" class="question-editor recode-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">ПЕРЕКОДИРОВКА</p><h2 id="recode-editor-title">Новая</h2></div><button id="close-recode-editor" class="icon-button" type="button" aria-label="Закрыть редактор перекодировки">×</button></div>
-            <form id="recode-form">
-              <div class="editor-scroll">
-                <label>Код производной переменной<input id="recode-code" required maxlength="64" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="AGE_GROUP" /></label>
-                <label>Название<input id="recode-name" required maxlength="500" placeholder="Возрастные группы" /></label>
-                <label>Способ перекодировки<select id="recode-mode"><option value="ranges">Числовые диапазоны</option><option value="categories">Объединение категорий</option></select></label>
-                <label>Исходная переменная<select id="recode-source" required></select></label>
-                <section id="range-editor"><div class="range-heading"><strong>Категории и диапазоны</strong><small>Пустая граница = открытый край</small></div><div id="range-list" class="range-list"></div><button id="add-range" class="secondary compact-button add-row-button" type="button">+ Добавить категорию</button></section>
-                <section id="category-editor" hidden><div class="range-heading"><strong>Новые категории</strong><small>Одно значение — одна группа</small></div><div id="category-group-list" class="category-group-list"></div><button id="add-category-group" class="secondary compact-button add-row-button" type="button">+ Добавить группу</button></section>
-                <section class="preview"><div class="preview-title"><h3>Предпросмотр групп</h3><button id="refresh-recode-preview" class="text-button" type="button">Пересчитать</button></div><div id="recode-preview" class="preview-content"><p class="muted">Сохраните перекодировку для расчёта.</p></div></section>
-                <p id="recode-error" class="error" hidden></p>
-              </div>
-              <div class="editor-actions">
-                <button id="save-recoding" type="submit">Сохранить</button>
-                <button id="delete-recoding" class="danger-button" type="button" hidden>Удалить</button>
-              </div>
-            </form>
-          </aside>
-          <aside id="banner-editor" class="question-editor banner-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">БАННЕР</p><h2 id="banner-editor-title">Новый</h2></div><button id="close-banner-editor" class="icon-button" type="button" aria-label="Закрыть редактор баннера">×</button></div>
-            <form id="banner-form">
-              <div class="editor-scroll">
-                <label>Название баннера<input id="banner-name" required maxlength="500" /></label>
-                <div class="range-heading"><strong>Блоки колонок</strong></div>
-                <div id="banner-block-list" class="banner-block-list blocks"></div>
-                <button id="add-banner-block" class="secondary compact-button add-block" type="button">+ Добавить блок</button>
-                <section class="banner-preview-section"><div class="range-heading"><strong>Колонки и базы</strong><small id="banner-preview-count"></small></div><div id="banner-preview" class="preview-content"><p class="muted">Сохраните баннер для расчёта.</p></div></section>
-                <p id="banner-error" class="error" hidden></p>
-              </div>
-              <div class="editor-actions">
-                <p id="banner-unsaved-warning" class="unsaved-warning" role="status" hidden><span aria-hidden="true">!</span><span>Есть несохранённые изменения. Сохраните баннер перед скачиванием отчёта.</span></p>
-                <button id="save-banner" type="submit">Сохранить</button>
-                <button id="refresh-banner-preview" class="secondary" type="button">Пересчитать</button>
-                <button id="delete-banner" class="danger-button" type="button" hidden>Удалить</button>
-              </div>
-            </form>
-          </aside>
-          <aside id="filter-editor" class="question-editor filter-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">БАЗА / ФИЛЬТР</p><h2 id="filter-editor-title">Новое правило</h2></div><button id="close-filter-editor" class="icon-button" type="button" aria-label="Закрыть редактор фильтра">×</button></div>
-            <form id="filter-form">
-              <div class="editor-scroll">
-                <label>Название правила<input id="filter-name" required maxlength="500" placeholder="Например, Покупатели категории" /></label>
-                <select id="filter-operator" hidden><option value="and">И</option><option value="or">ИЛИ</option></select>
-                <div class="range-heading filter-builder-heading"><strong>Кого включить в выборку</strong><small>Соберите правило из понятных условий</small></div>
-                <div id="filter-condition-list" class="filter-condition-list"></div>
-                <div class="filter-add-actions"><button id="add-filter-condition" type="button">+ Условие</button></div>
-                <section class="filter-preview-section"><div class="range-heading"><strong>Получающаяся выборка</strong></div><div id="filter-preview" class="preview-content"><p class="muted">Сохраните правило для расчёта.</p></div></section>
-                <p id="filter-error" class="error" hidden></p>
-              </div>
-              <div class="editor-actions">
-                <button id="save-filter" type="submit">Сохранить</button>
-                <button id="copy-filter" class="secondary" type="button" hidden>Копия</button>
-                <button id="delete-filter" class="danger-button" type="button" hidden>Удалить</button>
-              </div>
-            </form>
-          </aside>
-          <aside id="weight-editor" class="question-editor weight-editor" hidden>
-            <div class="editor-head"><div><p class="eyebrow">RAKING / IPF</p><h2 id="weight-editor-title">Новый вес</h2></div><button id="close-weight-editor" class="icon-button" type="button" aria-label="Закрыть редактор весов">×</button></div>
-            <form id="weight-form">
-              <div class="editor-scroll">
-                <label>Название веса<input id="weight-name" required maxlength="500" placeholder="Например, Вес по полу и возрасту" /></label>
-                <section class="weight-limit-card">
-                  <label class="tgl-row weight-toggle-setting"><span><strong>Ограничивать веса</strong><small>Обрезать экстремальные значения и повторно подогнать цели</small></span><span class="tgl"><input id="weight-trimming" type="checkbox" checked /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
-                  <div id="weight-bound-fields" class="weight-bound-fields">
-                    <label><span>Минимум</span><span class="weight-bound-input"><input id="weight-lower" type="number" min="0.01" step="0.01" value="0.3" /><em>×</em></span></label>
-                    <span class="weight-bound-separator">—</span>
-                    <label><span>Максимум</span><span class="weight-bound-input"><input id="weight-upper" type="number" min="0.01" step="0.01" value="3" /><em>×</em></span></label>
-                  </div>
-                </section>
-                <div class="range-heading weight-section-heading"><strong>Целевые распределения</strong><small>сумма = 100%</small></div>
-                <div id="weight-dimension-list" class="weight-dimension-list rows"></div>
-                <button id="add-weight-dimension" class="secondary compact-button add-dashed" type="button">+ Добавить распределение</button>
-                <section id="weight-preview-section" class="preview weight-preview-section" hidden><div class="preview-title"><div><h3>Диагностика веса</h3><small>Проверка качества и попадания в цели</small></div><button id="refresh-weight-preview" class="text-button" type="button">Пересчитать</button></div><div id="weight-preview" class="preview-content"></div></section>
-                <p id="weight-error" class="error" hidden></p>
-              </div>
-              <div class="editor-actions">
-                <button id="save-weight" type="submit">Рассчитать и сохранить</button>
-                <a id="download-weight" class="secondary link-button" href="#" hidden>Скачать Excel</a>
-                <button id="delete-weight" class="danger-button" type="button" hidden>Удалить</button>
-              </div>
-            </form>
-          </aside>
-        </div>
-      </section>
+        </section>
       </section>
 
       <!-- ================= Экран «AI-конструктор» ================= -->
@@ -332,9 +425,74 @@
         </div>
       </section>
     </main>
+
+    <!-- ================================================================
+         ЛИСТЫ. Настройки отчёта и пропуски по анкете — разовые действия,
+         а не объекты, которые просматривают. Вкладка заставляла их
+         заполнять всю панель; лист сам ужимается по содержимому.
+         ================================================================ -->
+    <div id="sheet-veil" class="veil" hidden>
+      <form id="report-settings-form" class="sheet" hidden>
+        <div class="sheet-head">
+          <div><h3>Настройка отчёта</h3><small>Применяется ко всему Excel и выбранному баннеру</small></div>
+          <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть настройки">×</button>
+        </div>
+        <div class="sheet-body scroll">
+          <p class="sec-cap">Расчёт</p>
+          <div class="form-row">
+            <label class="f">Уровень доверия, %<input id="report-confidence" type="number" min="0.01" max="99.99" step="0.01" value="95" required /></label>
+            <label class="f">Порог малой базы<input id="report-minimum-base" type="number" min="1" max="100000" value="30" required /></label>
+          </div>
+          <label class="f">Вес отчёта<select id="report-weight"><option value="">Без веса</option></select></label>
+
+          <p class="sec-cap">Значимые отличия</p>
+          <div class="settings-block">
+            <label class="tgl-row"><span><strong>Сравнивать подгруппы</strong><small>Отмечать значимые отличия в отчёте</small></span><span class="tgl"><input id="report-compare-subgroups" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
+            <label class="tgl-row"><span><strong>Попарные сравнения</strong><small>Между подгруппами блока</small></span><span class="tgl"><input id="report-compare-pairwise" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
+            <label class="tgl-row"><span><strong>Поправка Bonferroni</strong><small>Для множественных сравнений</small></span><span class="tgl"><input id="report-bonferroni" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
+          </div>
+          <label id="report-compare-target-label" class="f">С кем сравнивать подгруппы<select id="report-compare-target">
+            <option value="rest">С остальными (Rest) — статистически корректно</option>
+            <option value="total">С Total — как в клиентских макросах</option>
+          </select><small id="report-compare-target-help"></small></label>
+
+          <p class="sec-cap">Волны</p>
+          <div class="form-row">
+            <label class="f">Схема сравнения<select id="report-wave-comparison"><option value="none">Не сравнивать</option><option value="previous">С предыдущей волной</option><option value="control">С контрольной волной</option></select></label>
+            <label id="report-wave-control-label" class="f" hidden>Контрольная волна<select id="report-wave-control"></select></label>
+          </div>
+          <p id="report-settings-error" class="error" hidden></p>
+        </div>
+        <div class="sheet-foot">
+          <span class="foot-note">Сохраняется в конфигурацию проекта</span>
+          <button type="button" class="secondary" data-close-sheet>Отмена</button>
+          <button id="save-report-settings" type="submit">Сохранить настройки</button>
+        </div>
+      </form>
+
+      <aside id="not-applicable-editor" class="sheet wide" hidden>
+        <div class="sheet-head">
+          <div><h3>Пропуски по анкете</h3><small>Найденные коды пропуска по ветке</small></div>
+          <button id="close-not-applicable" class="icon-button" type="button" aria-label="Закрыть панель">×</button>
+        </div>
+        <form id="not-applicable-form">
+          <div class="sheet-body editor-scroll scroll">
+            <p class="muted na-intro">Предлагаются только коды без подписи у переменных, где подписаны хотя бы две категории, и только вне диапазона подписанных кодов. Подписанный ноль и переменные вовсе без подписей не предлагаются — там заглушку от настоящего нуля по данным не отличить, отметьте её в карточке вопроса вручную.</p>
+            <div id="not-applicable-groups" class="na-groups"></div>
+            <p id="not-applicable-error" class="error" hidden></p>
+          </div>
+          <div class="sheet-foot">
+            <span class="foot-note"></span>
+            <button type="button" class="secondary" data-close-sheet>Отмена</button>
+            <button id="apply-not-applicable" type="submit">Пометить выбранные</button>
+          </div>
+        </form>
+      </aside>
+    </div>
+
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260812-report-settings-1" defer></script>
-    <script src="/app.js?v=20260812-report-settings-1" defer></script>
+    <script src="/shell.js?v=20260812-shell-v2" defer></script>
+    <script src="/app.js?v=20260812-shell-v2" defer></script>
   </body>
 </html>

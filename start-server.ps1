@@ -1,9 +1,9 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $projectPath = $PSScriptRoot
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
 $appBaseUrl = "http://127.0.0.1:8000"
-$appUrl = "$appBaseUrl/?v=20260812-report-settings-1"
+$appUrl = "$appBaseUrl/?v=20260812-shell-v2"
 $healthUrl = "$appBaseUrl/api/health"
 
 Set-Location $projectPath

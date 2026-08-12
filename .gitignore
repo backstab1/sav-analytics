@@ -51,6 +51,7 @@ Thumbs.db
 .codex/
 .agents/
 .codex_work/
+.claude/
 
 # Logs and temporary files
 *.log
