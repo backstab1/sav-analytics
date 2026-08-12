@@ -153,6 +153,19 @@ snapshot полного `statistics.txt` и проверкой immutable XLSX.
 .\.venv\Scripts\python.exe -m pytest -m browser
 ```
 
+`test_full_analyst_workflow` изредка падает по таймауту на скачивании отчёта.
+Это не регрессия интерфейса: воспроизводится и на более старых коммитах, а
+причина пока не найдена. Что известно: весь тест в норме занимает около 6 секунд,
+скачивание — около секунды при лимите в 90, поэтому дело не в нехватке времени;
+полный набор проходит и под стопроцентной загрузкой процессора. При падении тест
+дочитывает `#report-status` и жалобы preflight, так что стадия отказа видна прямо
+в сообщении. Если поймали падение, снимите заодно трассировку:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m browser --tracing=retain-on-failure --screenshot=only-on-failure
+.\.venv\Scripts\python.exe -m playwright show-trace test-results\<каталог теста>\trace.zip
+```
+
 Покрытие считается тем же прогоном:
 
 ```powershell

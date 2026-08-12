@@ -27,6 +27,7 @@ import pyreadstat
 import pytest
 import uvicorn
 from playwright.sync_api import Page, expect
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from sav_analytics.api import app, get_repository
 from sav_analytics.repository import ProjectRepository
@@ -120,6 +121,39 @@ def _open_view(page: Page, view: str) -> None:
     page.click(f".tabs button[data-view='{view}']")
 
 
+def _panel_text(page: Page, selector: str) -> str:
+    """Текст диагностического блока, если он вообще появился на странице."""
+    locator = page.locator(selector)
+    if not locator.count():
+        return "—"
+    return " ".join(locator.first.inner_text().split()) or "—"
+
+
+def _download_artifact(page: Page, link: str, target: Path) -> Path:
+    """Скачать подготовленный артефакт, объяснив причину, если он не поехал.
+
+    Скачивание асинхронное: preflight, запуск сборки, опрос задачи и только
+    потом сам файл. На любом отказе приложение кладёт причину в #report-status
+    и оставляет её на экране, но download при этом просто не наступает, и
+    expect_download отдаёт голый TimeoutError без единого намёка на то, что
+    случилось. Этот тест изредка падает именно так, поэтому причину дочитываем
+    со страницы — иначе следующее падение снова будет нечитаемым.
+    """
+    page.click("#export-toggle")
+    try:
+        with page.expect_download(timeout=REPORT_TIMEOUT) as download:
+            page.click(link)
+    except PlaywrightTimeoutError as error:
+        raise AssertionError(
+            f"{link} не отдал файл за {REPORT_TIMEOUT // 1000} с.\n"
+            f"Статус отчёта: {_panel_text(page, '#report-status')}\n"
+            f"Проверка конфигурации: {_panel_text(page, '#report-findings')}\n"
+            f"Прогресс: {_panel_text(page, '#report-progress')}"
+        ) from error
+    download.value.save_as(target)
+    return target
+
+
 def test_full_analyst_workflow_from_upload_to_downloaded_files(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
@@ -183,17 +217,8 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     )
 
     # Подготовка и скачивание обоих артефактов.
-    page.click("#export-toggle")
-    with page.expect_download(timeout=REPORT_TIMEOUT) as download:
-        page.click("#download-report")
-    workbook = tmp_path / "topline.xlsx"
-    download.value.save_as(workbook)
-
-    page.click("#export-toggle")
-    with page.expect_download(timeout=REPORT_TIMEOUT) as download:
-        page.click("#download-statistics")
-    audit = tmp_path / "statistics.txt"
-    download.value.save_as(audit)
+    workbook = _download_artifact(page, "#download-report", tmp_path / "topline.xlsx")
+    audit = _download_artifact(page, "#download-statistics", tmp_path / "statistics.txt")
 
     # Скачалось именно то, что должно: настоящая книга и настоящий аудит.
     with ZipFile(workbook) as archive:
