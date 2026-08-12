@@ -68,6 +68,7 @@
   --bars: var(--bar);
 
   /* Оболочка рабочей области: рельс разделов, инспектор, поля вокруг. */
+  --project-bar: 44px;
   --rail: 200px;
   --insp: 408px;
   --shell-gap: 12px;
@@ -103,11 +104,10 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
        border-radius: 6px; font: 500 var(--t-sm)/1.4 "SF Mono", Menlo, Consolas, monospace; }
 
 /* ================================================================
-   ЯРУС 1 — единственный
+   ЯРУС 1 — глобальный
 
-   Бренд, экраны, открытый проект, сводка и действия в одной строке
-   48px. Всё, что относится к проекту, помечено .project-only и
-   появляется вместе с ним (класс project-open на body ставит shell.js).
+   Бренд слева, экраны и аккаунт справа. Не зависит от того, открыт ли
+   проект: всё проектное живёт ярусом ниже, внутри рабочей области.
    ================================================================ */
 .bar {
   height: var(--bar); padding: 0 16px 0 18px;
@@ -128,21 +128,31 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
 .brand span { color: var(--c-brand); }
 .bar-sep { width: 1px; height: 18px; background: var(--c-border-strong); flex-shrink: 0; }
 .bar-grow { flex: 1 1 auto; min-width: 4px; }
-body:not(:has(#workspace:not([hidden]))) .project-only { display: none !important; }
+/* ================================================================
+   ЯРУС 2 — проектный
 
-/* Открытый проект: переключатель в шапке вместо заголовка H1 во втором ярусе. */
-.project {
-  display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 280px;
+   Что открыто, из чего это состоит и что уйдёт в Excel. Лежит внутри
+   рабочей области, поэтому без проекта его нет вовсе, а не спрятан.
+   ================================================================ */
+.project-bar {
+  height: var(--project-bar); padding: 0 var(--shell-pad) 0 18px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--c-border);
+}
+.chip-project {
+  display: flex; align-items: center; gap: 7px; flex: 0 0 auto;
+  min-width: 0; max-width: 300px;
   padding: 5px 9px 5px 11px; border-radius: 9px;
   background: transparent; color: var(--c-ink);
 }
-.project:hover { background: var(--c-surface-soft); transform: none; }
-.project b {
+.chip-project:hover { background: var(--c-surface-soft); transform: none; }
+.chip-project b {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: var(--font-display); font-size: var(--t-base); font-weight: 700;
   letter-spacing: -0.015em;
 }
-.project svg { width: 11px; height: 11px; color: var(--c-ink-3); flex-shrink: 0; }
+.chip-project svg { width: 11px; height: 11px; color: var(--c-ink-3); flex-shrink: 0; }
+
 
 /* Сводка — чипы в строку вместо четырёх карточек 100×56 во втором ярусе. */
 .bar-stats { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
@@ -166,17 +176,6 @@ body:not(:has(#workspace:not([hidden]))) .project-only { display: none !importan
 /* Строка «что уйдёт в Excel» переехала в подсказку чипов: в ярусе на неё
    нет места, а нужна она в момент выгрузки. */
 .bar-state { display: none; }
-
-.bar .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 7px 15px; border-radius: var(--r-pill);
-  background: var(--c-brand); color: #fff;
-  font-size: var(--t-sm); font-weight: 600; white-space: nowrap;
-}
-.bar .btn svg { width: 15px; height: 15px; flex-shrink: 0; }
-.bar .btn.quiet { background: var(--c-surface-soft); color: var(--c-ink); }
-.bar .btn.quiet:hover { background: #ececef; }
-.bar .btn.compact { padding: 6px 12px; font-size: var(--t-xs); }
 
 .avatar {
   display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0;
@@ -309,7 +308,7 @@ textarea { resize: vertical; min-height: 56px; line-height: 1.45; }
 .link-button[aria-disabled="true"] { cursor: wait; opacity: 0.55; pointer-events: none; }
 
 .shell {
-  height: calc(100dvh - var(--bar));
+  height: calc(100dvh - var(--bar) - var(--project-bar));
   display: grid; grid-template-columns: var(--rail) minmax(0, 1fr);
   gap: var(--shell-gap); padding: var(--shell-pad) var(--shell-pad) calc(var(--shell-pad) + 2px);
 }
@@ -558,12 +557,6 @@ td small { display: block; max-width: 560px; margin-top: 1px; color: var(--c-ink
            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .code-column { width: 108px; }
 .code-column code { font-size: 10.5px; }
-.base-column { width: 168px; }
-.base-cell {
-  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--c-ink-2); font-size: var(--t-sm);
-}
-.base-cell.default { color: var(--c-ink-4); }
 
 .question-row { cursor: pointer; transition: background 140ms var(--ease); }
 .question-row:hover td { background: var(--c-surface-soft); }
@@ -1242,9 +1235,10 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   .upload-card { padding: var(--s-4); }
   .form-row { grid-template-columns: 1fr; }
   .bar { gap: 8px; padding: 0 10px; }
-  .bar .btn-text { display: none; }
+  .project-bar { gap: 8px; padding: 0 10px; }
   .bar-stats { display: none; }
-  .project { max-width: 170px; }
+  .chip-project { max-width: 200px; }
+  .export-toggle span:not(.export-caret) { display: none; }
   .toolbar { gap: 8px; padding: 0 8px 0 12px; }
   .toolbar-hint { display: none; }
   .search-field input { width: clamp(120px, 26vw, 190px); }
@@ -1489,8 +1483,14 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    один раз совпали и молча сломали вёрстку таблицы.
    ================================================================ */
 
-/* ---------- Экраны в шапке ---------- */
+/* ---------- Экраны в шапке (прижаты вправо через .bar-grow) ---------- */
 .screens { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.screens .nav-action {
+  padding: 6px 12px; border-radius: var(--r-pill);
+  background: transparent; color: var(--c-brand);
+  font-size: var(--t-sm); font-weight: 600; white-space: nowrap;
+}
+.screens .nav-action:hover { background: var(--c-brand-tint); color: var(--c-brand-hover); transform: none; }
 .screens button {
   padding: 6px 12px; border-radius: var(--r-pill);
   background: transparent; color: var(--c-ink-3);
@@ -1709,8 +1709,22 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    Это действие, а не экран, поэтому не подсвечивается как текущий раздел. */
 
 /* ---------- Шапка панели: вкладки видов и техническое меню ---------- */
-/* Меню выгрузки живёт в шапке. */
+/* Меню выгрузки — техническое действие, а не главная кнопка экрана. */
 .export-menu { position: relative; flex-shrink: 0; }
+.export-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: var(--r-1);
+  background: var(--c-surface-soft); color: var(--c-ink-2);
+  font-size: var(--t-xs); font-weight: 600;
+}
+.export-toggle:hover { background: #ececef; color: var(--c-ink); }
+.export-toggle svg { width: 15px; height: 15px; }
+.export-toggle[aria-expanded="true"] { background: var(--c-brand-tint); color: var(--c-brand); }
+.export-caret {
+  width: 0; height: 0; margin-left: 1px;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+}
 .export-list {
   position: absolute; right: 0; top: calc(100% + 8px); z-index: 100;
   min-width: 228px; padding: 6px;

@@ -1095,20 +1095,17 @@ function renderTable() {
     && matchesStructureSearch(question.code, question.label, originalQuestionLabel(question))
   );
   updateStructureSearchCount(questions.length, allQuestions.length);
-  // Код и база вынесены в свои колонки: раньше код был приклеен к
-  // названию, база не показывалась вовсе, и колонка «Вопрос» забирала
-  // 76% ширины ни на что.
-  const filters = configuredFilters();
+  // Код вынесен в свою колонку: раньше он был приклеен к названию, и
+  // колонка «Вопрос» забирала 76% ширины ни на что.
   document.querySelector("#table-head").innerHTML =
     "<th class=\"drag-cell\" aria-label=\"Порядок\"></th>"
     + "<th class=\"code-column\">Код</th>"
     + "<th class=\"question-cell\">Вопрос</th>"
     + "<th class=\"type-column\">Тип</th>"
     + "<th class=\"count-column\">Перем.</th>"
-    + "<th class=\"base-column\">База</th>"
     + "<th class=\"status-column\">Статус</th>";
   if (!questions.length) {
-    document.querySelector("#table-body").innerHTML = emptySearchRow(7, "Вопросы не найдены.");
+    document.querySelector("#table-body").innerHTML = emptySearchRow(6, "Вопросы не найдены.");
     return;
   }
   document.querySelector("#table-body").innerHTML = questions.map(question => {
@@ -1116,7 +1113,6 @@ function renderTable() {
     const warnings = (question.warnings || []).join(" · ");
     const title = `${question.code} — ${question.label}`;
     const sub = warnings || sourceLabel;
-    const base = filters.find(item => item.id === question.base_filter_id);
     // Пока список отфильтрован, порядок менять нельзя: соседи в выдаче не соседи в отчёте.
     const draggable = structureFiltered() ? "false" : "true";
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
@@ -1125,7 +1121,6 @@ function renderTable() {
       <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</span>${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
       <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
       <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
-      <td class="base-column"><span class="base-cell ${base ? "" : "default"}" title="${escapeAttribute(base ? base.name : "Стандартная база")}">${escapeHtml(base ? base.name : "стандартная")}</span></td>
       <td class="status-column"><span class="status ${!question.included_in_report ? "excluded" : (question.recognition === "auto_review" ? "review" : "")}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "Готов") : "Исключён"}</span></td>
     </tr>`;
   }).join("");
