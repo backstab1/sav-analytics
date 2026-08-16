@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .weight_validation import WEIGHT_ROLE, weight_role
+
 DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "compare_to_total": False,
     "compare_target": "rest",
@@ -31,6 +33,14 @@ def validate_report_settings(settings: dict[str, Any], project: dict[str, Any]) 
         for variable in project["inspection"]["variables"]
     ):
         raise ReportSettingsError("Весовая переменная не найдена в SAV.")
+    # Роль проверяется здесь, потому что для неё не нужен массив: этот путь
+    # проходят и старые клиенты, присылающие вес на баннере. Распределение
+    # проверяет роутер — там есть исходный файл.
+    if weight_variable and weight_role(weight_variable, project) != WEIGHT_ROLE:
+        raise ReportSettingsError(
+            f"Переменная {weight_variable} не объявлена весом. "
+            "Весом может быть только переменная с ролью «Вес»."
+        )
 
     calculated_weight_id = settings.get("calculated_weight_id")
     if calculated_weight_id and not any(

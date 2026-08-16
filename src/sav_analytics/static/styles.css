@@ -1472,6 +1472,16 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .diag-grid dd { margin: 0; font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .diag-grid dd.ok { color: var(--c-brand); }
 
+/* Разбор готового веса в настройках отчёта: вердикт стоит над числами, потому
+   что решает он, а числа объясняют. */
+.weight-verdict { display: grid; gap: var(--s-3); margin-top: var(--s-3); }
+.weight-verdict .error, .weight-verdict .muted, .weight-verdict .weight-ok { margin: 0; }
+.weight-ok { color: var(--c-ok-ink); font-size: var(--t-sm); font-weight: 500; }
+.declare-weight { margin-top: var(--s-3); font-size: var(--t-sm); }
+.declare-weight summary { cursor: pointer; color: var(--c-ink-3); }
+.declare-weight p { margin: var(--s-3) 0; }
+.declare-weight .form-row { align-items: end; }
+
 /* ================================================================
    Оболочка экранов
 

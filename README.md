@@ -53,8 +53,13 @@
   одинаковые подгруппы вложенного баннера, стрелки в Excel и аудит тестов;
 - индивидуальная пометка шкал как NPS (`0–10`) или CSAT (`1–5`) с фиксированными
   группами, итоговыми показателями и специализированными z-тестами балансов;
-- применение готовой положительной весовой переменной из SAV с нормализацией к среднему 1,
-  взвешенными показателями и эффективной базой Киша;
+- применение готовой весовой переменной из SAV с нормализацией к среднему 1,
+  взвешенными показателями и эффективной базой Киша. Весом становится только
+  переменная с ролью «Вес»: любую другую числовую переменную нужно объявить
+  весом явным действием, и перед применением показывается разбор распределения —
+  min/max, среднее, доля экстремальных значений, эффективная база и design effect.
+  Пропуски, неположительные значения, доля экстремальных выше 5% и design effect
+  выше 3 блокируют сборку отдельным кодом ошибки;
 - расчёт проектного веса методом raking/IPF по нескольким целевым распределениям,
   ограничениям веса и допуску 0,1 п.п. с диагностикой сходимости, design effect и
   распределений до/после;
@@ -142,12 +147,12 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py
 ```
 
-Сейчас набор содержит 126 pytest-кейсов для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 148 pytest-кейсов для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, проверки конфигурации
-до сборки, структуры XLSX и
+до сборки, пригодности готового веса, структуры XLSX и
 эталонных расчётов обычных и взвешенных z-test/Welch t-test, Subgroup/Rest,
 NPS и CSAT balance, взвешенного баланса и сравнения волн,
 включая сквозные регрессии multiple-response `counted_value`, построчных баз и SPSS
@@ -222,6 +227,7 @@ src/sav_analytics/
 │   ├── banner.py      # баннерные колонки
 │   ├── report_settings.py # общие настройки расчёта и чтение старых проектов
 │   ├── preflight.py   # проверка конфигурации до запуска сборки
+│   ├── weight_validation.py # пригодность готового веса: роль и распределение
 │   ├── not_applicable.py  # коды пропуска по ветке анкеты и поиск кандидатов
 │   ├── filtering.py   # базы и фильтры
 │   ├── report.py      # совместимый публичный фасад отчётов

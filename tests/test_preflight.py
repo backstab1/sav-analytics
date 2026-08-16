@@ -126,15 +126,16 @@ def test_empty_report_filter_is_a_blocking_error(tmp_path: Path) -> None:
     assert "пустую выборку" in report["errors"][0]["message"]
 
 
-def test_unusable_weight_is_a_blocking_error(tmp_path: Path) -> None:
-    source = tmp_path / "bad_weight.sav"
-    frame = pd.DataFrame({"GROUP": [1, 2] * 20, "W": [1.0, 0.0] * 20})
-    pyreadstat.write_sav(
-        frame, source, variable_value_labels={"GROUP": {1: "A", 2: "B"}}
-    )
-    inspection = inspect_sav(source).to_dict()
-    project = _project(
+def _weight_project(inspection: dict, *, declared: bool) -> dict:
+    questions = [
+        dict(question, role="weight", included_in_report=False)
+        if declared and question["source_variables"] == ["W"]
+        else question
+        for question in inspection["questions"]
+    ]
+    return _project(
         inspection,
+        questions=questions,
         banners=[
             {
                 "id": "banner-1",
@@ -146,11 +147,79 @@ def test_unusable_weight_is_a_blocking_error(tmp_path: Path) -> None:
         report_banner_id="banner-1",
     )
 
+
+def test_unusable_weight_is_a_blocking_error(tmp_path: Path) -> None:
+    """Нулевой вес блокирует сборку и называет свою причину, а не общую."""
+    source = tmp_path / "bad_weight.sav"
+    frame = pd.DataFrame({"GROUP": [1, 2] * 20, "W": [1.0, 0.0] * 20})
+    pyreadstat.write_sav(
+        frame, source, variable_value_labels={"GROUP": {1: "A", 2: "B"}}
+    )
+    inspection = inspect_sav(source).to_dict()
+
+    report = run_preflight(source, _weight_project(inspection, declared=True)).to_dict()
+
+    assert report["can_prepare"] is False
+    assert _codes(report["errors"]) == {"WEIGHT_NOT_POSITIVE"}
+    assert "положительными" in report["errors"][0]["message"]
+
+
+def test_weight_without_the_weight_role_is_a_blocking_error(tmp_path: Path) -> None:
+    """Не объявленная весом переменная не доходит до расчёта.
+
+    Само распределение здесь безупречно: все веса равны единице. Отвергает его
+    ровно отсутствие роли — то необходимое условие, которого не было до P1.0.
+    """
+    source = tmp_path / "undeclared_weight.sav"
+    frame = pd.DataFrame({"GROUP": [1, 2] * 20, "W": [1.0] * 40})
+    pyreadstat.write_sav(
+        frame, source, variable_value_labels={"GROUP": {1: "A", 2: "B"}}
+    )
+    inspection = inspect_sav(source).to_dict()
+
+    report = run_preflight(source, _weight_project(inspection, declared=False)).to_dict()
+
+    assert report["can_prepare"] is False
+    assert _codes(report["errors"]) == {"WEIGHT_ROLE_REQUIRED"}
+    assert "не объявлена весом" in report["errors"][0]["message"]
+
+
+def test_identifier_never_passes_as_a_weight(tmp_path: Path) -> None:
+    """`ID` весом не проходит даже после явного объявления ролью.
+
+    Это тот самый сценарий из аудита 14 августа. Роль здесь снята с проверки
+    намеренно: остаётся диагностика распределения, и она обязана отбить
+    порядковый номер сама. Design effect на таком весе всего 1,33 — ловит его
+    доля экстремальных значений.
+    """
+    source = tmp_path / "identifier_weight.sav"
+    rows = 240
+    frame = pd.DataFrame(
+        {
+            "ID": [float(index + 1) for index in range(rows)],
+            "GROUP": [1 + index % 2 for index in range(rows)],
+        }
+    )
+    pyreadstat.write_sav(
+        frame, source, variable_value_labels={"GROUP": {1: "A", 2: "B"}}
+    )
+    inspection = inspect_sav(source).to_dict()
+    questions = [
+        dict(question, role="weight", included_in_report=False)
+        if question["source_variables"] == ["ID"]
+        else question
+        for question in inspection["questions"]
+    ]
+    project = _project(
+        inspection,
+        questions=questions,
+        report_settings={"weight_variable": "ID"},
+    )
+
     report = run_preflight(source, project).to_dict()
 
     assert report["can_prepare"] is False
-    assert _codes(report["errors"]) == {"REPORT_NOT_BUILDABLE"}
-    assert "положительными" in report["errors"][0]["message"]
+    assert _codes(report["errors"]) == {"WEIGHT_EXTREME_VALUES"}
 
 
 def test_small_and_empty_banner_categories_only_warn(tmp_path: Path) -> None:

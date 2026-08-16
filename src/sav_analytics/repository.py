@@ -181,6 +181,34 @@ class ProjectRepository:
             if any(item["code"] != code and item.get("role") == "wave" for item in questions):
                 raise InvalidUploadError("В проекте может быть только одна переменная волны.")
             changes["included_in_report"] = False
+        if final_role == "weight":
+            # «Объявить весом» — явное действие аналитика: оно и есть то
+            # необходимое условие, которого не хватало, чтобы `ID` не проходил
+            # весом молча. Пригодность распределения проверяется отдельно, при
+            # выборе веса в настройках отчёта.
+            if len(question["source_variables"]) != 1:
+                raise InvalidUploadError("Весом можно объявить только одиночную переменную.")
+            variable_name = question["source_variables"][0]
+            variable = next(
+                item
+                for item in project["inspection"]["variables"]
+                if item["name"] == variable_name
+            )
+            if variable["storage_type"] != "numeric":
+                raise InvalidUploadError("Весом можно объявить только числовую переменную.")
+            changes["included_in_report"] = False
+        if (
+            question.get("role") == "weight"
+            and final_role != "weight"
+            and (project["configuration"].get("report_settings") or {}).get("weight_variable")
+            in question["source_variables"]
+        ):
+            # Снятие роли с выбранного веса оставило бы в настройках отчёта
+            # переменную, которую сборка уже отвергнет: отказ пришёл бы позже
+            # и в другом месте, чем действие, которое его вызвало.
+            raise InvalidUploadError(
+                "Эта переменная выбрана весом отчёта. Сначала смените вес в настройках отчёта."
+            )
         special_metric = changes.get("special_metric", question.get("special_metric", "none"))
         if special_metric in {"nps", "csat"}:
             if final_type != "scale" or len(question["source_variables"]) != 1:

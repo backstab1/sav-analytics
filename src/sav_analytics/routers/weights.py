@@ -10,10 +10,31 @@ from fastapi.responses import StreamingResponse
 from ..api_dependencies import get_repository
 from ..api_schemas import CalculatedWeightDefinition
 from ..core.configuration_integrity import ConfigurationIntegrityError
+from ..core.weight_validation import assess_project_weight
 from ..core.weighting import WeightingError, build_raking_export, calculate_raking_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(prefix="/api/projects/{project_id}/weights", tags=["weights"])
+
+
+@router.get("/ready/{variable}/diagnostics")
+def ready_weight_diagnostics(
+    project_id: UUID,
+    variable: str,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Разбор готового веса до его применения.
+
+    Отдаёт и вердикт, и числа: `requirements.md` §8 требует показывать
+    распределение веса перед применением, а не только сообщать об отказе.
+    """
+
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    return assess_project_weight(source, variable, project).to_dict()
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

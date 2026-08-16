@@ -272,3 +272,45 @@ def test_upload_rejects_a_file_that_is_not_sav(
 
     expect(page.locator("#form-error")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#workspace")).to_be_hidden()
+
+
+def test_identifier_cannot_be_chosen_as_a_report_weight(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Обязательный сценарий P1.0: `ID` не становится весом через интерфейс.
+
+    Проверяется вся цепочка защиты, а не одно звено: в списке весов `ID` нет,
+    после явного объявления весом он появляется, но разбор распределения
+    отвергает его и не даёт сохранить настройки.
+    """
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    _open_view(page, "report-settings")
+    expect(page.locator("#report-weight")).to_be_visible(timeout=UI_TIMEOUT)
+
+    # Ни одна переменная массива весом не объявлена, поэтому выбирать нечего.
+    expect(page.locator("#report-weight option")).to_have_count(1, timeout=UI_TIMEOUT)
+    expect(page.locator("#report-weight-help")).to_contain_text("Ни одна переменная")
+
+    # Явное действие: аналитик настаивает, что `ID` — вес.
+    page.locator("#report-weight-declare summary").click()
+    page.select_option("#report-weight-candidate", "ID")
+    page.click("#report-weight-declare-button")
+
+    # Роль получена, но отчёт на таком весе не собрать: решает распределение.
+    expect(page.locator("#report-weight-diagnostics")).to_contain_text(
+        "не похож на поправочный вес", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#save-report-settings")).to_be_disabled()
+
+    # Проверка не запрещает взвешивание вообще: переменная с правдоподобным
+    # распределением, объявленная весом, проходит. Осмысленность веса остаётся
+    # на аналитике — машина отвечает за то, что число не сломано.
+    page.select_option("#report-weight-candidate", "AGE")
+    page.click("#report-weight-declare-button")
+    expect(page.locator("#report-weight-diagnostics")).to_contain_text(
+        "Вес пригоден", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#save-report-settings")).to_be_enabled()

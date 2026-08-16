@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..api_dependencies import get_repository
 from ..api_schemas import ReportSettingsDefinition
 from ..core.report_settings import ReportSettingsError, validate_report_settings
+from ..core.weight_validation import ensure_project_weight_usable
 from ..repository import ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["report-settings"])
@@ -22,6 +23,12 @@ def update_report_settings(
     payload = definition.model_dump(mode="json")
     try:
         project = repository.get(project_id)
+        if payload.get("weight_variable"):
+            # Раньше проверки: непригодный вес отдаёт собственный код ошибки,
+            # а не общий отказ настроек, и интерфейс ведёт аналитика в структуру.
+            ensure_project_weight_usable(
+                repository.source_path(project_id), payload["weight_variable"], project
+            )
         validate_report_settings(payload, project)
         return repository.update_report_settings(project_id, payload)
     except ProjectNotFoundError as exc:

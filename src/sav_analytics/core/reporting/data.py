@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +16,7 @@ from ..filtering import evaluate_filter_frame
 from ..multiple_response import response_definition
 from ..not_applicable import not_applicable_values
 from ..report_settings import resolved_report_settings
+from ..weight_validation import assess_ready_weight, weight_role
 from ..weighting import WeightingError, calculate_raking
 from .models import ReportError
 
@@ -142,7 +142,7 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
         frame,
         report_settings.get("weight_variable"),
         report_settings.get("calculated_weight_id"),
-        configuration,
+        project,
     )
     statistical_settings = {
         "confidence_level": report_settings["confidence_level"],
@@ -178,8 +178,9 @@ def _report_weights(
     frame: pd.DataFrame,
     variable: str | None,
     calculated_weight_id: str | None,
-    configuration: dict[str, Any],
+    project: dict[str, Any],
 ) -> tuple[pd.Series | None, str | None]:
+    configuration = project["configuration"]
     if variable and calculated_weight_id:
         raise ReportError("Выберите готовый или рассчитанный вес, но не оба сразу.")
     if calculated_weight_id:
@@ -201,11 +202,23 @@ def _report_weights(
     if not variable:
         return None, None
     if variable not in frame.columns:
-        raise ReportError("Весовая переменная не найдена в SAV.")
-    weights = pd.to_numeric(frame[variable], errors="coerce")
-    if weights.isna().any():
-        raise ReportError("Весовая переменная должна быть числовой и заполненной для всех строк.")
-    if not weights.map(math.isfinite).all() or (weights <= 0).any():
-        raise ReportError("Все веса должны быть конечными положительными числами.")
-    normalized = weights.astype(float) / float(weights.mean())
+        raise ReportError("Весовая переменная не найдена в SAV.", code="WEIGHT_VARIABLE_NOT_FOUND")
+    # Ту же оценку до сборки делают интерфейс и API. Здесь она стоит последним
+    # рубежом: проект мог быть отредактирован в обход интерфейса или сохранён
+    # до появления проверки.
+    assessment = assess_ready_weight(
+        frame[variable],
+        variable=variable,
+        role=weight_role(variable, project),
+    )
+    if not assessment.usable:
+        # Наружу отдаётся `ReportError` с кодом первой проблемы: сборка и
+        # preflight ловят один тип ошибки, но причина отказа не смазывается в
+        # общий `REPORT_NOT_BUILDABLE`.
+        problem = assessment.problems[0]
+        raise ReportError(
+            " ".join(item.message for item in assessment.problems), code=problem.code
+        )
+    weights = pd.to_numeric(frame[variable], errors="coerce").astype(float)
+    normalized = weights / float(weights.mean())
     return normalized, variable

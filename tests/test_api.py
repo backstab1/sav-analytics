@@ -1230,3 +1230,162 @@ def test_saving_keeps_metadata_recognition_untouched(tmp_path: Path) -> None:
             assert after == before
     finally:
         app.dependency_overrides.clear()
+
+
+def _write_weight_fixture(path: Path) -> None:
+    """240 интервью: порядковый номер, группа и правдоподобный вес.
+
+    Повторяет проверочный сценарий аудита 14 августа 2026 — там весом был
+    сохранён именно `ID`.
+    """
+    rows = 240
+    pyreadstat.write_sav(
+        pd.DataFrame(
+            {
+                "ID": [float(index + 1) for index in range(rows)],
+                "GROUP": [1 + index % 2 for index in range(rows)],
+                "W": [1.4 if index % 3 else 0.8 for index in range(rows)],
+            }
+        ),
+        path,
+        variable_value_labels={"GROUP": {1: "Первая", 2: "Вторая"}},
+        variable_measure={"GROUP": "nominal", "W": "scale"},
+    )
+
+
+def _weight_settings(variable: str | None) -> dict:
+    return {
+        "compare_to_total": False,
+        "compare_target": "rest",
+        "compare_pairwise": False,
+        "confidence_level": 0.95,
+        "bonferroni": False,
+        "show_p_values": False,
+        "minimum_base": 30,
+        "weight_variable": variable,
+        "calculated_weight_id": None,
+        "wave_comparison": "none",
+        "wave_control_value": None,
+    }
+
+
+def test_identifier_cannot_be_saved_as_a_report_weight(tmp_path: Path) -> None:
+    """Сценарий аудита: `ID` весом не сохраняется ни до, ни после смены роли."""
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "weights.sav"
+    _write_weight_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                data={"name": "Вес"},
+                files={"file": ("weights.sav", stream, "application/octet-stream")},
+            ).json()
+            project_id = project["id"]
+
+            rejected = client.put(
+                f"/api/projects/{project_id}/report-settings",
+                json=_weight_settings("ID"),
+            )
+            assert rejected.status_code == 422
+            assert rejected.json()["error_code"] == "WEIGHT_ROLE_REQUIRED"
+
+            declared = client.patch(
+                f"/api/projects/{project_id}/questions/ID",
+                json={"role": "weight"},
+            )
+            assert declared.status_code == 200
+            question = next(
+                item
+                for item in declared.json()["configuration"]["questions"]
+                if item["code"] == "ID"
+            )
+            assert question["role"] == "weight"
+            # Объявленный весом вопрос уходит из отчёта: он больше не вопрос.
+            assert question["included_in_report"] is False
+
+            # Роль получена, и всё равно отказ: распределение порядкового номера
+            # весом не является. Одной роли для защиты было бы мало.
+            still_rejected = client.put(
+                f"/api/projects/{project_id}/report-settings",
+                json=_weight_settings("ID"),
+            )
+            assert still_rejected.status_code == 422
+            assert still_rejected.json()["error_code"] == "WEIGHT_EXTREME_VALUES"
+
+            diagnostics = client.get(
+                f"/api/projects/{project_id}/weights/ready/ID/diagnostics"
+            ).json()
+            assert diagnostics["usable"] is False
+            assert [item["code"] for item in diagnostics["problems"]] == [
+                "WEIGHT_EXTREME_VALUES"
+            ]
+            assert diagnostics["diagnostics"]["count"] == 240
+            assert diagnostics["diagnostics"]["maximum"] == 240.0
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_declared_weight_passes_and_cannot_lose_its_role_while_selected(
+    tmp_path: Path,
+) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "weights.sav"
+    _write_weight_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                data={"name": "Вес"},
+                files={"file": ("weights.sav", stream, "application/octet-stream")},
+            ).json()
+            project_id = project["id"]
+
+            # `W` не попадает в список точных имён `infer_role`, поэтому роль
+            # назначается явным действием — ради этого случая оно и заведено.
+            assert (
+                client.patch(
+                    f"/api/projects/{project_id}/questions/W", json={"role": "weight"}
+                ).status_code
+                == 200
+            )
+            accepted = client.put(
+                f"/api/projects/{project_id}/report-settings",
+                json=_weight_settings("W"),
+            )
+            assert accepted.status_code == 200
+            assert accepted.json()["configuration"]["report_settings"]["weight_variable"] == "W"
+
+            diagnostics = client.get(
+                f"/api/projects/{project_id}/weights/ready/W/diagnostics"
+            ).json()
+            assert diagnostics["usable"] is True
+            assert diagnostics["problems"] == []
+            assert diagnostics["diagnostics"]["design_effect"] < 1.1
+
+            preflight = client.get(f"/api/projects/{project_id}/reports/preflight").json()
+            assert preflight["can_prepare"] is True
+
+            # Снять роль с выбранного веса нельзя: отчёт остался бы настроенным
+            # на переменную, которую сборка уже отвергает.
+            locked = client.patch(
+                f"/api/projects/{project_id}/questions/W", json={"role": "question"}
+            )
+            assert locked.status_code == 422
+            assert "выбрана весом отчёта" in locked.json()["detail"]
+
+            released = client.put(
+                f"/api/projects/{project_id}/report-settings",
+                json=_weight_settings(None),
+            )
+            assert released.status_code == 200
+            assert (
+                client.patch(
+                    f"/api/projects/{project_id}/questions/W", json={"role": "question"}
+                ).status_code
+                == 200
+            )
+    finally:
+        app.dependency_overrides.clear()

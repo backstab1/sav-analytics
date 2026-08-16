@@ -6,7 +6,16 @@ from ..statistics import StatisticalTestResult
 
 
 class ReportError(ValueError):
-    pass
+    """Сборка невозможна.
+
+    `code` заполняется там, где у отказа есть собственная причина, отличимая от
+    общей неготовности конфигурации: preflight отдаёт его как код находки,
+    иначе непригодный вес и сломанный баннер выглядят для клиента одинаково.
+    """
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)

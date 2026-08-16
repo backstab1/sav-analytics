@@ -47,6 +47,7 @@ jobs:
           src/sav_analytics/report_cache.py
           src/sav_analytics/report_jobs.py
           src/sav_analytics/configuration_revision.py
+          src/sav_analytics/core/weight_validation.py
 
       - name: Pytest с покрытием
         run: >-

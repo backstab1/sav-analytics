@@ -193,6 +193,8 @@ document.querySelector("#delete-weight").addEventListener("click", deleteWeight)
 document.querySelector("#refresh-weight-preview").addEventListener("click", loadWeightPreview);
 document.querySelector("#weight-trimming").addEventListener("change", renderWeightTrimming);
 document.querySelector("#report-wave-comparison").addEventListener("change", syncReportWaveControl);
+document.querySelector("#report-weight").addEventListener("change", loadReportWeightDiagnostics);
+document.querySelector("#report-weight-declare-button").addEventListener("click", declareSelectedWeight);
 document.querySelector("#report-compare-target").addEventListener("change", syncReportCompareTargetHint);
 document.querySelector("#report-compare-subgroups").addEventListener("change", syncReportCompareTargetHint);
 document.querySelector("#weight-dimension-list").addEventListener("click", event => {
@@ -1034,15 +1036,7 @@ function renderReportSettings() {
   const selectedWeight = settings.calculated_weight_id
     ? `calculated:${settings.calculated_weight_id}`
     : settings.weight_variable ? `ready:${settings.weight_variable}` : "";
-  const readyOptions = currentProject.inspection.variables
-    .filter(variable => variable.storage_type === "numeric")
-    .map(variable => `<option value="ready:${escapeAttribute(variable.name)}" ${selectedWeight === `ready:${variable.name}` ? "selected" : ""}>Готовый: ${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`)
-    .join("");
-  const calculatedOptions = configuredWeights()
-    .map(weight => `<option value="calculated:${weight.id}" ${selectedWeight === `calculated:${weight.id}` ? "selected" : ""}>Рассчитанный: ${escapeHtml(weight.name)}</option>`)
-    .join("");
-  document.querySelector("#report-weight").innerHTML =
-    '<option value="">Без веса</option>' + readyOptions + calculatedOptions;
+  renderReportWeightSelect(selectedWeight);
 
   const waveQuestion = configuredQuestions().find(question => question.role === "wave");
   const waveVariable = waveQuestion
@@ -1060,6 +1054,144 @@ function renderReportSettings() {
   document.querySelector("#report-settings-error").hidden = true;
   syncReportWaveControl();
   syncReportCompareTargetHint();
+}
+
+// Роль берётся из конфигурации: её меняет аналитик, а `inspection` хранит
+// первичное автоопределение и после ручной правки устаревает.
+function questionByVariable(name) {
+  return configuredQuestions().find(question => (question.source_variables || []).includes(name));
+}
+
+function declaredWeightVariables() {
+  return currentProject.inspection.variables.filter(
+    variable => questionByVariable(variable.name)?.role === "weight"
+  );
+}
+
+// Кандидаты на объявление весом: числовые переменные, не объявленные весом.
+// Составные вопросы не предлагаются — весом может быть одиночная переменная.
+function weightCandidates() {
+  return currentProject.inspection.variables.filter(variable => {
+    if (variable.storage_type !== "numeric") return false;
+    const question = questionByVariable(variable.name);
+    return question && question.role !== "weight" && question.source_variables.length === 1;
+  });
+}
+
+// Список весов и разбор выбранного перерисовываются отдельно от остальной
+// формы: объявление веса не должно сбрасывать уже введённые настройки отчёта.
+function renderReportWeightSelect(selectedWeight) {
+  // В списке только объявленные весом переменные: роль — необходимое условие
+  // выбора, а не подсказка. Любая другая числовая переменная становится весом
+  // отдельным действием, меняющим роль в структуре.
+  const declared = declaredWeightVariables();
+  const readyOptions = declared
+    .map(variable => `<option value="ready:${escapeAttribute(variable.name)}" ${selectedWeight === `ready:${variable.name}` ? "selected" : ""}>Готовый: ${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`)
+    .join("");
+  // Проект, сохранённый до появления проверки, мог остаться с непригодным
+  // весом. Прятать его нельзя: настройка молча разошлась бы с тем, что видно.
+  const stale = selectedWeight.startsWith("ready:") ? selectedWeight.slice(6) : "";
+  const staleOption = stale && !declared.some(variable => variable.name === stale)
+    ? `<option value="ready:${escapeAttribute(stale)}" selected>Готовый: ${escapeHtml(stale)} — не объявлена весом</option>`
+    : "";
+  const calculatedOptions = configuredWeights()
+    .map(weight => `<option value="calculated:${weight.id}" ${selectedWeight === `calculated:${weight.id}` ? "selected" : ""}>Рассчитанный: ${escapeHtml(weight.name)}</option>`)
+    .join("");
+  document.querySelector("#report-weight").innerHTML =
+    '<option value="">Без веса</option>' + staleOption + readyOptions + calculatedOptions;
+  document.querySelector("#report-weight-help").textContent = declared.length
+    ? `Объявлено весом переменных: ${declared.length}`
+    : "Ни одна переменная не объявлена весом.";
+  renderWeightCandidates();
+  loadReportWeightDiagnostics();
+}
+
+function renderWeightCandidates() {
+  const select = document.querySelector("#report-weight-candidate");
+  const candidates = weightCandidates();
+  select.innerHTML = candidates
+    .map(variable => `<option value="${escapeAttribute(variable.name)}">${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`)
+    .join("");
+  const declareBlock = document.querySelector("#report-weight-declare");
+  declareBlock.hidden = candidates.length === 0;
+}
+
+async function declareSelectedWeight() {
+  const button = document.querySelector("#report-weight-declare-button");
+  const errorBox = document.querySelector("#report-settings-error");
+  const variable = document.querySelector("#report-weight-candidate").value;
+  const question = variable ? questionByVariable(variable) : null;
+  if (!question) return;
+  errorBox.hidden = true;
+  setBusy(button, true, "Объявляем…");
+  try {
+    currentProject = await api(
+      `/api/projects/${currentProject.id}/questions/${encodeURIComponent(question.code)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "weight" }),
+      }
+    );
+    renderProject();
+    // Объявление — половина действия: аналитик хотел этот вес, поэтому он сразу
+    // выбирается, а рядом показывается разбор распределения.
+    document.querySelector("#report-weight-declare").open = false;
+    renderReportWeightSelect(`ready:${variable}`);
+    showToast(`${variable} объявлена весом`);
+  } catch (error) {
+    showError(errorBox, error);
+  } finally {
+    setBusy(button, false, "Объявить весом");
+  }
+}
+
+// Разбор распределения показывается до применения веса, а не после отказа
+// сборки: `requirements.md` §8 требует именно этого порядка.
+async function loadReportWeightDiagnostics() {
+  const container = document.querySelector("#report-weight-diagnostics");
+  const saveButton = document.querySelector("#save-report-settings");
+  const selection = document.querySelector("#report-weight").value;
+  if (!selection.startsWith("ready:")) {
+    container.hidden = true;
+    container.innerHTML = "";
+    saveButton.disabled = false;
+    return;
+  }
+  const variable = selection.slice(6);
+  container.hidden = false;
+  container.innerHTML = '<p class="muted">Считаем распределение веса…</p>';
+  try {
+    const assessment = await api(
+      `/api/projects/${currentProject.id}/weights/ready/${encodeURIComponent(variable)}/diagnostics`
+    );
+    if (document.querySelector("#report-weight").value !== selection) return;
+    container.innerHTML = renderWeightAssessment(assessment);
+    saveButton.disabled = !assessment.usable;
+  } catch (error) {
+    container.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    saveButton.disabled = false;
+  }
+}
+
+function renderWeightAssessment(assessment) {
+  const verdict = assessment.usable
+    ? '<p class="weight-ok">Вес пригоден.</p>'
+    : assessment.problems
+      .map(problem => `<p class="error">${escapeHtml(problem.message)}</p>`)
+      .join("");
+  const notes = (assessment.notes || [])
+    .map(note => `<p class="muted">${escapeHtml(note)}</p>`)
+    .join("");
+  const diagnostics = assessment.diagnostics;
+  if (!diagnostics) return verdict + notes;
+  const metrics = [
+    [diagnostics.minimum, "Минимум"], [diagnostics.maximum, "Максимум"],
+    [diagnostics.mean, "Среднее"], [diagnostics.extreme_share_percent, "Экстремальных, %"],
+    [diagnostics.effective_base, "Эффективная база"], [diagnostics.design_effect, "Design effect"],
+  ];
+  const grid = `<dl class="diag-grid">${metrics.map(([value, label]) => `<div><dt>${escapeHtml(label)}</dt><dd class="${assessment.usable && label === "Эффективная база" ? "ok" : ""}">${formatWeightNumber(value)}</dd></div>`).join("")}</dl>`;
+  return verdict + grid + notes;
 }
 
 function renderTable() {

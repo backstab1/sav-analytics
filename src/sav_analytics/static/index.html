@@ -446,7 +446,16 @@
             <label class="f">Уровень доверия, %<input id="report-confidence" type="number" min="0.01" max="99.99" step="0.01" value="95" required /></label>
             <label class="f">Порог малой базы<input id="report-minimum-base" type="number" min="1" max="100000" value="30" required /></label>
           </div>
-          <label class="f">Вес отчёта<select id="report-weight"><option value="">Без веса</option></select></label>
+          <label class="f">Вес отчёта<select id="report-weight"><option value="">Без веса</option></select><small id="report-weight-help"></small></label>
+          <details id="report-weight-declare" class="declare-weight">
+            <summary>Объявить весом другую переменную</summary>
+            <p class="muted">Весом может быть только переменная с ролью «Вес». Роль меняется в структуре — здесь то же действие короткой дорогой.</p>
+            <div class="form-row">
+              <label class="f">Числовая переменная<select id="report-weight-candidate"></select></label>
+              <button type="button" id="report-weight-declare-button" class="secondary">Объявить весом</button>
+            </div>
+          </details>
+          <div id="report-weight-diagnostics" class="weight-verdict" hidden></div>
 
           <p class="sec-cap">Значимые отличия</p>
           <div class="settings-block">

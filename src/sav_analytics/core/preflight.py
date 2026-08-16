@@ -73,9 +73,11 @@ def run_preflight(path: str | Path, project: dict[str, Any]) -> PreflightReport:
         data = prepare_report_data(path, project)
     except ReportError as exc:
         # Структурная проблема: без готовых данных остальные проверки посчитать
-        # не на чем, поэтому она возвращается одна и сразу.
+        # не на чем, поэтому она возвращается одна и сразу. Отказ с собственной
+        # причиной — непригодный вес — сохраняет свой код: по нему интерфейс
+        # ведёт аналитика в структуру, а не в общий разбор конфигурации.
         return PreflightReport(
-            errors=[PreflightFinding("REPORT_NOT_BUILDABLE", str(exc))],
+            errors=[PreflightFinding(exc.code or "REPORT_NOT_BUILDABLE", str(exc))],
             warnings=warnings,
         )
 

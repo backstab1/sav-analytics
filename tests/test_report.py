@@ -24,6 +24,22 @@ from sav_analytics.core.sav_reader import inspect_sav
 from tests.test_sav_reader import write_counted_value_fixture, write_fixture
 
 
+def declare_weight(inspection: dict, variable: str = "W") -> list[dict]:
+    """Объявить переменную весом — то же, что аналитик делает в структуре.
+
+    Роль обязательна с P1.0: без неё вес отвергается независимо от того,
+    насколько правдоподобно распределение. Фикстуры называют вес `W`, и
+    `infer_role` такое имя не узнаёт — оно не входит в список точных совпадений.
+    """
+
+    return [
+        dict(question, role="weight", included_in_report=False)
+        if question["source_variables"] == [variable]
+        else question
+        for question in inspection["questions"]
+    ]
+
+
 def test_vectorized_unweighted_proportion_matches_legacy_path_exactly() -> None:
     random = np.random.default_rng(20260731)
     for _ in range(50):
@@ -554,7 +570,7 @@ def test_topline_applies_ready_weight_and_audits_effective_bases(tmp_path: Path)
         "original_filename": "weighted.sav",
         "inspection": inspection,
         "configuration": {
-            "questions": inspection["questions"],
+            "questions": declare_weight(inspection),
             "recodings": [],
             "filters": [],
             "report_filter_id": None,
@@ -736,7 +752,8 @@ def test_topline_rejects_invalid_ready_weight(tmp_path: Path) -> None:
         "name": "Ошибка веса",
         "inspection": inspection,
         "configuration": {
-            "questions": inspection["questions"],
+            # Роль объявлена: проверяется именно нулевой вес, а не отсутствие роли.
+            "questions": declare_weight(inspection),
             "recodings": [],
             "filters": [],
             "report_filter_id": None,
@@ -994,7 +1011,7 @@ def _weighted_base_project(source: Path) -> dict:
         "original_filename": "weighted.sav",
         "inspection": inspection,
         "configuration": {
-            "questions": inspection["questions"],
+            "questions": declare_weight(inspection),
             "recodings": [],
             "filters": [],
             "report_filter_id": None,
@@ -1245,7 +1262,7 @@ def test_valid_base_row_gets_a_weighted_pair_on_the_filter_sheet(
     inspection = inspect_sav(source).to_dict()
     project = _weighted_base_project(tmp_path / "unused.sav")
     project["inspection"] = inspection
-    project["configuration"]["questions"] = inspection["questions"]
+    project["configuration"]["questions"] = declare_weight(inspection)
 
     content = build_topline_xlsx(source, project)
 

@@ -22,6 +22,7 @@ from .configuration_revision import (
     reset_expected_revision,
 )
 from .core.preflight import PreflightBlockedError
+from .core.weight_validation import WeightNotUsableError
 from .project_models import InvalidStoredProjectError
 from .routers import (
     banners,
@@ -120,6 +121,21 @@ async def preflight_blocked_handler(
         request,
         status_code=422,
         error_code="REPORT_PREFLIGHT_FAILED",
+        detail=str(exc),
+    )
+
+
+@app.exception_handler(WeightNotUsableError)
+async def weight_not_usable_handler(
+    request: Request, exc: WeightNotUsableError
+) -> JSONResponse:
+    # Код первой проблемы уходит в `error_code`: `requirements.md` §8 требует
+    # отличать непригодный вес от прочих отказов конфигурации, а интерфейсу
+    # по нему решать, куда вести аналитика.
+    return error_response(
+        request,
+        status_code=422,
+        error_code=exc.code,
         detail=str(exc),
     )
 
