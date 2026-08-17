@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>sav-analytics — макет структуры v3 (воздух справа, настройки слева)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ================================================================
+   Макет v3 — структура массива.
+
+   Что меняется относительно нынешнего экрана:
+   1. Мельче текст и вся сетка. База 12.5px вместо 14.5px, шапки —
+      11px. Переключатель плотности в шапке: «Мелко / Обычно».
+   2. Справа воздух. Инспектор-aside справа убран совсем, лист
+      настроек по центру тоже. Осталось поле фона.
+   3. Всё настраиваемое выезжает слева: карточка вопроса, вид списка,
+      настройка отчёта — один ящик, три содержимого.
+   4. Вопросы живут в отдельном «окне» — белая карточка на сером
+      фоне, с полями вокруг, а не панель во всю ширину.
+
+   Токены те же, что в styles.css. Данные демонстрационные.
+   ================================================================ */
+:root{
+  --c-bg:#f4f4f6; --c-surface:#fff; --c-surface-soft:#f5f5f7;
+  --c-border:rgba(0,0,0,.08); --c-border-strong:rgba(0,0,0,.14);
+  --c-ink:#1d1d1f; --c-ink-2:#494950; --c-ink-3:#86868b; --c-ink-4:#c7c7cc;
+  --c-brand:#1d7a4f; --c-brand-hover:#166341; --c-brand-2:#2eae68; --c-brand-tint:#e8f4ee;
+  --c-danger:#d64545; --c-danger-tint:#fbecec;
+  --c-warn-ink:#9a6b00; --c-warn-tint:#fdf4dd;
+  --r-1:7px; --r-2:10px; --r-3:14px; --r-pill:100px;
+
+  /* Тип — мельче нынешнего на два шага. */
+  --t-micro:10.5px; --t-xs:11px; --t-sm:12px; --t-base:12.5px;
+  --t-md:14px; --t-lg:17px; --t-xl:20px;
+  --row-h:34px;
+
+  --font-display:"Inter Tight",-apple-system,"SF Pro Display",Inter,sans-serif;
+  --font-body:Inter,-apple-system,"SF Pro Text","Segoe UI",sans-serif;
+  --font-mono:"SF Mono",Menlo,Consolas,monospace;
+
+  --focus-ring:0 0 0 3px rgba(29,122,79,.12);
+  --shadow-card:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);
+  --shadow-drawer:0 2px 8px rgba(0,0,0,.05),0 18px 44px rgba(0,0,0,.09);
+  --ease:cubic-bezier(.25,.1,.25,1);
+
+  --bar:44px;
+  --rail:66px;
+  --drawer:326px;
+}
+/* «Обычно» — прежний размер, для сравнения. */
+body.dense-normal{
+  --t-micro:11.5px; --t-xs:12px; --t-sm:13px; --t-base:14.5px;
+  --t-md:16px; --t-lg:19px; --t-xl:22px;
+  --row-h:42px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--c-bg); color:var(--c-ink);
+  font:var(--t-base)/1.45 var(--font-body);
+  -webkit-font-smoothing:antialiased; font-synthesis:none;
+  font-feature-settings:"cv05","cv08";
+  overflow:hidden;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;font-family:var(--font-display)}
+h1{font-size:var(--t-xl);font-weight:800;letter-spacing:-.03em;line-height:1.1}
+h2{font-size:var(--t-md);font-weight:700;letter-spacing:-.02em}
+h3{font-size:var(--t-sm);font-weight:700;letter-spacing:-.01em}
+code{font:500 var(--t-xs)/1.3 var(--font-mono)}
+.muted{color:var(--c-ink-3)}
+
+/* ================================================================
+   Шапка — один ярус. Проектная строка втянута сюда же: раньше
+   их было две подряд и они съедали 92px до первой строки данных.
+   ================================================================ */
+.bar{
+  height:var(--bar); padding:0 14px 0 16px;
+  display:flex; align-items:center; gap:10px;
+  background:rgba(255,255,255,.85);
+  backdrop-filter:saturate(1.8) blur(20px);
+  -webkit-backdrop-filter:saturate(1.8) blur(20px);
+  border-bottom:1px solid var(--c-border);
+  position:relative; z-index:60;
+}
+.brand{
+  display:flex;align-items:center;gap:7px;flex-shrink:0;
+  color:var(--c-ink);text-decoration:none;
+  font-family:var(--font-display);font-weight:700;font-size:var(--t-md);letter-spacing:-.02em;
+}
+.brand svg{width:20px;height:20px}
+.brand span{color:var(--c-brand)}
+.bar-sep{width:1px;height:16px;background:var(--c-border-strong);flex-shrink:0}
+.bar-grow{flex:1 1 auto;min-width:4px}
+
+.project{
+  display:flex;align-items:center;gap:8px;
+  border:0;background:none;padding:3px 7px;border-radius:var(--r-1);cursor:pointer;
+}
+.project:hover{background:var(--c-surface-soft)}
+.project b{font-weight:600;font-size:var(--t-sm);letter-spacing:-.01em}
+.project svg{width:11px;height:11px;color:var(--c-ink-3)}
+.project-meta{color:var(--c-ink-3);font-size:var(--t-xs);letter-spacing:.01em}
+
+.seg{display:flex;gap:2px;padding:2px;background:var(--c-surface-soft);border-radius:var(--r-pill)}
+.seg button{
+  border:0;background:none;cursor:pointer;border-radius:var(--r-pill);
+  padding:3px 9px;font-size:var(--t-xs);font-weight:500;color:var(--c-ink-3);
+}
+.seg button.active{background:var(--c-surface);color:var(--c-ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+.btn{
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  padding:5px 11px;border-radius:var(--r-1);font-size:var(--t-sm);font-weight:500;
+  border:1px solid var(--c-border-strong);background:var(--c-surface);color:var(--c-ink);
+}
+.btn:hover{background:var(--c-surface-soft)}
+.btn.primary{background:var(--c-brand);border-color:var(--c-brand);color:#fff}
+.btn.primary:hover{background:var(--c-brand-hover)}
+.btn.ghost{border-color:transparent;background:none;color:var(--c-ink-2)}
+.btn.ghost:hover{background:var(--c-surface-soft)}
+.btn svg{width:14px;height:14px}
+.avatar{
+  width:24px;height:24px;border-radius:50%;flex-shrink:0;
+  display:grid;place-items:center;
+  background:var(--c-brand-tint);color:var(--c-brand);
+  font-size:var(--t-micro);font-weight:600;letter-spacing:.02em;
+}
+
+/* ================================================================
+   Каркас: рельс — ящик — холст. Ящик это колонка сетки, а не
+   накладка: выезжая, он отодвигает холст и ничего не закрывает.
+   ================================================================ */
+.app{
+  height:calc(100% - var(--bar));
+  display:grid; grid-template-columns:var(--rail) auto 1fr;
+}
+
+.rail{
+  border-right:1px solid var(--c-border);
+  background:rgba(255,255,255,.6);
+  display:flex;flex-direction:column;padding:8px 0 10px;gap:2px;
+}
+.rail-item{
+  border:0;background:none;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:7px 2px;margin:0 6px;border-radius:var(--r-1);
+  color:var(--c-ink-3);font-size:var(--t-micro);font-weight:500;line-height:1.15;text-align:center;
+}
+.rail-item svg{width:17px;height:17px}
+.rail-item:hover{background:var(--c-surface-soft);color:var(--c-ink-2)}
+.rail-item.active{color:var(--c-brand);background:var(--c-brand-tint)}
+.rail-item em{font-style:normal;font-size:var(--t-micro);color:var(--c-ink-4)}
+.rail-grow{flex:1}
+.rail-sep{height:1px;background:var(--c-border);margin:6px 12px}
+
+/* ---- Ящик настроек ---- */
+.drawer{
+  width:0; overflow:hidden; border-right:1px solid var(--c-border);
+  background:var(--c-surface); box-shadow:var(--shadow-drawer);
+  display:flex;
+  transition:width .26s var(--ease);
+}
+body.drawer-open .drawer{width:var(--drawer)}
+.drawer-inner{
+  width:var(--drawer);flex:0 0 var(--drawer);
+  display:flex;flex-direction:column;height:100%;
+  transform:translateX(-14px);opacity:0;
+  transition:transform .26s var(--ease),opacity .2s var(--ease);
+}
+body.drawer-open .drawer-inner{transform:none;opacity:1}
+.drawer-head{
+  padding:10px 12px 9px 14px;border-bottom:1px solid var(--c-border);
+  display:flex;align-items:flex-start;gap:8px;
+}
+.kicker{
+  margin:0 0 1px;font-size:var(--t-micro);font-weight:600;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--c-ink-3);
+}
+.drawer-head code{color:var(--c-brand);background:var(--c-brand-tint);padding:1px 5px;border-radius:5px}
+.icon-btn{
+  margin-left:auto;border:0;background:none;cursor:pointer;color:var(--c-ink-3);
+  width:22px;height:22px;border-radius:6px;font-size:15px;line-height:1;
+}
+.icon-btn:hover{background:var(--c-surface-soft);color:var(--c-ink)}
+.drawer-body{flex:1;overflow-y:auto;padding:12px 14px 16px;display:flex;flex-direction:column;gap:11px}
+.drawer-foot{
+  padding:9px 14px;border-top:1px solid var(--c-border);background:var(--c-surface);
+  display:flex;align-items:center;gap:8px;
+}
+.foot-grow{flex:1}
+
+/* поля формы — компактные */
+.f{display:flex;flex-direction:column;gap:4px}
+.f>span,.f>label{font-size:var(--t-xs);font-weight:600;color:var(--c-ink-2)}
+.f input,.f select,.f textarea{
+  width:100%;padding:6px 8px;border:1px solid var(--c-border-strong);
+  border-radius:var(--r-1);background:var(--c-surface);font-size:var(--t-sm);
+}
+.f textarea{resize:vertical;line-height:1.35}
+.f input:focus,.f select:focus,.f textarea:focus{outline:none;border-color:var(--c-brand);box-shadow:var(--focus-ring)}
+.f small{font-size:var(--t-micro);color:var(--c-ink-3);line-height:1.35}
+.f-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.sec-cap{
+  margin:4px 0 0;font-size:var(--t-micro);font-weight:600;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--c-ink-3);
+}
+.tgl-row{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;
+  border:1px solid var(--c-border);border-radius:var(--r-1);background:var(--c-surface-soft);
+  cursor:pointer;
+}
+.tgl-row div{flex:1}
+.tgl-row strong{display:block;font-size:var(--t-sm);font-weight:600}
+.tgl-row small{display:block;font-size:var(--t-micro);color:var(--c-ink-3);line-height:1.3}
+.tgl{position:relative;width:32px;height:19px;flex-shrink:0}
+.tgl input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.track{position:absolute;inset:0;background:var(--c-ink-4);border-radius:var(--r-pill);transition:background .18s var(--ease)}
+.knob{position:absolute;top:2px;left:2px;width:15px;height:15px;background:#fff;border-radius:50%;
+      box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .18s var(--ease)}
+.tgl input:checked~.track{background:var(--c-brand-2)}
+.tgl input:checked~.knob{transform:translateX(13px)}
+
+.cats{display:flex;flex-direction:column;gap:3px}
+.cat{
+  display:grid;grid-template-columns:26px 1fr auto;align-items:center;gap:8px;
+  padding:5px 8px;border-radius:6px;font-size:var(--t-sm);
+}
+.cat:nth-child(odd){background:var(--c-surface-soft)}
+.cat code{color:var(--c-ink-3)}
+.cat b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat span{color:var(--c-ink-3);font-size:var(--t-xs);font-variant-numeric:tabular-nums}
+
+.mini-preview{border:1px solid var(--c-border);border-radius:var(--r-1);overflow:hidden}
+.mini-preview header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 9px;background:var(--c-surface-soft);border-bottom:1px solid var(--c-border);
+}
+.mini-preview header h3{font-size:var(--t-xs)}
+.mini-preview header small{font-size:var(--t-micro);color:var(--c-ink-3)}
+.bars{display:flex;flex-direction:column;gap:5px;padding:9px}
+.bar-row{display:grid;grid-template-columns:1fr 34px;align-items:center;gap:8px;font-size:var(--t-xs)}
+.bar-row i{display:block;height:5px;border-radius:3px;background:var(--c-brand-2);opacity:.85}
+.bar-row u{text-decoration:none;color:var(--c-ink-2);display:block;margin-bottom:3px}
+.bar-row span{text-align:right;color:var(--c-ink-3);font-variant-numeric:tabular-nums}
+
+/* ---- Холст: серое поле, воздух, одна карточка ---- */
+.canvas{overflow-y:auto;position:relative}
+/* Окно вопросов шире холста-«листа»: колонок шесть, и на 1400+
+   лишние 160px уходят в название вопроса, а не в поля. */
+.canvas-inner{max-width:1180px;margin:0 auto;padding:26px var(--pad,44px) 96px;--pad:44px}
+@media (max-width:1180px){.canvas-inner{--pad:24px}}
+.canvas-head{margin-bottom:16px;display:flex;align-items:flex-end;gap:14px}
+.eyebrow{
+  margin:0 0 5px;font-size:var(--t-micro);font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--c-ink-3);
+}
+.canvas-head p.lead{margin:5px 0 0;color:var(--c-ink-3);font-size:var(--t-sm);max-width:52ch}
+.head-actions{margin-left:auto;display:flex;align-items:center;gap:7px}
+
+/* Сводка проекта — одна строка мелким шрифтом, кликается как фильтр. */
+.summary{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.stat{
+  border:1px solid var(--c-border);background:var(--c-surface);border-radius:var(--r-pill);
+  padding:3px 10px;font-size:var(--t-xs);color:var(--c-ink-2);cursor:pointer;
+  display:flex;align-items:center;gap:5px;
+}
+.stat:hover{border-color:var(--c-border-strong)}
+.stat b{font-weight:600;font-variant-numeric:tabular-nums}
+.stat.active{background:var(--c-brand-tint);border-color:transparent;color:var(--c-brand)}
+.stat .dot{width:5px;height:5px;border-radius:50%;background:var(--c-ink-4)}
+.stat.warn .dot{background:#e0a32e}
+.stat.off .dot{background:var(--c-ink-4)}
+.stat.ok .dot{background:var(--c-brand-2)}
+
+/* ---- «Окно» вопросов ---- */
+.card{
+  background:var(--c-surface);border:1px solid var(--c-border);
+  border-radius:var(--r-3);box-shadow:var(--shadow-card);overflow:hidden;
+}
+.card-bar{
+  display:flex;align-items:center;gap:8px;padding:8px 10px 8px 12px;
+  border-bottom:1px solid var(--c-border);
+}
+.card-bar h2{font-size:var(--t-sm);letter-spacing:-.01em}
+.card-bar .count{font-size:var(--t-xs);color:var(--c-ink-3);font-variant-numeric:tabular-nums}
+.card-grow{flex:1}
+.search{position:relative;display:flex;align-items:center}
+.search svg{position:absolute;left:8px;width:13px;height:13px;color:var(--c-ink-3);pointer-events:none}
+.search input{
+  width:190px;padding:5px 9px 5px 26px;font-size:var(--t-sm);
+  border:1px solid var(--c-border-strong);border-radius:var(--r-pill);background:var(--c-surface);
+}
+.search input:focus{outline:none;border-color:var(--c-brand);box-shadow:var(--focus-ring)}
+
+table{width:100%;border-collapse:collapse}
+thead th{
+  position:sticky;top:0;z-index:2;background:var(--c-surface);
+  text-align:left;font-size:var(--t-micro);font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--c-ink-3);
+  padding:7px 10px;border-bottom:1px solid var(--c-border);white-space:nowrap;
+}
+tbody td{
+  padding:0 10px;height:var(--row-h);border-bottom:1px solid rgba(0,0,0,.045);
+  font-size:var(--t-sm);vertical-align:middle;
+}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:#fbfbfc}
+tbody tr.selected td{background:var(--c-brand-tint)}
+tbody tr:last-child td{border-bottom:0}
+.drag-cell{width:22px;padding-left:8px !important;color:var(--c-ink-4);cursor:grab}
+.code-col{width:78px}
+.code-col code{color:var(--c-brand)}
+.q-cell{max-width:1px;width:100%}
+.q-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.q-sub{display:block;font-size:var(--t-micro);color:var(--c-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.q-sub.warning{color:var(--c-warn-ink)}
+.type-col{width:132px;color:var(--c-ink-2);white-space:nowrap}
+.type-col .ti{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-xs)}
+.type-col .ti i{
+  width:16px;height:16px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;
+  background:var(--c-surface-soft);color:var(--c-ink-3);font-size:9px;font-style:normal;font-weight:600;
+}
+.n-col{width:52px;text-align:right;font-variant-numeric:tabular-nums;color:var(--c-ink-3);font-size:var(--t-xs)}
+.st-col{width:92px}
+.status{
+  display:inline-block;padding:1.5px 7px;border-radius:var(--r-pill);
+  font-size:var(--t-micro);font-weight:500;background:var(--c-brand-tint);color:var(--c-brand);
+}
+.status.review{background:var(--c-warn-tint);color:var(--c-warn-ink)}
+.status.excluded{background:var(--c-surface-soft);color:var(--c-ink-3)}
+.card-foot{
+  display:flex;align-items:center;gap:10px;padding:7px 12px;
+  border-top:1px solid var(--c-border);background:var(--c-surface-soft);
+  font-size:var(--t-xs);color:var(--c-ink-3);
+}
+.card-foot .link{color:var(--c-brand);cursor:pointer;border:0;background:none;font-size:var(--t-xs);padding:0}
+
+/* Строка-разделитель блока анкеты — необязательная, но список
+   на 96 вопросов без неё читается хуже. */
+tbody tr.group td{
+  height:26px;background:var(--c-surface-soft);border-bottom:1px solid var(--c-border);
+  font-size:var(--t-micro);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--c-ink-3);
+  cursor:default;
+}
+tbody tr.group:hover td{background:var(--c-surface-soft)}
+
+/* Подсказка по макету */
+.hint{
+  position:fixed;right:18px;bottom:16px;max-width:270px;z-index:70;
+  background:rgba(29,29,31,.9);color:#fff;border-radius:var(--r-2);
+  padding:9px 11px;font-size:var(--t-xs);line-height:1.4;
+  box-shadow:0 8px 30px rgba(0,0,0,.18);
+}
+.hint b{display:block;font-size:var(--t-xs);margin-bottom:3px}
+.hint kbd{
+  background:rgba(255,255,255,.16);border-radius:4px;padding:1px 4px;
+  font:500 var(--t-micro)/1 var(--font-mono);
+}
+.hint button{
+  position:absolute;top:5px;right:6px;border:0;background:none;color:rgba(255,255,255,.6);
+  cursor:pointer;font-size:13px;line-height:1;
+}
+</style>
+</head>
+<body>
+
+<!-- ЯРУС ХРОМА — один. Проект, выгрузка и плотность здесь же. -->
+<header class="bar">
+  <a class="brand" href="#">
+    <svg viewBox="0 0 1024 1024" aria-hidden="true">
+      <path fill="#1d7a4f" opacity=".1" d="M300 56C196 56 126 80 86 151 58 201 52 273 52 512s6 311 34 361c40 71 110 95 214 95h424c104 0 174-24 214-95 28-50 34-122 34-361s-6-311-34-361c-40-71-110-95-214-95H300Z"/>
+      <g fill="none" stroke="#1d1d1f" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M416 222H262c-44 0-74 27-74 65s30 65 74 65h78c44 0 74 27 74 65s-30 65-74 65H186"/>
+        <path d="M544 482 654 232c8-18 18-18 26 0l110 250M598 374h138"/>
+        <path d="m190 574 108 246c8 18 18 18 26 0l108-246"/>
+      </g>
+      <path fill="none" stroke="#1d7a4f" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" d="m544 832 110-250c8-18 18-18 26 0l110 250M598 724h138"/>
+    </svg>
+    sav<span>analytics</span>
+  </a>
+
+  <div class="bar-sep"></div>
+
+  <button class="project" type="button">
+    <b>Трекер бренда · июль</b>
+    <svg viewBox="0 0 12 12" fill="none"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <span class="project-meta">1 248 респондентов · 96 вопросов · 214 столбцов SAV</span>
+
+  <div class="bar-grow"></div>
+
+  <div class="seg" id="density" title="Размер текста и плотность строк">
+    <button type="button" data-density="small" class="active">Мелко</button>
+    <button type="button" data-density="normal">Обычно</button>
+  </div>
+
+  <button class="btn ghost" type="button">Новый проект</button>
+  <button class="btn" type="button">
+    <svg viewBox="0 0 20 20" fill="none"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Выгрузка
+  </button>
+  <div class="bar-sep"></div>
+  <span class="avatar">ЛП</span>
+</header>
+
+<div class="app">
+
+  <!-- РЕЛЬС — только разделы, ничего настраиваемого. -->
+  <nav class="rail" aria-label="Разделы конфигурации">
+    <button class="rail-item active" type="button" data-drawer="view">
+      <svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      Структура<em>96</em>
+    </button>
+    <button class="rail-item" type="button" data-drawer="soon">
+      <svg viewBox="0 0 20 20" fill="none"><path d="M4 7h8l-2.4-2.4M16 13H8l2.4 2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Переко­дировки<em>3</em>
+    </button>
+    <button class="rail-item" type="button" data-drawer="soon">
+      <svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="4.5" width="13" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5v11M12.5 4.5v11" stroke="currentColor" stroke-width="1.4"/></svg>
+      Баннеры<em>2</em>
+    </button>
+    <button class="rail-item" type="button" data-drawer="soon">
+      <svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13l-5 5.6V16l-3-1.6v-3.8L3.5 5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      Базы и фильтры<em>4</em>
+    </button>
+    <button class="rail-item" type="button" data-drawer="soon">
+      <svg viewBox="0 0 20 20" fill="none"><path d="M10 4.5v11M5 8h10M6.6 8 4.5 13h4.2L6.6 8ZM13.4 8l-2.1 5h4.2l-2.1-5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      Веса<em>1</em>
+    </button>
+
+    <span class="rail-grow"></span>
+    <div class="rail-sep"></div>
+    <button class="rail-item" type="button" data-drawer="report">
+      <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.5v2m0 11v2M17.5 10h-2m-11 0h-2m12.3-5.3-1.4 1.4M6.6 13.4l-1.4 1.4m0-9.4 1.4 1.4m6.8 6.8 1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Настройка отчёта
+    </button>
+  </nav>
+
+  <!-- ЯЩИК — всё, что настраивают, выезжает отсюда. -->
+  <aside class="drawer" id="drawer" aria-label="Настройки">
+    <div class="drawer-inner">
+      <div class="drawer-head">
+        <div>
+          <p class="kicker" id="drawer-kicker">Вопрос</p>
+          <h2 id="drawer-title">S2</h2>
+        </div>
+        <button class="icon-btn" type="button" id="drawer-close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+      <div class="drawer-foot" id="drawer-foot"></div>
+    </div>
+  </aside>
+
+  <!-- ХОЛСТ — воздух и одно окно со списком вопросов. -->
+  <main class="canvas">
+    <div class="canvas-inner">
+
+      <div class="canvas-head">
+        <div>
+          <p class="eyebrow">Конфигурация проекта</p>
+          <h1>Структура массива</h1>
+          <p class="lead">Типы и названия вопросов определены автоматически. Проверьте отмеченное — остальное уже готово к выгрузке.</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn ghost" type="button" data-drawer="view">Вид</button>
+          <button class="btn" type="button" data-drawer="na">Пропуски по анкете</button>
+        </div>
+      </div>
+
+      <div class="summary" id="summary">
+        <button class="stat active" type="button"><span class="dot"></span>Все<b>96</b></button>
+        <button class="stat warn" type="button"><span class="dot"></span>Проверить<b>12</b></button>
+        <button class="stat ok" type="button"><span class="dot"></span>Готовы<b>77</b></button>
+        <button class="stat off" type="button"><span class="dot"></span>Исключены<b>7</b></button>
+      </div>
+
+      <section class="card">
+        <div class="card-bar">
+          <h2>Вопросы</h2>
+          <span class="count" id="row-count">96 из 96</span>
+          <span class="card-grow"></span>
+          <div class="search">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6"/><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input type="text" placeholder="Код или название" id="search" />
+          </div>
+          <div class="seg">
+            <button type="button" class="active">Вопросы</button>
+            <button type="button">Столбцы SAV</button>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th class="drag-cell"></th>
+              <th class="code-col">Код</th>
+              <th class="q-cell">Вопрос</th>
+              <th class="type-col">Тип</th>
+              <th class="n-col">Перем.</th>
+              <th class="st-col">Статус</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+
+        <div class="card-foot">
+          <span id="foot-note">96 вопросов · 12 требуют проверки · 7 исключены из отчёта</span>
+          <span class="card-grow"></span>
+          <button class="link" type="button">Перераспознать структуру</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div class="hint" id="hint">
+  <button type="button" onclick="document.getElementById('hint').remove()">×</button>
+  <b>Это макет</b>
+  Кликните строку — карточка вопроса выедет слева. <kbd>Вид</kbd>, <kbd>Настройка отчёта</kbd> и <kbd>Пропуски</kbd> открываются там же. Переключатель <kbd>Мелко / Обычно</kbd> в шапке сравнивает размер текста.
+</div>
+
+<script>
+/* ================================================================
+   Демоданные и три содержимых ящика. Логики никакой — только то,
+   что нужно, чтобы пощупать раскладку.
+   ================================================================ */
+const TYPES = {
+  single:  ["1", "Один ответ"],
+  multi:   ["М", "Множественный"],
+  scale:   ["≡", "Шкала"],
+  numeric: ["#", "Числовой"],
+  matrix:  ["⊞", "Матрица шкал"],
+  text:    ["A", "Открытый текст"],
+  tech:    ["·", "Технический"],
+};
+
+const ROWS = [
+  {group: "Скрининг"},
+  {code:"S1", label:"Пол респондента", sub:"S1. Укажите ваш пол", type:"single", n:1, st:"ok"},
+  {code:"S2", label:"Возраст", sub:"S2. Сколько вам полных лет?", type:"numeric", n:1, st:"ok"},
+  {code:"S3", label:"Регион проживания", sub:"S3. В каком регионе вы живёте?", type:"single", n:1, st:"ok"},
+  {code:"S4", label:"Доход на члена семьи", sub:"Есть неподписанный код 99 — возможно, «затрудняюсь»", type:"single", n:1, st:"review", warn:true},
+
+  {group: "Знание и потребление"},
+  {code:"Q1", label:"Знание марок без подсказки", sub:"Спонтанное знание, 18 дихотомий", type:"multi", n:18, st:"ok"},
+  {code:"Q2", label:"Знание марок с подсказкой", sub:"Q2_1…Q2_18", type:"multi", n:18, st:"ok"},
+  {code:"Q3", label:"Потребление за 3 месяца", sub:"Тип определён как множественный по совпадению подписей", type:"multi", n:18, st:"review", warn:true},
+  {code:"Q4", label:"Марка, которую покупают чаще всего", sub:"Q4. Какую марку вы покупаете чаще?", type:"single", n:1, st:"ok"},
+
+  {group: "Оценка марки"},
+  {code:"Q5", label:"Оценка марки по атрибутам", sub:"24 столбца, 8 атрибутов × 3 марки — проверьте разбор матрицы", type:"matrix", n:24, st:"review", warn:true},
+  {code:"Q6", label:"Готовность рекомендовать (NPS)", sub:"Шкала 0–10, специальный показатель NPS", type:"scale", n:1, st:"ok"},
+  {code:"Q7", label:"Общая удовлетворённость", sub:"Шкала 1–5, специальный показатель CSAT", type:"scale", n:1, st:"ok"},
+  {code:"Q8", label:"Средний чек покупки, ₽", sub:"Числовой, есть перекодировка AGE_GROUP-типа", type:"numeric", n:1, st:"ok"},
+
+  {group: "Открытые и технические"},
+  {code:"Q9",  label:"Почему выбрали эту марку", sub:"Открытый текст — в топлайн не идёт", type:"text", n:1, st:"off"},
+  {code:"WAVE",label:"Волна исследования", sub:"Роль: волна", type:"single", n:1, st:"ok"},
+  {code:"W",   label:"Вес по полу, возрасту и региону", sub:"Роль: вес · design effect 1,42", type:"numeric", n:1, st:"off"},
+  {code:"ID",  label:"Идентификатор анкеты", sub:"Роль: ID", type:"tech", n:1, st:"off"},
+];
+
+const STATUS = {ok:["", "Готов"], review:["review","Проверить"], off:["excluded","Исключён"]};
+
+const tbody = document.getElementById("rows");
+tbody.innerHTML = ROWS.map(r => {
+  if (r.group) return `<tr class="group"><td></td><td colspan="5">${r.group}</td></tr>`;
+  const [icon, name] = TYPES[r.type];
+  const [cls, text] = STATUS[r.st];
+  return `<tr data-code="${r.code}">
+    <td class="drag-cell">⋮⋮</td>
+    <td class="code-col"><code>${r.code}</code></td>
+    <td class="q-cell">
+      <span class="q-title">${r.label}</span>
+      <span class="q-sub ${r.warn ? "warning" : ""}">${r.sub}</span>
+    </td>
+    <td class="type-col"><span class="ti"><i>${icon}</i>${name}</span></td>
+    <td class="n-col">${r.n}</td>
+    <td class="st-col"><span class="status ${cls}">${text}</span></td>
+  </tr>`;
+}).join("");
+
+/* ---------------- ящик ---------------- */
+const body = document.body;
+const drawer = {
+  kicker: document.getElementById("drawer-kicker"),
+  title:  document.getElementById("drawer-title"),
+  body:   document.getElementById("drawer-body"),
+  foot:   document.getElementById("drawer-foot"),
+};
+
+function open(kind, payload) {
+  const content = CONTENT[kind](payload);
+  drawer.kicker.textContent = content.kicker;
+  drawer.title.textContent = content.title;
+  drawer.body.innerHTML = content.body;
+  drawer.foot.innerHTML = content.foot;
+  body.classList.add("drawer-open");
+}
+function close() {
+  body.classList.remove("drawer-open");
+  document.querySelectorAll("tbody tr.selected").forEach(tr => tr.classList.remove("selected"));
+}
+document.getElementById("drawer-close").addEventListener("click", close);
+document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+
+const CONTENT = {
+  /* Карточка вопроса — то, что раньше было инспектором справа. */
+  question: (r) => ({
+    kicker: "Вопрос · " + r.code,
+    title: r.label.length > 26 ? r.label.slice(0, 26) + "…" : r.label,
+    body: `
+      <label class="f"><span>Название для отчёта</span>
+        <textarea rows="2">${r.label}</textarea>
+        <small>Попадёт в содержание и топлайн Excel.</small>
+      </label>
+      <div class="f-row">
+        <label class="f"><span>Тип вопроса</span>
+          <select>${Object.entries(TYPES).map(([k, v]) =>
+            `<option ${k === r.type ? "selected" : ""}>${v[1]}</option>`).join("")}</select>
+        </label>
+        <label class="f"><span>Роль</span>
+          <select><option>Обычный вопрос</option><option>ID</option><option>Вес</option><option>Волна</option><option>Фильтрующая</option></select>
+        </label>
+      </div>
+      <label class="tgl-row">
+        <div><strong>Включить в отчёт</strong><small>Топлайн и содержание Excel</small></div>
+        <span class="tgl"><input type="checkbox" ${r.st === "off" ? "" : "checked"} /><span class="track"></span><span class="knob"></span></span>
+      </label>
+      <label class="f"><span>Пользовательская база</span>
+        <select><option>Стандартная база</option><option>Покупатели категории</option></select>
+      </label>
+
+      <p class="sec-cap">Категории · ${r.n === 1 ? "5" : r.n}</p>
+      <div class="cats">
+        ${sampleCats(r).map(c => `<div class="cat"><code>${c[0]}</code><b>${c[1]}</b><span>${c[2]}</span></div>`).join("")}
+      </div>
+
+      <div class="mini-preview">
+        <header><h3>Предпросмотр Total</h3><small>база 1 248</small></header>
+        <div class="bars">
+          ${sampleCats(r).slice(0, 4).map(c => `
+            <div class="bar-row">
+              <div><u>${c[1]}</u><i style="width:${c[3]}%"></i></div>
+              <span>${c[2]}</span>
+            </div>`).join("")}
+        </div>
+      </div>`,
+    foot: `<button class="btn primary" type="button">Сохранить</button>
+           <button class="btn" type="button">Пересчитать</button>
+           <span class="foot-grow"></span>
+           <span class="muted" style="font-size:var(--t-micro)">⌘S</span>`,
+  }),
+
+  /* Настройки списка — то, что сейчас размазано по тулбару. */
+  view: () => ({
+    kicker: "Структура",
+    title: "Вид списка",
+    body: `
+      <p class="sec-cap">Показывать</p>
+      <label class="tgl-row"><div><strong>Только требующие проверки</strong><small>12 вопросов</small></div>
+        <span class="tgl"><input type="checkbox" /><span class="track"></span><span class="knob"></span></span></label>
+      <label class="tgl-row"><div><strong>Исключённые из отчёта</strong><small>7 вопросов</small></div>
+        <span class="tgl"><input type="checkbox" checked /><span class="track"></span><span class="knob"></span></span></label>
+      <label class="tgl-row"><div><strong>Разделители блоков анкеты</strong><small>Скрининг, Знание, Оценка…</small></div>
+        <span class="tgl"><input type="checkbox" checked /><span class="track"></span><span class="knob"></span></span></label>
+
+      <p class="sec-cap">Колонки</p>
+      <label class="tgl-row"><div><strong>Исходная формулировка</strong><small>Вторая строка под названием</small></div>
+        <span class="tgl"><input type="checkbox" checked /><span class="track"></span><span class="knob"></span></span></label>
+      <label class="tgl-row"><div><strong>Число переменных</strong></div>
+        <span class="tgl"><input type="checkbox" checked /><span class="track"></span><span class="knob"></span></span></label>
+      <label class="tgl-row"><div><strong>Валидная база и пропуски</strong></div>
+        <span class="tgl"><input type="checkbox" /><span class="track"></span><span class="knob"></span></span></label>
+
+      <label class="f"><span>Порядок</span>
+        <select><option>Как в анкете</option><option>Как в SAV</option><option>По типу</option></select>
+        <small>Ручной порядок доступен, пока список не отфильтрован.</small>
+      </label>`,
+    foot: `<span class="muted" style="font-size:var(--t-micro)">Настройки вида не сохраняются в проект</span>
+           <span class="foot-grow"></span>
+           <button class="btn" type="button">Сбросить</button>`,
+  }),
+
+  /* Настройка отчёта — сейчас модальный лист по центру. */
+  report: () => ({
+    kicker: "Проект",
+    title: "Настройка отчёта",
+    body: `
+      <p class="sec-cap">Расчёт</p>
+      <div class="f-row">
+        <label class="f"><span>Уровень доверия, %</span><input value="95" /></label>
+        <label class="f"><span>Порог малой базы</span><input value="30" /></label>
+      </div>
+      <label class="f"><span>Вес отчёта</span>
+        <select><option>W — по полу, возрасту и региону</option><option>Без веса</option></select>
+        <small>design effect 1,42 · эффективная база 878 · экстремальных 1,8%</small>
+      </label>
+
+      <p class="sec-cap">Значимые отличия</p>
+      <label class="tgl-row"><div><strong>Сравнивать подгруппы</strong><small>Отмечать значимые отличия</small></div>
+        <span class="tgl"><input type="checkbox" checked /><span class="track"></span><span class="knob"></span></span></label>
+      <label class="tgl-row"><div><strong>Попарные сравнения</strong><small>Между подгруппами блока</small></div>
+        <span class="tgl"><input type="checkbox" checked /><span class="track"></span><span class="knob"></span></span></label>
+      <label class="tgl-row"><div><strong>Поправка Bonferroni</strong></div>
+        <span class="tgl"><input type="checkbox" /><span class="track"></span><span class="knob"></span></span></label>
+      <label class="f"><span>С кем сравнивать</span>
+        <select><option>С остальными (Rest)</option><option>С Total</option></select>
+      </label>
+
+      <p class="sec-cap">Волны</p>
+      <label class="f"><span>Схема сравнения</span>
+        <select><option>С предыдущей волной</option><option>Не сравнивать</option><option>С контрольной волной</option></select>
+      </label>`,
+    foot: `<button class="btn primary" type="button">Сохранить</button>
+           <span class="foot-grow"></span>
+           <span class="muted" style="font-size:var(--t-micro)">В конфигурацию проекта</span>`,
+  }),
+
+  /* Пропуски по анкете — тоже лист, тоже уезжает влево. */
+  na: () => ({
+    kicker: "Проверка",
+    title: "Пропуски по анкете",
+    body: `
+      <p class="muted" style="font-size:var(--t-xs);margin:0">Коды без подписи вне диапазона подписанных. Отмеченные уйдут из распределения, база Total сохранится.</p>
+      ${[["Q3","99","41 ответ"],["Q5_1","-1","318 ответов"],["Q5_2","-1","318 ответов"],["Q7","98","12 ответов"]]
+        .map(([q, code, n]) => `
+        <label class="tgl-row"><div><strong>${q} · код ${code}</strong><small>${n}</small></div>
+          <span class="tgl"><input type="checkbox" checked /><span class="track"></span><span class="knob"></span></span></label>`).join("")}`,
+    foot: `<button class="btn primary" type="button">Пометить выбранные</button>
+           <span class="foot-grow"></span>
+           <button class="btn ghost" type="button">Отмена</button>`,
+  }),
+
+  soon: () => ({
+    kicker: "Раздел",
+    title: "В макете не раскрыт",
+    body: `<p class="muted" style="font-size:var(--t-sm)">Перекодировки, баннеры, фильтры и веса устроены так же: список — окном на холсте, редактор — этим ящиком.</p>`,
+    foot: `<span class="foot-grow"></span><button class="btn" type="button" onclick="document.getElementById('drawer-close').click()">Понятно</button>`,
+  }),
+};
+
+/* Демонстрационные категории под тип вопроса. */
+function sampleCats(r) {
+  if (r.type === "scale" && r.code === "Q6")
+    return [["9–10","Промоутеры","38%",38],["7–8","Нейтральные","41%",41],["0–6","Критики","21%",21],["—","NPS","+17",17]];
+  if (r.type === "numeric")
+    return [["—","Среднее","34,2",70],["—","Медиана","31,0",62],["—","Мин / макс","18 / 67",44],["—","Валидных","1 214",97]];
+  if (r.type === "multi")
+    return [["1","Марка А","62%",62],["2","Марка Б","54%",54],["3","Марка В","37%",37],["4","Марка Г","21%",21],["5","Другая","8%",8]];
+  return [["1","Первая категория","34%",34],["2","Вторая категория","28%",28],["3","Третья категория","22%",22],["4","Четвёртая","11%",11],["99","Затрудняюсь","5%",5]];
+}
+
+/* ---------------- события ---------------- */
+tbody.addEventListener("click", e => {
+  const tr = e.target.closest("tr");
+  if (!tr || tr.classList.contains("group")) return;
+  document.querySelectorAll("tbody tr.selected").forEach(x => x.classList.remove("selected"));
+  tr.classList.add("selected");
+  open("question", ROWS.find(r => r.code === tr.dataset.code));
+});
+
+document.querySelectorAll("[data-drawer]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("tbody tr.selected").forEach(x => x.classList.remove("selected"));
+    open(btn.dataset.drawer);
+  });
+});
+
+document.getElementById("density").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  document.querySelectorAll("#density button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  body.classList.toggle("dense-normal", btn.dataset.density === "normal");
+});
+
+document.getElementById("search").addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase();
+  let shown = 0;
+  tbody.querySelectorAll("tr").forEach(tr => {
+    if (tr.classList.contains("group")) { tr.hidden = !!q; return; }
+    const hit = !q || tr.textContent.toLowerCase().includes(q);
+    tr.hidden = !hit;
+    if (hit) shown++;
+  });
+  document.getElementById("row-count").textContent = q ? `${shown} из 96` : "96 из 96";
+});
+</script>
+</body>
+</html>

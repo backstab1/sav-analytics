@@ -7,12 +7,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260812-shell-v3" />
+    <link rel="stylesheet" href="/styles.css?v=20260817-canvas-v4" />
   </head>
   <body>
     <!-- ================================================================
-         ЯРУС 1 — глобальный: бренд слева, экраны и аккаунт справа.
-         Не зависит от того, открыт ли проект.
+         ХРОМ — один ярус: бренд, открытый проект, экраны, выгрузка.
+
+         Раньше ярусов было два: глобальная шапка и шапка проекта внутри
+         рабочей области. Вместе они стоили 92px до первой строки данных.
+         Проектное осталось отдельным блоком (#project-chrome и
+         #project-actions) и без открытого проекта скрыто целиком —
+         показывает и прячет его Shell.setProjectOpen.
          ================================================================ -->
     <header class="bar">
       <a class="brand" href="/" aria-label="sav analytics — на главную">
@@ -28,6 +33,18 @@
         sav<span>analytics</span>
       </a>
 
+      <div id="project-chrome" class="project-chrome" hidden>
+        <div class="bar-sep"></div>
+        <button id="project-switch" class="chip-project" type="button"
+                title="Открытый проект. Список проектов — «Новый проект».">
+          <b id="project-name"></b>
+          <svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </button>
+
+        <!-- Наполняется из app.js (renderSummary), клик фильтрует таблицу. -->
+        <div id="summary" class="bar-stats"></div>
+      </div>
+
       <div class="bar-grow"></div>
 
       <nav id="screen-nav" class="screens" aria-label="Экраны">
@@ -36,6 +53,20 @@
         <button type="button" data-screen="manual" aria-current="page">Ручной режим</button>
         <button type="button" data-screen="builder">AI-конструктор</button>
       </nav>
+
+      <div id="project-actions" class="export-menu" hidden>
+        <button id="export-toggle" class="export-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          Выгрузка<span class="export-caret" aria-hidden="true"></span>
+        </button>
+        <div id="export-list" class="export-list" role="menu" hidden>
+          <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
+          <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
+          <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
+          <div class="export-sep" role="separator"></div>
+          <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
+        </div>
+      </div>
 
       <div class="bar-sep"></div>
 
@@ -87,42 +118,14 @@
         </section>
 
         <!-- ================================================================
-             РАБОЧАЯ ОБЛАСТЬ — рельс / список / инспектор.
+             РАБОЧАЯ ОБЛАСТЬ — рельс / инспектор / холст.
              Страница не прокручивается: прокручиваются панели.
+
+             Порядок колонок задаётся в CSS (grid-column), а не разметкой:
+             инспектор стоит слева от списка, но в DOM идёт после него —
+             панель читается сразу за строкой, которая её открыла.
              ================================================================ -->
         <section id="workspace" class="workspace" hidden>
-          <!-- ============================================================
-               ЯРУС 2 — проектный: чем сейчас занимаемся и что выгружаем.
-               Живёт внутри рабочей области, поэтому без открытого проекта
-               его просто нет.
-               ============================================================ -->
-          <div class="project-bar">
-            <button id="project-switch" class="chip-project" type="button"
-                    title="Открытый проект. Список проектов — «Новый проект».">
-              <b id="project-name"></b>
-              <svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-            </button>
-
-            <!-- Наполняется из app.js (renderSummary), клик фильтрует таблицу. -->
-            <div id="summary" class="bar-stats"></div>
-
-            <div class="bar-grow"></div>
-
-            <div class="export-menu">
-              <button id="export-toggle" class="export-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
-                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                Выгрузка<span class="export-caret" aria-hidden="true"></span>
-              </button>
-              <div id="export-list" class="export-list" role="menu" hidden>
-                <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
-                <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
-                <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
-                <div class="export-sep" role="separator"></div>
-                <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
-              </div>
-            </div>
-          </div>
-
           <div id="app-shell" class="shell">
 
             <nav class="rail" aria-label="Разделы конфигурации">
@@ -231,7 +234,12 @@
                  ИНСПЕКТОРЫ. Одна оболочка на все сущности: голова, тело со
                  своей прокруткой, ряд действий. Высота — по содержимому,
                  потолок — экран (см. .insp в styles.css).
+
+                 Док — колонка между рельсом и холстом. Пока все инспекторы
+                 скрыты, он нулевой ширины, и колонка не занимает места.
                  ============================================================ -->
+            <div class="insp-dock">
+
             <aside id="question-editor" class="insp structure-editor" hidden>
               <div class="insp-head">
                 <div><p class="kicker">Вопрос</p><h3 id="editor-code"></h3></div>
@@ -382,6 +390,8 @@
               </form>
             </aside>
 
+            </div>
+
           </div>
         </section>
       </section>
@@ -505,7 +515,7 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260812-shell-v3" defer></script>
-    <script src="/app.js?v=20260812-shell-v3" defer></script>
+    <script src="/shell.js?v=20260817-canvas-v4" defer></script>
+    <script src="/app.js?v=20260817-canvas-v4" defer></script>
   </body>
 </html>
