@@ -121,14 +121,15 @@ def _open_view(page: Page, view: str) -> None:
     page.click(f".tabs button[data-view='{view}']")
 
 
-def _open_report_settings(page: Page) -> None:
-    """Лист настроек открывается из раздела «Отчёт», а не из рельса.
+def _open_weight_sheet(page: Page) -> None:
+    """Лист веса открывается из плитки «Вес» раздела «Отчёт».
 
     Баннеры, базы и веса перестали быть разделами: это свойства книги,
-    и живут строками раздела «Отчёт».
+    и живут плитками раздела «Отчёт». Статистика листа не требует —
+    её варианты видны прямо в панели под плитками.
     """
     _open_view(page, "report")
-    page.click('[data-block="statistics"] [data-open-sheet="report-settings"]')
+    page.click('[data-block="weight"] [data-open-sheet="report-settings"]')
 
 
 def _panel_text(page: Page, selector: str) -> str:
@@ -236,16 +237,16 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     page.click("#close-banner-editor")
     expect(page.locator('[data-block="banner"]')).to_contain_text("Пол", timeout=UI_TIMEOUT)
 
-    # Статистические параметры живут отдельно и применяются ко всему отчёту.
-    page.click('[data-block="statistics"] [data-open-sheet="report-settings"]')
-    expect(page.locator("#report-settings-form")).to_be_visible(timeout=UI_TIMEOUT)
-    expect(page.locator("#report-compare-target")).to_be_visible(timeout=UI_TIMEOUT)
-    expect(page.locator("#report-compare-target")).to_be_disabled()
-    page.locator("#report-compare-subgroups").check()
-    expect(page.locator("#report-compare-target")).to_be_enabled()
-    page.click("#save-report-settings")
-    expect(page.locator("#toast-container")).to_contain_text(
-        "Настройки отчёта сохранены", timeout=UI_TIMEOUT
+    # Статистические параметры видны прямо в разделе и применяются сразу:
+    # схема сравнения — один сегментированный переключатель на два поля.
+    expect(page.locator("#stat-panel")).to_be_visible(timeout=UI_TIMEOUT)
+    page.click('#stat-panel [data-stat="scheme"][data-value="rest"]')
+    expect(page.locator('#stat-panel [data-stat="scheme"][data-value="rest"]')).to_have_attribute(
+        "aria-checked", "true", timeout=UI_TIMEOUT
+    )
+    page.click('#stat-panel [data-stat="pairwise"]')
+    expect(page.locator('#stat-panel [data-stat="pairwise"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=UI_TIMEOUT
     )
 
     # Состав книги стоит отдельной полосой над плитками свойств.
@@ -324,7 +325,7 @@ def test_identifier_cannot_be_chosen_as_a_report_weight(
     _write_survey(source)
     _open_project(page, live_server, source)
 
-    _open_report_settings(page)
+    _open_weight_sheet(page)
     expect(page.locator("#report-weight")).to_be_visible(timeout=UI_TIMEOUT)
 
     # Ни одна переменная массива весом не объявлена, поэтому выбирать нечего.

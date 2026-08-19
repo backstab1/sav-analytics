@@ -309,7 +309,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .shell {
   height: calc(100dvh - var(--bar));
   display: grid;
-  grid-template-columns: var(--rail) auto minmax(0, 1fr);
+  grid-template-columns: var(--rail) minmax(0, 1fr) auto;
   grid-template-rows: minmax(0, 1fr);
 }
 /* Ряд один и тот же для всех трёх: колонки расставлены явно, а порядок
@@ -358,7 +358,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
    потолком по ширине и серым полем справа. Над окном — шапка раздела:
    где мы, что здесь делают и действие раздела. Раньше всё это было
    ужато в один ряд .toolbar внутри самой панели. */
-.canvas { grid-column: 3; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+.canvas { grid-column: 2; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
 .canvas-inner {
   width: min(100%, var(--canvas-max));
   padding: var(--canvas-pad);
@@ -484,7 +484,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 /* Четыре свойства книги ложатся в ряд: холст шириной 1180px, и в столбик
    они занимали высоту экрана. Разделители — фон сетки, а не рамки. */
 .tiles {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px; background: var(--c-border);
 }
 .tile {
@@ -537,9 +537,98 @@ button.tile-val:hover, .tile-val-button:hover { color: var(--c-brand); backgroun
 .tile-meta { margin-top: auto; font-size: var(--t-xs); color: var(--c-ink-3); }
 .tile-meta b { color: var(--c-ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* На узком окне ряд из четырёх нечитаем: делим пополам, потом в столбик. */
+/* На узком окне ряд из трёх нечитаем: делим пополам, потом в столбик. */
 @media (max-width: 1080px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .tiles { grid-template-columns: minmax(0, 1fr); } }
+
+/* ================================================================
+   ПАНЕЛЬ СТАТИСТИКИ
+
+   У трёх плиток значение одно: этот баннер, этот фильтр, этот вес.
+   У статистики значений семь, и за словом «изменить» они превращались
+   в закрытый ящик. Поэтому она идёт полосой под плитками во всю их
+   ширину и показывает сами варианты: строка — вопрос, справа ответы,
+   выбранный залит. Каждый щелчок уходит в конфигурацию сразу.
+   ================================================================ */
+.stat-panel { border-top: 1px solid var(--c-border); background: var(--c-surface); }
+.stat-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px 2px;
+}
+.stat-head .tile-key { flex: 0 0 auto; }
+.stat-note { font-size: var(--t-xs); color: var(--c-ink-4); }
+.stat-saved {
+  margin-left: auto; padding: 1px 9px; border-radius: var(--r-pill);
+  background: var(--c-brand-tint); color: var(--c-brand);
+  font-size: var(--t-micro); font-weight: 600;
+  animation: drawer-rise 160ms var(--ease);
+}
+.stat-row {
+  display: grid; grid-template-columns: 148px minmax(0, 1fr);
+  gap: 12px; align-items: center; padding: 8px 14px;
+}
+.stat-key { font-size: var(--t-xs); color: var(--c-ink-3); }
+.stat-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.stat-hint { margin: 0 14px 6px 174px; font-size: var(--t-xs); }
+
+/* Сегменты: варианты одного вопроса стоят рядом, выбранный залит.
+   Радиогруппа читается быстрее селекта — видно и выбор, и альтернативы. */
+.seg {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--c-surface-soft); border-radius: var(--r-pill);
+}
+.seg button {
+  padding: 4px 12px; border: 0; border-radius: var(--r-pill);
+  background: transparent; color: var(--c-ink-2);
+  font-size: var(--t-xs); font-weight: 500; white-space: nowrap;
+}
+.seg button:hover { background: rgba(0, 0, 0, .04); color: var(--c-ink); transform: none; }
+.seg button.on {
+  background: var(--c-surface); color: var(--c-ink); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 0 0 1px rgba(0, 0, 0, .04);
+}
+.seg button.on:hover { background: var(--c-surface); }
+
+/* Независимые переключатели: не сегмент, а флажок-пилюля. */
+.opt {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 12px 4px 8px; border-radius: var(--r-pill);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500; white-space: nowrap;
+}
+.opt:hover { border-color: var(--c-border-strong); color: var(--c-ink); background: var(--c-surface); transform: none; }
+.opt-mark {
+  width: 13px; height: 13px; flex: 0 0 auto; border-radius: 4px;
+  border: 1.5px solid var(--c-ink-4); background: var(--c-surface);
+}
+.opt.on { border-color: transparent; background: var(--c-brand-tint); color: var(--c-brand); font-weight: 600; }
+.opt.on .opt-mark {
+  border-color: var(--c-brand); background: var(--c-brand);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6.4 4.8 8.7 9.5 3.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-size: 11px 11px; background-position: center; background-repeat: no-repeat;
+}
+
+/* Число и выбор волны: те же пилюли, но с полем внутри. */
+.stat-number {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 12px; border-radius: var(--r-pill);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  font-size: var(--t-xs); color: var(--c-ink-3); white-space: nowrap;
+}
+.stat-number input, .stat-number select {
+  height: 22px; padding: 0 6px; border: 0; border-radius: var(--r-1);
+  background: var(--c-surface-soft); color: var(--c-ink);
+  font-size: var(--t-xs); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.stat-number input { width: 58px; }
+.stat-number input:focus-visible, .stat-number select:focus-visible {
+  outline: none; box-shadow: var(--focus-ring);
+}
+
+@media (max-width: 900px) {
+  .stat-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .stat-hint { margin-left: 14px; }
+}
 
 /* Группировки в карточке вопроса: строка-ссылка в редактор перекодировки. */
 .question-recodings { display: flex; flex-direction: column; gap: 6px; }
@@ -870,11 +959,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    оформления дока — тени и рамки, которых у пустой колонки быть не должно.
    ================================================================ */
 .insp-dock {
-  grid-column: 2; display: flex; align-items: stretch;
+  grid-column: 3; display: flex; align-items: stretch;
   min-width: 0;
 }
 .shell:has(.insp:not([hidden])) .insp-dock {
-  border-right: 1px solid var(--c-border);
+  border-left: 1px solid var(--c-border);
 }
 .insp {
   align-self: stretch; height: 100%; max-height: 100%;
@@ -886,7 +975,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   animation: insp-in 220ms var(--ease);
 }
 .insp[hidden] { display: none !important; }
-@keyframes insp-in { from { opacity: 0; transform: translateX(-10px); } }
+@keyframes insp-in { from { opacity: 0; transform: translateX(10px); } }
 
 /* Форма внутри инспектора повторяет его же три яруса и тянется на всю
    высоту панели: ряд действий стоит внизу, а не там, где кончился текст. */
@@ -1158,15 +1247,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .sheet-foot .foot-note { flex: 1 1 auto; min-width: 0; color: var(--c-ink-3); font-size: var(--t-xs); }
 
-/* Заголовок секции внутри листа — вместо карточки с рамкой и отступами. */
-.sec-cap {
-  display: flex; align-items: center; gap: 9px; margin: 3px 0 0;
-  color: var(--c-ink-3); font-size: 11px; font-weight: 600;
-  letter-spacing: .07em; text-transform: uppercase;
-}
-.sec-cap::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--c-border); }
-.sheet .settings-block { padding: 2px 14px; background: var(--c-surface-soft); border-radius: 10px; }
-.sheet label.disabled-setting { opacity: .62; }
 
 /* Weight editor */
 /* Оболочку задаёт .insp — здесь остались только внутренности. */
@@ -1382,7 +1462,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .tgl-row + .tgl-row { border-top: 1px solid var(--c-border); }
 .tgl-row strong { font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.005em; display: block; }
 .tgl-row small { font-size: var(--t-xs); color: var(--c-ink-3); line-height: 1.35; display: block; margin-top: 1px; }
-.settings-block { padding: 2px 14px; background: var(--c-surface-soft); border-radius: 10px; }
 .banner-toggle-settings, .weight-toggle-setting { grid-column: 1 / -1; }
 .weight-toggle-setting { padding-inline: 2px; }
 .tgl-row.boxed { padding: 8px 13px; background: var(--c-surface-soft); border-radius: 10px; }
@@ -1419,7 +1498,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    некуда положить, он выезжает поверх списка с той же стороны.
    ================================================================ */
 .editor-backdrop { display: none; }
-@keyframes slide-over-in { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes slide-over-in { from { opacity: 0; transform: translateX(24px); } }
 @keyframes backdrop-in { from { opacity: 0; } }
 /* На неё ссылается меню выгрузки. */
 @keyframes drawer-rise { from { opacity: 0; transform: translateY(10px); } }
@@ -1434,11 +1513,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 @media (max-width: 1080px) {
   .insp-dock { position: static; padding: 0; }
-  .shell:has(.insp:not([hidden])) .insp-dock { border-right: 0; }
+  .shell:has(.insp:not([hidden])) .insp-dock { border-left: 0; }
   .insp:not([hidden]) {
-    position: fixed; top: 0; left: 0; right: auto; bottom: 0; z-index: 140;
+    position: fixed; top: 0; left: auto; right: 0; bottom: 0; z-index: 140;
     width: min(400px, 100vw); max-height: none; height: 100%;
-    border: 0; border-radius: 0; box-shadow: 18px 0 54px rgba(15, 20, 17, .26);
+    border: 0; border-radius: 0; box-shadow: -18px 0 54px rgba(15, 20, 17, .26);
     animation: slide-over-in 240ms var(--ease);
   }
   body:has(.insp:not([hidden])) .editor-backdrop {

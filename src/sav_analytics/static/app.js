@@ -189,11 +189,8 @@ document.querySelector("#add-weight-dimension").addEventListener("click", () => 
 document.querySelector("#delete-weight").addEventListener("click", deleteWeight);
 document.querySelector("#refresh-weight-preview").addEventListener("click", loadWeightPreview);
 document.querySelector("#weight-trimming").addEventListener("change", renderWeightTrimming);
-document.querySelector("#report-wave-comparison").addEventListener("change", syncReportWaveControl);
 document.querySelector("#report-weight").addEventListener("change", loadReportWeightDiagnostics);
 document.querySelector("#report-weight-declare-button").addEventListener("click", declareSelectedWeight);
-document.querySelector("#report-compare-target").addEventListener("change", syncReportCompareTargetHint);
-document.querySelector("#report-compare-subgroups").addEventListener("change", syncReportCompareTargetHint);
 document.querySelector("#weight-dimension-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-weight-dimension]");
   if (button) button.closest(".weight-dimension").remove();
@@ -555,6 +552,13 @@ document.querySelector("#entity-list").addEventListener("click", event => {
     setView(goto.dataset.goto);
     return;
   }
+  const stat = event.target.closest("[data-stat]");
+  if (stat) {
+    if (stat.getAttribute("aria-checked") !== "true") {
+      void applyStatSetting(statPatch(stat.dataset.stat, stat.dataset.value));
+    }
+    return;
+  }
   const recodeCard = event.target.closest("[data-recode-id]");
   if (recodeCard) {
     openRecoding(recodeCard.dataset.recodeId);
@@ -675,40 +679,21 @@ reportSettingsForm.addEventListener("submit", async event => {
   const saveButton = document.querySelector("#save-report-settings");
   const settingsError = document.querySelector("#report-settings-error");
   const weightSelection = document.querySelector("#report-weight").value;
-  const waveMode = document.querySelector("#report-wave-comparison").value;
-  const waveControl = document.querySelector("#report-wave-control").value;
-  const payload = {
-    compare_to_total: document.querySelector("#report-compare-subgroups").checked,
-    compare_target: document.querySelector("#report-compare-target").value,
-    compare_pairwise: document.querySelector("#report-compare-pairwise").checked,
-    confidence_level: Number(document.querySelector("#report-confidence").value) / 100,
-    bonferroni: document.querySelector("#report-bonferroni").checked,
-    show_p_values: document.querySelector("#report-show-p-values").checked,
-    minimum_base: Number(document.querySelector("#report-minimum-base").value),
-    weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
-    calculated_weight_id: weightSelection.startsWith("calculated:")
-      ? weightSelection.slice(11)
-      : null,
-    wave_comparison: waveMode,
-    wave_control_value: waveMode === "control" && waveControl
-      ? JSON.parse(waveControl)
-      : null,
-  };
   settingsError.hidden = true;
   setBusy(saveButton, true, "Сохраняем…");
   try {
-    currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    await patchReportSettings({
+      weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
+      calculated_weight_id: weightSelection.startsWith("calculated:")
+        ? weightSelection.slice(11)
+        : null,
     });
-    renderProject();
     closeSheet();
     showToast("Настройки отчёта сохранены");
   } catch (error) {
     showError(settingsError, error);
   } finally {
-    setBusy(saveButton, false, "Сохранить настройки");
+    setBusy(saveButton, false, "Применить вес");
   }
 });
 
@@ -1040,36 +1025,11 @@ function reportWeightLabel(settings) {
 
 function renderReportSettings() {
   const settings = configuredReportSettings();
-  document.querySelector("#report-confidence").value = settings.confidence_level * 100;
-  document.querySelector("#report-minimum-base").value = settings.minimum_base;
-  document.querySelector("#report-compare-subgroups").checked = settings.compare_to_total;
-  document.querySelector("#report-compare-target").value = settings.compare_target;
-  document.querySelector("#report-compare-pairwise").checked = settings.compare_pairwise;
-  document.querySelector("#report-bonferroni").checked = settings.bonferroni;
-  document.querySelector("#report-show-p-values").checked = settings.show_p_values;
-  document.querySelector("#report-wave-comparison").value = settings.wave_comparison;
-
   const selectedWeight = settings.calculated_weight_id
     ? `calculated:${settings.calculated_weight_id}`
     : settings.weight_variable ? `ready:${settings.weight_variable}` : "";
   renderReportWeightSelect(selectedWeight);
-
-  const waveQuestion = configuredQuestions().find(question => question.role === "wave");
-  const waveVariable = waveQuestion
-    ? currentProject.inspection.variables.find(
-      variable => variable.name === waveQuestion.source_variables?.[0]
-    )
-    : null;
-  document.querySelector("#report-wave-control").innerHTML =
-    (waveVariable?.value_labels || []).map(item => {
-      const selected = String(item.value) === String(settings.wave_control_value)
-        ? "selected"
-        : "";
-      return `<option value="${escapeAttribute(JSON.stringify(item.value))}" ${selected}>${escapeHtml(item.label)}</option>`;
-    }).join("");
   document.querySelector("#report-settings-error").hidden = true;
-  syncReportWaveControl();
-  syncReportCompareTargetHint();
 }
 
 // Роль берётся из конфигурации: её меняет аналитик, а `inspection` хранит
@@ -1327,7 +1287,7 @@ function reportWeightTile(settings) {
   let value = "Без веса";
   let chips = [];
   let meta = "Показатели и базы невзвешенные";
-  let action = '<button type="button" class="tile-edit" data-new="weight">рассчитать</button>';
+  let action = '<button type="button" class="tile-edit" data-open-sheet="report-settings">настроить</button>';
   if (calculated) {
     value = escapeHtml(calculated.name);
     chips = ['<span class="chip">raking / IPF</span>'].concat(
@@ -1344,7 +1304,7 @@ function reportWeightTile(settings) {
     meta = diagnostics
       ? `Эфф. база <b>${formatWeightNumber(diagnostics.effective_base)}</b> · DEFF <b>${formatWeightNumber(diagnostics.design_effect)}</b>`
       : "Разбор распределения <b>считается…</b>";
-    action = '<button type="button" class="tile-edit" data-open-sheet="report-settings">диагностика</button>';
+    action = '<button type="button" class="tile-edit" data-open-sheet="report-settings">настроить</button>';
   }
   return reportTileMarkup({
     key: "weight", title: "Вес", picker: "weight",
@@ -1352,28 +1312,96 @@ function reportWeightTile(settings) {
   });
 }
 
-function reportStatisticsTile(settings) {
-  const waves = {
-    none: "Волны не сравниваются",
-    previous: "Сравнение с предыдущей волной",
-    control: "Сравнение с контрольной волной",
-  };
-  const value = settings.compare_to_total
-    ? `Subgroup/${settings.compare_target === "total" ? "Total" : "Rest"}${settings.compare_pairwise ? " и попарные" : ""}`
-    : (settings.compare_pairwise ? "Только попарные сравнения" : "Тесты не считаются");
-  const chips = [
-    `<span class="chip">${Math.round(settings.confidence_level * 1000) / 10}%</span>`,
-    settings.bonferroni ? '<span class="chip">Bonferroni</span>' : "",
-    `<span class="chip">база &lt; ${settings.minimum_base}</span>`,
-    settings.show_p_values ? '<span class="chip">p-value</span>' : "",
-  ].filter(Boolean);
-  return reportTileMarkup({
-    key: "statistics", title: "Статистика",
-    value: `<button type="button" class="tile-val-button ${settings.compare_to_total || settings.compare_pairwise ? "" : "off"}" data-open-sheet="report-settings">${escapeHtml(value)}</button>`,
-    off: false, chips: tileChips(chips),
-    meta: escapeHtml(waves[settings.wave_comparison] || waves.none),
-    action: '<button type="button" class="tile-edit" data-open-sheet="report-settings">изменить</button>',
-  });
+// Статистика — не плитка. У остальных трёх свойств значение одно
+// («этот баннер», «этот фильтр», «этот вес»), а здесь их семь, и прятать
+// их за словом «изменить» значит держать половину настроек отчёта в
+// закрытом ящике. Поэтому она идёт полосой под плитками, во всю их
+// ширину, и показывает варианты, а не итог: выбор виден и делается на
+// месте, каждый переключатель сразу уходит в конфигурацию.
+function statSegment(name, options, value) {
+  return `<span class="seg" role="radiogroup">${options.map(option => `
+    <button type="button" role="radio" data-stat="${name}" data-value="${escapeAttribute(option.value)}"
+      aria-checked="${option.value === value}" class="${option.value === value ? "on" : ""}">${escapeHtml(option.label)}</button>`).join("")}</span>`;
+}
+
+function statToggle(name, label, checked, title = "") {
+  return `<button type="button" class="opt ${checked ? "on" : ""}" data-stat="${name}"
+    data-value="${checked ? "off" : "on"}" aria-pressed="${checked}" title="${escapeAttribute(title)}">
+    <span class="opt-mark" aria-hidden="true"></span>${escapeHtml(label)}</button>`;
+}
+
+function reportStatisticsPanel(settings) {
+  // Схема сравнения — это два поля сразу: считать ли подгруппы и с кем.
+  // Раздельно они давали выключенный селект рядом с выключенным флажком.
+  const scheme = !settings.compare_to_total
+    ? "off"
+    : settings.compare_target === "total" ? "total" : "rest";
+  const waveQuestion = configuredQuestions().find(question => question.role === "wave");
+  const waveVariable = waveQuestion
+    ? currentProject.inspection.variables
+      .find(variable => variable.name === waveQuestion.source_variables?.[0])
+    : null;
+  const waveOptions = (waveVariable?.value_labels || []).map(item => {
+    const value = JSON.stringify(item.value);
+    const selected = String(item.value) === String(settings.wave_control_value) ? "selected" : "";
+    return `<option value="${escapeAttribute(value)}" ${selected}>${escapeHtml(item.label)}</option>`;
+  }).join("");
+  const totalWarning = scheme === "total"
+    ? '<p class="stat-hint warning-hint">Total включает саму подгруппу: выборки пересекаются, различия занижаются. Выбирайте, только если этого требует шаблон заказчика.</p>'
+    : "";
+  return `<section class="stat-panel" data-block="statistics" id="stat-panel">
+    <div class="stat-head">
+      <span class="tile-key">Статистика</span>
+      <span class="stat-note">Действует на весь отчёт</span>
+      <span id="stat-saved" class="stat-saved" role="status" hidden>Сохранено</span>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-key">Сравнение подгрупп</span>
+      <div class="stat-controls">
+        ${statSegment("scheme", [
+          { value: "off", label: "Не считать" },
+          { value: "rest", label: "С остатком (Rest)" },
+          { value: "total", label: "С Total" },
+        ], scheme)}
+        ${statToggle("pairwise", "Попарные внутри блока", settings.compare_pairwise)}
+      </div>
+    </div>
+    ${totalWarning}
+
+    <div class="stat-row">
+      <span class="stat-key">Уровень и пороги</span>
+      <div class="stat-controls">
+        ${statSegment("confidence", [
+          { value: "0.9", label: "90%" },
+          { value: "0.95", label: "95%" },
+          { value: "0.99", label: "99%" },
+        ], String(settings.confidence_level))}
+        ${statToggle("bonferroni", "Поправка Bonferroni", settings.bonferroni,
+          "Корректирует alpha на число сравнений внутри блока")}
+        <label class="stat-number">Малая база &lt;
+          <input id="stat-minimum-base" type="number" min="1" max="100000" value="${settings.minimum_base}" />
+        </label>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-key">Волны и вывод</span>
+      <div class="stat-controls">
+        ${statSegment("wave", [
+          { value: "none", label: "Волны не сравнивать" },
+          { value: "previous", label: "С предыдущей" },
+          { value: "control", label: "С контрольной" },
+        ], settings.wave_comparison)}
+        ${settings.wave_comparison === "control"
+          ? `<label class="stat-number">Контрольная
+              <select id="stat-wave-control">${waveOptions}</select></label>`
+          : ""}
+        ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
+          "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
+      </div>
+    </div>
+  </section>`;
 }
 
 // Состав — не настройка книги, а итог структуры: его не выбирают здесь,
@@ -1404,12 +1432,13 @@ function renderReportBlocks() {
   const container = document.querySelector("#entity-list");
   const settings = configuredReportSettings();
   container.className = "entity-list report-blocks";
-  container.innerHTML = reportContentSummary() + `<div class="tiles">${[
-    reportColumnsTile(),
-    reportBaseTile(),
-    reportWeightTile(settings),
-    reportStatisticsTile(settings),
-  ].join("")}</div>`;
+  container.innerHTML = reportContentSummary()
+    + `<div class="tiles">${[
+      reportColumnsTile(),
+      reportBaseTile(),
+      reportWeightTile(settings),
+    ].join("")}</div>`
+    + reportStatisticsPanel(settings);
   const activeBanner = configuredBanners().find(item => item.id === selectedReportBannerId());
   const included = configuredQuestions().filter(question => question.included_in_report).length;
   const columns = activeBanner ? reportBannerColumnCount(activeBanner) : 1;
@@ -1435,6 +1464,101 @@ async function hydrateReadyWeight(variable) {
   }
   if (currentProject?.id === projectId && currentView === "report") renderReportBlocks();
 }
+
+// Настройки отчёта пишутся целиком: endpoint принимает полный набор,
+// поэтому любой переключатель отправляет текущие значения с одной
+// заменённой парой. Так же поступает и лист выбора веса.
+async function patchReportSettings(partial, { toast = null } = {}) {
+  const settings = { ...configuredReportSettings(), ...partial };
+  const payload = {
+    compare_to_total: settings.compare_to_total,
+    compare_target: settings.compare_target,
+    compare_pairwise: settings.compare_pairwise,
+    confidence_level: settings.confidence_level,
+    bonferroni: settings.bonferroni,
+    show_p_values: settings.show_p_values,
+    minimum_base: settings.minimum_base,
+    weight_variable: settings.weight_variable || null,
+    calculated_weight_id: settings.calculated_weight_id || null,
+    wave_comparison: settings.wave_comparison,
+    wave_control_value: settings.wave_comparison === "control"
+      ? settings.wave_control_value
+      : null,
+  };
+  currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  renderProject();
+  if (currentView === "report") void loadReportPreflight();
+  if (toast) showToast(toast);
+  return currentProject;
+}
+
+// Первая волна в списке — значение по умолчанию: контрольное сравнение без
+// выбранной волны сервер не примет.
+function firstWaveValue() {
+  const waveQuestion = configuredQuestions().find(question => question.role === "wave");
+  const variable = waveQuestion
+    ? currentProject.inspection.variables
+      .find(item => item.name === waveQuestion.source_variables?.[0])
+    : null;
+  return variable?.value_labels?.[0]?.value ?? null;
+}
+
+function statPatch(name, value) {
+  if (name === "scheme") {
+    return value === "off"
+      ? { compare_to_total: false }
+      : { compare_to_total: true, compare_target: value };
+  }
+  if (name === "confidence") return { confidence_level: Number(value) };
+  if (name === "pairwise") return { compare_pairwise: value === "on" };
+  if (name === "bonferroni") return { bonferroni: value === "on" };
+  if (name === "pvalues") return { show_p_values: value === "on" };
+  if (name === "wave") {
+    return value === "control"
+      ? {
+        wave_comparison: "control",
+        wave_control_value: configuredReportSettings().wave_control_value ?? firstWaveValue(),
+      }
+      : { wave_comparison: value };
+  }
+  return {};
+}
+
+function flashSaved() {
+  const badge = document.querySelector("#stat-saved");
+  if (!badge) return;
+  badge.hidden = false;
+  window.clearTimeout(flashSaved.timer);
+  flashSaved.timer = window.setTimeout(() => {
+    const current = document.querySelector("#stat-saved");
+    if (current) current.hidden = true;
+  }, 1800);
+}
+
+async function applyStatSetting(partial) {
+  try {
+    await patchReportSettings(partial);
+    flashSaved();
+  } catch (error) {
+    alert(error.message);
+    renderReportBlocks();
+  }
+}
+
+document.querySelector("#entity-list").addEventListener("change", event => {
+  const base = event.target.closest("#stat-minimum-base");
+  if (base) {
+    const value = Math.min(100000, Math.max(1, Math.round(Number(base.value) || 30)));
+    void applyStatSetting({ minimum_base: value });
+    return;
+  }
+  const wave = event.target.closest("#stat-wave-control");
+  if (wave) void applyStatSetting({ wave_control_value: JSON.parse(wave.value) });
+});
 
 /* ---------------- Поповер выбора ---------------- */
 
@@ -2817,28 +2941,6 @@ function valueLabelsForQuestion(question) {
 
 function containsComparable(values, expected) {
   return values.some(value => String(value) === String(expected));
-}
-
-// Схема сравнения меняет смысл цветных пометок в Excel, поэтому объясняем
-// выбор прямо под селектором, а не только в документации.
-function syncReportWaveControl() {
-  const mode = document.querySelector("#report-wave-comparison").value;
-  document.querySelector("#report-wave-control-label").hidden = mode !== "control";
-}
-
-function syncReportCompareTargetHint() {
-  const select = document.querySelector("#report-compare-target");
-  const hint = document.querySelector("#report-compare-target-help");
-  const enabled = document.querySelector("#report-compare-subgroups").checked;
-  const label = document.querySelector("#report-compare-target-label");
-  select.disabled = !enabled;
-  label.classList.toggle("disabled-setting", !enabled);
-  hint.textContent = !enabled
-    ? "Включите сравнение подгрупп, чтобы выбрать референсную группу."
-    : select.value === "total"
-    ? "Total включает саму подгруппу: выборки пересекаются, различия занижаются и часть реальных отличий останется без пометки. Выбирайте, только если этого требует шаблон заказчика."
-    : "Подгруппа сравнивается с теми, кто в неё не вошёл. Total остаётся описательной колонкой и в тестах не участвует.";
-  hint.classList.toggle("warning-hint", enabled && select.value === "total");
 }
 
 async function refreshStructure() {

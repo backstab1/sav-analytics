@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260819-report-a" />
+    <link rel="stylesheet" href="/styles.css?v=20260819-report-b" />
   </head>
   <body>
     <!-- ================================================================
@@ -105,11 +105,11 @@
         </section>
 
         <!-- ================================================================
-             РАБОЧАЯ ОБЛАСТЬ — рельс / инспектор / холст.
+             РАБОЧАЯ ОБЛАСТЬ — рельс / холст / инспектор.
              Страница не прокручивается: прокручиваются панели.
 
              Порядок колонок задаётся в CSS (grid-column), а не разметкой:
-             инспектор стоит слева от списка, но в DOM идёт после него —
+             инспектор стоит справа от холста и в DOM идёт после него —
              панель читается сразу за строкой, которая её открыла.
              ================================================================ -->
         <section id="workspace" class="workspace" hidden>
@@ -231,7 +231,7 @@
                  своей прокруткой, ряд действий. Высота — по содержимому,
                  потолок — экран (см. .insp в styles.css).
 
-                 Док — колонка между рельсом и холстом. Пока все инспекторы
+                 Док — колонка справа от холста. Пока все инспекторы
                  скрыты, он нулевой ширины, и колонка не занимает места.
                  ============================================================ -->
             <div class="insp-dock">
@@ -445,17 +445,15 @@
          заполнять всю панель; лист сам ужимается по содержимому.
          ================================================================ -->
     <div id="sheet-veil" class="veil" hidden>
+      <!-- Лист остался только про вес: статистику видно и выбирают прямо
+           в разделе «Отчёт» (панель .stat-panel), а здесь живёт то, что
+           требует разбора распределения и смены роли переменной. -->
       <form id="report-settings-form" class="sheet" hidden>
         <div class="sheet-head">
-          <div><h3>Настройка отчёта</h3><small>Применяется ко всему Excel и выбранному баннеру</small></div>
-          <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть настройки">×</button>
+          <div><h3>Вес отчёта</h3><small>Готовый из массива или рассчитанный raking</small></div>
+          <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть настройки веса">×</button>
         </div>
         <div class="sheet-body scroll">
-          <p class="sec-cap">Расчёт</p>
-          <div class="form-row">
-            <label class="f">Уровень доверия, %<input id="report-confidence" type="number" min="0.01" max="99.99" step="0.01" value="95" required /></label>
-            <label class="f">Порог малой базы<input id="report-minimum-base" type="number" min="1" max="100000" value="30" required /></label>
-          </div>
           <label class="f">Вес отчёта<select id="report-weight"><option value="">Без веса</option></select><small id="report-weight-help"></small></label>
           <details id="report-weight-declare" class="declare-weight">
             <summary>Объявить весом другую переменную</summary>
@@ -466,30 +464,12 @@
             </div>
           </details>
           <div id="report-weight-diagnostics" class="weight-verdict" hidden></div>
-
-          <p class="sec-cap">Значимые отличия</p>
-          <div class="settings-block">
-            <label class="tgl-row"><span><strong>Сравнивать подгруппы</strong><small>Отмечать значимые отличия в отчёте</small></span><span class="tgl"><input id="report-compare-subgroups" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
-            <label class="tgl-row"><span><strong>Попарные сравнения</strong><small>Между подгруппами блока</small></span><span class="tgl"><input id="report-compare-pairwise" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
-            <label class="tgl-row"><span><strong>Поправка Bonferroni</strong><small>Для множественных сравнений</small></span><span class="tgl"><input id="report-bonferroni" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
-            <label class="tgl-row"><span><strong>Показывать p-value</strong><small>Детали теста в примечании к ячейке; книга заметно тяжелее</small></span><span class="tgl"><input id="report-show-p-values" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
-          </div>
-          <label id="report-compare-target-label" class="f">С кем сравнивать подгруппы<select id="report-compare-target">
-            <option value="rest">С остальными (Rest) — статистически корректно</option>
-            <option value="total">С Total — как в клиентских макросах</option>
-          </select><small id="report-compare-target-help"></small></label>
-
-          <p class="sec-cap">Волны</p>
-          <div class="form-row">
-            <label class="f">Схема сравнения<select id="report-wave-comparison"><option value="none">Не сравнивать</option><option value="previous">С предыдущей волной</option><option value="control">С контрольной волной</option></select></label>
-            <label id="report-wave-control-label" class="f" hidden>Контрольная волна<select id="report-wave-control"></select></label>
-          </div>
           <p id="report-settings-error" class="error" hidden></p>
         </div>
         <div class="sheet-foot">
           <span class="foot-note">Сохраняется в конфигурацию проекта</span>
           <button type="button" class="secondary" data-close-sheet>Отмена</button>
-          <button id="save-report-settings" type="submit">Сохранить настройки</button>
+          <button id="save-report-settings" type="submit">Применить вес</button>
         </div>
       </form>
 
@@ -521,7 +501,7 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260819-report-a" defer></script>
-    <script src="/app.js?v=20260819-report-a" defer></script>
+    <script src="/shell.js?v=20260819-report-b" defer></script>
+    <script src="/app.js?v=20260819-report-b" defer></script>
   </body>
 </html>
