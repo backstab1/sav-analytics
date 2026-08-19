@@ -505,19 +505,17 @@
     return { setVariables, activate };
   })();
 
-  /* Проектное в шапке: название, сводка и выгрузка. Ярус хрома один, поэтому
-     блок не «пустеет», а скрывается целиком — до открытия проекта показывать
-     в нём нечего. */
-  const projectChrome = [
-    document.querySelector("#project-chrome"),
-    document.querySelector("#project-actions"),
-  ];
+  /* Проектное в шапке: название открытого проекта и размер массива. Ярус
+     хрома один, поэтому блок не «пустеет», а скрывается целиком — до
+     открытия проекта показывать в нём нечего. Выгрузка живёт не здесь,
+     а в ряду действий над окном списка, внутри самой рабочей области. */
+  const projectChrome = document.querySelector("#project-chrome");
 
   window.Shell = {
     showScreen,
     /* Вызывается из app.js: проект открыли или закрыли. */
     setProjectOpen(open) {
-      projectChrome.forEach(block => { block.hidden = !open; });
+      projectChrome.hidden = !open;
       if (!open) {
         builder.setVariables([], 0);
         closeExportMenu();

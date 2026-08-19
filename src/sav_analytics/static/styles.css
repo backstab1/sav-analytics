@@ -47,6 +47,7 @@
   /* Type — на два шага мельче прежнего. Таблица структуры и инспектор
      это справочные экраны: на прежних 14,5px в них помещалось на треть
      меньше строк, а читаемость от размера здесь не зависела. */
+  --t-micro: 10.5px;
   --t-xs:   11px;
   --t-sm:   12px;
   --t-base: 12.5px;
@@ -73,7 +74,7 @@
      списка по центру и воздух вокруг него. */
   --rail: 80px;
   --insp: 356px;
-  --sheet: 400px;
+  --sheet: 480px;
   --canvas-pad: 20px;
   --canvas-max: 1180px;
   --shell-gap: 12px;
@@ -159,27 +160,16 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
 .chip-project svg { width: 11px; height: 11px; color: var(--c-ink-3); flex-shrink: 0; }
 
 
-/* Сводка — чипы в строку вместо четырёх карточек 100×56 во втором ярусе. */
-.bar-stats { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
-.bar-chip {
-  display: inline-flex; align-items: baseline; gap: 5px; flex: 0 0 auto;
-  padding: 4px 9px; border-radius: var(--r-pill);
-  background: transparent; color: var(--c-ink-3);
-  font-size: var(--t-xs); font-weight: 500; white-space: nowrap;
+/* Размер массива рядом с названием: он не меняется по ходу работы, а
+   сводка со статусами переехала на холст (.summary) — там она стоит
+   у списка, который фильтрует. */
+.project-meta {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-ink-3); font-size: var(--t-xs); letter-spacing: .01em;
 }
-.bar-chip b {
-  font-family: var(--font-display); font-size: var(--t-sm); font-weight: 700;
-  color: var(--c-ink); letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
-}
-.bar-chip[data-status-filter]:hover { background: var(--c-surface-soft); transform: none; }
-.bar-chip.active { background: var(--c-brand-tint); color: var(--c-brand); }
-.bar-chip.active b { color: var(--c-brand); }
-.bar-chip.warn b { color: var(--c-warn-ink); }
-.bar-chip.warn.active { background: var(--c-warn-tint); color: var(--c-warn-ink); }
-.bar-chip.warn.active b { color: var(--c-warn-ink); }
 
-/* Строка «что уйдёт в Excel» переехала в подсказку чипов: в ярусе на неё
-   нет места, а нужна она в момент выгрузки. */
+/* Строка «что уйдёт в Excel» переехала в подсказку кнопки выгрузки:
+   в ярусе на неё нет места, а нужна она в момент выгрузки. */
 .bar-state { display: none; }
 
 .avatar {
@@ -325,7 +315,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 /* Ряд один и тот же для всех трёх: колонки расставлены явно, а порядок
    в разметке другой, и автоматическая раскладка отправила бы док во
    второй ряд. */
-.rail, .insp-dock, .pane { grid-row: 1; }
+.rail, .insp-dock, .canvas { grid-row: 1; }
 
 /* ---------- Рельс: заменяет ряд вкладок внутри панели ---------- */
 .rail {
@@ -362,15 +352,63 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 }
 .rail-item.active svg, .rail-item.active em { color: var(--c-brand); }
 
-/* ---------- Холст: окно со списком и воздух вокруг него ----------
+/* ---------- Холст: шапка раздела, сводка и окно со списком ----------
 
    Панель перестала быть «всей шириной минус рельс»: это окно с полями,
-   потолком по ширине и серым полем справа. На 1440px окно занимает
-   1092px, дальше растёт только воздух. */
+   потолком по ширине и серым полем справа. Над окном — шапка раздела:
+   где мы, что здесь делают и действие раздела. Раньше всё это было
+   ужато в один ряд .toolbar внутри самой панели. */
+.canvas { grid-column: 3; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+.canvas-inner {
+  width: min(100%, var(--canvas-max));
+  padding: var(--canvas-pad);
+  display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0;
+}
+
+.canvas-head { display: flex; align-items: flex-start; gap: 16px; flex: 0 0 auto; }
+.canvas-head-text { min-width: 0; flex: 1 1 auto; }
+.canvas-head .eyebrow { color: var(--c-ink-3); font-size: var(--t-micro); letter-spacing: .09em; }
+.canvas-head h1 {
+  margin: 4px 0 0; font-size: var(--t-2xl); font-weight: 800; letter-spacing: -0.03em;
+}
+.canvas-head .lead {
+  margin: 5px 0 0; color: var(--c-ink-3);
+  font-size: var(--t-sm); line-height: 1.45;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Ряд действий: сводка слева, разовые действия справа. Одна высота на
+   весь ряд — чипы и кнопки набраны одной пилюлей .stat / .pill. */
+.canvas-tools { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; min-height: 24px; }
+.canvas-tools-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+
+/* Сводка проекта: она же фильтр по статусу. Чип «Все» снимает фильтр. */
+.summary { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.summary[hidden] { display: none; }
+.stat, .pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: var(--r-pill);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
+  white-space: nowrap;
+}
+.pill:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
+.pill svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.pill[hidden] { display: none !important; }
+#find-not-applicable svg { color: var(--c-warn-ink); }
+.stat b { font-weight: 600; color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.stat .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-ink-4); flex: 0 0 auto; }
+.stat:hover { background: var(--c-surface); border-color: var(--c-border-strong); transform: none; }
+.stat.warn .dot { background: #e0a32e; }
+.stat.ok .dot { background: var(--c-brand-2); }
+.stat.active { background: var(--c-brand-tint); border-color: transparent; color: var(--c-brand); }
+.stat.active b { color: var(--c-brand); }
+.stat.active .dot { background: var(--c-brand); }
+.stat.warn.active { background: var(--c-warn-tint); color: var(--c-warn-ink); }
+.stat.warn.active b { color: var(--c-warn-ink); }
+
 .pane {
-  grid-column: 3; justify-self: center; align-self: stretch;
-  width: min(100% - var(--canvas-pad) * 2, var(--canvas-max));
-  margin: var(--canvas-pad) 0;
+  flex: 1 1 auto;
   display: flex; flex-direction: column; min-width: 0; min-height: 0;
   background: var(--c-surface); border: 1px solid var(--c-border);
   border-radius: var(--r-3);
@@ -409,10 +447,10 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .report-findings .finding-warning { background: var(--c-surface-soft); }
 .report-findings .finding-warning b { color: var(--c-ink-3); }
 
-/* Сводка проекта переехала в шапку чипами (.bar-stats / .bar-chip),
-   а сетка «таблица + дровер» — в .shell выше. Здесь раньше лежали
-   четыре карточки 100x56 во втором ярусе и grid-template с
-   clamp(400px, 29vw, 460px) под каждый редактор отдельно. */
+/* Сводка проекта живёт на холсте (.summary / .stat), а сетка
+   «таблица + дровер» — в .shell выше. Здесь раньше лежали четыре
+   карточки 100x56 и grid-template с clamp(400px, 29vw, 460px)
+   под каждый редактор отдельно. */
 
 /* ================================================================
    СПИСКИ СУЩНОСТЕЙ — сетка карточек
@@ -685,9 +723,9 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    прибивала панель к высоте экрана через --drawer-height. Панель на
    440px содержимого занимала 814px, остальное было воздухом.
 
-   Теперь оболочка одна, а высота считается по содержимому:
-   align-self: start даёт карточку по контенту, max-height: 100%
-   ставит потолок в экран и включает прокрутку тела.
+   Теперь оболочка одна. Панель занимает всю высоту рабочей области
+   и стоит прямоугольником встык к рельсу: она выезжает сбоку, а не
+   всплывает карточкой. Тело прокручивается, ряд действий всегда внизу.
 
    Док — вторая колонка оболочки. Пока все инспекторы скрыты, он нулевой
    ширины: колонка `auto` схлопывается сама, синхронизировать класс из
@@ -695,27 +733,27 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    оформления дока — тени и рамки, которых у пустой колонки быть не должно.
    ================================================================ */
 .insp-dock {
-  grid-column: 2; display: flex; align-items: flex-start;
-  min-width: 0; padding: var(--canvas-pad) 0;
+  grid-column: 2; display: flex; align-items: stretch;
+  min-width: 0;
 }
 .shell:has(.insp:not([hidden])) .insp-dock {
   border-right: 1px solid var(--c-border);
 }
 .insp {
-  align-self: start; max-height: 100%;
+  align-self: stretch; height: 100%; max-height: 100%;
   flex: 0 0 var(--insp); width: var(--insp);
   display: flex; flex-direction: column; min-width: 0; min-height: 0;
   --editor-pad: 15px;
-  background: var(--c-surface); border: 1px solid var(--c-border); border-left: 0;
-  border-radius: 0 var(--r-3) var(--r-3) 0;
+  background: var(--c-surface); border: 0; border-radius: 0;
   box-shadow: var(--shadow-drawer); overflow: clip;
   animation: insp-in 220ms var(--ease);
 }
 .insp[hidden] { display: none !important; }
 @keyframes insp-in { from { opacity: 0; transform: translateX(-10px); } }
 
-/* Форма внутри инспектора повторяет его же три яруса. */
-.insp > form { display: flex; flex-direction: column; min-height: 0; }
+/* Форма внутри инспектора повторяет его же три яруса и тянется на всю
+   высоту панели: ряд действий стоит внизу, а не там, где кончился текст. */
+.insp > form { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 
 .insp-head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
@@ -734,7 +772,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .insp-head .icon-button { flex-shrink: 0; }
 
 .insp-body {
-  flex: 0 1 auto; min-height: 0; overflow-y: auto;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
   display: grid; align-content: start; gap: 12px;
   padding: 14px var(--editor-pad);
 }
@@ -940,13 +978,13 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    Раньше настройки были вкладкой и потому обязаны были заполнить всю
    панель: 1377x593 на четыре поля и три тумблера, карточка «Сравнение
    волн» — 682x224 при 59px содержимого. Лист сам ужимается по составу.
-   Лист выезжает оттуда же, откуда инспектор, — слева, встык к рельсу.
-   Настройки и пропуски перестали быть окном посреди экрана: всё, что
-   настраивают, приходит с одной стороны.
+   Лист — окно посреди экрана, а не ящик у края: это разовое действие,
+   после которого возвращаются к списку, и ему нужно внимание целиком.
+   Слева выезжают инспекторы — то, что правят рядом с таблицей.
    ================================================================ */
 .veil {
   position: fixed; inset: 0; z-index: 130;
-  display: flex; align-items: stretch; justify-content: flex-start; padding: 0;
+  display: grid; place-items: center; padding: 24px;
   background: rgba(29,29,31,.28);
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
   animation: veil-in 180ms var(--ease);
@@ -955,16 +993,15 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 @keyframes veil-in { from { opacity: 0; } }
 
 .sheet {
-  width: min(var(--sheet), 100%); max-height: none;
-  height: calc(100% - var(--bar)); margin: var(--bar) 0 0 var(--rail);
+  width: min(var(--sheet), 100%); max-height: min(720px, calc(100dvh - 48px));
   display: flex; flex-direction: column; min-height: 0;
-  background: var(--c-surface); border-radius: 0;
+  background: var(--c-surface); border-radius: 18px;
   box-shadow: var(--shadow-drawer); overflow: clip;
-  animation: sheet-in 240ms var(--ease);
+  animation: sheet-in 240ms var(--spring);
 }
-.sheet.wide { width: min(460px, 100%); }
+.sheet.wide { width: min(600px, 100%); }
 .sheet[hidden] { display: none !important; }
-@keyframes sheet-in { from { opacity: 0; transform: translateX(-16px); } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(12px) scale(.98); } }
 
 .sheet > form { display: flex; flex-direction: column; min-height: 0; }
 .sheet-head {
@@ -1251,20 +1288,14 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 @keyframes drawer-rise { from { opacity: 0; transform: translateY(10px); } }
 
 @media (max-width: 1280px) {
-  :root { --insp: 330px; --sheet: 360px; --canvas-pad: 14px; }
-  /* Ярус один, и на средних экранах подписи чипов из него вытесняют
-     экраны и выгрузку. Числа остаются: они же и фильтр таблицы,
-     а расшифровка есть в подсказке чипа. */
-  .bar-chip { gap: 0; padding: 4px 7px; font-size: 0; }
-  .bar-chip b { font-size: var(--t-sm); }
+  :root { --insp: 330px; --sheet: 440px; --canvas-pad: 14px; }
   .screens button, .screens .nav-action { padding: 5px 9px; font-size: var(--t-xs); }
+  /* Обрезанное «420 респо…» не несёт ничего: ниже этой ширины размер
+     массива убирается целиком. */
+  .project-meta { display: none; }
 }
 
 @media (max-width: 1080px) {
-  /* Ниже этой ширины числа сводки в ярус уже не влезают: место уходит
-     экранам и выгрузке. Фильтр по статусу вместе с ними пропадает —
-     то же было и до перестройки, только порогом 900px. */
-  .bar-stats { display: none; }
   .insp-dock { position: static; padding: 0; }
   .shell:has(.insp:not([hidden])) .insp-dock { border-right: 0; }
   .insp:not([hidden]) {
@@ -1294,7 +1325,8 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 @media (max-width: 620px) {
   :root { --shell-pad: 8px; --shell-gap: 8px; --canvas-pad: 8px; --rail: 62px; }
-  .sheet { margin-left: 0; width: 100%; }
+  .veil { padding: 12px; }
+  .sheet { border-radius: 14px; }
   .screen-pad { padding-right: var(--s-4); padding-left: var(--s-4); }
   .screens button { padding: 7px 9px; font-size: var(--t-xs); }
   .insp { --editor-pad: var(--s-4); }
@@ -1769,14 +1801,13 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* ---------- Шапка панели: вкладки видов и техническое меню ---------- */
 /* Меню выгрузки — техническое действие, а не главная кнопка экрана. */
 .export-menu { position: relative; flex-shrink: 0; }
+/* Выгрузка стоит в одном ряду с чипами и набрана той же пилюлей .pill —
+   отличается только заливкой: это действие, а не фильтр. */
 .export-toggle {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: var(--r-1);
   background: var(--c-surface-soft); color: var(--c-ink-2);
-  font-size: var(--t-xs); font-weight: 600;
+  border-color: transparent; font-weight: 600;
 }
 .export-toggle:hover { background: #ececef; color: var(--c-ink); }
-.export-toggle svg { width: 15px; height: 15px; }
 .export-toggle[aria-expanded="true"] { background: var(--c-brand-tint); color: var(--c-brand); }
 .export-caret {
   width: 0; height: 0; margin-left: 1px;

@@ -240,7 +240,6 @@ function resetStructureSearch({ render = true } = {}) {
   structureStatusFilter = null;
   structureSearchInput.value = "";
   document.querySelector("#structure-search-clear").hidden = true;
-  document.querySelector("#structure-search-count").hidden = true;
   if (render && currentProject) renderTable();
 }
 
@@ -248,11 +247,13 @@ function resetStructureSearch({ render = true } = {}) {
 document.querySelector("#summary").addEventListener("click", event => {
   const card = event.target.closest("button[data-status-filter]");
   if (!card || !currentProject) return;
-  const key = card.dataset.statusFilter;
+  // Пустой ключ — чип «Все»: он снимает фильтр, а не ставит свой.
+  const key = card.dataset.statusFilter || null;
   structureStatusFilter = structureStatusFilter === key ? null : key;
   if (structureStatusFilter) {
     currentView = "questions";
     structureMode = "questions";
+    renderSectionHead("questions");
     document.querySelectorAll(".tabs button[data-view]").forEach(button => {
       button.classList.toggle("active", button.dataset.view === "questions");
     });
@@ -269,9 +270,7 @@ document.querySelector("#summary").addEventListener("click", event => {
 
 function matchesStatusFilter(question) {
   if (!structureStatusFilter) return true;
-  const status = questionStatus(question);
-  if (structureStatusFilter === "included") return status !== "excluded";
-  return status === structureStatusFilter;
+  return questionStatus(question) === structureStatusFilter;
 }
 
 function matchesStructureSearch(...parts) {
@@ -285,10 +284,51 @@ function structureFiltered() {
   return Boolean(structureSearch || structureStatusFilter);
 }
 
+// Счётчик показывается всегда, а не только под фильтром: «96 из 96» —
+// это ещё и размер списка, за которым иначе надо лезть в сводку.
 function updateStructureSearchCount(shown, total) {
   const counter = document.querySelector("#structure-search-count");
-  counter.hidden = !structureFiltered();
-  counter.textContent = structureFiltered() ? `${shown} из ${total}` : "";
+  counter.textContent = `${shown} из ${total}`;
+}
+
+/* ================================================================
+   Шапка холста
+
+   Раздел называет себя сам: заголовок и подпись стоят над окном
+   списка, а не ужаты в ряд .toolbar внутри него. Действие раздела
+   («Пропуски по анкете») относится к структуре, поэтому в остальных
+   разделах его нет.
+   ================================================================ */
+const sectionHeads = {
+  questions: {
+    title: "Структура массива",
+    lead: "Типы и названия вопросов определены автоматически. Проверьте отмеченное.",
+  },
+  recodings: {
+    title: "Перекодировки",
+    lead: "Независимые группировки числовых переменных: возрастные группы, укрупнённые категории.",
+  },
+  banners: {
+    title: "Баннеры",
+    lead: "Колонки отчёта и их базы. Total добавляется всегда.",
+  },
+  filters: {
+    title: "Базы и фильтры",
+    lead: "Именованные правила выборки. «В Excel» применяет правило ко всему отчёту.",
+  },
+  weights: {
+    title: "Веса",
+    lead: "Расчёт веса методом raking/IPF по целевым распределениям.",
+  },
+};
+
+function renderSectionHead(view) {
+  const head = sectionHeads[view] || sectionHeads.questions;
+  document.querySelector("#section-title").textContent = head.title;
+  document.querySelector("#section-lead").textContent = head.lead;
+  document.querySelector("#find-not-applicable").hidden = view !== "questions";
+  // Сводка — фильтр таблицы вопросов, в других разделах ей нечего фильтровать.
+  document.querySelector("#summary").hidden = view !== "questions";
 }
 
 // Заголовки и ячейки обрезаются многоточием, поэтому дублируем текст в подсказку.
@@ -433,6 +473,7 @@ document.querySelectorAll(".tabs button[data-view]").forEach(button => button.ad
   document.querySelectorAll(".tabs button").forEach(item => item.classList.remove("active"));
   button.classList.add("active");
   currentView = button.dataset.view;
+  renderSectionHead(currentView);
   document.querySelector("#recode-toolbar").hidden = currentView !== "recodings";
   document.querySelector("#banner-toolbar").hidden = currentView !== "banners";
   document.querySelector("#structure-toolbar").hidden = currentView !== "questions";
@@ -904,6 +945,7 @@ function showProject(project) {
   bannerEditor.hidden = true;
   filterEditor.hidden = true;
   weightEditor.hidden = true;
+  renderSectionHead("questions");
   document.querySelector("#recode-toolbar").hidden = true;
   document.querySelector("#banner-toolbar").hidden = true;
   document.querySelector("#structure-toolbar").hidden = false;
@@ -958,25 +1000,30 @@ function questionStatus(question) {
   return question.recognition === "auto_review" ? "review" : "ready";
 }
 
-// Сводка живёт в шапке чипами: четыре карточки 100x56 во втором ярусе
-// стоили 77px высоты, а несли четыре числа.
+// Сводка стоит над окном списка и работает фильтром по статусу. Размер
+// массива в неё не входит: он не меняется по ходу работы и потому стоит
+// в шапке рядом с названием проекта.
 function renderSummary(inspection, questions) {
-  const included = questions.filter(item => questionStatus(item) !== "excluded");
+  const ready = questions.filter(item => questionStatus(item) === "ready");
   const review = questions.filter(item => questionStatus(item) === "review");
   const excluded = questions.filter(item => questionStatus(item) === "excluded");
+  document.querySelector("#project-meta").textContent = [
+    `${inspection.row_count.toLocaleString("ru-RU")} респондентов`,
+    `${questions.length} вопросов`,
+    `${inspection.variables.length} столбцов SAV`,
+  ].join(" · ");
   document.querySelector("#summary").innerHTML = [
-    { value: inspection.row_count, label: "респондентов", key: null },
-    { value: included.length, label: "в отчёте", key: "included" },
-    { value: review.length, label: "проверить", key: "review", tone: "warn" },
-    { value: excluded.length, label: "исключено", key: "excluded" },
+    { value: questions.length, label: "Все", key: null },
+    { value: review.length, label: "Проверить", key: "review", tone: "warn" },
+    { value: ready.length, label: "Готовы", key: "ready", tone: "ok" },
+    { value: excluded.length, label: "Исключены", key: "excluded", tone: "off" },
   ].map(chip => {
     const number = chip.value.toLocaleString("ru-RU");
-    if (!chip.key) return `<span class="bar-chip"><b>${number}</b>${chip.label}</span>`;
-    const active = structureStatusFilter === chip.key;
-    return `<button type="button" class="bar-chip ${chip.tone || ""} ${active ? "active" : ""}"
-      data-status-filter="${chip.key}" aria-pressed="${active}"
-      title="${active ? "Показать все вопросы" : `Показать только: ${chip.label}`}"
-      ><b>${number}</b>${chip.label}</button>`;
+    const active = chip.key ? structureStatusFilter === chip.key : !structureStatusFilter;
+    return `<button type="button" class="stat ${chip.tone || ""} ${active ? "active" : ""}"
+      data-status-filter="${chip.key || ""}" aria-pressed="${active}"
+      title="${chip.key ? `Показать только: ${chip.label.toLowerCase()}` : "Показать все вопросы"}"
+      ><span class="dot" aria-hidden="true"></span>${chip.label}<b>${number}</b></button>`;
   }).join("");
   renderRailCounts(questions);
   // Что уйдёт в Excel — подсказка на кнопке выгрузки. Раньше это была

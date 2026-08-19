@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260817-canvas-v4" />
+    <link rel="stylesheet" href="/styles.css?v=20260817-canvas-v7" />
   </head>
   <body>
     <!-- ================================================================
@@ -41,8 +41,9 @@
           <svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </button>
 
-        <!-- Наполняется из app.js (renderSummary), клик фильтрует таблицу. -->
-        <div id="summary" class="bar-stats"></div>
+        <!-- Размер массива: он не меняется по ходу работы, поэтому стоит
+             рядом с названием, а не среди фильтров. Заполняет app.js. -->
+        <span id="project-meta" class="project-meta"></span>
       </div>
 
       <div class="bar-grow"></div>
@@ -53,20 +54,6 @@
         <button type="button" data-screen="manual" aria-current="page">Ручной режим</button>
         <button type="button" data-screen="builder">AI-конструктор</button>
       </nav>
-
-      <div id="project-actions" class="export-menu" hidden>
-        <button id="export-toggle" class="export-toggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          Выгрузка<span class="export-caret" aria-hidden="true"></span>
-        </button>
-        <div id="export-list" class="export-list" role="menu" hidden>
-          <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
-          <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
-          <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
-          <div class="export-sep" role="separator"></div>
-          <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
-        </div>
-      </div>
 
       <div class="bar-sep"></div>
 
@@ -154,10 +141,6 @@
               </div>
 
               <div class="rail-foot">
-                <button id="find-not-applicable" class="rail-item" type="button" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">
-                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.2 17 16H3l7-12.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M10 8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="10" cy="13.6" r=".9" fill="currentColor" /></svg>
-                  <span>Пропуски по анкете</span>
-                </button>
                 <!-- Настройки — лист, а не вкладка, но остаются разделом
                      конфигурации, поэтому лежат в том же .tabs-контракте. -->
                 <div class="rail-group tabs">
@@ -169,12 +152,57 @@
               </div>
             </nav>
 
+            <main class="canvas">
+              <div class="canvas-inner">
+
+              <!-- ========================================================
+                   ШАПКА ХОЛСТА. Где мы, что здесь делают и действие
+                   раздела. Заголовок и подпись меняются вместе с разделом,
+                   их заполняет app.js (renderSectionHead): раньше то же
+                   самое было ужато в один ряд .toolbar внутри панели.
+                   ======================================================== -->
+              <div class="canvas-head">
+                <div class="canvas-head-text">
+                  <p class="eyebrow">Конфигурация проекта</p>
+                  <h1 id="section-title">Структура массива</h1>
+                  <p class="lead" id="section-lead"></p>
+                </div>
+              </div>
+
+              <!-- Ряд действий над окном: слева сводка, она же фильтр по
+                   статусу (наполняется из app.js, renderSummary), справа —
+                   разовое действие раздела и выгрузка. Всё одной толщины,
+                   чтобы ряд читался как один. -->
+              <div class="canvas-tools">
+                <div id="summary" class="summary"></div>
+                <div class="canvas-tools-actions">
+                  <button id="find-not-applicable" class="pill" type="button" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.2 17 16H3l7-12.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M10 8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="10" cy="13.6" r=".9" fill="currentColor" /></svg>
+                    Пропуски по анкете
+                  </button>
+
+                  <div id="project-actions" class="export-menu">
+                    <button id="export-toggle" class="export-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                      Выгрузка<span class="export-caret" aria-hidden="true"></span>
+                    </button>
+                    <div id="export-list" class="export-list" role="menu" hidden>
+                      <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
+                      <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
+                      <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
+                      <div class="export-sep" role="separator"></div>
+                      <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             <div class="pane">
               <!-- Один ряд действий вместо «шапка панели + тулбар». -->
               <div class="pane-bar">
                 <div id="structure-toolbar" class="toolbar">
-                  <h2>Структура</h2>
-                  <span id="structure-search-count" class="toolbar-count" aria-live="polite" hidden></span>
+                  <h2>Вопросы</h2>
+                  <span id="structure-search-count" class="toolbar-count" aria-live="polite"></span>
                   <div class="toolbar-grow"></div>
                   <div class="search-field">
                     <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
@@ -187,30 +215,29 @@
                   </div>
                 </div>
 
+                <!-- Подписи разделов переехали в шапку холста
+                     (renderSectionHead), здесь остались имя списка
+                     и его действие. -->
                 <div id="recode-toolbar" class="toolbar" hidden>
                   <h2>Перекодировки</h2>
-                  <span class="toolbar-hint">Независимые группировки числовых переменных</span>
                   <div class="toolbar-grow"></div>
                   <button id="new-recoding" class="btn compact" type="button">+ Новая перекодировка</button>
                 </div>
 
                 <div id="banner-toolbar" class="toolbar" hidden>
                   <h2>Баннеры</h2>
-                  <span class="toolbar-hint">Total добавляется всегда</span>
                   <div class="toolbar-grow"></div>
                   <button id="new-banner" class="btn compact" type="button">+ Новый баннер</button>
                 </div>
 
                 <div id="filter-toolbar" class="toolbar" hidden>
                   <h2>Базы и фильтры</h2>
-                  <span class="toolbar-hint">«В Excel» применяет правило ко всему отчёту</span>
                   <div class="toolbar-grow"></div>
                   <button id="new-filter" class="btn compact" type="button">+ Новое правило</button>
                 </div>
 
                 <div id="weight-toolbar" class="toolbar" hidden>
                   <h2>Веса</h2>
-                  <span class="toolbar-hint">Raking / IPF по целевым распределениям</span>
                   <div class="toolbar-grow"></div>
                   <button id="new-weight" class="btn compact" type="button">+ Новый вес</button>
                 </div>
@@ -229,6 +256,9 @@
                 <div id="entity-list" class="entity-list" hidden></div>
               </div>
             </div>
+
+              </div>
+            </main>
 
             <!-- ============================================================
                  ИНСПЕКТОРЫ. Одна оболочка на все сущности: голова, тело со
@@ -515,7 +545,7 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260817-canvas-v4" defer></script>
-    <script src="/app.js?v=20260817-canvas-v4" defer></script>
+    <script src="/shell.js?v=20260817-canvas-v7" defer></script>
+    <script src="/app.js?v=20260817-canvas-v7" defer></script>
   </body>
 </html>
