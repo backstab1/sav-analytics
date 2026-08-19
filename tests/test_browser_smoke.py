@@ -121,6 +121,16 @@ def _open_view(page: Page, view: str) -> None:
     page.click(f".tabs button[data-view='{view}']")
 
 
+def _open_report_settings(page: Page) -> None:
+    """Лист настроек открывается из раздела «Отчёт», а не из рельса.
+
+    Баннеры, базы и веса перестали быть разделами: это свойства книги,
+    и живут строками раздела «Отчёт».
+    """
+    _open_view(page, "report")
+    page.click('[data-block="statistics"] [data-open-sheet="report-settings"]')
+
+
 def _panel_text(page: Page, selector: str) -> str:
     """Текст диагностического блока, если он вообще появился на странице."""
     locator = page.locator(selector)
@@ -172,19 +182,35 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     page.click("#save-question")
     expect(page.locator("#table-body")).to_contain_text("Основная марка", timeout=UI_TIMEOUT)
 
-    # Перекодировка: числовой возраст в группы.
-    _open_view(page, "recodings")
-    page.click("#new-recoding")
+    # Перекодировка: числовой возраст в группы. Заводится из карточки самого
+    # вопроса — своего раздела у перекодировок больше нет, а источник
+    # подставляется тем вопросом, из которого пришли.
+    page.click("#table-body tr:has-text('AGE') .question-cell")
+    expect(page.locator("#question-recodings")).to_be_visible(timeout=UI_TIMEOUT)
+    page.click("#question-recodings [data-new-recoding='AGE']")
     expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#recode-source")).to_have_value("AGE")
     page.fill("#recode-code", "AGEGRP")
     page.fill("#recode-name", "Возрастные группы")
-    page.select_option("#recode-source", "AGE")
     page.click("#save-recoding")
-    expect(page.locator("#entity-list")).to_contain_text("Возрастные группы", timeout=UI_TIMEOUT)
+    # Сохранение асинхронное и само переоткрывает редактор, поэтому закрываем
+    # его только после подтверждения — иначе гонка с перерисовкой.
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Перекодировка сохранена", timeout=UI_TIMEOUT
+    )
+    # Закрытие редактора возвращает в тот же вопрос, и группировка уже там.
+    page.click("#close-recode-editor")
+    expect(page.locator("#question-recodings")).to_contain_text(
+        "Возрастные группы", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#table-body")).to_contain_text("1 группировка", timeout=UI_TIMEOUT)
+    page.click("#close-editor")
 
-    # Фильтр: именованное правило по одному ответу.
-    _open_view(page, "filters")
-    page.click("#new-filter")
+    _open_view(page, "report")
+
+    # Фильтр: именованное правило по одному ответу. Создаётся из строки
+    # «База отчёта» — отдельного раздела под правила больше нет.
+    page.click('[data-block="filter"] [data-new="filter"]')
     expect(page.locator("#filter-editor")).to_be_visible(timeout=UI_TIMEOUT)
     page.fill("#filter-name", "Только женщины")
     condition = page.locator("#filter-condition-list .filter-condition").first
@@ -193,19 +219,25 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     expect(condition.locator("select.filter-operation")).to_have_value("eq", timeout=UI_TIMEOUT)
     condition.locator("input.filter-value").fill("2")
     page.click("#save-filter")
-    expect(page.locator("#entity-list")).to_contain_text("Только женщины", timeout=UI_TIMEOUT)
+    # Сохранённое правило попадает в поповер выбора базы — бывший экран целиком.
+    page.click('[data-picker="filter"]')
+    expect(page.locator("#picker")).to_contain_text("Только женщины", timeout=UI_TIMEOUT)
+    page.keyboard.press("Escape")
 
-    # Баннер теперь описывает только колонки отчёта.
-    _open_view(page, "banners")
-    page.click("#new-banner")
+    # Баннер теперь описывает только колонки отчёта и создаётся из строки
+    # «Колонки» того же раздела.
+    page.click('[data-block="banner"] [data-new="banner"]')
     expect(page.locator("#banner-editor")).to_be_visible(timeout=UI_TIMEOUT)
     page.fill("#banner-name", "Пол")
     page.locator("#banner-block-list select").first.select_option("question:SEX")
     page.click("#save-banner")
     expect(page.locator("#banner-preview")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
+    # Первый баннер становится баннером отчёта, и строка «Колонки» это показывает.
+    page.click("#close-banner-editor")
+    expect(page.locator('[data-block="banner"]')).to_contain_text("Пол", timeout=UI_TIMEOUT)
 
     # Статистические параметры живут отдельно и применяются ко всему отчёту.
-    _open_view(page, "report-settings")
+    page.click('[data-block="statistics"] [data-open-sheet="report-settings"]')
     expect(page.locator("#report-settings-form")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#report-compare-target")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#report-compare-target")).to_be_disabled()
@@ -214,6 +246,11 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     page.click("#save-report-settings")
     expect(page.locator("#toast-container")).to_contain_text(
         "Настройки отчёта сохранены", timeout=UI_TIMEOUT
+    )
+
+    # Состав книги стоит отдельной полосой над плитками свойств.
+    expect(page.locator('[data-block="content"]')).to_contain_text(
+        "Состав книги", timeout=UI_TIMEOUT
     )
 
     # Подготовка и скачивание обоих артефактов.
@@ -287,7 +324,7 @@ def test_identifier_cannot_be_chosen_as_a_report_weight(
     _write_survey(source)
     _open_project(page, live_server, source)
 
-    _open_view(page, "report-settings")
+    _open_report_settings(page)
     expect(page.locator("#report-weight")).to_be_visible(timeout=UI_TIMEOUT)
 
     # Ни одна переменная массива весом не объявлена, поэтому выбирать нечего.
@@ -308,6 +345,9 @@ def test_identifier_cannot_be_chosen_as_a_report_weight(
     # Проверка не запрещает взвешивание вообще: переменная с правдоподобным
     # распределением, объявленная весом, проходит. Осмысленность веса остаётся
     # на аналитике — машина отвечает за то, что число не сломано.
+    # После объявления веса интерфейс закрывает блок (declareSelectedWeight),
+    # поэтому для второй попытки его надо раскрыть заново.
+    page.locator("#report-weight-declare summary").click()
     page.select_option("#report-weight-candidate", "AGE")
     page.click("#report-weight-declare-button")
     expect(page.locator("#report-weight-diagnostics")).to_contain_text(

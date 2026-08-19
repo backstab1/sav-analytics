@@ -24,8 +24,6 @@ let structureSearch = "";
 let structureStatusFilter = null;
 let bannerFormDirty = false;
 const recodePreviewCache = new Map();
-const recodePreviewRequests = new Map();
-let recodeCardHydration = null;
 const filterPreviewCache = new Map();
 const filterPreviewRequests = new Map();
 let filterCardHydration = null;
@@ -135,10 +133,13 @@ document.querySelector("#new-project").addEventListener("click", () => {
 });
 
 document.querySelector("#refresh-projects").addEventListener("click", loadProjects);
-document.querySelectorAll("#download-report, #download-statistics").forEach(link => {
-  link.dataset.defaultLabel = link.textContent;
-  link.addEventListener("click", downloadPreparedReport);
-});
+// Одна и та же процедура на два входа: меню выгрузки и полоса запуска
+// раздела «Отчёт». Вид артефакта берётся из data-report-kind.
+document.querySelectorAll("#download-report, #download-statistics, #launch-report, #launch-statistics")
+  .forEach(link => {
+    link.dataset.defaultLabel = link.textContent;
+    link.addEventListener("click", downloadPreparedReport);
+  });
 document.querySelector("#close-editor").addEventListener("click", closeQuestionEditor);
 document.querySelector("#refresh-preview").addEventListener("click", loadPreview);
 document.querySelector("#refresh-structure").addEventListener("click", refreshStructure);
@@ -153,7 +154,6 @@ document.querySelector("#question-type").addEventListener("change", () => {
     question_type: document.querySelector("#question-type").value,
   });
 });
-document.querySelector("#new-recoding").addEventListener("click", () => openRecoding());
 document.querySelector("#close-recode-editor").addEventListener("click", closeRecoding);
 document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
 document.querySelector("#add-category-group").addEventListener("click", () => addCategoryGroup());
@@ -170,7 +170,6 @@ document.querySelector("#recode-source").addEventListener("change", () => {
 });
 document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
 document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
-document.querySelector("#new-banner").addEventListener("click", () => openBanner());
 document.querySelector("#close-banner-editor").addEventListener("click", () => closeBanner());
 document.querySelector("#add-banner-block").addEventListener("click", () => {
   addBannerBlock();
@@ -178,7 +177,6 @@ document.querySelector("#add-banner-block").addEventListener("click", () => {
 });
 document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
 document.querySelector("#refresh-banner-preview").addEventListener("click", loadBannerPreview);
-document.querySelector("#new-filter").addEventListener("click", () => openFilter());
 document.querySelector("#close-filter-editor").addEventListener("click", closeFilter);
 document.querySelector("#add-filter-condition").addEventListener("click", () => {
   addFilterCondition();
@@ -186,7 +184,6 @@ document.querySelector("#add-filter-condition").addEventListener("click", () => 
 });
 document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
 document.querySelector("#copy-filter").addEventListener("click", copyFilter);
-document.querySelector("#new-weight").addEventListener("click", () => openWeight());
 document.querySelector("#close-weight-editor").addEventListener("click", closeWeight);
 document.querySelector("#add-weight-dimension").addEventListener("click", () => addWeightDimension());
 document.querySelector("#delete-weight").addEventListener("click", deleteWeight);
@@ -260,9 +257,7 @@ document.querySelector("#summary").addEventListener("click", event => {
     document.querySelectorAll("[data-structure-mode]").forEach(button => {
       button.classList.toggle("active", button.dataset.structureMode === "questions");
     });
-    document.querySelector("#structure-toolbar").hidden = false;
-    ["#recode-toolbar", "#banner-toolbar", "#filter-toolbar", "#weight-toolbar"]
-      .forEach(selector => { document.querySelector(selector).hidden = true; });
+    syncSectionChrome("questions");
   }
   renderSummary(currentProject.inspection, configuredQuestions());
   renderTable();
@@ -304,21 +299,9 @@ const sectionHeads = {
     title: "Структура массива",
     lead: "Типы и названия вопросов определены автоматически. Проверьте отмеченное.",
   },
-  recodings: {
-    title: "Перекодировки",
-    lead: "Независимые группировки числовых переменных: возрастные группы, укрупнённые категории.",
-  },
-  banners: {
-    title: "Баннеры",
-    lead: "Колонки отчёта и их базы. Total добавляется всегда.",
-  },
-  filters: {
-    title: "Базы и фильтры",
-    lead: "Именованные правила выборки. «В Excel» применяет правило ко всему отчёту.",
-  },
-  weights: {
-    title: "Веса",
-    lead: "Расчёт веса методом raking/IPF по целевым распределениям.",
+  report: {
+    title: "Отчёт",
+    lead: "Всё, что определяет книгу Excel: колонки, база, вес, статистика и состав вопросов.",
   },
 };
 
@@ -396,6 +379,10 @@ sheetVeil.addEventListener("click", event => {
 document.querySelector("#editor-backdrop").addEventListener("click", closeSlideOver);
 document.addEventListener("keydown", event => {
   if (event.key !== "Escape") return;
+  if (!pickerElement.hidden) {
+    closePicker();
+    return;
+  }
   if (!sheetVeil.hidden) {
     closeSheet();
     return;
@@ -462,71 +449,51 @@ document.querySelector("#filter-condition-list").addEventListener("change", even
 document.querySelector("#filter-form").addEventListener("input", scheduleFilterPreview);
 document.querySelector("#filter-form").addEventListener("change", scheduleFilterPreview);
 
-document.querySelectorAll(".tabs button[data-view]").forEach(button => button.addEventListener("click", () => {
-  // Настройка отчёта — не вид панели, а лист: это разовая конфигурация,
-  // а не список объектов, который просматривают. Раздел панели при этом
-  // не меняется, поэтому под листом остаётся то, что было.
-  if (button.dataset.view === "report-settings") {
-    openReportSettingsSheet();
-    return;
-  }
-  document.querySelectorAll(".tabs button").forEach(item => item.classList.remove("active"));
-  button.classList.add("active");
-  currentView = button.dataset.view;
-  renderSectionHead(currentView);
-  document.querySelector("#recode-toolbar").hidden = currentView !== "recodings";
-  document.querySelector("#banner-toolbar").hidden = currentView !== "banners";
-  document.querySelector("#structure-toolbar").hidden = currentView !== "questions";
-  document.querySelector("#filter-toolbar").hidden = currentView !== "filters";
-  document.querySelector("#weight-toolbar").hidden = currentView !== "weights";
-  if (currentView === "recodings") {
-    editor.hidden = true;
-    bannerEditor.hidden = true;
-    filterEditor.hidden = true;
-    weightEditor.hidden = true;
-    currentQuestionCode = null;
-    currentBannerId = null;
-    currentFilterId = null;
-    currentWeightId = null;
-  } else if (currentView === "banners") {
-    editor.hidden = true;
-    recodeEditor.hidden = true;
-    filterEditor.hidden = true;
-    weightEditor.hidden = true;
-    currentQuestionCode = null;
-    currentRecodingId = null;
-    currentFilterId = null;
-    currentWeightId = null;
-  } else if (currentView === "filters") {
-    editor.hidden = true;
-    recodeEditor.hidden = true;
-    bannerEditor.hidden = true;
-    currentQuestionCode = null;
-    currentRecodingId = null;
-    currentBannerId = null;
-    weightEditor.hidden = true;
-    currentWeightId = null;
-  } else if (currentView === "weights") {
-    editor.hidden = true;
-    recodeEditor.hidden = true;
-    bannerEditor.hidden = true;
-    filterEditor.hidden = true;
-    currentQuestionCode = null;
-    currentRecodingId = null;
-    currentBannerId = null;
-    currentFilterId = null;
-  } else {
-    recodeEditor.hidden = true;
-    bannerEditor.hidden = true;
-    currentRecodingId = null;
-    currentBannerId = null;
-    filterEditor.hidden = true;
-    currentFilterId = null;
-    weightEditor.hidden = true;
-    currentWeightId = null;
-  }
+/* ================================================================
+   ПЕРЕКЛЮЧЕНИЕ РАЗДЕЛОВ
+
+   Разделов осталось три: структура, перекодировки и отчёт. Баннер, база,
+   вес и статистика перестали быть разделами — это свойства одной книги,
+   и живут строками раздела «Отчёт» (renderReportBlocks). Их списки
+   свёрнуты в поповер выбора, поэтому собственных экранов у них нет.
+   Контракт `.tabs button[data-view]` сохранён.
+   ================================================================ */
+function closeAllInspectors() {
+  editor.hidden = true;
+  recodeEditor.hidden = true;
+  bannerEditor.hidden = true;
+  filterEditor.hidden = true;
+  weightEditor.hidden = true;
+  currentQuestionCode = null;
+  currentRecodingId = null;
+  currentBannerId = null;
+  currentFilterId = null;
+  currentWeightId = null;
+}
+
+// Хром раздела: подсветка в рельсе, тулбар панели и полоса запуска.
+function syncSectionChrome(view) {
+  document.querySelectorAll(".tabs button").forEach(item => {
+    item.classList.toggle("active", item.dataset.view === view);
+  });
+  document.querySelector("#structure-toolbar").hidden = view !== "questions";
+  document.querySelector("#report-toolbar").hidden = view !== "report";
+  document.querySelector("#report-launch").hidden = view !== "report";
+}
+
+function setView(view) {
+  currentView = view;
+  renderSectionHead(view);
+  syncSectionChrome(view);
+  closePicker();
+  closeAllInspectors();
   renderTable();
-}));
+  if (view === "report") void loadReportPreflight();
+}
+
+document.querySelectorAll(".tabs button[data-view]").forEach(
+  button => button.addEventListener("click", () => setView(button.dataset.view))
+);
 
 document.querySelector("#table-body").addEventListener("click", event => {
   if (event.target.closest("[data-drag-code]")) return;
@@ -562,16 +529,30 @@ document.querySelector("#table-body").addEventListener("click", event => {
 });
 
 document.querySelector("#entity-list").addEventListener("click", event => {
-  const reportBannerButton = event.target.closest("button[data-report-banner-id]");
-  if (reportBannerButton) {
-    const bannerId = reportBannerButton.dataset.reportBannerId;
-    void assignReportBanner(reportBannerButton.dataset.active === "true" ? null : bannerId, reportBannerButton);
+  // Строки раздела «Отчёт»: пилюля открывает поповер выбора, соседняя
+  // кнопка — редактор, лист настроек или структуру.
+  const pickerAnchor = event.target.closest("[data-picker]");
+  if (pickerAnchor) {
+    openPicker(pickerAnchor.dataset.picker, pickerAnchor);
     return;
   }
-  const reportFilterButton = event.target.closest("button[data-report-filter-id]");
-  if (reportFilterButton) {
-    const filterId = reportFilterButton.dataset.reportFilterId;
-    void assignReportFilter(reportFilterButton.dataset.active === "true" ? null : filterId, reportFilterButton);
+  const editButton = event.target.closest("[data-edit]");
+  if (editButton) {
+    openEntityEditor(editButton.dataset.edit, editButton.dataset.id);
+    return;
+  }
+  const newButton = event.target.closest("[data-new]");
+  if (newButton) {
+    openEntityEditor(newButton.dataset.new);
+    return;
+  }
+  if (event.target.closest('[data-open-sheet="report-settings"]')) {
+    openReportSettingsSheet();
+    return;
+  }
+  const goto = event.target.closest("[data-goto]");
+  if (goto) {
+    setView(goto.dataset.goto);
     return;
   }
   const recodeCard = event.target.closest("[data-recode-id]");
@@ -946,15 +927,9 @@ function showProject(project) {
   filterEditor.hidden = true;
   weightEditor.hidden = true;
   renderSectionHead("questions");
-  document.querySelector("#recode-toolbar").hidden = true;
-  document.querySelector("#banner-toolbar").hidden = true;
-  document.querySelector("#structure-toolbar").hidden = false;
-  document.querySelector("#filter-toolbar").hidden = true;
-  document.querySelector("#weight-toolbar").hidden = true;
+  syncSectionChrome("questions");
   closeSheet();
-  document.querySelectorAll(".tabs button").forEach(button => {
-    button.classList.toggle("active", button.dataset.view === "questions");
-  });
+  closePicker();
   document.querySelectorAll("[data-structure-mode]").forEach(button => {
     button.classList.toggle("active", button.dataset.structureMode === "questions");
   });
@@ -1035,13 +1010,7 @@ function renderSummary(inspection, questions) {
 // Числа разделов в рельсе: раньше их вообще не было видно, пока не
 // откроешь вкладку.
 function renderRailCounts(questions) {
-  const counts = {
-    questions: questions.length,
-    recodings: configuredRecodings().length,
-    banners: configuredBanners().length,
-    filters: configuredFilters().length,
-    weights: configuredWeights().length,
-  };
+  const counts = { questions: questions.length };
   document.querySelectorAll("#section-nav em[data-count]").forEach(slot => {
     const value = counts[slot.dataset.count];
     slot.textContent = value ? String(value) : "";
@@ -1241,34 +1210,452 @@ function renderWeightAssessment(assessment) {
   return verdict + grid + notes;
 }
 
+/* ================================================================
+   РАЗДЕЛ «ОТЧЁТ»
+
+   Колонки, база, вес, статистика и состав — не пять разделов, а пять
+   свойств одной книги. Раньше у каждого был свой экран со списком на
+   0–3 карточки и пустым состоянием во весь холст; теперь свойство —
+   строка, а список свёрнут в поповер выбора, открывающийся из неё же.
+   Редакторы остались прежними инспекторами слева.
+   ================================================================ */
+
+const pickerElement = document.querySelector("#picker");
+let pickerKind = null;
+// Preflight держится до следующей правки конфигурации: он читает данные
+// целиком, а ревизия меняется только при записи.
+let preflightCache = { revision: null, report: null };
+// Разбор готового веса по переменной: тот же endpoint, что и в листе настроек.
+const readyWeightCache = new Map();
+
+// Числа в подписях раздела стоят рядом с существительным, поэтому его
+// приходится склонять: «1 блок · 3 колонки», а не «1 блоков · 3 колонок».
+function plural(count, one, few, many) {
+  const tens = Math.abs(count) % 100;
+  const units = count % 10;
+  if (tens > 10 && tens < 20) return `${count} ${many}`;
+  if (units === 1) return `${count} ${one}`;
+  if (units >= 2 && units <= 4) return `${count} ${few}`;
+  return `${count} ${many}`;
+}
+
+function reportBannerColumnCount(banner) {
+  return 1 + banner.blocks.reduce(
+    (total, block) => total + block.sources.reduce(
+      (count, source) => count * bannerSourceCategoryCount(source), 1
+    ),
+    0,
+  );
+}
+
+// Плитка вместо строки: холст шириной 1180px, а свойств книги четыре —
+// в столбик они занимали высоту экрана, в ряд занимают одну полосу.
+// Состав вынесен отдельной сводкой над плитками: это не настройка,
+// а итог структуры, и правится он в другом разделе.
+function reportTileMarkup({ key, title, value, off, chips = [], meta, picker, action }) {
+  const chipLine = chips.length ? `<span class="tile-chips">${chips.join("")}</span>` : "";
+  const valueMarkup = picker
+    ? `<button type="button" class="tile-val ${off ? "off" : ""}" data-picker="${picker}"
+        aria-haspopup="dialog" aria-expanded="false">${value}<span class="caret" aria-hidden="true"></span></button>`
+    : `<span class="tile-val ${off ? "off" : ""}">${value}</span>`;
+  return `<article class="tile" data-block="${key}">
+    <span class="tile-key">${escapeHtml(title)}${action}</span>
+    ${valueMarkup}
+    ${chipLine}
+    <span class="tile-meta">${meta}</span>
+  </article>`;
+}
+
+// Чипы в плитке живут в одну строку: лишние сворачиваются в счётчик,
+// иначе плитка растёт от длины названий и ряд перестаёт быть ровным.
+function tileChips(chips, limit = 3) {
+  if (chips.length <= limit) return chips;
+  return chips.slice(0, limit).concat(
+    `<span class="chip muted">…ещё ${chips.length - limit}</span>`
+  );
+}
+
+function reportColumnsTile() {
+  const banner = configuredBanners().find(item => item.id === selectedReportBannerId()) || null;
+  const chips = ['<span class="chip total">A · Total</span>'].concat(
+    (banner?.blocks || []).map(block => {
+      const label = block.label || block.sources.map(bannerSourceLabel).join(" → ");
+      const path = block.sources
+        .map(source => escapeHtml(bannerSourceLabel(source)))
+        .join('<span class="lvl">→</span>');
+      return `<span class="chip" title="${escapeAttribute(label)}">${path}</span>`;
+    })
+  );
+  return reportTileMarkup({
+    key: "banner", title: "Колонки", picker: "banner",
+    value: banner ? escapeHtml(banner.name) : "Только Total",
+    off: !banner, chips: tileChips(chips),
+    meta: banner
+      ? `Блоков <b>${banner.blocks.length}</b> · колонок <b>${reportBannerColumnCount(banner)}</b>`
+      : "Разбивки нет, одна колонка",
+    action: banner
+      ? `<button type="button" class="tile-edit" data-edit="banner" data-id="${escapeAttribute(banner.id)}">править</button>`
+      : '<button type="button" class="tile-edit" data-new="banner">новый</button>',
+  });
+}
+
+function reportBaseTile() {
+  const filter = configuredFilters().find(item => item.id === selectedReportFilterId()) || null;
+  const total = currentProject.inspection.row_count;
+  const preview = filter ? filterPreviewCache.get(filterPreviewKey(filter)) : null;
+  const chips = filter ? tileChips(filterRuleChips(filter.rule)) : [];
+  return reportTileMarkup({
+    key: "filter", title: "База отчёта", picker: "filter",
+    value: filter ? escapeHtml(filter.name) : "Все респонденты",
+    off: !filter, chips,
+    meta: filter
+      ? (preview
+        ? `Выборка <b>${preview.selected.toLocaleString("ru-RU")}</b> из ${preview.total.toLocaleString("ru-RU")}`
+        : "Выборка <b>считается…</b>")
+      : `Все <b>${total.toLocaleString("ru-RU")}</b> респондентов`,
+    action: filter
+      ? `<button type="button" class="tile-edit" data-edit="filter" data-id="${escapeAttribute(filter.id)}">править</button>`
+      : '<button type="button" class="tile-edit" data-new="filter">новое</button>',
+  });
+}
+
+function reportWeightTile(settings) {
+  const calculated = settings.calculated_weight_id
+    ? configuredWeights().find(item => item.id === settings.calculated_weight_id)
+    : null;
+  const ready = settings.weight_variable || null;
+  let value = "Без веса";
+  let chips = [];
+  let meta = "Показатели и базы невзвешенные";
+  let action = '<button type="button" class="tile-edit" data-new="weight">рассчитать</button>';
+  if (calculated) {
+    value = escapeHtml(calculated.name);
+    chips = ['<span class="chip">raking / IPF</span>'].concat(
+      calculated.lower_bound == null
+        ? []
+        : [`<span class="chip">${formatWeightNumber(calculated.lower_bound)}–${formatWeightNumber(calculated.upper_bound)}</span>`]
+    );
+    meta = `Распределений <b>${calculated.dimensions.length}</b>`;
+    action = `<button type="button" class="tile-edit" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">править</button>`;
+  } else if (ready) {
+    value = escapeHtml(ready);
+    chips = ['<span class="chip">готовый из массива</span>'];
+    const diagnostics = readyWeightCache.get(ready)?.diagnostics;
+    meta = diagnostics
+      ? `Эфф. база <b>${formatWeightNumber(diagnostics.effective_base)}</b> · DEFF <b>${formatWeightNumber(diagnostics.design_effect)}</b>`
+      : "Разбор распределения <b>считается…</b>";
+    action = '<button type="button" class="tile-edit" data-open-sheet="report-settings">диагностика</button>';
+  }
+  return reportTileMarkup({
+    key: "weight", title: "Вес", picker: "weight",
+    value, off: !calculated && !ready, chips, meta, action,
+  });
+}
+
+function reportStatisticsTile(settings) {
+  const waves = {
+    none: "Волны не сравниваются",
+    previous: "Сравнение с предыдущей волной",
+    control: "Сравнение с контрольной волной",
+  };
+  const value = settings.compare_to_total
+    ? `Subgroup/${settings.compare_target === "total" ? "Total" : "Rest"}${settings.compare_pairwise ? " и попарные" : ""}`
+    : (settings.compare_pairwise ? "Только попарные сравнения" : "Тесты не считаются");
+  const chips = [
+    `<span class="chip">${Math.round(settings.confidence_level * 1000) / 10}%</span>`,
+    settings.bonferroni ? '<span class="chip">Bonferroni</span>' : "",
+    `<span class="chip">база &lt; ${settings.minimum_base}</span>`,
+    settings.show_p_values ? '<span class="chip">p-value</span>' : "",
+  ].filter(Boolean);
+  return reportTileMarkup({
+    key: "statistics", title: "Статистика",
+    value: `<button type="button" class="tile-val-button ${settings.compare_to_total || settings.compare_pairwise ? "" : "off"}" data-open-sheet="report-settings">${escapeHtml(value)}</button>`,
+    off: false, chips: tileChips(chips),
+    meta: escapeHtml(waves[settings.wave_comparison] || waves.none),
+    action: '<button type="button" class="tile-edit" data-open-sheet="report-settings">изменить</button>',
+  });
+}
+
+// Состав — не настройка книги, а итог структуры: его не выбирают здесь,
+// его правят в другом разделе. Поэтому он стоит над плитками полосой,
+// а не пятой плиткой в ряду.
+function reportContentSummary() {
+  const questions = configuredQuestions();
+  const included = questions.filter(question => question.included_in_report);
+  const review = included.filter(question => questionStatus(question) === "review");
+  const withBase = included.filter(question => question.base_filter_id);
+  const excluded = questions.length - included.length;
+  const chips = [
+    review.length ? `<span class="chip warn">${plural(review.length, "требует", "требуют", "требуют")} проверки</span>` : "",
+    withBase.length ? `<span class="chip">${plural(withBase.length, "со своей базой", "со своей базой", "со своей базой")}</span>` : "",
+    excluded ? `<span class="chip muted">${excluded} исключено</span>` : "",
+  ].filter(Boolean).join("");
+  return `<section class="rep-summary" data-block="content">
+    <div class="rep-summary-text">
+      <p class="rep-summary-key">Состав книги</p>
+      <p class="rep-summary-val">${plural(included.length, "вопрос", "вопроса", "вопросов")} из ${questions.length}</p>
+    </div>
+    <div class="rep-summary-chips">${chips}</div>
+    <button type="button" class="pill" data-goto="questions">К структуре</button>
+  </section>`;
+}
+
+function renderReportBlocks() {
+  const container = document.querySelector("#entity-list");
+  const settings = configuredReportSettings();
+  container.className = "entity-list report-blocks";
+  container.innerHTML = reportContentSummary() + `<div class="tiles">${[
+    reportColumnsTile(),
+    reportBaseTile(),
+    reportWeightTile(settings),
+    reportStatisticsTile(settings),
+  ].join("")}</div>`;
+  const activeBanner = configuredBanners().find(item => item.id === selectedReportBannerId());
+  const included = configuredQuestions().filter(question => question.included_in_report).length;
+  const columns = activeBanner ? reportBannerColumnCount(activeBanner) : 1;
+  document.querySelector("#report-revision").textContent =
+    `${plural(included, "вопрос", "вопроса", "вопросов")} · ${plural(columns, "колонка", "колонки", "колонок")}`;
+  const filters = configuredFilters();
+  if (filters.length) void hydrateFilterCards(filters);
+  if (settings.weight_variable) void hydrateReadyWeight(settings.weight_variable);
+}
+
+// Разбор готового веса нужен блоку так же, как листу настроек: аналитик
+// должен видеть эффективную базу до сборки, а не после отказа.
+async function hydrateReadyWeight(variable) {
+  if (readyWeightCache.has(variable)) return;
+  const projectId = currentProject.id;
+  try {
+    const assessment = await api(
+      `/api/projects/${projectId}/weights/ready/${encodeURIComponent(variable)}/diagnostics`
+    );
+    readyWeightCache.set(variable, assessment);
+  } catch {
+    readyWeightCache.set(variable, null);
+  }
+  if (currentProject?.id === projectId && currentView === "report") renderReportBlocks();
+}
+
+/* ---------------- Поповер выбора ---------------- */
+
+function pickerRows(kind) {
+  if (kind === "banner") {
+    const active = selectedReportBannerId();
+    return [{ value: "", title: "Только Total", note: "без разбивки", checked: !active }].concat(
+      configuredBanners().map(banner => ({
+        value: banner.id,
+        title: banner.name,
+        note: `${plural(banner.blocks.length, "блок", "блока", "блоков")} · ${plural(reportBannerColumnCount(banner), "колонка", "колонки", "колонок")}`,
+        checked: banner.id === active,
+        edit: { kind: "banner", id: banner.id },
+      }))
+    );
+  }
+  if (kind === "filter") {
+    const active = selectedReportFilterId();
+    const total = currentProject.inspection.row_count;
+    return [{
+      value: "", title: "Все респонденты",
+      note: `без общего фильтра · ${total.toLocaleString("ru-RU")}`,
+      checked: !active,
+    }].concat(
+      configuredFilters().map(filter => {
+        const preview = filterPreviewCache.get(filterPreviewKey(filter));
+        const sample = preview ? preview.selected.toLocaleString("ru-RU") : "…";
+        return {
+          value: filter.id,
+          title: filter.name,
+          note: `${plural(countFilterConditions(filter.rule), "условие", "условия", "условий")} · выборка ${sample}`,
+          checked: filter.id === active,
+          edit: { kind: "filter", id: filter.id },
+        };
+      })
+    );
+  }
+  const settings = configuredReportSettings();
+  const selection = settings.calculated_weight_id
+    ? `calculated:${settings.calculated_weight_id}`
+    : settings.weight_variable ? `ready:${settings.weight_variable}` : "";
+  return [{ value: "", title: "Без веса", note: "невзвешенные показатели", checked: !selection }]
+    .concat(declaredWeightVariables().map(variable => ({
+      value: `ready:${variable.name}`,
+      title: variable.name,
+      note: `готовый из массива — ${variable.label}`,
+      checked: selection === `ready:${variable.name}`,
+    })))
+    .concat(configuredWeights().map(weight => ({
+      value: `calculated:${weight.id}`,
+      title: weight.name,
+      note: `raking / IPF · ${plural(weight.dimensions.length, "распределение", "распределения", "распределений")}`,
+      checked: selection === `calculated:${weight.id}`,
+      edit: { kind: "weight", id: weight.id },
+    })));
+}
+
+const pickerHeads = {
+  banner: { caption: "Баннеры проекта", create: "+ Новый баннер" },
+  filter: { caption: "Базы и фильтры", create: "+ Новое правило" },
+  weight: { caption: "Веса проекта", create: "+ Новый вес (raking)" },
+};
+
+function renderPicker(kind) {
+  const head = pickerHeads[kind];
+  const rows = pickerRows(kind);
+  const items = rows.map(row => {
+    return `<div class="picker-row ${row.checked ? "checked" : ""}">
+      <button type="button" class="picker-pick" data-pick="${escapeAttribute(row.value)}" aria-checked="${row.checked}" role="radio">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="picker-text"><strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(row.note)}</small></span>
+      </button>
+      ${row.edit ? `<button type="button" class="picker-edit" data-edit="${row.edit.kind}" data-id="${escapeAttribute(row.edit.id)}">править</button>` : ""}
+    </div>`;
+  }).join("");
+  return `<div class="picker-head"><strong>${escapeHtml(head.caption)}</strong><span>${rows.length - 1}</span></div>
+    <div class="picker-list" role="radiogroup">${items}</div>
+    <div class="picker-foot"><button type="button" class="btn ghost compact" data-new="${kind}">${escapeHtml(head.create)}</button></div>`;
+}
+
+function openPicker(kind, anchor) {
+  if (pickerKind === kind && !pickerElement.hidden) {
+    closePicker();
+    return;
+  }
+  closePicker();
+  pickerKind = kind;
+  pickerElement.innerHTML = renderPicker(kind);
+  pickerElement.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  const width = pickerElement.offsetWidth;
+  const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+  pickerElement.style.top = `${Math.round(rect.bottom + 6)}px`;
+  pickerElement.style.left = `${Math.round(left)}px`;
+  anchor.setAttribute("aria-expanded", "true");
+}
+
+function closePicker() {
+  if (!pickerElement || pickerElement.hidden) return;
+  pickerElement.hidden = true;
+  pickerElement.innerHTML = "";
+  pickerKind = null;
+  document.querySelectorAll("[data-picker]").forEach(button => button.setAttribute("aria-expanded", "false"));
+}
+
+function openEntityEditor(kind, id = null) {
+  if (kind === "banner") openBanner(id);
+  else if (kind === "filter") openFilter(id);
+  else if (kind === "weight") openWeight(id);
+  else if (kind === "recoding") openRecoding(id);
+}
+
+async function applyPick(kind, value) {
+  const anchor = document.querySelector(`[data-picker="${kind}"]`);
+  closePicker();
+  if (kind === "banner") await assignReportBanner(value || null, anchor);
+  else if (kind === "filter") await assignReportFilter(value || null, anchor);
+  else await assignReportWeight(value);
+}
+
+// Вес живёт в report_settings целиком, поэтому переключение отправляет
+// текущие настройки с заменённым весом: сервер заодно проверит пригодность.
+async function assignReportWeight(value) {
+  const settings = configuredReportSettings();
+  const payload = {
+    compare_to_total: settings.compare_to_total,
+    compare_target: settings.compare_target,
+    compare_pairwise: settings.compare_pairwise,
+    confidence_level: settings.confidence_level,
+    bonferroni: settings.bonferroni,
+    show_p_values: settings.show_p_values,
+    minimum_base: settings.minimum_base,
+    weight_variable: value.startsWith("ready:") ? value.slice(6) : null,
+    calculated_weight_id: value.startsWith("calculated:") ? value.slice(11) : null,
+    wave_comparison: settings.wave_comparison,
+    wave_control_value: settings.wave_comparison === "control" ? settings.wave_control_value : null,
+  };
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    renderProject();
+    showToast(value ? "Вес применён к отчёту" : "Отчёт считается без веса");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+pickerElement.addEventListener("click", event => {
+  const editButton = event.target.closest("[data-edit]");
+  if (editButton) {
+    closePicker();
+    openEntityEditor(editButton.dataset.edit, editButton.dataset.id);
+    return;
+  }
+  const newButton = event.target.closest("[data-new]");
+  if (newButton) {
+    const kind = newButton.dataset.new;
+    closePicker();
+    openEntityEditor(kind);
+    return;
+  }
+  const pick = event.target.closest("[data-pick]");
+  if (pick) void applyPick(pickerKind, pick.dataset.pick);
+});
+
+document.addEventListener("click", event => {
+  if (pickerElement.hidden) return;
+  if (event.target.closest("#picker") || event.target.closest("[data-picker]")) return;
+  closePicker();
+});
+window.addEventListener("resize", closePicker);
+
+/* ---------------- Полоса запуска ---------------- */
+
+async function loadReportPreflight() {
+  if (!currentProject) return;
+  const container = document.querySelector("#report-preflight");
+  const revision = currentProject.configuration?.revision ?? null;
+  if (preflightCache.report && preflightCache.revision === revision) {
+    renderLaunchStatus(preflightCache.report);
+    return;
+  }
+  container.innerHTML = '<span class="pf">Проверяем настройки отчёта…</span>';
+  const projectId = currentProject.id;
+  try {
+    const report = await api(`/api/projects/${projectId}/reports/preflight`);
+    preflightCache = { revision, report };
+    if (currentProject?.id === projectId && currentView === "report") renderLaunchStatus(report);
+  } catch (error) {
+    container.innerHTML = `<span class="pf error"><i></i>${escapeHtml(error.message)}</span>`;
+  }
+}
+
+function renderLaunchStatus(report) {
+  const container = document.querySelector("#report-preflight");
+  const rows = [
+    ...(report.errors || []).map(item => ({ item, kind: "error" })),
+    ...(report.warnings || []).map(item => ({ item, kind: "warn" })),
+  ];
+  container.innerHTML = rows.length
+    ? rows.map(({ item, kind }) => `<span class="pf ${kind}"><i></i>${escapeHtml(item.message)}</span>`).join("")
+    : '<span class="pf ok"><i></i>Проверка пройдена: отчёт можно собирать</span>';
+  document.querySelector("#launch-report").disabled = !report.can_prepare;
+}
+
 function renderTable() {
   if (!currentProject) return;
   const tableWrap = document.querySelector("#table-wrap");
   const entityList = document.querySelector("#entity-list");
-  const cardView = currentView === "recodings" || currentView === "banners" || currentView === "filters" || currentView === "weights";
+  const cardView = currentView === "report";
   tableWrap.hidden = cardView;
   entityList.hidden = !cardView;
   if (currentView === "questions" && structureMode === "variables") {
     renderPhysicalVariables();
     return;
   }
-  if (currentView === "weights") {
-    renderWeightCards(configuredWeights());
-    return;
-  }
-  if (currentView === "filters") {
-    const filters = configuredFilters();
-    renderFilterCards(filters);
-    return;
-  }
-  if (currentView === "banners") {
-    const banners = configuredBanners();
-    renderBannerCards(banners);
-    return;
-  }
-  if (currentView === "recodings") {
-    const recodings = configuredRecodings();
-    renderRecodeCards(recodings);
+  if (currentView === "report") {
+    renderReportBlocks();
     return;
   }
   const allQuestions = configuredQuestions();
@@ -1294,7 +1681,13 @@ function renderTable() {
     const sourceLabel = originalQuestionLabel(question);
     const warnings = (question.warnings || []).join(" · ");
     const title = `${question.code} — ${question.label}`;
-    const sub = warnings || sourceLabel;
+    // Группировки видны прямо в списке: иначе о них знает только тот,
+    // кто откроет карточку исходного вопроса.
+    const groupings = recodingsForQuestion(question);
+    const sub = [
+      warnings || sourceLabel,
+      groupings.length ? plural(groupings.length, "группировка", "группировки", "группировок") : "",
+    ].filter(Boolean).join(" · ");
     // Пока список отфильтрован, порядок менять нельзя: соседи в выдаче не соседи в отчёте.
     const draggable = structureFiltered() ? "false" : "true";
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
@@ -1315,81 +1708,9 @@ function emptySearchRow(columns, message) {
   return `<tr class="empty-row"><td colspan="${columns}"><div class="empty-state">${escapeHtml(message)} ${reason}</div></td></tr>`;
 }
 
-function renderRecodeCards(recodings) {
-  const container = document.querySelector("#entity-list");
-  container.className = "entity-list recode-card-list";
-  container.innerHTML = recodings.length ? recodings.map(recoding => {
-    const source = currentProject.inspection.variables.find(item => item.name === recoding.source_variable);
-    const preview = recodePreviewCache.get(recodePreviewKey(recoding.id));
-    return `<button type="button" class="recode-card ${recoding.id === currentRecodingId ? "selected" : ""}" data-recode-id="${escapeAttribute(recoding.id)}">
-      <span class="recode-card-head"><strong title="${escapeAttribute(recoding.name)}">${escapeHtml(recoding.name)}</strong><code>${escapeHtml(recoding.code)}</code></span>
-      <span class="recode-card-meta"><span>${recoding.mode === "categories" ? "Объединение категорий" : "Числовые диапазоны"}</span><span>Из <b>${escapeHtml(recoding.source_variable)}</b>${source?.label ? ` — ${escapeHtml(source.label)}` : ""}</span><span>${recoding.mode === "categories" ? "Групп" : "Категорий"} <b>${recoding.categories.length}</b></span></span>
-      <span class="recode-chips">${renderRecodeCardChips(recoding, preview)}</span>
-    </button>`;
-  }).join("") : '<div class="empty-state">Перекодировок пока нет. Создайте, например, возрастные группы.</div>';
-  if (recodings.length) void hydrateRecodeCards(recodings);
-}
-
-function renderBannerCards(banners) {
-  const container = document.querySelector("#entity-list");
-  const activeBannerId = selectedReportBannerId();
-  container.className = "entity-list banner-list";
-  container.innerHTML = banners.length ? banners.map(banner => {
-    const columnCount = 1 + banner.blocks.reduce((total, block) => total + block.sources.reduce((count, source) => count * bannerSourceCategoryCount(source), 1), 0);
-    const chips = ['<span class="chip total">A · Total</span>'].concat(banner.blocks.map(block => {
-      const label = block.label || block.sources.map(bannerSourceLabel).join(" → ");
-      const path = block.sources.map(source => escapeHtml(bannerSourceLabel(source))).join('<span class="lvl">→</span>');
-      return `<span class="chip" title="${escapeAttribute(label)}">${path}</span>`;
-    })).join("");
-    const active = banner.id === activeBannerId;
-    return `<article class="banner-card ${banner.id === currentBannerId ? "selected" : ""}" data-banner-id="${escapeAttribute(banner.id)}">
-      <span class="banner-card-head"><strong title="${escapeAttribute(banner.name)}">${escapeHtml(banner.name)}</strong><button type="button" class="badge-active ${active ? "active" : ""}" data-report-banner-id="${escapeAttribute(banner.id)}" data-active="${active}" title="${active ? "Оставить в Excel только Total" : "Использовать этот баннер в Excel"}">В Excel</button></span>
-      <span class="banner-meta"><span>Блоков <b>${banner.blocks.length}</b></span><span>Колонок <b>${columnCount}</b></span></span>
-      <span class="block-chips">${chips}</span>
-    </article>`;
-  }).join("") : '<div class="empty-state">Баннеров пока нет. В Excel будет только Total.</div>';
-}
-
-function renderFilterCards(filters) {
-  const container = document.querySelector("#entity-list");
-  container.className = "entity-list filter-card-list";
-  container.innerHTML = filters.length ? filters.map(filter => {
-    const uses = configuredQuestions().filter(question => question.base_filter_id === filter.id).length;
-    const previewKey = filterPreviewKey(filter);
-    const previewLoaded = filterPreviewCache.has(previewKey);
-    const preview = filterPreviewCache.get(previewKey);
-    const sample = preview
-      ? `<span>Выборка <b>${preview.selected.toLocaleString("ru-RU")}</b> из ${preview.total.toLocaleString("ru-RU")}</span>`
-      : `<span>Выборка <b>${previewLoaded ? "—" : "считается…"}</b></span>`;
-    const usage = uses ? `<span>База для <b>${uses}</b> вопросов</span>` : "";
-    const active = filter.id === selectedReportFilterId();
-    return `<article class="filter-card ${filter.id === currentFilterId ? "selected" : ""}" data-filter-id="${escapeAttribute(filter.id)}" role="button" tabindex="0">
-      <span class="filter-card-head"><strong title="${escapeAttribute(filter.name)}">${escapeHtml(filter.name)}</strong><button type="button" class="badge-active ${active ? "active" : ""}" data-report-filter-id="${escapeAttribute(filter.id)}" data-active="${active}" title="${active ? "Убрать общий фильтр из отчёта" : "Применить это правило ко всему отчёту"}">В Excel</button></span>
-      <span class="filter-card-meta"><span>Условий <b>${countFilterConditions(filter.rule)}</b></span>${sample}${usage}</span>
-      <span class="filter-card-chips">${renderFilterRuleChips(filter.rule)}</span>
-    </article>`;
-  }).join("") : '<div class="empty-state">Сохранённых баз и фильтров пока нет.</div>';
-  if (filters.length) void hydrateFilterCards(filters);
-}
-
-function renderWeightCards(weights) {
-  const container = document.querySelector("#entity-list");
-  container.className = "entity-list card-list weight-card-list";
-  container.innerHTML = weights.length ? weights.map(weight => {
-    const limits = weight.lower_bound == null
-      ? "Без ограничения значений"
-      : `Границы <b>${formatWeightNumber(weight.lower_bound)}–${formatWeightNumber(weight.upper_bound)}</b>`;
-    const dimensions = weight.dimensions.map(dimension => `
-      <span class="chip" title="${escapeAttribute(dimension.label)}">${escapeHtml(dimension.label)} <b>${dimension.targets.length}</b></span>`).join("");
-    return `<article class="item-card weight-card ${weight.id === currentWeightId ? "selected" : ""}" data-weight-id="${escapeAttribute(weight.id)}">
-      <span class="item-card-head"><strong title="${escapeAttribute(weight.name)}">${escapeHtml(weight.name)}</strong></span>
-      <span class="item-meta"><span>Распределений <b>${weight.dimensions.length}</b></span><span>${limits}</span></span>
-      <span class="chips">${dimensions}</span>
-    </article>`;
-  }).join("") : '<div class="empty-state">Рассчитанных весов пока нет. Добавьте целевые распределения и запустите расчёт.</div>';
-}
-
-function renderFilterRuleChips(rule) {
+// Чипы правила фильтра списком: плитке нужно уметь показать первые три
+// и свернуть остальные в счётчик.
+function filterRuleChips(rule) {
   const chips = [];
   if ((rule.items || []).length > 1) chips.push(`<span class="operator-chip">${rule.operator === "or" ? "ИЛИ" : "И"}</span>`);
   (rule.items || []).forEach(item => {
@@ -1400,7 +1721,7 @@ function renderFilterRuleChips(rule) {
       chips.push(renderFilterConditionChip(item));
     }
   });
-  return chips.join("");
+  return chips;
 }
 
 function renderFilterConditionChip(condition) {
@@ -1456,7 +1777,7 @@ function hydrateFilterCards(filters) {
     for (let index = 0; index < pending.length; index += 4) {
       await Promise.all(pending.slice(index, index + 4).map(filter => getFilterCardPreview(filter, projectId)));
     }
-    if (currentProject?.id === projectId && currentView === "filters") renderFilterCards(configuredFilters());
+    if (currentProject?.id === projectId && currentView === "report") renderReportBlocks();
   })().finally(() => { filterCardHydration = null; });
   return filterCardHydration;
 }
@@ -1471,46 +1792,8 @@ function bannerSourceCategoryCount(source) {
   return variable?.value_labels?.length || 0;
 }
 
-function renderRecodeCardChips(recoding, preview) {
-  const rows = new Map((preview?.rows || []).map(row => [String(row.label), row]));
-  return recoding.categories.map(category => {
-    const row = rows.get(String(category.label));
-    const percent = row ? ` <b>${formatPercent(row.percent_total)}</b>` : "";
-    return `<span>${escapeHtml(category.label)}${percent}</span>`;
-  }).join("");
-}
-
 function recodePreviewKey(recodingId) {
   return `${currentProject?.id || ""}:${recodingId}`;
-}
-
-async function getRecodeCardPreview(recodingId, projectId) {
-  const key = `${projectId}:${recodingId}`;
-  if (recodePreviewCache.has(key)) return recodePreviewCache.get(key);
-  if (recodePreviewRequests.has(key)) return recodePreviewRequests.get(key);
-  const request = api(`/api/projects/${projectId}/recodings/${recodingId}/preview`)
-    .then(preview => {
-      recodePreviewCache.set(key, preview);
-      return preview;
-    })
-    .catch(() => null)
-    .finally(() => recodePreviewRequests.delete(key));
-  recodePreviewRequests.set(key, request);
-  return request;
-}
-
-function hydrateRecodeCards(recodings) {
-  if (recodeCardHydration) return recodeCardHydration;
-  const projectId = currentProject.id;
-  const pending = recodings.filter(item => !recodePreviewCache.has(`${projectId}:${item.id}`));
-  if (!pending.length) return Promise.resolve();
-  recodeCardHydration = (async () => {
-    for (let index = 0; index < pending.length; index += 4) {
-      await Promise.all(pending.slice(index, index + 4).map(item => getRecodeCardPreview(item.id, projectId)));
-    }
-    if (currentProject?.id === projectId && currentView === "recodings") renderRecodeCards(configuredRecodings());
-  })().finally(() => { recodeCardHydration = null; });
-  return recodeCardHydration;
 }
 
 function renderPhysicalVariables() {
@@ -2080,7 +2363,13 @@ async function deleteBanner() {
   }
 }
 
-function openRecoding(recodingId = null) {
+/* Перекодировка — свойство переменной, а не отчёта: её заводят из карточки
+   вопроса, на котором она строится. Отсюда и возврат: закрыв редактор,
+   аналитик попадает обратно в тот вопрос, из которого пришёл. */
+let recodeReturnTo = null;
+
+function openRecoding(recodingId = null, options = {}) {
+  if ("returnTo" in options) recodeReturnTo = options.returnTo || null;
   currentRecodingId = recodingId;
   currentQuestionCode = null;
   editor.hidden = true;
@@ -2088,9 +2377,9 @@ function openRecoding(recodingId = null) {
   const recoding = recodingId ? configuredRecodings().find(item => item.id === recodingId) : null;
   setHeadingText(document.querySelector("#recode-editor-title"), recoding ? recoding.code : "Новая");
   document.querySelector("#recode-code").value = recoding?.code || suggestRecodeCode();
-  document.querySelector("#recode-name").value = recoding?.name || "";
-  document.querySelector("#recode-mode").value = recoding?.mode || "ranges";
-  fillRecodeSources(recoding?.source_variable);
+  document.querySelector("#recode-name").value = recoding?.name || options.suggestName || "";
+  document.querySelector("#recode-mode").value = recoding?.mode || options.mode || "ranges";
+  fillRecodeSources(recoding?.source_variable || options.sourceVariable);
   const rangeList = document.querySelector("#range-list");
   rangeList.innerHTML = "";
   const categoryList = document.querySelector("#category-group-list");
@@ -2099,7 +2388,7 @@ function openRecoding(recodingId = null) {
     recoding.categories.forEach(category => addCategoryGroup(category));
   } else if (recoding) {
     recoding.categories.forEach(category => addRangeRow(category));
-  } else {
+  } else if (document.querySelector("#recode-mode").value === "ranges") {
     addRangeRow({ label: "18–24", lower: 18, upper: 24 });
     addRangeRow({ label: "25–34", lower: 25, upper: 34 });
     addRangeRow({ label: "35 и старше", lower: 35, upper: null });
@@ -2117,6 +2406,12 @@ function openRecoding(recodingId = null) {
 function closeRecoding() {
   recodeEditor.hidden = true;
   currentRecodingId = null;
+  const back = recodeReturnTo;
+  recodeReturnTo = null;
+  if (back && findQuestion(back)) {
+    openQuestion(back);
+    return;
+  }
   renderTable();
 }
 
@@ -2273,7 +2568,66 @@ function fillEditor(question) {
   renderQuestionMembers(question);
   renderSpecialAnswers(question);
   renderSpecialMetric(question);
+  renderQuestionRecodings(question);
 }
+
+function recodingsForQuestion(question) {
+  const sources = new Set(question?.source_variables || []);
+  return configuredRecodings().filter(item => sources.has(item.source_variable));
+}
+
+// Группировка строится по одному столбцу: у блока из нескольких столбцов
+// источник неоднозначен, поэтому там её не предлагаем.
+function questionRecodeSource(question) {
+  if (!question || question.source_variables.length !== 1) return null;
+  const variable = currentProject.inspection.variables
+    .find(item => item.name === question.source_variables[0]);
+  if (!variable) return null;
+  if (variable.storage_type === "numeric") return { variable, mode: "ranges" };
+  return variable.value_labels?.length ? { variable, mode: "categories" } : null;
+}
+
+function renderQuestionRecodings(question) {
+  const section = document.querySelector("#question-recodings");
+  const recodings = recodingsForQuestion(question);
+  const source = questionRecodeSource(question);
+  section.hidden = !recodings.length && !source;
+  if (section.hidden) {
+    section.innerHTML = "";
+    return;
+  }
+  const rows = recodings.map(recoding => `
+    <button type="button" class="recode-row" data-open-recoding="${escapeAttribute(recoding.id)}">
+      <span class="recode-row-text">
+        <strong>${escapeHtml(recoding.name)}</strong>
+        <small><code>${escapeHtml(recoding.code)}</code> ${recoding.mode === "categories" ? "объединение категорий" : "числовые диапазоны"} · ${plural(recoding.categories.length, "категория", "категории", "категорий")}</small>
+      </span>
+      <span class="recode-row-go" aria-hidden="true">→</span>
+    </button>`).join("");
+  const add = source
+    ? `<button type="button" class="secondary compact-button add-row-button"
+        data-new-recoding="${escapeAttribute(source.variable.name)}" data-mode="${source.mode}"
+        data-name="${escapeAttribute(question.label)}">+ Новая группировка</button>`
+    : "";
+  section.innerHTML = `<div class="grp-cap"><strong>Группировки</strong><small>В колонки баннера и условия фильтра</small></div>${rows}${add}`;
+}
+
+document.querySelector("#question-recodings").addEventListener("click", event => {
+  const from = currentQuestionCode;
+  const open = event.target.closest("[data-open-recoding]");
+  if (open) {
+    openRecoding(open.dataset.openRecoding, { returnTo: from });
+    return;
+  }
+  const create = event.target.closest("[data-new-recoding]");
+  if (!create) return;
+  openRecoding(null, {
+    returnTo: from,
+    sourceVariable: create.dataset.newRecoding,
+    mode: create.dataset.mode,
+    suggestName: `${create.dataset.name} — группы`.slice(0, 500),
+  });
+});
 
 function renderSpecialMetric(question) {
   const label = document.querySelector("#special-metric-label");
@@ -2616,7 +2970,7 @@ async function downloadPreparedReport(event) {
   event.preventDefault();
   const link = event.currentTarget;
   if (!currentProject || link.getAttribute("aria-disabled") === "true") return;
-  const downloads = [...document.querySelectorAll("#download-report, #download-statistics")];
+  const downloads = [...document.querySelectorAll("#download-report, #download-statistics, #launch-report, #launch-statistics")];
   const feedback = document.querySelector("#report-feedback");
   feedback.hidden = false;
   let status = document.querySelector("#report-status");
@@ -2676,7 +3030,8 @@ async function downloadPreparedReport(event) {
       throw new Error(result.error || "Не удалось сформировать отчёт.");
     }
     progress.value = 100;
-    const downloadKind = link.id === "download-statistics" ? "statistics" : "topline";
+    const downloadKind = link.dataset.reportKind
+      || (link.id === "download-statistics" ? "statistics" : "topline");
     const preparedUrl = result.downloads?.[downloadKind];
     if (!preparedUrl) {
       throw new Error("Сервер не вернул ссылку на подготовленный отчёт.");
@@ -2696,6 +3051,9 @@ async function downloadPreparedReport(event) {
   } finally {
     downloads.forEach(item => item.setAttribute("aria-disabled", "false"));
     link.textContent = link.dataset.defaultLabel;
+    // Полоса запуска перерисовывает свой вердикт: сборка могла изменить
+    // ревизию конфигурации, а с ней и результат проверки.
+    if (currentView === "report") void loadReportPreflight();
     // Найденные проблемы и ошибки остаются на экране: их нужно прочитать,
     // а не поймать взглядом за три секунды.
     if (!keepOpen) {

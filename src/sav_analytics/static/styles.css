@@ -414,6 +414,9 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
   border-radius: var(--r-3);
   box-shadow: var(--shadow-card); overflow: clip;
 }
+/* Конфигурация книги короткая: панель тянется по содержимому, а не на всю
+   высоту рабочей области — иначе под плитками остаётся поле пустоты. */
+.pane:has(.report-blocks:not([hidden])) { flex: 0 0 auto; }
 .pane-bar { flex: 0 0 auto; border-bottom: 1px solid var(--c-border); }
 .pane-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
 
@@ -453,6 +456,196 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
    под каждый редактор отдельно. */
 
 /* ================================================================
+   РАЗДЕЛ «ОТЧЁТ» — сводка состава и четыре плитки
+
+   Не сетка карточек-сущностей, а один контейнер: сверху состав книги
+   полосой, под ним ряд из четырёх плиток — колонки, база, вес,
+   статистика. Поэтому .report-blocks отменяет сетку .entity-list
+   и раскладывает содержимое сам.
+   ================================================================ */
+.entity-list.report-blocks {
+  display: block; padding: 0;
+}
+/* Сводка состава: не настройка, а итог структуры, поэтому стоит полосой
+   над плитками и ведёт в другой раздел, а не открывает поповер. */
+.rep-summary {
+  display: flex; align-items: center; gap: 14px;
+  padding: 11px 16px; border-bottom: 1px solid var(--c-border);
+}
+.rep-summary-text { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.rep-summary-key { margin: 0; font-size: var(--t-xs); color: var(--c-ink-3); }
+.rep-summary-val {
+  margin: 0; font-family: var(--font-display); font-size: var(--t-md);
+  font-weight: 700; letter-spacing: -0.02em;
+}
+.rep-summary-chips { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.rep-summary .pill { margin-left: auto; flex: 0 0 auto; }
+
+/* Четыре свойства книги ложатся в ряд: холст шириной 1180px, и в столбик
+   они занимали высоту экрана. Разделители — фон сетки, а не рамки. */
+.tiles {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px; background: var(--c-border);
+}
+.tile {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  padding: 12px 14px 13px; background: var(--c-surface);
+}
+.tile:hover { background: #fcfcfd; }
+.tile-key {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: var(--t-micro); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--c-ink-4); font-weight: 600;
+}
+.tile-edit {
+  flex: 0 0 auto; padding: 1px 8px; border-radius: var(--r-pill);
+  border: 1px solid transparent; background: transparent; color: var(--c-ink-4);
+  font-size: var(--t-micro); text-transform: none; letter-spacing: 0;
+}
+.tile-edit { justify-content: center; }
+.tile:hover .tile-edit { color: var(--c-brand); border-color: var(--c-border); background: var(--c-surface); }
+.tile-edit:hover { background: var(--c-brand-tint); border-color: transparent; color: var(--c-brand); transform: none; }
+/* Значение — оно же кнопка выбора: щёлкать по названию естественнее,
+   чем искать отдельную пилюлю. */
+.tile-val, .tile-val-button {
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px;
+  min-width: 0; padding: 0;
+  border: 0; background: transparent; text-align: left;
+  font-family: var(--font-display); font-size: var(--t-md); font-weight: 700;
+  letter-spacing: -0.02em; color: var(--c-ink);
+}
+.tile-val > *:first-child, .tile-val-button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.tile-val:hover, .tile-val-button:hover { color: var(--c-brand); background: transparent; transform: none; }
+.tile-val.off, .tile-val-button.off {
+  font-family: var(--font-body); font-size: var(--t-sm); font-weight: 500; color: var(--c-ink-3);
+}
+.tile-val .caret {
+  width: 0; height: 0; flex: 0 0 auto;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 4px solid currentColor; opacity: .5;
+}
+.tile-chips { display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; max-height: 40px; }
+.tile-chips .chip, .tile-chips > span {
+  display: inline-flex; align-items: center; max-width: 100%; min-width: 0;
+  padding: 2px 8px; border-radius: var(--r-pill); background: var(--c-surface-soft);
+  color: var(--c-ink-2); font-size: var(--t-micro); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tile-chips .chip.total { background: var(--c-ink); color: #fff; }
+.tile-chips .chip.muted { color: var(--c-ink-4); }
+.tile-chips .operator-chip { background: var(--c-brand-tint); color: var(--c-brand); font-weight: 700; }
+.tile-meta { margin-top: auto; font-size: var(--t-xs); color: var(--c-ink-3); }
+.tile-meta b { color: var(--c-ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* На узком окне ряд из четырёх нечитаем: делим пополам, потом в столбик. */
+@media (max-width: 1080px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .tiles { grid-template-columns: minmax(0, 1fr); } }
+
+/* Группировки в карточке вопроса: строка-ссылка в редактор перекодировки. */
+.question-recodings { display: flex; flex-direction: column; gap: 6px; }
+.recode-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--r-2);
+  background: var(--c-surface-soft); text-align: left; color: var(--c-ink);
+}
+.recode-row:hover { background: var(--c-surface); border-color: var(--c-brand); transform: none; }
+.recode-row-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.recode-row-text strong {
+  font-size: var(--t-sm); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.recode-row-text small { font-size: var(--t-micro); color: var(--c-ink-3); }
+.recode-row-go { margin-left: auto; color: var(--c-ink-4); }
+
+/* ================================================================
+   ПОЛОСА ЗАПУСКА
+
+   Preflight перестал быть тем, что узнаёшь через минуту после нажатия
+   «Скачать»: вердикт стоит рядом с кнопкой сборки и обновляется на
+   каждый вход в раздел.
+   ================================================================ */
+.launch {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; background: var(--c-surface-soft);
+  border-top: 1px solid var(--c-border);
+}
+.launch[hidden] { display: none; }
+.launch-status { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pf { display: flex; align-items: center; gap: 7px; font-size: var(--t-xs); color: var(--c-ink-2); }
+.pf i { width: 6px; height: 6px; border-radius: 50%; background: var(--c-ink-4); flex: 0 0 auto; }
+.pf.ok i { background: var(--c-brand-2); }
+.pf.warn i { background: #e0a800; }
+.pf.error { color: var(--c-danger); }
+.pf.error i { background: var(--c-danger); }
+.launch .btn { flex: 0 0 auto; }
+.launch .btn.ghost {
+  background: var(--c-surface); color: var(--c-ink); border: 1px solid var(--c-border);
+}
+.launch .btn.ghost:hover { background: var(--c-surface-soft); }
+.launch .btn:disabled { background: var(--c-ink-4); cursor: not-allowed; }
+
+/* ================================================================
+   ПОПОВЕР ВЫБОРА
+
+   Бывшие разделы «Баннеры», «Базы и фильтры» и «Веса»: список
+   сохранённого, отметка активного, вход в редактор и создание нового.
+   Всё, чего они лишились, — заголовка, подписи и пустого состояния
+   во весь холст.
+   ================================================================ */
+.picker {
+  position: fixed; z-index: 120; width: 330px; max-height: 70vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-2); box-shadow: var(--shadow-drawer);
+  animation: drawer-rise 160ms var(--ease);
+}
+.picker[hidden] { display: none; }
+.picker-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px; border-bottom: 1px solid var(--c-border);
+}
+.picker-head strong { font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.06em;
+                      text-transform: uppercase; color: var(--c-ink-4); }
+.picker-head span { font-size: var(--t-micro); color: var(--c-ink-4); }
+.picker-list { overflow: auto; }
+.picker-row { display: flex; align-items: stretch; border-bottom: 1px solid rgba(0, 0, 0, .05); }
+.picker-row:last-child { border-bottom: 0; }
+.picker-row:hover { background: var(--c-surface-soft); }
+.picker-pick {
+  flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 16px minmax(0, 1fr);
+  gap: 9px; align-items: start; padding: 9px 12px;
+  background: transparent; border: 0; text-align: left; color: var(--c-ink);
+}
+.picker-pick:hover { background: transparent; transform: none; }
+.picker-pick .dot {
+  width: 14px; height: 14px; margin-top: 2px; border-radius: 50%;
+  border: 1.5px solid var(--c-ink-4);
+}
+.picker-row.checked .picker-pick .dot {
+  border-color: var(--c-brand);
+  background: radial-gradient(circle, var(--c-brand) 0 4px, transparent 4px);
+}
+.picker-text { min-width: 0; }
+.picker-text strong { display: block; font-size: var(--t-sm); font-weight: 600;
+                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-text small { display: block; margin-top: 1px; font-size: var(--t-micro); color: var(--c-ink-3);
+                     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-edit {
+  flex: 0 0 auto; align-self: center; margin-right: 10px;
+  padding: 2px 9px; border-radius: var(--r-pill);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  font-size: var(--t-micro); color: var(--c-ink-3);
+}
+.picker-edit:hover { color: var(--c-brand); border-color: var(--c-brand); background: var(--c-surface); }
+.picker-foot { padding: 8px 12px; border-top: 1px solid var(--c-border); background: var(--c-surface-soft); }
+.picker-foot .btn {
+  width: 100%; padding: 7px 12px; border-radius: var(--r-pill);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  color: var(--c-ink); font-size: var(--t-xs); font-weight: 600;
+}
+.picker-foot .btn:hover { background: var(--c-brand-tint); color: var(--c-brand); border-color: transparent; }
+
+/* ================================================================
    СПИСКИ СУЩНОСТЕЙ — сетка карточек
 
    Раньше карточка баннера растягивалась на всю ширину панели
@@ -466,62 +659,6 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
   gap: 10px; padding: 14px;
 }
 .entity-list > .empty-state { grid-column: 1 / -1; }
-.recode-card {
-  width: 100%; display: grid; align-items: stretch; justify-items: stretch;
-  justify-content: stretch;
-  gap: 10px; padding: 16px 20px;
-  border: 1px solid var(--c-border); border-radius: 14px;
-  background: var(--c-surface); color: var(--c-ink); text-align: left;
-  white-space: normal; box-shadow: none;
-  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), background 160ms var(--ease);
-}
-.recode-card:hover { background: var(--c-surface); border-color: var(--c-border-strong); box-shadow: var(--shadow-card); }
-.recode-card:active { transform: none; }
-.recode-card.selected { border-color: var(--c-brand); box-shadow: inset 0 0 0 1px var(--c-brand); }
-.recode-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
-.recode-card-head strong {
-  min-width: 0; overflow: hidden; font-family: var(--font-display); font-size: var(--t-md);
-  font-weight: 700; letter-spacing: -0.015em; text-overflow: ellipsis; white-space: nowrap;
-}
-.recode-card-head code { flex: 0 0 auto; font-size: 10px; }
-.recode-card-meta { display: flex; flex-wrap: wrap; gap: 5px 14px; color: var(--c-ink-3); font-size: var(--t-xs); }
-.recode-card-meta b { color: var(--c-ink-2); font-weight: 600; }
-.recode-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.recode-chips > span {
-  display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px;
-  border-radius: var(--r-pill); background: var(--c-surface-soft);
-  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
-}
-.recode-chips b { color: var(--c-ink-3); font-weight: 600; font-variant-numeric: tabular-nums; }
-
-/* сетка задана на .entity-list */
-.filter-card {
-  width: 100%; display: grid; align-items: stretch; justify-items: stretch; justify-content: stretch;
-  gap: 10px; padding: 16px 20px;
-  border: 1px solid var(--c-border); border-radius: 14px;
-  background: var(--c-surface); color: var(--c-ink); text-align: left; white-space: normal;
-  cursor: pointer;
-  box-shadow: none; transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
-}
-.filter-card:hover { background: var(--c-surface); border-color: var(--c-border-strong); box-shadow: var(--shadow-card); }
-.filter-card:active { transform: none; }
-.filter-card.selected { border-color: var(--c-brand); box-shadow: inset 0 0 0 1px var(--c-brand); }
-.filter-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
-.filter-card-head strong {
-  min-width: 0; overflow: hidden; font-family: var(--font-display); font-size: var(--t-md);
-  font-weight: 700; letter-spacing: -0.015em; text-overflow: ellipsis; white-space: nowrap;
-}
-.filter-card-meta { display: flex; flex-wrap: wrap; gap: 5px 14px; color: var(--c-ink-3); font-size: var(--t-xs); }
-.filter-card-meta b { color: var(--c-ink-2); font-weight: 600; }
-.filter-card-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.filter-card-chips > span {
-  display: inline-flex; align-items: center; min-width: 0; max-width: 100%;
-  padding: 5px 11px; border-radius: var(--r-pill); background: var(--c-surface-soft);
-  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.filter-card-chips .operator-chip { background: var(--c-brand-tint); color: var(--c-brand); font-weight: 700; }
-
 /* Разделы конфигурации переехали в рельс, но остались в контракте .tabs:
    на него опираются app.js и браузерный тест. Контейнер оформляет
    .rail-group, кнопки — .rail-item, поэтому собственных правил у .tabs
@@ -1346,39 +1483,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   }
 }
 
-/* ================================================================
-   BANNERS SCREEN — карточный вид (опционально, см. README п.6)
-   Требует изменения рендера в app.js: список .banner-card вместо
-   таблицы. Старая таблица тоже работает — эти классы аддитивны.
-   ================================================================ */
-/* сетка задана на .entity-list */
-.banner-card {
-  width: 100%; align-items: stretch; justify-items: stretch; justify-content: stretch;
-  padding: 16px 20px; border-radius: var(--r-2);
-  border: 0; background: var(--c-surface); color: var(--c-ink); text-align: left;
-  white-space: normal; box-shadow: 0 0 0 1px var(--c-border);
-  cursor: pointer; display: grid; gap: 10px;
-  transition: box-shadow 160ms var(--ease);
-}
-.banner-card:active { transform: none; }
-.banner-card:hover { box-shadow: 0 0 0 1px var(--c-border-strong), var(--shadow-card); }
-.banner-card.selected { box-shadow: 0 0 0 2px var(--c-brand), var(--shadow-card); }
-.banner-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.banner-card-head strong { font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.015em; }
-.banner-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--t-xs); color: var(--c-ink-3); }
-.banner-meta b { color: var(--c-ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
-.badge-active {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 12px; border-radius: var(--r-pill);
-  border: 0; background: var(--c-surface-soft); color: var(--c-ink-3);
-  font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
-}
-.badge-active::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c-ink-4); }
-.badge-active:hover { background: var(--c-brand-tint); color: var(--c-brand); transform: none; }
-.badge-active.active { background: var(--c-brand-tint); color: var(--c-brand); }
-.badge-active.active::before { background: var(--c-brand-2); }
-
-.block-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 12px; border-radius: var(--r-pill);
@@ -1431,28 +1535,6 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .col-line.small-base em { color: var(--c-warn-ink); }
 .col-line.small-base span::after { content: " ⚠"; color: var(--c-warn-ink); }
 
-/* ================================================================
-   UNIVERSAL CARD LIST — перекодировки / фильтры / веса
-   (карточный вид для всех списочных вкладок, аддитивно)
-   ================================================================ */
-/* сетка задана на .entity-list */
-.item-card {
-  padding: 16px 20px; border-radius: var(--r-2);
-  background: var(--c-surface); box-shadow: 0 0 0 1px var(--c-border);
-  cursor: pointer; display: grid; gap: 10px;
-  transition: box-shadow 160ms var(--ease);
-}
-.item-card:hover { box-shadow: 0 0 0 1px var(--c-border-strong), var(--shadow-card); }
-.item-card.selected { box-shadow: 0 0 0 2px var(--c-brand), var(--shadow-card); }
-.item-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.item-card-head strong { font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.015em; }
-.item-card-head code {
-  padding: 3px 10px; border-radius: var(--r-pill);
-  background: var(--c-surface-soft); color: var(--c-brand);
-  font: 600 var(--t-xs) "SF Mono", Menlo, monospace;
-}
-.item-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--t-xs); color: var(--c-ink-3); }
-.item-meta b { color: var(--c-ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip.op { background: var(--c-brand-tint); color: var(--c-brand); font-weight: 600; }
 .chip b { color: var(--c-brand); font-weight: 600; font-variant-numeric: tabular-nums; }

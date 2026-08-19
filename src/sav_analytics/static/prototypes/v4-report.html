@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>sav-analytics — макет v4: баннеры, фильтры и веса без отдельных экранов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ================================================================
+   Макет v4 — куда девать баннеры, фильтры и веса.
+
+   Задача: сейчас каждая из этих сущностей занимает целый раздел
+   рельса со своей шапкой, подписью, тулбаром и пустым состоянием,
+   хотя в проекте их обычно 0–3 штуки. Экран с одной карточкой
+   и надписью «Баннеров пока нет» стоит столько же внимания,
+   сколько таблица на 147 вопросов.
+
+   Четыре раскладки на одних и тех же демонстрационных данных:
+     0 — как сейчас, для контраста;
+     A — один раздел «Отчёт», библиотека свёрнута в поле выбора;
+     B — экрана нет вовсе, параметры пилюлями над таблицей;
+     C — раскладка рождается в живом кросстабе и сохраняется из него.
+
+   Токены и оболочка те же, что в styles.css. Данные вымышленные.
+   ================================================================ */
+:root{
+  --c-bg:#f4f4f6; --c-surface:#fff; --c-surface-soft:#f5f5f7;
+  --c-border:rgba(0,0,0,.08); --c-border-strong:rgba(0,0,0,.14);
+  --c-ink:#1d1d1f; --c-ink-2:#494950; --c-ink-3:#86868b; --c-ink-4:#c7c7cc;
+  --c-brand:#1d7a4f; --c-brand-hover:#166341; --c-brand-2:#2eae68; --c-brand-tint:#e8f4ee;
+  --c-danger:#d64545; --c-danger-tint:#fbecec;
+  --c-warn-ink:#9a6b00; --c-warn-tint:#fdf4dd;
+
+  --r-1:7px; --r-2:10px; --r-3:14px; --r-pill:100px;
+  --t-micro:10.5px; --t-xs:11px; --t-sm:12px; --t-base:12.5px;
+  --t-md:14px; --t-lg:17px; --t-xl:20px; --t-2xl:26px;
+
+  --font-display:"Inter Tight",-apple-system,"SF Pro Display",Inter,sans-serif;
+  --font-body:Inter,-apple-system,"SF Pro Text","Segoe UI",sans-serif;
+  --font-mono:"SF Mono",Menlo,Consolas,monospace;
+
+  --bar:42px; --rail:80px; --insp:356px; --canvas-pad:20px; --canvas-max:1180px;
+  --shell-gap:12px; --shell-pad:14px; --row-h:33px;
+
+  --focus-ring:0 0 0 3px rgba(29,122,79,.12);
+  --shadow-card:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);
+  --shadow-pop:0 2px 8px rgba(0,0,0,.06),0 16px 48px rgba(0,0,0,.12);
+  --ease:cubic-bezier(.25,.1,.25,1);
+}
+*{box-sizing:border-box;}
+[hidden]{display:none!important;}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font:var(--t-base)/1.45 var(--font-body);
+     -webkit-font-smoothing:antialiased;font-feature-settings:"cv05","cv08";}
+h1,h2,h3,h4{margin:0;font-family:var(--font-display);letter-spacing:-.02em;}
+button,input,select{font:inherit;color:inherit;}
+code{font:500 var(--t-xs)/1.4 var(--font-mono);color:var(--c-brand);background:var(--c-brand-tint);
+     padding:1px 5px;border-radius:5px;}
+
+/* ============ переключатель вариантов (вне продукта) ============ */
+.switch{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+        padding:10px 16px;background:#1d1d1f;color:#fff;}
+.switch b{font-family:var(--font-display);font-size:var(--t-sm);letter-spacing:-.01em;margin-right:6px;}
+.switch button{padding:5px 12px;border-radius:var(--r-pill);border:1px solid rgba(255,255,255,.22);
+        background:transparent;color:rgba(255,255,255,.72);font-size:var(--t-xs);font-weight:500;cursor:pointer;}
+.switch button:hover{color:#fff;border-color:rgba(255,255,255,.45);}
+.switch button[aria-pressed="true"]{background:var(--c-brand-2);border-color:var(--c-brand-2);color:#08210f;font-weight:600;}
+.switch .switch-note{margin-left:auto;font-size:var(--t-xs);color:rgba(255,255,255,.5);}
+
+/* ============ пояснение к варианту ============ */
+.explain{padding:16px var(--canvas-pad) 0;max-width:calc(var(--canvas-max) + var(--rail) + 40px);margin:0 auto;}
+.explain-card{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--r-3);
+        padding:14px 16px;box-shadow:var(--shadow-card);}
+.explain-card h2{font-size:var(--t-lg);margin-bottom:4px;}
+.explain-card p{margin:0 0 8px;color:var(--c-ink-2);max-width:78ch;}
+.explain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:10px;}
+.explain-grid div{border:1px solid var(--c-border);border-radius:var(--r-2);padding:9px 11px;background:var(--c-surface-soft);}
+.explain-grid p{margin:0;font-size:var(--t-xs);color:var(--c-ink-2);}
+.explain-grid strong{display:block;font-size:var(--t-xs);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}
+.plus strong{color:var(--c-brand);} .minus strong{color:var(--c-danger);} .cost strong{color:var(--c-warn-ink);}
+
+/* ============ хром продукта ============ */
+.frame{max-width:calc(var(--canvas-max) + var(--rail) + 40px);margin:14px auto 40px;
+       background:var(--c-bg);border:1px solid var(--c-border-strong);border-radius:var(--r-3);
+       overflow:hidden;box-shadow:var(--shadow-card);}
+.bar{height:var(--bar);display:flex;align-items:center;gap:10px;padding:0 12px 0 14px;
+     background:rgba(255,255,255,.9);border-bottom:1px solid var(--c-border);}
+.brand{display:flex;align-items:center;gap:6px;font-family:var(--font-display);font-weight:800;
+       font-size:var(--t-md);letter-spacing:-.03em;}
+.brand span{color:var(--c-brand);}
+.brand i{width:16px;height:16px;border-radius:5px;background:var(--c-brand);display:inline-block;}
+.bar-sep{width:1px;height:18px;background:var(--c-border);}
+.chip-project{display:flex;align-items:center;gap:5px;border:1px solid var(--c-border);background:var(--c-surface);
+       border-radius:var(--r-pill);padding:3px 10px;font-size:var(--t-xs);font-weight:600;cursor:pointer;}
+.project-meta{font-size:var(--t-xs);color:var(--c-ink-3);}
+.bar-grow{flex:1;}
+.screens{display:flex;gap:2px;}
+.screens button{padding:4px 10px;border:0;background:transparent;border-radius:var(--r-pill);
+       font-size:var(--t-xs);color:var(--c-ink-3);cursor:pointer;}
+.screens button[aria-current]{background:var(--c-surface-soft);color:var(--c-ink);font-weight:600;}
+.avatar{width:22px;height:22px;border-radius:50%;background:var(--c-brand-tint);color:var(--c-brand);
+       display:grid;place-items:center;font-size:var(--t-micro);font-weight:700;}
+
+.shell{display:grid;grid-template-columns:var(--rail) auto 1fr;gap:var(--shell-gap);
+       padding:var(--shell-pad);min-height:640px;align-items:start;}
+.rail{display:flex;flex-direction:column;gap:2px;align-self:stretch;}
+.rail-cap{margin:2px 0 6px;font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--c-ink-4);text-align:center;}
+.rail-item{display:grid;justify-items:center;gap:3px;padding:8px 4px;border:0;border-radius:var(--r-2);
+       background:transparent;color:var(--c-ink-2);font-size:var(--t-micro);line-height:1.2;text-align:center;cursor:pointer;}
+.rail-item svg{width:19px;height:19px;}
+.rail-item:hover{background:var(--c-surface);}
+.rail-item.active{background:var(--c-surface);color:var(--c-brand);box-shadow:var(--shadow-card);font-weight:600;}
+.rail-item em{font-style:normal;font-size:9.5px;color:var(--c-ink-4);}
+.rail-foot{margin-top:auto;}
+
+.canvas{grid-column:3;min-width:0;padding:6px var(--canvas-pad) var(--canvas-pad);}
+.canvas-inner{max-width:var(--canvas-max);margin:0 auto;}
+.canvas-head{margin:6px 0 12px;}
+.eyebrow{margin:0 0 3px;font-size:var(--t-micro);letter-spacing:.09em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;}
+.canvas-head h1{font-size:var(--t-2xl);font-weight:800;letter-spacing:-.035em;}
+.canvas-head .lead{margin:4px 0 0;color:var(--c-ink-3);font-size:var(--t-sm);max-width:70ch;}
+.canvas-tools{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border:1px solid var(--c-border);
+      background:var(--c-surface);border-radius:var(--r-pill);font-size:var(--t-xs);cursor:pointer;white-space:nowrap;}
+.pill:hover{border-color:var(--c-border-strong);}
+.pill.on{background:var(--c-brand-tint);border-color:transparent;color:var(--c-brand);font-weight:600;}
+.pill b{font-weight:600;}
+.pill .caret{width:0;height:0;border:3.5px solid transparent;border-top-color:currentColor;margin-top:3px;opacity:.55;}
+.tools-grow{flex:1;}
+
+.pane{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--r-3);
+      box-shadow:var(--shadow-card);overflow:hidden;}
+.pane-bar{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-bottom:1px solid var(--c-border);}
+.pane-bar h2{font-size:var(--t-md);font-weight:700;}
+.pane-count{font-size:var(--t-xs);color:var(--c-ink-3);}
+.btn{height:26px;padding:0 11px;border-radius:var(--r-pill);border:1px solid transparent;background:var(--c-brand);
+     color:#fff;font-size:var(--t-xs);font-weight:600;cursor:pointer;}
+.btn:hover{background:var(--c-brand-hover);}
+.btn.ghost{background:var(--c-surface);color:var(--c-ink);border-color:var(--c-border);}
+.btn.ghost:hover{border-color:var(--c-border-strong);}
+.btn.lg{height:32px;padding:0 16px;font-size:var(--t-sm);}
+
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--r-pill);
+      background:var(--c-surface-soft);border:1px solid var(--c-border);font-size:var(--t-micro);color:var(--c-ink-2);}
+.chip.total{background:var(--c-brand-tint);border-color:transparent;color:var(--c-brand);font-weight:600;}
+.chip .lvl{color:var(--c-ink-4);margin:0 2px;}
+.muted{color:var(--c-ink-3);}
+.empty{padding:38px 16px;text-align:center;color:var(--c-ink-3);font-size:var(--t-sm);}
+
+/* ============ таблица структуры (фон в вариантах B и 0) ============ */
+.tbl{width:100%;border-collapse:collapse;font-size:var(--t-sm);}
+.tbl th{position:sticky;top:0;background:var(--c-surface);text-align:left;font-size:var(--t-micro);
+        letter-spacing:.05em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;
+        padding:7px 12px;border-bottom:1px solid var(--c-border);}
+.tbl td{height:var(--row-h);padding:0 12px;border-bottom:1px solid rgba(0,0,0,.05);vertical-align:middle;}
+.tbl tr:hover td{background:#fbfbfc;}
+.tbl .c-code{font:500 var(--t-xs)/1 var(--font-mono);color:var(--c-ink-3);width:72px;}
+.tbl .c-name{max-width:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tag{display:inline-block;padding:1px 7px;border-radius:var(--r-pill);font-size:var(--t-micro);
+     background:var(--c-surface-soft);color:var(--c-ink-2);border:1px solid var(--c-border);}
+.tag.ok{background:var(--c-brand-tint);color:var(--c-brand);border-color:transparent;}
+.tag.warn{background:var(--c-warn-tint);color:var(--c-warn-ink);border-color:transparent;}
+
+/* ============ A: блоки отчёта ============ */
+.blocks{display:flex;flex-direction:column;}
+.block{display:grid;grid-template-columns:118px minmax(0,1fr) auto;gap:14px;align-items:start;
+       padding:13px 14px;border-bottom:1px solid var(--c-border);position:relative;}
+.block:last-child{border-bottom:0;}
+.block:hover{background:#fcfcfd;}
+.block-key{display:flex;flex-direction:column;gap:2px;padding-top:1px;}
+.block-key strong{font-size:var(--t-sm);font-weight:600;}
+.block-key small{font-size:var(--t-micro);color:var(--c-ink-4);line-height:1.3;}
+.block-val{min-width:0;}
+.block-val .headline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:var(--t-md);
+       font-family:var(--font-display);font-weight:700;letter-spacing:-.02em;}
+.block-val .headline.off{color:var(--c-ink-3);font-weight:500;font-family:var(--font-body);font-size:var(--t-sm);}
+.block-meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:3px;font-size:var(--t-xs);color:var(--c-ink-3);}
+.block-meta b{color:var(--c-ink-2);font-weight:600;}
+.block-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px;}
+.block-act{display:flex;gap:6px;align-items:center;}
+.badge-on{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:var(--r-pill);
+       background:var(--c-brand-tint);color:var(--c-brand);font-size:var(--t-micro);font-weight:700;letter-spacing:.02em;}
+
+/* поповер выбора: библиотека сущностей, свёрнутая в поле */
+.pop-wrap{position:relative;}
+.pop{position:absolute;z-index:30;top:calc(100% + 6px);right:0;width:330px;background:var(--c-surface);
+     border:1px solid var(--c-border);border-radius:var(--r-3);box-shadow:var(--shadow-pop);overflow:hidden;}
+.pop-head{padding:9px 12px;border-bottom:1px solid var(--c-border);display:flex;align-items:center;justify-content:space-between;}
+.pop-head strong{font-size:var(--t-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--c-ink-4);}
+.pop-item{display:grid;grid-template-columns:16px 1fr auto;gap:9px;align-items:start;width:100%;text-align:left;
+     padding:9px 12px;border:0;background:transparent;border-bottom:1px solid rgba(0,0,0,.05);cursor:pointer;}
+.pop-item:hover{background:var(--c-surface-soft);}
+.pop-item .dot{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--c-ink-4);margin-top:2px;}
+.pop-item[aria-checked="true"] .dot{border-color:var(--c-brand);background:radial-gradient(circle,var(--c-brand) 0 4px,transparent 4px);}
+.pop-item strong{display:block;font-size:var(--t-sm);font-weight:600;}
+.pop-item small{display:block;font-size:var(--t-micro);color:var(--c-ink-3);margin-top:1px;}
+.pop-item .edit{font-size:var(--t-micro);color:var(--c-ink-3);border:1px solid var(--c-border);border-radius:var(--r-pill);padding:1px 7px;}
+.pop-foot{padding:8px 12px;display:flex;gap:6px;background:var(--c-surface-soft);}
+/* тот же поповер, вынесенный из наложения: в макете он показан рядом,
+   чтобы не закрывать строки, которые как раз и надо рассмотреть */
+.pop.static{position:static;width:330px;box-shadow:var(--shadow-card);flex:none;}
+.demo-row{display:flex;gap:16px;align-items:flex-start;margin-top:14px;}
+.demo-row .demo-text{max-width:44ch;padding-top:2px;}
+.demo-row .demo-text h4{font-size:var(--t-sm);margin-bottom:4px;}
+.demo-row .demo-text p{margin:0 0 6px;font-size:var(--t-xs);color:var(--c-ink-3);}
+
+/* preflight и запуск */
+.launch{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--c-surface-soft);
+        border-top:1px solid var(--c-border);}
+.launch .grow{flex:1;min-width:0;}
+.pf{display:flex;align-items:center;gap:7px;font-size:var(--t-xs);color:var(--c-ink-2);}
+.pf+.pf{margin-top:3px;}
+.pf i{width:6px;height:6px;border-radius:50%;display:inline-block;}
+.pf.ok i{background:var(--c-brand-2);} .pf.warn i{background:#e0a800;}
+
+/* ============ инспектор ============ */
+.insp-dock{grid-column:2;align-self:stretch;}
+.insp{width:var(--insp);background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--r-3);
+      box-shadow:var(--shadow-card);display:flex;flex-direction:column;max-height:600px;overflow:hidden;}
+.insp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:11px 13px;border-bottom:1px solid var(--c-border);}
+.kicker{margin:0 0 1px;font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;}
+.insp-head h3{font-size:var(--t-md);}
+.icon-button{width:22px;height:22px;border-radius:var(--r-1);border:0;background:transparent;color:var(--c-ink-3);cursor:pointer;font-size:15px;line-height:1;}
+.insp-body{padding:12px 13px;overflow:auto;display:flex;flex-direction:column;gap:11px;}
+.insp-foot{margin-top:auto;padding:10px 13px;border-top:1px solid var(--c-border);display:flex;gap:6px;align-items:center;}
+.f{display:flex;flex-direction:column;gap:4px;font-size:var(--t-xs);color:var(--c-ink-3);}
+.f input,.f select{height:29px;padding:0 9px;border:1px solid var(--c-border);border-radius:var(--r-1);
+     background:var(--c-surface);font-size:var(--t-sm);color:var(--c-ink);}
+.grp-cap{display:flex;flex-direction:column;gap:1px;margin-bottom:5px;}
+.grp-cap strong{font-size:var(--t-xs);}
+.grp-cap small{font-size:var(--t-micro);color:var(--c-ink-4);}
+.blk{border:1px solid var(--c-border);border-radius:var(--r-2);padding:8px 9px;background:var(--c-surface-soft);}
+.blk+.blk{margin-top:6px;}
+.blk-head{display:flex;justify-content:space-between;align-items:center;font-size:var(--t-sm);font-weight:600;}
+.blk-src{margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;}
+.prev{border-top:1px dashed var(--c-border);padding-top:9px;}
+.prev table{width:100%;border-collapse:collapse;font-size:var(--t-xs);}
+.prev td{padding:3px 0;border-bottom:1px solid rgba(0,0,0,.04);}
+.prev td:last-child{text-align:right;color:var(--c-ink-2);font-variant-numeric:tabular-nums;}
+
+/* ============ C: кросстаб ============ */
+.shelves{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+.shelf{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--r-2);padding:7px 9px;min-height:56px;}
+.shelf-label{font-size:var(--t-micro);letter-spacing:.07em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;}
+.zone{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;min-height:22px;}
+.zone .chip{background:var(--c-surface);border-color:var(--c-border-strong);cursor:grab;}
+.zone.empty-zone{border:1px dashed var(--c-border-strong);border-radius:var(--r-1);align-items:center;
+     justify-content:center;color:var(--c-ink-4);font-size:var(--t-micro);}
+.xt{width:100%;border-collapse:collapse;font-size:var(--t-sm);font-variant-numeric:tabular-nums;}
+.xt th{padding:6px 9px;border-bottom:1px solid var(--c-border);font-size:var(--t-micro);color:var(--c-ink-3);
+     font-weight:600;text-align:right;white-space:nowrap;}
+.xt th.grp{text-align:center;color:var(--c-ink-4);letter-spacing:.06em;text-transform:uppercase;border-bottom:0;padding-bottom:2px;}
+.xt th:first-child,.xt td:first-child{text-align:left;}
+.xt td{padding:5px 9px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right;}
+.xt tbody tr:hover td{background:#fbfbfc;}
+.xt .base td{color:var(--c-ink-3);font-size:var(--t-xs);border-bottom:1px solid var(--c-border);}
+.xt sup{color:var(--c-brand);font-weight:700;font-size:9.5px;margin-left:2px;}
+.xt sup.dn{color:var(--c-danger);}
+.xt .hi{background:var(--c-brand-tint);}
+
+.footnote{margin:10px auto 0;max-width:var(--canvas-max);font-size:var(--t-xs);color:var(--c-ink-4);}
+.caption{margin:0 0 8px;font-size:var(--t-xs);color:var(--c-ink-3);}
+.callout{display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border-radius:var(--r-2);
+     background:var(--c-warn-tint);color:var(--c-warn-ink);font-size:var(--t-xs);margin-bottom:10px;}
+</style>
+</head>
+<body data-variant="a">
+
+<div class="switch">
+  <b>Макет v4</b>
+  <button type="button" data-go="now">0 · Как сейчас</button>
+  <button type="button" data-go="a" aria-pressed="true">A · Раздел «Отчёт»</button>
+  <button type="button" data-go="b">B · Пилюли над таблицей</button>
+  <button type="button" data-go="c">C · Из кросстаба</button>
+  <span class="switch-note">Данные вымышленные. Кликается только переключатель вариантов.</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- 0 — КАК СЕЙЧАС                                               -->
+<!-- ============================================================ -->
+<section class="mock" data-v="now" hidden>
+  <div class="explain">
+    <div class="explain-card">
+      <h2>0 · Как сейчас</h2>
+      <p>Шесть разделов рельса, у каждого своя шапка, подпись, ряд действий и пустое состояние.
+        Раздел «Баннеры» в типичном проекте выглядит так: одна карточка на холсте шириной 1180px.
+        Чтобы понять, что уйдёт в Excel, нужно обойти четыре раздела и открыть лист настроек —
+        ответ «какие колонки, какая база, какой вес» нигде не собран в одном месте.</p>
+      <div class="explain-grid">
+        <div class="minus"><strong>Что раздражает</strong><p>Экран на 0–3 карточки; «В Excel» — переключатель активной сущности, спрятанный внутрь карточки списка.</p></div>
+        <div class="minus"><strong>Чего не хватает</strong><p>Сводки конфигурации отчёта и одного места запуска: preflight сейчас всплывает уже после нажатия «Скачать Excel».</p></div>
+        <div class="cost"><strong>Цена бездействия</strong><p>Каждая новая сущность (NET-ы, шаблоны, волны) просится седьмым разделом рельса.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span>
+      <span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Конфигурация</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M4 7h8l-2.4-2.4M16 13H8l2.4 2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Перекодировки</span><em>2</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="4.5" width="13" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5v11M12.5 4.5v11" stroke="currentColor" stroke-width="1.4"/></svg><span>Баннеры</span><em>1</em></button>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13l-5 5.6V16l-3-1.6v-3.8L3.5 5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span>Базы и фильтры</span><em>2</em></button>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M10 4.5v11M5 8h10M6.6 8 4.5 13h4.2L6.6 8ZM13.4 8l-2.1 5h4.2l-2.1-5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span>Веса</span><em>1</em></button>
+        <div class="rail-foot">
+          <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.5v2m0 11v2M17.5 10h-2m-11 0h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>Настройка отчёта</span></button>
+        </div>
+      </nav>
+      <div class="insp-dock"></div>
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Конфигурация проекта</p>
+          <h1>Баннеры</h1>
+          <p class="lead">Колонки отчёта и их базы. Total добавляется всегда.</p>
+        </div>
+        <div class="canvas-tools">
+          <span class="tools-grow"></span>
+          <button class="pill" type="button">Выгрузка<span class="caret"></span></button>
+        </div>
+        <div class="pane">
+          <div class="pane-bar"><h2>Баннеры</h2><span class="tools-grow"></span><button class="btn ghost" type="button">+ Новый баннер</button></div>
+          <div style="padding:12px;">
+            <article style="border:1px solid var(--c-border);border-radius:var(--r-2);padding:11px 12px;">
+              <span style="display:flex;justify-content:space-between;align-items:center;">
+                <strong style="font-size:var(--t-sm);">Пол × Возраст</strong>
+                <span class="badge-on">В Excel</span>
+              </span>
+              <span class="block-meta"><span>Блоков <b>2</b></span><span>Колонок <b>9</b></span></span>
+              <span class="block-chips"><span class="chip total">A · Total</span><span class="chip">Пол</span><span class="chip">Возраст, 6 групп</span></span>
+            </article>
+            <div class="empty" style="padding:120px 16px;">Второго баннера нет. Экран остаётся пустым на 90% высоты.</div>
+          </div>
+        </div>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- A — РАЗДЕЛ «ОТЧЁТ»                                           -->
+<!-- ============================================================ -->
+<section class="mock" data-v="a">
+  <div class="explain">
+    <div class="explain-card">
+      <h2>A · Один раздел «Отчёт» вместо четырёх</h2>
+      <p>Баннер, база, вес и статистика — не места, а <b>свойства одного объекта</b>: будущей книги Excel.
+        Рельс сжимается до «Структура» и «Отчёт». На холсте — макет отчёта: строка на каждое свойство,
+        в ней сразу видно, что уйдёт в книгу. Библиотека сохранённых сущностей никуда не девается,
+        но перестаёт быть экраном: она сворачивается в поле выбора внутри строки (открыто на «Колонках»).
+        Редактор — тот же инспектор слева, что и сейчас. Внизу — preflight и единственная кнопка запуска.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Ответ «что уйдёт в Excel» читается за один взгляд; «В Excel» становится самим смыслом строки, а не бейджем в карточке. Закрывает пункт P1.1 «единый экран запуска» тем же движением.</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Сложный вложенный баннер по-прежнему правится в 356px инспектора — этот экран ему места не добавляет.</p></div>
+        <div class="cost"><strong>Объём работы</strong><p>Средний: новая вёрстка раздела, переезд четырёх списков в поповеры. Редакторы, API и контракт `.tabs button[data-view]` не трогаются.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span>
+      <span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M4 16V9m4 7V5m4 11v-5m4 5V7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Кросстаб</span><em>скоро</em></button>
+      </nav>
+
+      <!-- инспектор: тот же, что сейчас, открыт по «Изменить» на колонках -->
+      <div class="insp-dock">
+        <aside class="insp">
+          <div class="insp-head">
+            <div><p class="kicker">Баннер</p><h3>Пол × Возраст</h3></div>
+            <button class="icon-button" type="button">×</button>
+          </div>
+          <div class="insp-body">
+            <label class="f">Название баннера<input value="Пол × Возраст" /></label>
+            <div>
+              <div class="grp-cap"><strong>Блоки колонок</strong><small>Второй источник даёт вложенность</small></div>
+              <div class="blk">
+                <div class="blk-head">Пол <span class="muted" style="font-size:var(--t-micro);">2 колонки</span></div>
+                <div class="blk-src"><span class="chip">S1 · Пол</span></div>
+              </div>
+              <div class="blk">
+                <div class="blk-head">Возраст <span class="muted" style="font-size:var(--t-micro);">6 колонок</span></div>
+                <div class="blk-src"><span class="chip">AGE_GROUP · Возрастные группы</span></div>
+              </div>
+              <button class="btn ghost" type="button" style="margin-top:7px;width:100%;">+ Добавить блок</button>
+            </div>
+            <div class="prev">
+              <div class="grp-cap"><strong>Колонки и базы</strong><small>9 колонок вместе с Total</small></div>
+              <table>
+                <tr><td>A · Total</td><td>2 000</td></tr>
+                <tr><td>B · Мужчины</td><td>952</td></tr>
+                <tr><td>C · Женщины</td><td>1 048</td></tr>
+                <tr><td>D · 18–24</td><td>301</td></tr>
+                <tr><td>E · 25–34</td><td>416</td></tr>
+                <tr><td class="muted">…ещё 4</td><td></td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="insp-foot"><button class="btn" type="button">Сохранить</button><button class="btn ghost" type="button">Отмена</button></div>
+        </aside>
+      </div>
+
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Проект</p>
+          <h1>Отчёт</h1>
+          <p class="lead">Всё, что определяет книгу Excel: колонки, база, вес, статистика и состав вопросов.</p>
+        </div>
+
+        <div class="pane">
+          <div class="pane-bar">
+            <h2>Конфигурация книги</h2>
+            <span class="pane-count">изменено 3 минуты назад</span>
+            <span class="tools-grow"></span>
+            <button class="pill" type="button">Выгрузка<span class="caret"></span></button>
+          </div>
+
+          <div class="blocks">
+            <!-- колонки -->
+            <div class="block">
+              <div class="block-key"><strong>Колонки</strong><small>баннер</small></div>
+              <div class="block-val">
+                <div class="headline">Пол × Возраст <span class="badge-on">9 колонок</span></div>
+                <div class="block-meta"><span>Блоков <b>2</b></span><span>Минимальная база колонки <b>128</b></span></div>
+                <div class="block-chips">
+                  <span class="chip total">A · Total</span><span class="chip">B · Мужчины</span><span class="chip">C · Женщины</span>
+                  <span class="chip">D · 18–24</span><span class="chip">E · 25–34</span><span class="chip">F · 35–44</span><span class="chip muted">…ещё 3</span>
+                </div>
+              </div>
+              <div class="block-act pop-wrap">
+                <button class="pill on" type="button">Пол × Возраст<span class="caret"></span></button>
+                <button class="pill" type="button">Изменить</button>
+              </div>
+            </div>
+
+            <!-- база -->
+            <div class="block">
+              <div class="block-key"><strong>База отчёта</strong><small>общий фильтр</small></div>
+              <div class="block-val">
+                <div class="headline">Покупатели категории</div>
+                <div class="block-meta"><span>Выборка <b>1 842</b> из 2 000</span><span>Условий <b>2</b></span></div>
+                <div class="block-chips">
+                  <span class="chip">Q1 ∈ 1, 2, 3</span><span class="chip">И</span><span class="chip">Q4 ≠ 9</span>
+                </div>
+              </div>
+              <div class="block-act">
+                <button class="pill on" type="button">Покупатели категории<span class="caret"></span></button>
+                <button class="pill" type="button">Изменить</button>
+              </div>
+            </div>
+
+            <!-- вес -->
+            <div class="block">
+              <div class="block-key"><strong>Вес</strong><small>из массива или raking</small></div>
+              <div class="block-val">
+                <div class="headline">Вес по полу и возрасту <span class="chip">raking / IPF</span></div>
+                <div class="block-meta"><span>Эффективная база <b>1 560</b></span><span>Design effect <b>1,18</b></span><span>Экстремальных <b>1,2%</b></span><span>Границы <b>0,3–3,0</b></span></div>
+              </div>
+              <div class="block-act">
+                <button class="pill on" type="button">Вес по полу и возрасту<span class="caret"></span></button>
+                <button class="pill" type="button">Диагностика</button>
+              </div>
+            </div>
+
+            <!-- статистика -->
+            <div class="block">
+              <div class="block-key"><strong>Статистика</strong><small>тесты и пороги</small></div>
+              <div class="block-val">
+                <div class="headline off">Subgroup/Rest и попарные сравнения</div>
+                <div class="block-chips">
+                  <span class="chip">Уровень доверия 95%</span><span class="chip">Bonferroni</span>
+                  <span class="chip">Малая база &lt; 30</span><span class="chip">p-value в примечании — выкл</span><span class="chip">Сравнение волн — выкл</span>
+                </div>
+              </div>
+              <div class="block-act"><button class="pill" type="button">Изменить</button></div>
+            </div>
+
+            <!-- состав -->
+            <div class="block">
+              <div class="block-key"><strong>Состав</strong><small>вопросы книги</small></div>
+              <div class="block-val">
+                <div class="headline off">128 вопросов включено из 147</div>
+                <div class="block-meta"><span>Требуют проверки <b>4</b></span><span>Со своей базой <b>7</b></span><span>Исключено <b>19</b></span></div>
+              </div>
+              <div class="block-act"><button class="pill" type="button">К структуре</button></div>
+            </div>
+          </div>
+
+          <div class="launch">
+            <div class="grow">
+              <div class="pf ok"><i></i>Preflight пройден: пустых баз и непригодного веса нет</div>
+              <div class="pf warn"><i></i>4 вопроса помечены «требует проверки» — на сборку не влияет</div>
+            </div>
+            <button class="btn ghost lg" type="button">Скачать статистику</button>
+            <button class="btn lg" type="button">Собрать Excel</button>
+          </div>
+        </div>
+
+        <!-- Бывший экран «Баннеры» целиком. В работе он раскрывается поповером
+             от пилюли в строке «Колонки»; здесь показан рядом, чтобы не
+             закрывать строки, которые как раз и надо рассмотреть. -->
+        <div class="demo-row">
+          <div class="demo-text">
+            <h4>Что раскрывает пилюля «Пол × Возраст ▾»</h4>
+            <p>Бывший раздел «Баннеры» целиком: библиотека сохранённых, отметка активного,
+              вход в редактор и создание нового. Всё, чего лишается список, — заголовка, подписи
+              и пустого состояния на весь холст.</p>
+            <p>Точно так же устроены пилюли базы, веса и статистики.</p>
+          </div>
+          <div class="pop static">
+            <div class="pop-head"><strong>Баннеры проекта</strong><span class="muted" style="font-size:var(--t-micro);">3</span></div>
+            <button class="pop-item" type="button" aria-checked="true"><span class="dot"></span>
+              <span><strong>Пол × Возраст</strong><small>2 блока · 9 колонок</small></span><span class="edit">править</span></button>
+            <button class="pop-item" type="button" aria-checked="false"><span class="dot"></span>
+              <span><strong>Регион</strong><small>1 блок · 5 колонок</small></span><span class="edit">править</span></button>
+            <button class="pop-item" type="button" aria-checked="false"><span class="dot"></span>
+              <span><strong>Пол внутри региона</strong><small>вложенный · 11 колонок</small></span><span class="edit">править</span></button>
+            <button class="pop-item" type="button" aria-checked="false"><span class="dot"></span>
+              <span><strong>Только Total</strong><small>без разбивки</small></span><span></span></button>
+            <div class="pop-foot"><button class="btn ghost" type="button" style="width:100%;">+ Новый баннер</button></div>
+          </div>
+        </div>
+
+        <p class="footnote">Рельс сжался с шести пунктов до трёх. Четыре бывших экрана стали четырьмя строками,
+          а их списки — содержимым поля выбора: то, что раньше требовало перехода, теперь раскрывается на месте.</p>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- B — ПИЛЮЛИ НАД ТАБЛИЦЕЙ                                      -->
+<!-- ============================================================ -->
+<section class="mock" data-v="b" hidden>
+  <div class="explain">
+    <div class="explain-card">
+      <h2>B · Экрана нет вовсе: параметры пилюлями над таблицей</h2>
+      <p>Самый дешёвый и самый радикальный ход. Рабочий экран остаётся один — структура массива.
+        Баннер, база, вес и статистика живут в ряду <code>.canvas-tools</code>, который уже есть:
+        каждая пилюля показывает текущее значение и раскрывается поповером. Разделов рельса
+        не остаётся совсем, рельс исчезает — и холст получает 80px ширины обратно.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Конфигурация всегда перед глазами и всегда рядом с данными: видно, на какой базе смотришь распределения. Переиспользует существующие `.sheet` и `.insp` — новых раскладок почти не нужно.</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Нет обзорного места: чтобы сравнить два сохранённых баннера, надо открыть поповер. Пилюль пять, и они конкурируют за тот же ряд, где живёт сводка-фильтр структуры. Экрана запуска по-прежнему нет.</p></div>
+        <div class="cost"><strong>Объём работы</strong><p>Малый. Поповеры вместо разделов, рельс убирается, редакторы остаются как есть.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span>
+      <span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+
+    <div class="shell" style="grid-template-columns:auto 1fr;">
+      <div class="insp-dock" style="grid-column:1;"></div>
+      <main class="canvas" style="grid-column:2;"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Трекер бренда · июль</p>
+          <h1>Структура массива</h1>
+          <p class="lead">Типы и названия определены автоматически. Проверьте отмеченное.</p>
+        </div>
+
+        <!-- ряд конфигурации: бывшие четыре раздела -->
+        <div class="canvas-tools">
+          <div class="pop-wrap">
+            <button class="pill on" type="button">Колонки: Пол × Возраст<span class="caret"></span></button>
+          </div>
+          <div class="pop-wrap">
+            <button class="pill on" type="button">База: Покупатели категории<span class="caret"></span></button>
+            <div class="pop" style="left:0;right:auto;">
+              <div class="pop-head"><strong>База отчёта</strong><span class="muted" style="font-size:var(--t-micro);">1 842 из 2 000</span></div>
+              <button class="pop-item" type="button" aria-checked="false"><span class="dot"></span>
+                <span><strong>Все респонденты</strong><small>без фильтра · 2 000</small></span><span></span></button>
+              <button class="pop-item" type="button" aria-checked="true"><span class="dot"></span>
+                <span><strong>Покупатели категории</strong><small>Q1 ∈ 1, 2, 3 И Q4 ≠ 9 · 1 842</small></span><span class="edit">править</span></button>
+              <button class="pop-item" type="button" aria-checked="false"><span class="dot"></span>
+                <span><strong>Женщины 18–34</strong><small>S1 = 2 И AGE между 18–34 · 604</small></span><span class="edit">править</span></button>
+              <div class="pop-foot"><button class="btn ghost" type="button" style="width:100%;">+ Новое правило</button></div>
+            </div>
+          </div>
+          <button class="pill on" type="button">Вес: по полу и возрасту<span class="caret"></span></button>
+          <button class="pill" type="button">Статистика: 95%, Bonferroni<span class="caret"></span></button>
+          <span class="tools-grow"></span>
+          <button class="pill" type="button">Пропуски по анкете</button>
+          <button class="btn" type="button" style="height:28px;">Собрать Excel</button>
+        </div>
+
+        <div class="pane">
+          <div class="pane-bar">
+            <h2>Вопросы</h2><span class="pane-count">128 из 147 в отчёте</span>
+            <span class="tools-grow"></span>
+            <span class="chip">Все</span><span class="chip">Проверить · 4</span><span class="chip">Исключены · 19</span>
+          </div>
+          <div style="max-height:420px;overflow:auto;">
+            <table class="tbl">
+              <thead><tr><th>Код</th><th>Название</th><th>Тип</th><th>Категорий</th><th>База</th><th>Статус</th></tr></thead>
+              <tbody>
+                <tr><td class="c-code">S1</td><td class="c-name">Пол респондента</td><td>Single choice</td><td>2</td><td class="muted">Общая</td><td><span class="tag ok">Готов</span></td></tr>
+                <tr><td class="c-code">S2</td><td class="c-name">Возраст, полных лет</td><td>Числовая</td><td>—</td><td class="muted">Общая</td><td><span class="tag ok">Готов</span></td></tr>
+                <tr><td class="c-code">Q1</td><td class="c-name">Какие марки категории вы покупали за последние 3 месяца?</td><td>Multiple</td><td>14</td><td class="muted">Общая</td><td><span class="tag ok">Готов</span></td></tr>
+                <tr><td class="c-code">Q2</td><td class="c-name">Насколько вы готовы рекомендовать бренд знакомым?</td><td>NPS 0–10</td><td>11</td><td>Покупатели</td><td><span class="tag ok">Готов</span></td></tr>
+                <tr><td class="c-code">Q5_1…8</td><td class="c-name">Оценка бренда по характеристикам</td><td>Matrix, шкала 1–5</td><td>5</td><td>Покупатели</td><td><span class="tag warn">Проверить</span></td></tr>
+                <tr><td class="c-code">Q6</td><td class="c-name">Что понравилось в последней покупке?</td><td>Открытый</td><td>—</td><td class="muted">Общая</td><td><span class="tag">Исключён</span></td></tr>
+                <tr><td class="c-code">Q7</td><td class="c-name">Как часто вы покупаете категорию?</td><td>Single choice</td><td>6</td><td class="muted">Общая</td><td><span class="tag ok">Готов</span></td></tr>
+                <tr><td class="c-code">Q8</td><td class="c-name">Средний чек покупки, рублей</td><td>Числовая</td><td>—</td><td>Покупатели</td><td><span class="tag ok">Готов</span></td></tr>
+                <tr><td class="c-code">D1</td><td class="c-name">Регион проживания</td><td>Single choice</td><td>8</td><td class="muted">Общая</td><td><span class="tag ok">Готов</span></td></tr>
+                <tr><td class="c-code">D2</td><td class="c-name">Доход домохозяйства</td><td>Single choice</td><td>7</td><td class="muted">Общая</td><td><span class="tag warn">Проверить</span></td></tr>
+                <tr><td class="c-code">W1</td><td class="c-name">Вес по полу и возрасту</td><td>Вес</td><td>—</td><td class="muted">—</td><td><span class="tag ok">Готов</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="footnote">Рельса нет совсем. Четыре бывших раздела — четыре пилюли, читаются как одна строка:
+          «колонки такие, база такая, вес такой, тесты такие».</p>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- C — ИЗ КРОССТАБА                                             -->
+<!-- ============================================================ -->
+<section class="mock" data-v="c" hidden>
+  <div class="explain">
+    <div class="explain-card">
+      <h2>C · Баннер и фильтр рождаются в живом кросстабе</h2>
+      <p>Продолжение уже принятого решения о живом кросстабе поверх расчётного ядра.
+        Баннер перестаёт быть сущностью, которую сочиняют в форме вслепую: бросил переменную в «Колонки» —
+        таблица пересчиталась, увидел базы и значимость — сохранил раскладку как баннер отчёта.
+        То же с фильтром: он собран в зоне «Фильтр» и сохраняется оттуда. Формы редакторов остаются,
+        но становятся вторым путём, а не единственным.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Настройка проверяется до сохранения на настоящих числах: пустая категория баннера видна сразу, а не предупреждением preflight. Экран полезен сам по себе, даже если ассистент не появится.</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Нужен эндпоинт произвольного кросса и скорость ядра. Без варианта A всё равно остаётся вопрос, где живёт сводка конфигурации: C её не заменяет, а дополняет.</p></div>
+        <div class="cost"><strong>Объём работы</strong><p>Большой: это отдельный пункт роадмапа уровня P1, а не перевёрстка.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span>
+      <span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M4 16V9m4 7V5m4 11v-5m4 5V7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Кросстаб</span></button>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+      </nav>
+
+      <!-- палитра переменных вместо инспектора -->
+      <div class="insp-dock">
+        <aside class="insp" style="width:250px;">
+          <div class="insp-head"><div><p class="kicker">Перетащите в зоны</p><h3>Переменные</h3></div><span class="pane-count">147</span></div>
+          <div class="insp-body" style="gap:4px;">
+            <span class="chip" style="justify-content:flex-start;">S1 · Пол</span>
+            <span class="chip" style="justify-content:flex-start;">AGE_GROUP · Возрастные группы</span>
+            <span class="chip" style="justify-content:flex-start;">D1 · Регион</span>
+            <span class="chip" style="justify-content:flex-start;">D2 · Доход</span>
+            <span class="chip" style="justify-content:flex-start;">Q1 · Марки, покупка 3 мес.</span>
+            <span class="chip" style="justify-content:flex-start;">Q2 · NPS</span>
+            <span class="chip" style="justify-content:flex-start;">Q7 · Частота покупки</span>
+            <span class="chip muted" style="justify-content:flex-start;">…ещё 140</span>
+          </div>
+        </aside>
+      </div>
+
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Трекер бренда · июль</p>
+          <h1>Кросстаб</h1>
+          <p class="lead">Числа считает то же ядро, что собирает Excel. Понравившаяся раскладка сохраняется в отчёт.</p>
+        </div>
+
+        <div class="shelves">
+          <div class="shelf"><span class="shelf-label">Строки</span>
+            <div class="zone"><span class="chip">Q1 · Марки, покупка 3 мес.</span></div></div>
+          <div class="shelf"><span class="shelf-label">Колонки</span>
+            <div class="zone"><span class="chip">S1 · Пол</span><span class="chip">AGE_GROUP · Возраст</span></div></div>
+          <div class="shelf"><span class="shelf-label">Фильтр</span>
+            <div class="zone"><span class="chip">Q7 ∈ 1, 2, 3 — покупают чаще раза в месяц</span></div></div>
+        </div>
+
+        <div class="canvas-tools">
+          <button class="pill" type="button">% по колонке<span class="caret"></span></button>
+          <button class="pill" type="button">Значимость 95%, буквы<span class="caret"></span></button>
+          <button class="pill" type="button">Вес: по полу и возрасту<span class="caret"></span></button>
+          <span class="tools-grow"></span>
+          <button class="pill on" type="button">Сохранить раскладку<span class="caret"></span></button>
+        </div>
+
+        <div class="pane">
+          <div class="pane-bar"><h2>Q1 · Марки, покупка за 3 месяца</h2>
+            <span class="pane-count">% по колонке, взвешенные</span><span class="tools-grow"></span>
+            <span class="chip">пересчитано за 0,4 с</span></div>
+          <div style="padding:4px 12px 12px;overflow:auto;">
+            <table class="xt">
+              <thead>
+                <tr><th></th><th class="grp"></th><th class="grp" colspan="2">Пол</th><th class="grp" colspan="4">Возраст</th></tr>
+                <tr><th></th><th>Total<br /><span class="muted">A</span></th><th>Мужчины<br /><span class="muted">B</span></th><th>Женщины<br /><span class="muted">C</span></th>
+                    <th>18–24<br /><span class="muted">D</span></th><th>25–34<br /><span class="muted">E</span></th><th>35–44<br /><span class="muted">F</span></th><th>45+<br /><span class="muted">G</span></th></tr>
+              </thead>
+              <tbody>
+                <tr class="base"><td>База, невзвеш.</td><td>1 213</td><td>571</td><td>642</td><td>188</td><td>264</td><td>301</td><td>460</td></tr>
+                <tr><td>Марка А</td><td>44%</td><td class="hi">51%<sup>C</sup></td><td>38%</td><td>36%</td><td>41%</td><td>46%</td><td class="hi">49%<sup>DE</sup></td></tr>
+                <tr><td>Марка Б</td><td>31%</td><td>27%</td><td class="hi">35%<sup>B</sup></td><td class="hi">42%<sup>FG</sup></td><td>34%</td><td>28%</td><td>26%</td></tr>
+                <tr><td>Марка В</td><td>22%</td><td>23%</td><td>21%</td><td>19%</td><td>24%</td><td>23%</td><td>21%</td></tr>
+                <tr><td>Марка Г</td><td>18%</td><td>16%</td><td>19%</td><td>17%</td><td>20%</td><td>18%</td><td>16%</td></tr>
+                <tr><td>Марка Д</td><td>11%</td><td>12%</td><td>10%</td><td>14%</td><td>12%</td><td>10%</td><td>9%<sup class="dn">D</sup></td></tr>
+                <tr><td class="muted">Другие марки</td><td class="muted">9%</td><td class="muted">8%</td><td class="muted">9%</td><td class="muted">11%</td><td class="muted">8%</td><td class="muted">9%</td><td class="muted">8%</td></tr>
+                <tr><td>Ни одной из перечисленных</td><td>6%</td><td>7%</td><td>6%</td><td>8%</td><td>5%</td><td>6%</td><td>7%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="demo-row">
+          <div class="demo-text">
+            <h4>Что раскрывает «Сохранить раскладку ▾»</h4>
+            <p>Здесь исчезают формы создания баннера и фильтра: и то и другое уже собрано
+              на экране и проверено на числах. Сохранение — последний шаг, а не первый.</p>
+            <p>Отчёт при этом остаётся главным продуктом: конструктор в него впадает,
+              а не живёт рядом.</p>
+          </div>
+          <div class="pop static">
+            <div class="pop-head"><strong>Что сохранить</strong></div>
+            <button class="pop-item" type="button"><span class="dot" style="border-radius:4px;"></span>
+              <span><strong>Колонки как баннер отчёта</strong><small>Пол × Возраст · 9 колонок</small></span><span></span></button>
+            <button class="pop-item" type="button"><span class="dot" style="border-radius:4px;"></span>
+              <span><strong>Фильтр как базу</strong><small>Q7 ∈ 1, 2, 3 · 1 213 респондентов</small></span><span></span></button>
+            <button class="pop-item" type="button"><span class="dot" style="border-radius:4px;"></span>
+              <span><strong>Строки в состав отчёта</strong><small>Q1 добавится в книгу</small></span><span></span></button>
+            <div class="pop-foot"><button class="btn ghost" type="button" style="width:100%;">Выгрузить эту таблицу в XLSX</button></div>
+          </div>
+        </div>
+
+        <p class="footnote">Буквы в ячейке — колонки, которые она статистически превосходит на уровне 95%, в конвенции SPSS Custom Tables.
+          Раскладка на экране — это и есть будущий баннер: сохранять его вслепую в форме больше не нужно.</p>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<script>
+const buttons = document.querySelectorAll(".switch button");
+const mocks = document.querySelectorAll(".mock");
+buttons.forEach(button => button.addEventListener("click", () => {
+  const target = button.dataset.go;
+  buttons.forEach(other => other.setAttribute("aria-pressed", String(other === button)));
+  mocks.forEach(mock => { mock.hidden = mock.dataset.v !== target; });
+  window.scrollTo({ top: 0, behavior: "instant" });
+}));
+</script>
+</body>
+</html>
