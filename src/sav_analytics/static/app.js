@@ -298,7 +298,7 @@ const sectionHeads = {
   },
   report: {
     title: "Отчёт",
-    lead: "Всё, что определяет книгу Excel: колонки, база, вес, статистика и состав вопросов.",
+    lead: "Слева — что войдёт в книгу, справа — как считаются различия.",
   },
 };
 
@@ -1208,116 +1208,141 @@ function reportBannerColumnCount(banner) {
   );
 }
 
-// Плитка вместо строки: холст шириной 1180px, а свойств книги четыре —
-// в столбик они занимали высоту экрана, в ряд занимают одну полосу.
-// Состав вынесен отдельной сводкой над плитками: это не настройка,
-// а итог структуры, и правится он в другом разделе.
-function reportTileMarkup({ key, title, value, off, chips = [], meta, picker, action }) {
-  const chipLine = chips.length ? `<span class="tile-chips">${chips.join("")}</span>` : "";
+// Строка вместо плитки: свойства книги стоят узкой колонкой слева, а
+// статистика — своей колонкой справа. Холст шириной 1180px, и ярусами
+// во всю ширину в нём писали только потому, что раскладку задавал
+// список: ни одной из половин эта ширина не нужна.
+//
+// Значение — оно же кнопка выбора: щёлкать по названию естественнее,
+// чем искать отдельную пилюлю. Соседняя кнопка ведёт в редактор.
+function reportPropRow({ key, title, value, off, meta, picker, hint = "", action = "" }) {
+  // Строка метрик обрезается по ширине колонки, поэтому длинный хвост —
+  // перечисление блоков баннера — дублируется подсказкой.
+  const hintAttribute = hint ? ` title="${escapeAttribute(hint)}"` : "";
+  const text = `<strong class="${off ? "off" : ""}">${value}</strong><small>${meta}</small>`;
   const valueMarkup = picker
-    ? `<button type="button" class="tile-val ${off ? "off" : ""}" data-picker="${picker}"
-        aria-haspopup="dialog" aria-expanded="false">${value}<span class="caret" aria-hidden="true"></span></button>`
-    : `<span class="tile-val ${off ? "off" : ""}">${value}</span>`;
-  return `<article class="tile" data-block="${key}">
-    <span class="tile-key">${escapeHtml(title)}${action}</span>
+    ? `<button type="button" class="prop-val" data-picker="${picker}"${hintAttribute}
+        aria-haspopup="dialog" aria-expanded="false">${text}</button>`
+    : `<span class="prop-val"${hintAttribute}>${text}</span>`;
+  return `<div class="prop" data-block="${key}">
+    <span class="prop-key">${escapeHtml(title)}</span>
     ${valueMarkup}
-    ${chipLine}
-    <span class="tile-meta">${meta}</span>
-  </article>`;
+    ${action}
+  </div>`;
 }
 
-// Чипы в плитке живут в одну строку: лишние сворачиваются в счётчик,
-// иначе плитка растёт от длины названий и ряд перестаёт быть ровным.
-function tileChips(chips, limit = 3) {
-  if (chips.length <= limit) return chips;
-  return chips.slice(0, limit).concat(
-    `<span class="chip muted">…ещё ${chips.length - limit}</span>`
-  );
-}
-
-function reportColumnsTile() {
-  const banner = configuredBanners().find(item => item.id === selectedReportBannerId()) || null;
-  const chips = ['<span class="chip total">A · Total</span>'].concat(
-    (banner?.blocks || []).map(block => {
-      const label = block.label || block.sources.map(bannerSourceLabel).join(" → ");
-      const path = block.sources
-        .map(source => escapeHtml(bannerSourceLabel(source)))
-        .join('<span class="lvl">→</span>');
-      return `<span class="chip" title="${escapeAttribute(label)}">${path}</span>`;
-    })
-  );
-  return reportTileMarkup({
-    key: "banner", title: "Колонки", picker: "banner",
-    value: banner ? escapeHtml(banner.name) : "Только Total",
-    off: !banner, chips: tileChips(chips),
-    meta: banner
-      ? `Блоков <b>${banner.blocks.length}</b> · колонок <b>${reportBannerColumnCount(banner)}</b>`
-      : "Разбивки нет, одна колонка",
-    action: banner
-      ? `<button type="button" class="tile-edit" data-edit="banner" data-id="${escapeAttribute(banner.id)}">править</button>`
-      : '<button type="button" class="tile-edit" data-new="banner">новый</button>',
+// Состав — не настройка книги, а итог структуры: его не выбирают здесь,
+// его правят в другом разделе. Поэтому у строки нет поповера, а есть
+// переход.
+function reportContentRow() {
+  const questions = configuredQuestions();
+  const included = questions.filter(question => question.included_in_report);
+  const review = included.filter(question => questionStatus(question) === "review");
+  const withBase = included.filter(question => question.base_filter_id);
+  const excluded = questions.length - included.length;
+  const meta = [
+    review.length ? `требуют проверки <b>${review.length}</b>` : "",
+    withBase.length ? `со своей базой <b>${withBase.length}</b>` : "",
+    excluded ? `исключено <b>${excluded}</b>` : "",
+  ].filter(Boolean).join(" · ") || "Все вопросы массива идут в книгу";
+  return reportPropRow({
+    key: "content", title: "Состав",
+    value: `${plural(included.length, "вопрос", "вопроса", "вопросов")} из ${questions.length}`,
+    meta,
+    action: '<button type="button" class="prop-act" data-goto="questions">к структуре</button>',
   });
 }
 
-function reportBaseTile() {
+function reportColumnsRow() {
+  const banner = configuredBanners().find(item => item.id === selectedReportBannerId()) || null;
+  const blocks = (banner?.blocks || []).map(block =>
+    block.label || block.sources.map(bannerSourceLabel).join(" → ")
+  ).join(", ");
+  return reportPropRow({
+    key: "banner", title: "Колонки", picker: "banner",
+    value: banner ? escapeHtml(banner.name) : "Только Total",
+    off: !banner,
+    meta: banner
+      ? `Блоков <b>${banner.blocks.length}</b> · колонок <b>${reportBannerColumnCount(banner)}</b> · ${escapeHtml(blocks)}`
+      : "Разбивки нет, одна колонка",
+    hint: blocks,
+    action: banner
+      ? `<button type="button" class="prop-act" data-edit="banner" data-id="${escapeAttribute(banner.id)}">править</button>`
+      : '<button type="button" class="prop-act" data-new="banner">новый</button>',
+  });
+}
+
+function reportBaseRow() {
   const filter = configuredFilters().find(item => item.id === selectedReportFilterId()) || null;
   const total = currentProject.inspection.row_count;
   const preview = filter ? filterPreviewCache.get(filterPreviewKey(filter)) : null;
-  const chips = filter ? tileChips(filterRuleChips(filter.rule)) : [];
-  return reportTileMarkup({
-    key: "filter", title: "База отчёта", picker: "filter",
+  const sample = preview
+    ? `выборка <b>${preview.selected.toLocaleString("ru-RU")}</b> из ${preview.total.toLocaleString("ru-RU")}`
+    : "выборка <b>считается…</b>";
+  return reportPropRow({
+    key: "filter", title: "База", picker: "filter",
     value: filter ? escapeHtml(filter.name) : "Все респонденты",
-    off: !filter, chips,
+    off: !filter,
     meta: filter
-      ? (preview
-        ? `Выборка <b>${preview.selected.toLocaleString("ru-RU")}</b> из ${preview.total.toLocaleString("ru-RU")}`
-        : "Выборка <b>считается…</b>")
+      ? `${plural(countFilterConditions(filter.rule), "Условие", "Условия", "Условий")} <b>${countFilterConditions(filter.rule)}</b> · ${sample}`
       : `Все <b>${total.toLocaleString("ru-RU")}</b> респондентов`,
     action: filter
-      ? `<button type="button" class="tile-edit" data-edit="filter" data-id="${escapeAttribute(filter.id)}">править</button>`
-      : '<button type="button" class="tile-edit" data-new="filter">новое</button>',
+      ? `<button type="button" class="prop-act" data-edit="filter" data-id="${escapeAttribute(filter.id)}">править</button>`
+      : '<button type="button" class="prop-act" data-new="filter">новое</button>',
   });
 }
 
-function reportWeightTile(settings) {
+function reportWeightRow(settings) {
   const calculated = settings.calculated_weight_id
     ? configuredWeights().find(item => item.id === settings.calculated_weight_id)
     : null;
   const ready = settings.weight_variable || null;
   let value = "Без веса";
-  let chips = [];
   let meta = "Показатели и базы невзвешенные";
-  let action = '<button type="button" class="tile-edit" data-open-sheet="report-settings">настроить</button>';
+  let action = '<button type="button" class="prop-act" data-open-sheet="report-settings">настроить</button>';
   if (calculated) {
     value = escapeHtml(calculated.name);
-    chips = ['<span class="chip">raking / IPF</span>'].concat(
-      calculated.lower_bound == null
-        ? []
-        : [`<span class="chip">${formatWeightNumber(calculated.lower_bound)}–${formatWeightNumber(calculated.upper_bound)}</span>`]
-    );
-    meta = `Распределений <b>${calculated.dimensions.length}</b>`;
-    action = `<button type="button" class="tile-edit" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">править</button>`;
+    const bounds = calculated.lower_bound == null
+      ? ""
+      : ` · границы <b>${formatWeightNumber(calculated.lower_bound)}–${formatWeightNumber(calculated.upper_bound)}</b>`;
+    meta = `raking / IPF · ${plural(calculated.dimensions.length, "распределение", "распределения", "распределений")}${bounds}`;
+    action = `<button type="button" class="prop-act" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">править</button>`;
   } else if (ready) {
     value = escapeHtml(ready);
-    chips = ['<span class="chip">готовый из массива</span>'];
     const diagnostics = readyWeightCache.get(ready)?.diagnostics;
     meta = diagnostics
-      ? `Эфф. база <b>${formatWeightNumber(diagnostics.effective_base)}</b> · DEFF <b>${formatWeightNumber(diagnostics.design_effect)}</b>`
-      : "Разбор распределения <b>считается…</b>";
-    action = '<button type="button" class="tile-edit" data-open-sheet="report-settings">настроить</button>';
+      ? `Готовый из массива · эфф. база <b>${formatWeightNumber(diagnostics.effective_base)}</b> · DEFF <b>${formatWeightNumber(diagnostics.design_effect)}</b>`
+      : "Готовый из массива · разбор распределения <b>считается…</b>";
   }
-  return reportTileMarkup({
+  return reportPropRow({
     key: "weight", title: "Вес", picker: "weight",
-    value, off: !calculated && !ready, chips, meta, action,
+    value, off: !calculated && !ready, meta, action,
   });
 }
 
-// Статистика — не плитка. У остальных трёх свойств значение одно
-// («этот баннер», «этот фильтр», «этот вес»), а здесь их семь, и прятать
-// их за словом «изменить» значит держать половину настроек отчёта в
-// закрытом ящике. Поэтому она идёт полосой под плитками, во всю их
-// ширину, и показывает варианты, а не итог: выбор виден и делается на
-// месте, каждый переключатель сразу уходит в конфигурацию.
+// Листы — не свойство, которое здесь выбирают, а следствие состава:
+// второй топлайн существует ради вопросов, заданных не всем. Правило то
+// же, что на сервере (core/reporting/data.py): объявленный пропуск SPSS
+// или код, помеченный как «не применимо».
+function reportSheetsRow() {
+  const partial = configuredQuestions().filter(question =>
+    question.included_in_report
+    && (question.missing_count > 0 || (question.not_applicable_values || []).length > 0)
+  ).length;
+  return reportPropRow({
+    key: "sheets", title: "Листы", off: true,
+    value: "Содержание · topline_main · topline_filter",
+    meta: partial
+      ? `Второй топлайн — для <b>${partial}</b> ${plural(partial, "вопроса", "вопросов", "вопросов")} с пропусками`
+      : "Вопросов с пропусками нет, второй топлайн останется пустым",
+  });
+}
+
+// Статистика — не строка. У остальных свойств значение одно («этот
+// баннер», «этот фильтр», «этот вес»), а здесь их семь, и прятать их за
+// словом «изменить» значит держать половину настроек отчёта в закрытом
+// ящике. Своей колонкой они помещаются целиком: каждый переключатель
+// виден и уходит в конфигурацию сразу.
 function statSegment(name, options, value) {
   return `<span class="seg" role="radiogroup">${options.map(option => `
     <button type="button" role="radio" data-stat="${name}" data-value="${escapeAttribute(option.value)}"
@@ -1330,7 +1355,7 @@ function statToggle(name, label, checked, title = "") {
     <span class="opt-mark" aria-hidden="true"></span>${escapeHtml(label)}</button>`;
 }
 
-function reportStatisticsPanel(settings) {
+function reportStatisticsColumn(settings) {
   // Схема сравнения — это два поля сразу: считать ли подгруппы и с кем.
   // Раздельно они давали выключенный селект рядом с выключенным флажком.
   const scheme = !settings.compare_to_total
@@ -1349,82 +1374,67 @@ function reportStatisticsPanel(settings) {
   const totalWarning = scheme === "total"
     ? '<p class="stat-hint warning-hint">Total включает саму подгруппу: выборки пересекаются, различия занижаются. Выбирайте, только если этого требует шаблон заказчика.</p>'
     : "";
-  return `<section class="stat-panel" data-block="statistics" id="stat-panel">
-    <div class="stat-head">
-      <span class="tile-key">Статистика</span>
-      <span class="stat-note">Действует на весь отчёт</span>
+  return `<section class="col stat-col" id="stat-panel">
+    <div class="col-head">
+      <h3>Статистика</h3>
+      <span class="col-note">действует на весь отчёт</span>
       <span id="stat-saved" class="stat-saved" role="status" hidden>Сохранено</span>
     </div>
+    <div class="stat-stack">
 
-    <div class="stat-row">
-      <span class="stat-key">Сравнение подгрупп</span>
-      <div class="stat-controls">
-        ${statSegment("scheme", [
-          { value: "off", label: "Не считать" },
-          { value: "rest", label: "С остатком (Rest)" },
-          { value: "total", label: "С Total" },
-        ], scheme)}
-        ${statToggle("pairwise", "Попарные внутри блока", settings.compare_pairwise)}
+      <div class="stat-block">
+        <p>Сравнение подгрупп</p>
+        <div class="stat-controls">
+          ${statSegment("scheme", [
+            { value: "off", label: "Не считать" },
+            { value: "rest", label: "С остатком (Rest)" },
+            { value: "total", label: "С Total" },
+          ], scheme)}
+          ${statToggle("pairwise", "Попарные внутри блока", settings.compare_pairwise)}
+        </div>
+        ${totalWarning}
       </div>
-    </div>
-    ${totalWarning}
 
-    <div class="stat-row">
-      <span class="stat-key">Уровень и пороги</span>
-      <div class="stat-controls">
-        ${statSegment("confidence", [
-          { value: "0.9", label: "90%" },
-          { value: "0.95", label: "95%" },
-          { value: "0.99", label: "99%" },
-        ], String(settings.confidence_level))}
-        ${statToggle("bonferroni", "Поправка Bonferroni", settings.bonferroni,
-          "Корректирует alpha на число сравнений внутри блока")}
-        <label class="stat-number">Малая база &lt;
-          <input id="stat-minimum-base" type="number" min="1" max="100000" value="${settings.minimum_base}" />
-        </label>
+      <div class="stat-block">
+        <p>Уровень доверия и пороги</p>
+        <div class="stat-controls">
+          ${statSegment("confidence", [
+            { value: "0.9", label: "90%" },
+            { value: "0.95", label: "95%" },
+            { value: "0.99", label: "99%" },
+          ], String(settings.confidence_level))}
+          ${statToggle("bonferroni", "Поправка Bonferroni", settings.bonferroni,
+            "Корректирует alpha на число сравнений внутри блока")}
+          <label class="stat-number">Малая база &lt;
+            <input id="stat-minimum-base" type="number" min="1" max="100000" value="${settings.minimum_base}" />
+          </label>
+        </div>
       </div>
-    </div>
 
-    <div class="stat-row">
-      <span class="stat-key">Волны и вывод</span>
-      <div class="stat-controls">
-        ${statSegment("wave", [
-          { value: "none", label: "Волны не сравнивать" },
-          { value: "previous", label: "С предыдущей" },
-          { value: "control", label: "С контрольной" },
-        ], settings.wave_comparison)}
-        ${settings.wave_comparison === "control"
-          ? `<label class="stat-number">Контрольная
-              <select id="stat-wave-control">${waveOptions}</select></label>`
-          : ""}
-        ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
-          "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
+      <div class="stat-block">
+        <p>Сравнение волн</p>
+        <div class="stat-controls">
+          ${statSegment("wave", [
+            { value: "none", label: "Не сравнивать" },
+            { value: "previous", label: "С предыдущей" },
+            { value: "control", label: "С контрольной" },
+          ], settings.wave_comparison)}
+          ${settings.wave_comparison === "control"
+            ? `<label class="stat-number">Контрольная
+                <select id="stat-wave-control">${waveOptions}</select></label>`
+            : ""}
+        </div>
       </div>
-    </div>
-  </section>`;
-}
 
-// Состав — не настройка книги, а итог структуры: его не выбирают здесь,
-// его правят в другом разделе. Поэтому он стоит над плитками полосой,
-// а не пятой плиткой в ряду.
-function reportContentSummary() {
-  const questions = configuredQuestions();
-  const included = questions.filter(question => question.included_in_report);
-  const review = included.filter(question => questionStatus(question) === "review");
-  const withBase = included.filter(question => question.base_filter_id);
-  const excluded = questions.length - included.length;
-  const chips = [
-    review.length ? `<span class="chip warn">${plural(review.length, "требует", "требуют", "требуют")} проверки</span>` : "",
-    withBase.length ? `<span class="chip">${plural(withBase.length, "со своей базой", "со своей базой", "со своей базой")}</span>` : "",
-    excluded ? `<span class="chip muted">${excluded} исключено</span>` : "",
-  ].filter(Boolean).join("");
-  return `<section class="rep-summary" data-block="content">
-    <div class="rep-summary-text">
-      <p class="rep-summary-key">Состав книги</p>
-      <p class="rep-summary-val">${plural(included.length, "вопрос", "вопроса", "вопросов")} из ${questions.length}</p>
+      <div class="stat-block">
+        <p>Вывод в книге</p>
+        <div class="stat-controls">
+          ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
+            "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
+        </div>
+      </div>
+
     </div>
-    <div class="rep-summary-chips">${chips}</div>
-    <button type="button" class="pill" data-goto="questions">К структуре</button>
   </section>`;
 }
 
@@ -1432,13 +1442,19 @@ function renderReportBlocks() {
   const container = document.querySelector("#entity-list");
   const settings = configuredReportSettings();
   container.className = "entity-list report-blocks";
-  container.innerHTML = reportContentSummary()
-    + `<div class="tiles">${[
-      reportColumnsTile(),
-      reportBaseTile(),
-      reportWeightTile(settings),
-    ].join("")}</div>`
-    + reportStatisticsPanel(settings);
+  container.innerHTML = `<div class="split">
+    <section class="col">
+      <div class="col-head"><h3>Содержимое книги</h3><span class="col-note">что войдёт в Excel</span></div>
+      ${[
+        reportContentRow(),
+        reportColumnsRow(),
+        reportBaseRow(),
+        reportWeightRow(settings),
+        reportSheetsRow(),
+      ].join("")}
+    </section>
+    ${reportStatisticsColumn(settings)}
+  </div>`;
   const activeBanner = configuredBanners().find(item => item.id === selectedReportBannerId());
   const included = configuredQuestions().filter(question => question.included_in_report).length;
   const columns = activeBanner ? reportBannerColumnCount(activeBanner) : 1;
@@ -1830,43 +1846,6 @@ function emptySearchRow(columns, message) {
     ? `По запросу «${escapeHtml(structureSearch)}» ничего не совпало.`
     : "Под выбранный фильтр ничего не подходит.";
   return `<tr class="empty-row"><td colspan="${columns}"><div class="empty-state">${escapeHtml(message)} ${reason}</div></td></tr>`;
-}
-
-// Чипы правила фильтра списком: плитке нужно уметь показать первые три
-// и свернуть остальные в счётчик.
-function filterRuleChips(rule) {
-  const chips = [];
-  if ((rule.items || []).length > 1) chips.push(`<span class="operator-chip">${rule.operator === "or" ? "ИЛИ" : "И"}</span>`);
-  (rule.items || []).forEach(item => {
-    if (item.kind === "group") {
-      if ((item.items || []).length > 1) chips.push(`<span class="operator-chip">${item.operator === "or" ? "ИЛИ" : "И"}</span>`);
-      (item.items || []).forEach(condition => chips.push(renderFilterConditionChip(condition)));
-    } else {
-      chips.push(renderFilterConditionChip(item));
-    }
-  });
-  return chips;
-}
-
-function renderFilterConditionChip(condition) {
-  const source = condition.source?.kind === "recoding"
-    ? configuredRecodings().find(item => item.id === condition.source.ref)?.code || condition.source.ref
-    : condition.source?.ref || "?";
-  const operators = {
-    eq: "=", ne: "≠", in: "∈", not_in: "∉", gt: ">", lt: "<", between: "между",
-    filled: "заполнено", missing: "пропущено", selected_any: "выбран любой",
-    selected_all: "выбраны все", selected_none: "не выбрано",
-  };
-  let values = (condition.values || []).join(", ");
-  if (condition.operator === "between") {
-    values = [condition.lower, condition.upper].filter(value => value !== undefined && value !== null && value !== "").join("–");
-  } else if (condition.operator === "gt") {
-    values = condition.lower ?? "";
-  } else if (condition.operator === "lt") {
-    values = condition.upper ?? "";
-  }
-  const text = [source, operators[condition.operator] || condition.operator, values].filter(Boolean).join(" ");
-  return `<span title="${escapeAttribute(text)}">${escapeHtml(text)}</span>`;
 }
 
 function filterPreviewKey(filter) {

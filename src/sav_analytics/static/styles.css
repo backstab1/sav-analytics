@@ -302,14 +302,14 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .link-button { padding: 9px 20px; font-size: var(--t-sm); font-weight: 600; }
 .link-button[aria-disabled="true"] { cursor: wait; opacity: 0.55; pointer-events: none; }
 
-/* Три колонки: рельс, док инспекторов, холст. Инспектор переехал налево
-   и стоит между рельсом и списком; справа остаётся поле. Порядок задан
+/* Три колонки: рельс, док инспекторов, холст. Инспектор стоит слева от
+   списка, между рельсом и холстом; справа остаётся поле. Порядок задан
    grid-column, а не разметкой: в DOM панель по-прежнему идёт после
    таблицы, которая её открывает. */
 .shell {
   height: calc(100dvh - var(--bar));
   display: grid;
-  grid-template-columns: var(--rail) minmax(0, 1fr) auto;
+  grid-template-columns: var(--rail) auto minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 /* Ряд один и тот же для всех трёх: колонки расставлены явно, а порядок
@@ -358,7 +358,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
    потолком по ширине и серым полем справа. Над окном — шапка раздела:
    где мы, что здесь делают и действие раздела. Раньше всё это было
    ужато в один ряд .toolbar внутри самой панели. */
-.canvas { grid-column: 2; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+.canvas { grid-column: 3; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
 .canvas-inner {
   width: min(100%, var(--canvas-max));
   padding: var(--canvas-pad);
@@ -456,120 +456,104 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
    под каждый редактор отдельно. */
 
 /* ================================================================
-   РАЗДЕЛ «ОТЧЁТ» — сводка состава и четыре плитки
+   РАЗДЕЛ «ОТЧЁТ» — две колонки
 
-   Не сетка карточек-сущностей, а один контейнер: сверху состав книги
-   полосой, под ним ряд из четырёх плиток — колонки, база, вес,
-   статистика. Поэтому .report-blocks отменяет сетку .entity-list
+   Не сетка карточек-сущностей и не ярусы во всю ширину: слева узкая
+   колонка со строками-свойствами (чем книга описывается), справа —
+   статистика (как она считается). Холст шириной 1180px, и полосой
+   через весь холст содержимое шло только потому, что раскладку
+   задавал список. Поэтому .report-blocks отменяет сетку .entity-list
    и раскладывает содержимое сам.
+
+   Разделитель между колонками — фон сетки, а не рамка: колонки
+   растянуты на одну высоту, и линия идёт до низа сама.
    ================================================================ */
 .entity-list.report-blocks {
   display: block; padding: 0;
 }
-/* Сводка состава: не настройка, а итог структуры, поэтому стоит полосой
-   над плитками и ведёт в другой раздел, а не открывает поповер. */
-.rep-summary {
-  display: flex; align-items: center; gap: 14px;
-  padding: 11px 16px; border-bottom: 1px solid var(--c-border);
-}
-.rep-summary-text { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
-.rep-summary-key { margin: 0; font-size: var(--t-xs); color: var(--c-ink-3); }
-.rep-summary-val {
-  margin: 0; font-family: var(--font-display); font-size: var(--t-md);
-  font-weight: 700; letter-spacing: -0.02em;
-}
-.rep-summary-chips { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
-.rep-summary .pill { margin-left: auto; flex: 0 0 auto; }
-
-/* Четыре свойства книги ложатся в ряд: холст шириной 1180px, и в столбик
-   они занимали высоту экрана. Разделители — фон сетки, а не рамки. */
-.tiles {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+.split {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 1px; background: var(--c-border);
 }
-.tile {
-  display: flex; flex-direction: column; gap: 6px; min-width: 0;
-  padding: 12px 14px 13px; background: var(--c-surface);
+.col { background: var(--c-surface); min-width: 0; }
+.col-head {
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 11px 14px 5px;
 }
-.tile:hover { background: #fcfcfd; }
-.tile-key {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  font-size: var(--t-micro); letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--c-ink-4); font-weight: 600;
+.col-head h3 {
+  margin: 0; font-size: var(--t-micro); letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--c-ink-4); font-weight: 600;
 }
-.tile-edit {
-  flex: 0 0 auto; padding: 1px 8px; border-radius: var(--r-pill);
-  border: 1px solid transparent; background: transparent; color: var(--c-ink-4);
-  font-size: var(--t-micro); text-transform: none; letter-spacing: 0;
+.col-note { font-size: var(--t-xs); color: var(--c-ink-4); }
+
+/* Строка свойства: имя, значение с метриками, действие. Значение — оно
+   же кнопка выбора: щёлкать по названию естественнее, чем искать
+   отдельную пилюлю. */
+.prop {
+  display: grid; grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 10px; align-items: center;
+  padding: 8px 14px; border-top: 1px solid rgba(0, 0, 0, .05);
 }
-.tile-edit { justify-content: center; }
-.tile:hover .tile-edit { color: var(--c-brand); border-color: var(--c-border); background: var(--c-surface); }
-.tile-edit:hover { background: var(--c-brand-tint); border-color: transparent; color: var(--c-brand); transform: none; }
-/* Значение — оно же кнопка выбора: щёлкать по названию естественнее,
-   чем искать отдельную пилюлю. */
-.tile-val, .tile-val-button {
-  display: flex; align-items: center; justify-content: flex-start; gap: 6px;
-  min-width: 0; padding: 0;
-  border: 0; background: transparent; text-align: left;
-  font-family: var(--font-display); font-size: var(--t-md); font-weight: 700;
+.prop:hover { background: #fcfcfd; }
+.prop-key { font-size: var(--t-xs); color: var(--c-ink-3); }
+.prop-val {
+  display: block; min-width: 0; padding: 0; text-align: left;
+  border: 0; background: transparent; color: inherit;
+}
+.prop-val strong {
+  display: block; min-width: 0;
+  font-family: var(--font-display); font-size: var(--t-sm); font-weight: 700;
   letter-spacing: -0.02em; color: var(--c-ink);
-}
-.tile-val > *:first-child, .tile-val-button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-button.tile-val:hover, .tile-val-button:hover { color: var(--c-brand); background: transparent; transform: none; }
-.tile-val.off, .tile-val-button.off {
-  font-family: var(--font-body); font-size: var(--t-sm); font-weight: 500; color: var(--c-ink-3);
-}
-.tile-val .caret {
-  width: 0; height: 0; flex: 0 0 auto;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
-  border-top: 4px solid currentColor; opacity: .5;
-}
-.tile-chips { display: flex; flex-wrap: wrap; gap: 4px; overflow: hidden; max-height: 40px; }
-.tile-chips .chip, .tile-chips > span {
-  display: inline-flex; align-items: center; max-width: 100%; min-width: 0;
-  padding: 2px 8px; border-radius: var(--r-pill); background: var(--c-surface-soft);
-  color: var(--c-ink-2); font-size: var(--t-micro); font-weight: 500;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tile-chips .chip.total { background: var(--c-ink); color: #fff; }
-.tile-chips .chip.muted { color: var(--c-ink-4); }
-.tile-chips .operator-chip { background: var(--c-brand-tint); color: var(--c-brand); font-weight: 700; }
-.tile-meta { margin-top: auto; font-size: var(--t-xs); color: var(--c-ink-3); }
-.tile-meta b { color: var(--c-ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.prop-val strong.off { font-family: var(--font-body); font-weight: 500; color: var(--c-ink-3); }
+.prop-val small {
+  display: block; min-width: 0; font-size: var(--t-micro); color: var(--c-ink-4);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prop-val small b { color: var(--c-ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+button.prop-val:hover strong { color: var(--c-brand); }
+button.prop-val:hover { background: transparent; transform: none; }
+/* Действие видно всегда, но не спорит со значением: цвет набирается
+   при наведении на строку. */
+.prop-act {
+  flex: 0 0 auto; padding: 2px 9px; border-radius: var(--r-pill);
+  border: 1px solid transparent; background: transparent; color: var(--c-ink-4);
+  font-size: var(--t-micro);
+}
+.prop:hover .prop-act { color: var(--c-brand); border-color: var(--c-border); background: var(--c-surface); }
+.prop-act:hover { background: var(--c-brand-tint); border-color: transparent; color: var(--c-brand); transform: none; }
 
-/* На узком окне ряд из трёх нечитаем: делим пополам, потом в столбик. */
-@media (max-width: 1080px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .tiles { grid-template-columns: minmax(0, 1fr); } }
+/* На узком окне две колонки не читаются: они складываются в одну, и
+   статистика встаёт под свойствами — как было до этой раскладки. */
+@media (max-width: 1080px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ================================================================
-   ПАНЕЛЬ СТАТИСТИКИ
+   СТАТИСТИКА — правая колонка
 
-   У трёх плиток значение одно: этот баннер, этот фильтр, этот вес.
+   У свойств книги значение одно: этот баннер, этот фильтр, этот вес.
    У статистики значений семь, и за словом «изменить» они превращались
-   в закрытый ящик. Поэтому она идёт полосой под плитками во всю их
-   ширину и показывает сами варианты: строка — вопрос, справа ответы,
-   выбранный залит. Каждый щелчок уходит в конфигурацию сразу.
+   в закрытый ящик. Своей колонкой они помещаются целиком: блок —
+   вопрос, под ним ответы, выбранный залит. Каждый щелчок уходит в
+   конфигурацию сразу.
    ================================================================ */
-.stat-panel { border-top: 1px solid var(--c-border); background: var(--c-surface); }
-.stat-head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 14px 2px;
-}
-.stat-head .tile-key { flex: 0 0 auto; }
-.stat-note { font-size: var(--t-xs); color: var(--c-ink-4); }
+.stat-col .col-head { padding-right: 12px; }
 .stat-saved {
   margin-left: auto; padding: 1px 9px; border-radius: var(--r-pill);
   background: var(--c-brand-tint); color: var(--c-brand);
   font-size: var(--t-micro); font-weight: 600;
   animation: drawer-rise 160ms var(--ease);
 }
-.stat-row {
-  display: grid; grid-template-columns: 148px minmax(0, 1fr);
-  gap: 12px; align-items: center; padding: 8px 14px;
+.stat-stack { padding: 0 14px 12px; }
+.stat-block { padding: 9px 0; border-top: 1px solid rgba(0, 0, 0, .05); }
+.stat-block:first-child { border-top: 0; padding-top: 4px; }
+.stat-block > p {
+  margin: 0 0 6px; font-size: var(--t-xs); color: var(--c-ink-3);
 }
-.stat-key { font-size: var(--t-xs); color: var(--c-ink-3); }
-.stat-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.stat-hint { margin: 0 14px 6px 174px; font-size: var(--t-xs); }
+.stat-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.stat-hint { margin: 7px 0 0; font-size: var(--t-xs); }
 
 /* Сегменты: варианты одного вопроса стоят рядом, выбранный залит.
    Радиогруппа читается быстрее селекта — видно и выбор, и альтернативы. */
@@ -623,11 +607,6 @@ button.tile-val:hover, .tile-val-button:hover { color: var(--c-brand); backgroun
 .stat-number input { width: 58px; }
 .stat-number input:focus-visible, .stat-number select:focus-visible {
   outline: none; box-shadow: var(--focus-ring);
-}
-
-@media (max-width: 900px) {
-  .stat-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .stat-hint { margin-left: 14px; }
 }
 
 /* Группировки в карточке вопроса: строка-ссылка в редактор перекодировки. */
@@ -953,17 +932,18 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    и стоит прямоугольником встык к рельсу: она выезжает сбоку, а не
    всплывает карточкой. Тело прокручивается, ряд действий всегда внизу.
 
-   Док — вторая колонка оболочки. Пока все инспекторы скрыты, он нулевой
-   ширины: колонка `auto` схлопывается сама, синхронизировать класс из
-   app.js по-прежнему не нужно. Условие на :has() осталось ровно для
-   оформления дока — тени и рамки, которых у пустой колонки быть не должно.
+   Док — вторая колонка оболочки, между рельсом и холстом. Пока все
+   инспекторы скрыты, он нулевой ширины: колонка `auto` схлопывается сама,
+   синхронизировать класс из app.js по-прежнему не нужно. Условие на :has()
+   осталось ровно для оформления дока — тени и рамки, которых у пустой
+   колонки быть не должно.
    ================================================================ */
 .insp-dock {
-  grid-column: 3; display: flex; align-items: stretch;
+  grid-column: 2; display: flex; align-items: stretch;
   min-width: 0;
 }
 .shell:has(.insp:not([hidden])) .insp-dock {
-  border-left: 1px solid var(--c-border);
+  border-right: 1px solid var(--c-border);
 }
 .insp {
   align-self: stretch; height: 100%; max-height: 100%;
@@ -975,7 +955,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   animation: insp-in 220ms var(--ease);
 }
 .insp[hidden] { display: none !important; }
-@keyframes insp-in { from { opacity: 0; transform: translateX(10px); } }
+@keyframes insp-in { from { opacity: 0; transform: translateX(-10px); } }
 
 /* Форма внутри инспектора повторяет его же три яруса и тянется на всю
    высоту панели: ряд действий стоит внизу, а не там, где кончился текст. */
@@ -1498,7 +1478,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    некуда положить, он выезжает поверх списка с той же стороны.
    ================================================================ */
 .editor-backdrop { display: none; }
-@keyframes slide-over-in { from { opacity: 0; transform: translateX(24px); } }
+@keyframes slide-over-in { from { opacity: 0; transform: translateX(-24px); } }
 @keyframes backdrop-in { from { opacity: 0; } }
 /* На неё ссылается меню выгрузки. */
 @keyframes drawer-rise { from { opacity: 0; transform: translateY(10px); } }
@@ -1513,11 +1493,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 @media (max-width: 1080px) {
   .insp-dock { position: static; padding: 0; }
-  .shell:has(.insp:not([hidden])) .insp-dock { border-left: 0; }
+  .shell:has(.insp:not([hidden])) .insp-dock { border-right: 0; }
   .insp:not([hidden]) {
-    position: fixed; top: 0; left: auto; right: 0; bottom: 0; z-index: 140;
+    position: fixed; top: 0; right: auto; left: 0; bottom: 0; z-index: 140;
     width: min(400px, 100vw); max-height: none; height: 100%;
-    border: 0; border-radius: 0; box-shadow: -18px 0 54px rgba(15, 20, 17, .26);
+    border: 0; border-radius: 0; box-shadow: 18px 0 54px rgba(15, 20, 17, .26);
     animation: slide-over-in 240ms var(--ease);
   }
   body:has(.insp:not([hidden])) .editor-backdrop {

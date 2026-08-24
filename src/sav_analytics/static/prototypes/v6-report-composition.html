@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>sav-analytics — макет v6: пять компоновок экрана «Отчёт»</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ================================================================
+   Макет v6 — компоновка экрана «Отчёт».
+
+   v4 отвечал на вопрос «сколько разделов», v5 — «насколько лаконичен
+   блок конфигурации». Оба оставили одну и ту же композицию холста:
+   полоса состава, ряд плиток, панель статистики, полоса запуска —
+   четыре яруса сверху вниз, каждый во всю ширину.
+
+   Здесь сравниваются пять способов расставить то же содержимое:
+     0 — как собрано сейчас, для отсчёта;
+     A — превью книги главным объектом, настройки полосой под ним;
+     B — две колонки: свойства слева, статистика справа;
+     C — параметры одной полосой, холст отдан содержанию книги;
+     D — книга как документ: листы и свойства титульным листом;
+     E — готовность к сборке: свойства как строки чеклиста.
+
+   Токены те же, что в styles.css. Данные вымышленные и во всех
+   вариантах одни: 147 переменных, 128 вопросов в книге, баннер
+   «Пол × Возраст» на 9 колонок, база 1 842 из 2 000, вес raking.
+   ================================================================ */
+:root{
+  --c-bg:#f4f4f6; --c-surface:#fff; --c-surface-soft:#f5f5f7;
+  --c-border:rgba(0,0,0,.08); --c-border-strong:rgba(0,0,0,.14);
+  --c-ink:#1d1d1f; --c-ink-2:#494950; --c-ink-3:#86868b; --c-ink-4:#c7c7cc;
+  --c-brand:#1d7a4f; --c-brand-hover:#166341; --c-brand-2:#2eae68; --c-brand-tint:#e8f4ee;
+  --c-danger:#d64545; --c-warn-ink:#9a6b00; --c-warn-tint:#fdf4dd;
+
+  --r-1:7px; --r-2:10px; --r-3:14px; --r-pill:100px;
+  --t-micro:10.5px; --t-xs:11px; --t-sm:12px; --t-base:12.5px;
+  --t-md:14px; --t-lg:17px; --t-xl:20px; --t-2xl:26px;
+
+  --font-display:"Inter Tight",-apple-system,"SF Pro Display",Inter,sans-serif;
+  --font-body:Inter,-apple-system,"SF Pro Text","Segoe UI",sans-serif;
+  --font-mono:"SF Mono",Menlo,Consolas,monospace;
+
+  --bar:42px; --rail:80px; --canvas-pad:20px; --canvas-max:1180px;
+  --shell-gap:12px; --shell-pad:14px;
+
+  --shadow-card:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);
+  --ease:cubic-bezier(.25,.1,.25,1);
+}
+*{box-sizing:border-box;}
+[hidden]{display:none!important;}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font:var(--t-base)/1.45 var(--font-body);
+     -webkit-font-smoothing:antialiased;font-feature-settings:"cv05","cv08";}
+h1,h2,h3,h4{margin:0;font-family:var(--font-display);letter-spacing:-.02em;}
+button,input,select{font:inherit;color:inherit;}
+code{font:500 var(--t-micro)/1.4 var(--font-mono);color:var(--c-brand);background:var(--c-brand-tint);
+     padding:1px 5px;border-radius:5px;}
+
+/* ---------------- переключатель (вне продукта) ---------------- */
+.switch{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+        padding:10px 16px;background:#1d1d1f;color:#fff;}
+.switch b{font-family:var(--font-display);font-size:var(--t-sm);margin-right:6px;}
+.switch button{padding:5px 12px;border-radius:var(--r-pill);border:1px solid rgba(255,255,255,.22);
+        background:transparent;color:rgba(255,255,255,.72);font-size:var(--t-xs);font-weight:500;cursor:pointer;}
+.switch button:hover{color:#fff;border-color:rgba(255,255,255,.45);}
+.switch button[aria-pressed="true"]{background:var(--c-brand-2);border-color:var(--c-brand-2);color:#08210f;font-weight:600;}
+.switch .note{margin-left:auto;font-size:var(--t-xs);color:rgba(255,255,255,.5);}
+
+.explain{padding:16px var(--canvas-pad) 0;max-width:calc(var(--canvas-max) + var(--rail) + 40px);margin:0 auto;}
+.explain-card{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--r-3);
+        padding:14px 16px;box-shadow:var(--shadow-card);}
+.explain-card h2{font-size:var(--t-lg);margin-bottom:4px;}
+.explain-card p{margin:0 0 8px;color:var(--c-ink-2);max-width:82ch;}
+.explain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:10px;}
+.explain-grid div{border:1px solid var(--c-border);border-radius:var(--r-2);padding:9px 11px;background:var(--c-surface-soft);}
+.explain-grid p{margin:0;font-size:var(--t-xs);color:var(--c-ink-2);}
+.explain-grid strong{display:block;font-size:var(--t-xs);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}
+.plus strong{color:var(--c-brand);} .minus strong{color:var(--c-danger);} .size strong{color:var(--c-ink-3);}
+.measure{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:var(--r-pill);
+         background:var(--c-ink);color:#fff;font-size:var(--t-micro);font-weight:600;}
+
+/* ---------------- хром продукта ---------------- */
+.frame{max-width:calc(var(--canvas-max) + var(--rail) + 40px);margin:14px auto 40px;
+       background:var(--c-bg);border:1px solid var(--c-border-strong);border-radius:var(--r-3);
+       overflow:hidden;box-shadow:var(--shadow-card);}
+.bar{height:var(--bar);display:flex;align-items:center;gap:10px;padding:0 12px 0 14px;
+     background:rgba(255,255,255,.9);border-bottom:1px solid var(--c-border);}
+.brand{display:flex;align-items:center;gap:6px;font-family:var(--font-display);font-weight:800;font-size:var(--t-md);}
+.brand span{color:var(--c-brand);} .brand i{width:16px;height:16px;border-radius:5px;background:var(--c-brand);}
+.bar-sep{width:1px;height:18px;background:var(--c-border);}
+.chip-project{display:flex;align-items:center;gap:5px;border:1px solid var(--c-border);background:var(--c-surface);
+       border-radius:var(--r-pill);padding:3px 10px;font-size:var(--t-xs);font-weight:600;cursor:pointer;}
+.project-meta{font-size:var(--t-xs);color:var(--c-ink-3);}
+.bar-grow{flex:1;}
+.screens{display:flex;gap:2px;}
+.screens button{padding:4px 10px;border:0;background:transparent;border-radius:var(--r-pill);font-size:var(--t-xs);color:var(--c-ink-3);cursor:pointer;}
+.screens button[aria-current]{background:var(--c-surface-soft);color:var(--c-ink);font-weight:600;}
+.avatar{width:22px;height:22px;border-radius:50%;background:var(--c-brand-tint);color:var(--c-brand);
+        display:grid;place-items:center;font-size:var(--t-micro);font-weight:700;}
+
+.shell{display:grid;grid-template-columns:var(--rail) 1fr;gap:var(--shell-gap);padding:var(--shell-pad);
+       min-height:560px;align-items:start;}
+.rail{display:flex;flex-direction:column;gap:2px;}
+.rail-cap{margin:2px 0 6px;font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--c-ink-4);text-align:center;}
+.rail-item{display:grid;justify-items:center;gap:3px;padding:8px 4px;border:0;border-radius:var(--r-2);
+       background:transparent;color:var(--c-ink-2);font-size:var(--t-micro);line-height:1.2;text-align:center;cursor:pointer;}
+.rail-item svg{width:19px;height:19px;}
+.rail-item.active{background:var(--c-brand-tint);color:var(--c-brand);font-weight:600;}
+.rail-item em{font-style:normal;font-size:9.5px;color:var(--c-ink-4);}
+
+.canvas{min-width:0;padding:6px var(--canvas-pad) var(--canvas-pad);}
+.canvas-inner{max-width:var(--canvas-max);margin:0 auto;}
+.canvas-head{margin:6px 0 12px;}
+.eyebrow{margin:0 0 3px;font-size:var(--t-micro);letter-spacing:.09em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;}
+.canvas-head h1{font-size:var(--t-2xl);font-weight:800;letter-spacing:-.035em;}
+.canvas-head .lead{margin:4px 0 0;color:var(--c-ink-3);font-size:var(--t-sm);max-width:72ch;}
+
+.pane{background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--r-3);
+      box-shadow:var(--shadow-card);overflow:hidden;}
+.pane-bar{display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-bottom:1px solid var(--c-border);}
+.pane-bar h2{font-size:var(--t-md);font-weight:700;}
+.pane-count{font-size:var(--t-xs);color:var(--c-ink-3);}
+.grow{flex:1;}
+
+.pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid var(--c-border);
+      background:var(--c-surface);border-radius:var(--r-pill);font-size:var(--t-xs);cursor:pointer;white-space:nowrap;}
+.pill:hover{border-color:var(--c-border-strong);}
+.pill.on{background:var(--c-brand-tint);border-color:transparent;color:var(--c-brand);font-weight:600;}
+.pill .caret{width:0;height:0;border:3.5px solid transparent;border-top-color:currentColor;margin-top:3px;opacity:.55;}
+.btn{height:28px;padding:0 13px;border-radius:var(--r-pill);border:1px solid transparent;background:var(--c-brand);
+     color:#fff;font-size:var(--t-xs);font-weight:600;cursor:pointer;}
+.btn:hover{background:var(--c-brand-hover);}
+.btn.ghost{background:var(--c-surface);color:var(--c-ink);border-color:var(--c-border);}
+.btn.lg{height:32px;padding:0 16px;font-size:var(--t-sm);}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--r-pill);
+      background:var(--c-surface-soft);border:1px solid var(--c-border);font-size:var(--t-micro);color:var(--c-ink-2);}
+.chip.total{background:var(--c-ink);border-color:transparent;color:#fff;}
+.chip.warn{background:var(--c-warn-tint);border-color:transparent;color:var(--c-warn-ink);}
+.chip.muted{color:var(--c-ink-4);}
+.chip .lvl{color:var(--c-ink-4);margin:0 2px;}
+.muted{color:var(--c-ink-3);}
+
+/* полоса запуска — общая для всех вариантов */
+.launch{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--c-surface-soft);
+        border-top:1px solid var(--c-border);}
+.launch .grow{min-width:0;}
+.pf{display:flex;align-items:center;gap:7px;font-size:var(--t-xs);color:var(--c-ink-2);}
+.pf+.pf{margin-top:3px;}
+.pf i{width:6px;height:6px;border-radius:50%;display:inline-block;flex:0 0 auto;}
+.pf.ok i{background:var(--c-brand-2);} .pf.warn i{background:#e0a800;} .pf.err i{background:var(--c-danger);}
+
+/* сегменты и флажки статистики — как в продукте */
+.seg{display:inline-flex;padding:2px;gap:2px;background:var(--c-surface-soft);border-radius:var(--r-pill);}
+.seg button{padding:4px 11px;border:0;border-radius:var(--r-pill);background:transparent;color:var(--c-ink-2);
+            font-size:var(--t-xs);font-weight:500;white-space:nowrap;cursor:pointer;}
+.seg button.on{background:var(--c-surface);color:var(--c-ink);font-weight:600;
+               box-shadow:0 1px 2px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.04);}
+.opt{display:inline-flex;align-items:center;gap:7px;padding:4px 12px 4px 8px;border-radius:var(--r-pill);
+     border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-ink-2);
+     font-size:var(--t-xs);font-weight:500;white-space:nowrap;cursor:pointer;}
+.opt-mark{width:13px;height:13px;flex:0 0 auto;border-radius:4px;border:1.5px solid var(--c-ink-4);background:var(--c-surface);}
+.opt.on{border-color:transparent;background:var(--c-brand-tint);color:var(--c-brand);font-weight:600;}
+.opt.on .opt-mark{border-color:var(--c-brand);background:var(--c-brand);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6.4 4.8 8.7 9.5 3.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-size:11px 11px;background-position:center;background-repeat:no-repeat;}
+.stat-number{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 12px;border-radius:var(--r-pill);
+     border:1px solid var(--c-border);background:var(--c-surface);font-size:var(--t-xs);color:var(--c-ink-3);white-space:nowrap;}
+.stat-number input{width:52px;height:22px;padding:0 6px;border:0;border-radius:var(--r-1);
+     background:var(--c-surface-soft);font-size:var(--t-xs);font-weight:600;font-variant-numeric:tabular-nums;}
+
+/* ================================================================
+   0 — как собрано сейчас: состав полосой, три плитки, статистика
+   ================================================================ */
+.rep-summary{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--c-border);}
+.rep-summary-key{margin:0;font-size:var(--t-xs);color:var(--c-ink-3);}
+.rep-summary-val{margin:0;font-family:var(--font-display);font-size:var(--t-md);font-weight:700;letter-spacing:-.02em;}
+.rep-summary-chips{display:flex;flex-wrap:wrap;gap:5px;}
+.rep-summary .pill{margin-left:auto;}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--c-border);}
+.tile{background:var(--c-surface);padding:12px 14px 13px;display:flex;flex-direction:column;gap:6px;min-width:0;cursor:pointer;}
+.tile:hover{background:#fcfcfd;}
+.tile-key{display:flex;align-items:center;justify-content:space-between;gap:8px;
+          font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;}
+.tile-key .edit{text-transform:none;letter-spacing:0;color:var(--c-ink-4);}
+.tile:hover .edit{color:var(--c-brand);}
+.tile-val{display:flex;align-items:center;gap:6px;font-family:var(--font-display);font-size:var(--t-md);
+          font-weight:700;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tile-val.off{font-family:var(--font-body);font-size:var(--t-sm);font-weight:500;color:var(--c-ink-3);}
+.tile-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.tile-meta{margin-top:auto;font-size:var(--t-xs);color:var(--c-ink-3);}
+.tile-meta b{color:var(--c-ink-2);font-weight:600;font-variant-numeric:tabular-nums;}
+.stat-panel{border-top:1px solid var(--c-border);}
+.stat-head{display:flex;align-items:center;gap:10px;padding:11px 14px 2px;}
+.stat-head .tile-key{flex:0 0 auto;}
+.stat-note{font-size:var(--t-xs);color:var(--c-ink-4);}
+.stat-row{display:grid;grid-template-columns:148px minmax(0,1fr);gap:12px;align-items:center;padding:8px 14px;}
+.stat-key{font-size:var(--t-xs);color:var(--c-ink-3);}
+.stat-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+
+/* ================================================================
+   Превью книги — общее для A и D. Это не таблица данных, а шапка
+   будущего листа: колонки баннера, буквы сравнений, строка базы.
+   ================================================================ */
+.xl{width:100%;border-collapse:collapse;font-size:var(--t-xs);font-variant-numeric:tabular-nums;}
+.xl th,.xl td{border:1px solid var(--c-border);padding:4px 8px;text-align:right;white-space:nowrap;}
+.xl th{background:var(--c-surface-soft);color:var(--c-ink-3);font-weight:600;}
+.xl th.grp{text-align:center;color:var(--c-ink-4);letter-spacing:.05em;text-transform:uppercase;}
+.xl th.stub{text-align:left;}
+.xl th i,.xl td i{font-style:normal;color:var(--c-ink-4);font-size:9.5px;margin-left:4px;}
+.xl th:first-child,.xl td:first-child{text-align:left;color:var(--c-ink-2);}
+.xl .base td,.xl .base th{color:var(--c-ink-3);background:#fcfcfd;}
+.xl .sig{color:var(--c-brand);font-weight:700;}
+.xl-scroll{overflow-x:auto;}
+.xl-note{margin:7px 0 0;font-size:var(--t-micro);color:var(--c-ink-4);}
+
+/* ================================================================
+   A — книга сверху. Главный объект холста — то, что уйдёт в Excel;
+   настройки стоят под ним полосой и меняют его на глазах.
+   ================================================================ */
+.book{padding:12px 14px 14px;}
+.book-head{display:flex;align-items:baseline;gap:9px;margin-bottom:9px;}
+.book-head h3{font-size:var(--t-sm);}
+.book-head span{font-size:var(--t-xs);color:var(--c-ink-3);}
+.book-head .pill{margin-left:auto;}
+.parambar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:9px 14px;
+          border-top:1px solid var(--c-border);background:#fbfbfc;}
+.param{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--r-pill);
+       border:1px solid var(--c-border);background:var(--c-surface);font-size:var(--t-xs);cursor:pointer;white-space:nowrap;}
+.param:hover{border-color:var(--c-border-strong);}
+.param b{font-weight:600;}
+.param em{font-style:normal;color:var(--c-ink-4);}
+.param.off b{color:var(--c-ink-3);font-weight:500;}
+.param .caret{width:0;height:0;border:3.5px solid transparent;border-top-color:currentColor;margin-top:3px;opacity:.5;}
+.param-sep{width:1px;height:18px;background:var(--c-border);margin:0 3px;}
+
+/* ================================================================
+   B — две колонки. Холст шириной 1180px: свойства книги узкой
+   колонкой слева, статистика — своей колонкой справа, а не ярусом.
+   ================================================================ */
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:1px;background:var(--c-border);}
+.col{background:var(--c-surface);min-width:0;}
+.col-head{display:flex;align-items:center;gap:8px;padding:10px 14px 6px;}
+.col-head h3{font-size:var(--t-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;}
+.col-head .grow{flex:1;}
+.prop{display:grid;grid-template-columns:74px minmax(0,1fr) auto;gap:10px;align-items:center;
+      padding:9px 14px;border-top:1px solid rgba(0,0,0,.05);cursor:pointer;}
+.prop:hover{background:#fbfbfc;}
+.prop-key{font-size:var(--t-xs);color:var(--c-ink-3);}
+.prop-val{min-width:0;}
+.prop-val strong{display:block;font-family:var(--font-display);font-size:var(--t-sm);font-weight:700;
+                 letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.prop-val strong.off{font-family:var(--font-body);font-weight:500;color:var(--c-ink-3);}
+.prop-val small{font-size:var(--t-micro);color:var(--c-ink-4);}
+.prop-val small b{color:var(--c-ink-2);font-weight:600;}
+.prop-act{color:var(--c-ink-4);font-size:var(--t-xs);}
+.stat-stack{padding:0 14px 12px;}
+.stat-block{padding:9px 0;border-top:1px solid rgba(0,0,0,.05);}
+.stat-block:first-child{border-top:0;}
+.stat-block p{margin:0 0 6px;font-size:var(--t-xs);color:var(--c-ink-3);}
+.stat-block .stat-controls{gap:6px;}
+
+/* ================================================================
+   C — параметры полосой, холст отдан содержанию книги
+   ================================================================ */
+.toc{max-height:330px;overflow:auto;}
+.toc-row{display:grid;grid-template-columns:56px minmax(0,1fr) 132px 96px;gap:10px;align-items:center;
+         padding:7px 14px;border-top:1px solid rgba(0,0,0,.05);font-size:var(--t-sm);cursor:pointer;}
+.toc-row:hover{background:#fbfbfc;}
+.toc-row.head{position:sticky;top:0;background:var(--c-surface);border-top:0;
+              font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;}
+.toc-code{font:500 var(--t-micro)/1.4 var(--font-mono);color:var(--c-brand);}
+.toc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.toc-kind,.toc-base{font-size:var(--t-xs);color:var(--c-ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.toc-row.out .toc-name,.toc-row.out .toc-code{color:var(--c-ink-4);text-decoration:line-through;}
+
+/* ================================================================
+   D — книга как документ: имя файла, листы, свойства парами
+   ================================================================ */
+.doc{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:1px;background:var(--c-border);}
+.doc-main,.doc-side{background:var(--c-surface);padding:14px 16px;min-width:0;}
+.doc-title{display:flex;align-items:center;gap:9px;margin-bottom:3px;}
+.doc-title h3{font-size:var(--t-xl);font-weight:800;letter-spacing:-.03em;}
+.doc-file{font:500 var(--t-micro)/1.4 var(--font-mono);color:var(--c-ink-3);}
+.doc-sub{margin:0 0 12px;font-size:var(--t-xs);color:var(--c-ink-3);}
+.sheets{display:flex;flex-direction:column;gap:1px;background:var(--c-border);border:1px solid var(--c-border);border-radius:var(--r-2);overflow:hidden;}
+.sheet-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:9px;align-items:center;
+           padding:8px 11px;background:var(--c-surface);font-size:var(--t-sm);}
+.sheet-row svg{width:15px;height:15px;color:var(--c-ink-4);}
+.sheet-row small{font-size:var(--t-micro);color:var(--c-ink-4);}
+.sheet-row b{font-weight:600;}
+.dl{margin:0;display:grid;grid-template-columns:88px minmax(0,1fr);gap:7px 12px;align-items:baseline;}
+.dl dt{font-size:var(--t-xs);color:var(--c-ink-3);}
+.dl dd{margin:0;font-size:var(--t-sm);min-width:0;}
+.dl dd strong{font-weight:600;}
+.dl dd small{display:block;font-size:var(--t-micro);color:var(--c-ink-4);}
+.dl dd.off{color:var(--c-ink-3);}
+.dl-sep{grid-column:1/-1;height:1px;background:var(--c-border);margin:4px 0;}
+.doc-side h4{font-size:var(--t-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--c-ink-4);font-weight:600;margin-bottom:9px;}
+.doc-side .pill{margin-top:11px;}
+
+/* ================================================================
+   E — готовность к сборке: свойство = строка чеклиста со статусом
+   ================================================================ */
+.steps{padding:2px 0;}
+.step{display:grid;grid-template-columns:20px 92px minmax(0,1fr) auto;gap:11px;align-items:center;
+      padding:10px 14px;border-top:1px solid rgba(0,0,0,.05);cursor:pointer;}
+.step:first-child{border-top:0;}
+.step:hover{background:#fbfbfc;}
+.dot{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:9.5px;font-weight:700;color:#fff;}
+.dot.ok{background:var(--c-brand-2);} .dot.warn{background:#e0a800;} .dot.err{background:var(--c-danger);}
+.dot.idle{background:var(--c-surface);border:1.5px solid var(--c-ink-4);}
+.step-key{font-size:var(--t-xs);color:var(--c-ink-3);}
+.step-val{min-width:0;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;}
+.step-val strong{font-family:var(--font-display);font-size:var(--t-sm);font-weight:700;letter-spacing:-.02em;}
+.step-val strong.off{font-family:var(--font-body);font-weight:500;color:var(--c-ink-3);}
+.step-val span{font-size:var(--t-xs);color:var(--c-ink-3);}
+.step-val span b{color:var(--c-ink-2);font-weight:600;}
+.step-note{font-size:var(--t-xs);color:var(--c-warn-ink);}
+.step-act{color:var(--c-ink-4);font-size:var(--t-xs);}
+.launch.tall{padding:12px 14px;}
+.launch.tall .pf{font-size:var(--t-sm);}
+
+.footnote{max-width:calc(var(--canvas-max) + var(--rail) + 40px);margin:0 auto 30px;
+          padding:0 var(--canvas-pad);font-size:var(--t-xs);color:var(--c-ink-4);}
+</style>
+</head>
+<body>
+
+<div class="switch">
+  <b>Макет v6 · компоновка экрана «Отчёт»</b>
+  <button type="button" data-go="now">0 · Как собрано</button>
+  <button type="button" data-go="a" aria-pressed="true">A · Книга сверху</button>
+  <button type="button" data-go="b">B · Две колонки</button>
+  <button type="button" data-go="c">C · Полоса и содержание</button>
+  <button type="button" data-go="d">D · Документ</button>
+  <button type="button" data-go="e">E · Готовность</button>
+  <span class="note">Данные во всех вариантах одни и вымышлены</span>
+</div>
+
+<!-- ============================================================
+     0 — ОТСЧЁТ. То, что собрано сейчас: четыре яруса во всю ширину.
+     ============================================================ -->
+<section class="mock" data-v="now" hidden>
+  <div class="explain">
+    <div class="explain-card">
+      <h2>0 · Как собрано сейчас</h2>
+      <p>Полоса состава, ряд из трёх плиток, панель статистики, полоса запуска — четыре яруса
+        сверху вниз, каждый во всю ширину холста. Содержимое ужато (v5 срезал 489&nbsp;px до 250),
+        но композиция осталась той же: экран читается как список настроек, а не как книга,
+        которую эти настройки описывают.</p>
+      <div class="explain-grid">
+        <div class="size"><strong>Высота блока</strong><p><span class="measure" data-height="now">—</span> конфигурация без шапки раздела и полосы запуска — отсчёт для остальных пяти.</p></div>
+        <div class="minus"><strong>Что мешает</strong><p>Ответ «что уйдёт в Excel» по-прежнему собирается в голове: колонки описаны словами, а не показаны.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span><span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+      </nav>
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Конфигурация проекта</p><h1>Отчёт</h1>
+          <p class="lead">Всё, что определяет книгу Excel: колонки, база, вес, статистика и состав вопросов.</p>
+        </div>
+        <div class="pane">
+          <div class="pane-bar"><h2>Конфигурация книги</h2><span class="pane-count">128 вопросов · 9 колонок</span><span class="grow"></span></div>
+          <div data-measure="now">
+            <section class="rep-summary">
+              <p class="rep-summary-key">Состав книги</p>
+              <p class="rep-summary-val">128 вопросов из 147</p>
+              <div class="rep-summary-chips"><span class="chip warn">4 требуют проверки</span><span class="chip">7 со своей базой</span><span class="chip muted">19 исключено</span></div>
+              <button class="pill" type="button">К структуре</button>
+            </section>
+            <div class="tiles">
+              <article class="tile">
+                <span class="tile-key">Колонки<span class="edit">править</span></span>
+                <span class="tile-val">Пол × Возраст<span class="caret"></span></span>
+                <span class="tile-chips"><span class="chip total">A · Total</span><span class="chip">Пол</span><span class="chip">Возраст, 6 групп</span></span>
+                <span class="tile-meta">Блоков <b>2</b> · колонок <b>9</b></span>
+              </article>
+              <article class="tile">
+                <span class="tile-key">База отчёта<span class="edit">править</span></span>
+                <span class="tile-val">Покупатели категории<span class="caret"></span></span>
+                <span class="tile-chips"><span class="chip">Q1 ∈ 1, 2, 3</span><span class="chip">И</span><span class="chip">Q4 ≠ 9</span></span>
+                <span class="tile-meta">Выборка <b>1 842</b> из 2 000</span>
+              </article>
+              <article class="tile">
+                <span class="tile-key">Вес<span class="edit">править</span></span>
+                <span class="tile-val">Вес по полу и возрасту<span class="caret"></span></span>
+                <span class="tile-chips"><span class="chip">raking / IPF</span><span class="chip">0,3–3,0</span></span>
+                <span class="tile-meta">Эфф. база <b>1 620</b> · DEFF <b>1,14</b></span>
+              </article>
+            </div>
+            <section class="stat-panel">
+              <div class="stat-head"><span class="tile-key">Статистика</span><span class="stat-note">Действует на весь отчёт</span></div>
+              <div class="stat-row"><span class="stat-key">Сравнение подгрупп</span><div class="stat-controls">
+                <span class="seg"><button type="button">Не считать</button><button type="button" class="on">С остатком (Rest)</button><button type="button">С Total</button></span>
+                <button class="opt on" type="button"><span class="opt-mark"></span>Попарные внутри блока</button></div></div>
+              <div class="stat-row"><span class="stat-key">Уровень и пороги</span><div class="stat-controls">
+                <span class="seg"><button type="button">90%</button><button type="button" class="on">95%</button><button type="button">99%</button></span>
+                <button class="opt on" type="button"><span class="opt-mark"></span>Поправка Bonferroni</button>
+                <label class="stat-number">Малая база &lt; <input type="number" value="30" /></label></div></div>
+              <div class="stat-row"><span class="stat-key">Волны и вывод</span><div class="stat-controls">
+                <span class="seg"><button type="button" class="on">Волны не сравнивать</button><button type="button">С предыдущей</button><button type="button">С контрольной</button></span>
+                <button class="opt" type="button"><span class="opt-mark"></span>p-value в примечании</button></div></div>
+            </section>
+          </div>
+          <div class="launch">
+            <div class="grow"><div class="pf ok"><i></i>Проверка пройдена: отчёт можно собирать</div></div>
+            <button class="btn ghost lg" type="button">Скачать статистику</button>
+            <button class="btn lg" type="button">Собрать Excel</button>
+          </div>
+        </div>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     A — КНИГА СВЕРХУ.
+     Главный объект экрана — не список настроек, а сама книга:
+     шапка будущего листа с колонками баннера и строкой базы.
+     Настройки стоят под ней полосой параметров и меняют превью
+     на глазах — примерно так же, как фильтры меняют сводную.
+     ============================================================ -->
+<section class="mock" data-v="a">
+  <div class="explain">
+    <div class="explain-card">
+      <h2>A · Книга сверху</h2>
+      <p>Экран показывает то, ради чего он существует: шапку будущего листа с колонками баннера,
+        буквами сравнений и строкой базы. Настройки — полоса параметров под превью; щелчок по
+        параметру открывает поповер, превью пересобирается. Статистика прячется в ту же полосу,
+        потому что её след виден прямо в таблице: буквы значимости, звёздочки, малая база.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Ответ «что уйдёт в Excel» перестаёт быть текстовым описанием и становится картинкой. Вложенный баннер видно сразу — сейчас его приходится представлять по чипам.</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Нужен эндпоинт шапки: колонки, буквы, взвешенные базы. Это уже почти живой кросстаб из решения 002 — вычислять базы по всем колонкам приходится по-настоящему.</p></div>
+        <div class="size"><strong>Объём работы</strong><p><span class="measure" data-height="a">—</span> высота блока. Большая: новый расчётный вызов, кэш превью, переразметка холста. Плюс полоса параметров вместо плиток.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span><span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+      </nav>
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Конфигурация проекта</p><h1>Отчёт</h1>
+          <p class="lead">Так будет выглядеть книга. Параметры под превью меняют её на месте.</p>
+        </div>
+        <div class="pane">
+          <div class="pane-bar"><h2>Книга Excel</h2><span class="pane-count">128 вопросов · 9 колонок · 3 листа</span><span class="grow"></span><button class="pill" type="button">Выгрузка<span class="caret"></span></button></div>
+          <div data-measure="a">
+            <div class="book">
+              <div class="book-head">
+                <h3>topline_main · шапка</h3>
+                <span>первый вопрос книги, остальные 127 идут по тому же скелету</span>
+                <button class="pill" type="button">Открыть предпросмотр</button>
+              </div>
+              <div class="xl-scroll">
+                <table class="xl">
+                  <thead>
+                    <tr>
+                      <th class="stub" rowspan="2">Q7. Знаю марку</th>
+                      <th rowspan="2">Всего<i>A</i></th>
+                      <th class="grp" colspan="2">Пол</th>
+                      <th class="grp" colspan="6">Возраст</th>
+                    </tr>
+                    <tr>
+                      <th>Муж<i>Б</i></th><th>Жен<i>В</i></th>
+                      <th>18–24<i>Г</i></th><th>25–34<i>Д</i></th><th>35–44<i>Е</i></th>
+                      <th>45–54<i>Ж</i></th><th>55–64<i>З</i></th><th>65+<i>И</i></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="base"><td>База, взвеш.</td><td>1 842</td><td>884</td><td>958</td><td>196</td><td>341</td><td>367</td><td>352</td><td>309</td><td>277</td></tr>
+                    <tr><td>Знаю хорошо</td><td>46%</td><td>41%</td><td>50% <span class="sig">Б</span></td><td>58% <span class="sig">ЖЗИ</span></td><td>52% <span class="sig">ЗИ</span></td><td>47%</td><td>43%</td><td>38%</td><td>34%</td></tr>
+                    <tr><td>Слышал название</td><td>38%</td><td>40%</td><td>36%</td><td>31%</td><td>35%</td><td>38%</td><td>39%</td><td>42%</td><td>44%</td></tr>
+                    <tr><td>Не знаю</td><td>16%</td><td>19%</td><td>14%</td><td>11%</td><td>13%</td><td>15%</td><td>18%</td><td>20%</td><td>22%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="xl-note">Буквы — значимые отличия при 95% с поправкой Bonferroni, схема Subgroup/Rest.
+                Базы взвешены; колонки с базой меньше 30 будут помечены серым.</p>
+            </div>
+            <div class="parambar">
+              <button class="param" type="button"><em>Колонки</em><b>Пол × Возраст</b><span class="caret"></span></button>
+              <button class="param" type="button"><em>База</em><b>Покупатели категории</b><span class="caret"></span></button>
+              <button class="param" type="button"><em>Вес</em><b>Пол и возраст, raking</b><span class="caret"></span></button>
+              <span class="param-sep"></span>
+              <button class="param" type="button"><em>Сравнение</em><b>С остатком</b><span class="caret"></span></button>
+              <button class="param" type="button"><em>Уровень</em><b>95% + Bonferroni</b><span class="caret"></span></button>
+              <button class="param" type="button"><em>Малая база</em><b>&lt; 30</b><span class="caret"></span></button>
+              <button class="param off" type="button"><em>Волны</em><b>не сравнивать</b><span class="caret"></span></button>
+              <button class="param off" type="button"><em>p-value</em><b>скрыт</b><span class="caret"></span></button>
+              <span class="grow"></span>
+              <button class="param" type="button"><em>Состав</em><b>128 из 147</b><span class="caret"></span></button>
+            </div>
+          </div>
+          <div class="launch">
+            <div class="grow"><div class="pf ok"><i></i>Проверка пройдена: отчёт можно собирать</div>
+              <div class="pf warn"><i></i>4 вопроса требуют проверки в структуре</div></div>
+            <button class="btn ghost lg" type="button">Скачать статистику</button>
+            <button class="btn lg" type="button">Собрать Excel</button>
+          </div>
+        </div>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     B — ДВЕ КОЛОНКИ.
+     Холст шириной 1180px, а содержимое пишется ярусами по всей
+     ширине. Свойства книги — короткие строки, статистика — семь
+     переключателей: они ставятся рядом, а не друг под другом.
+     ============================================================ -->
+<section class="mock" data-v="b">
+  <div class="explain">
+    <div class="explain-card">
+      <h2>B · Две колонки</h2>
+      <p>Слева — чем книга описывается: состав, колонки, база, вес. Справа — как она считается:
+        те же семь настроек статистики, но своей колонкой. Ни одна половина не растягивается
+        на всю ширину, и полоса запуска поднимается почти к шапке холста.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Самая дешёвая правка из пяти: разметка та же, меняется контейнер. Разделение читается смыслово — «что в книге» против «как считается».</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Композиция остаётся списком настроек: превью книги по-прежнему нет. На окне уже 1100px колонки складываются обратно в ярусы.</p></div>
+        <div class="size"><strong>Объём работы</strong><p><span class="measure" data-height="b">—</span> высота блока. Маленькая: <code>renderReportBlocks</code> собирает те же куски в двух обёртках, CSS-сетка вместо ярусов.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span><span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+      </nav>
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Конфигурация проекта</p><h1>Отчёт</h1>
+          <p class="lead">Слева — что войдёт в книгу, справа — как считаются различия.</p>
+        </div>
+        <div class="pane">
+          <div class="pane-bar"><h2>Конфигурация книги</h2><span class="pane-count">128 вопросов · 9 колонок</span><span class="grow"></span><button class="pill" type="button">Выгрузка<span class="caret"></span></button></div>
+          <div class="split" data-measure="b">
+            <div class="col">
+              <div class="col-head"><h3>Содержимое книги</h3><span class="grow"></span><span class="pane-count">4 свойства</span></div>
+              <div class="prop">
+                <span class="prop-key">Состав</span>
+                <span class="prop-val"><strong>128 вопросов из 147</strong><small>Требуют проверки <b>4</b> · со своей базой <b>7</b> · исключено <b>19</b></small></span>
+                <span class="prop-act">к структуре →</span>
+              </div>
+              <div class="prop">
+                <span class="prop-key">Колонки</span>
+                <span class="prop-val"><strong>Пол × Возраст</strong><small>Блоков <b>2</b> · колонок <b>9</b> · вложенных нет</small></span>
+                <span class="prop-act">▾</span>
+              </div>
+              <div class="prop">
+                <span class="prop-key">База</span>
+                <span class="prop-val"><strong>Покупатели категории</strong><small>Выборка <b>1 842</b> из 2 000 · условий <b>2</b></small></span>
+                <span class="prop-act">▾</span>
+              </div>
+              <div class="prop">
+                <span class="prop-key">Вес</span>
+                <span class="prop-val"><strong>Вес по полу и возрасту</strong><small>raking / IPF · эфф. база <b>1 620</b> · DEFF <b>1,14</b></small></span>
+                <span class="prop-act">▾</span>
+              </div>
+              <div class="prop">
+                <span class="prop-key">Листы</span>
+                <span class="prop-val"><strong class="off">Содержание · topline_main · topline_filter</strong><small>Второй топлайн — для 23 вопросов с пропусками</small></span>
+                <span class="prop-act"></span>
+              </div>
+            </div>
+            <div class="col">
+              <div class="col-head"><h3>Статистика</h3><span class="grow"></span><span class="pane-count">действует на весь отчёт</span></div>
+              <div class="stat-stack">
+                <div class="stat-block">
+                  <p>Сравнение подгрупп</p>
+                  <div class="stat-controls">
+                    <span class="seg"><button type="button">Не считать</button><button type="button" class="on">С остатком (Rest)</button><button type="button">С Total</button></span>
+                    <button class="opt on" type="button"><span class="opt-mark"></span>Попарные внутри блока</button>
+                  </div>
+                </div>
+                <div class="stat-block">
+                  <p>Уровень доверия и пороги</p>
+                  <div class="stat-controls">
+                    <span class="seg"><button type="button">90%</button><button type="button" class="on">95%</button><button type="button">99%</button></span>
+                    <button class="opt on" type="button"><span class="opt-mark"></span>Поправка Bonferroni</button>
+                    <label class="stat-number">Малая база &lt; <input type="number" value="30" /></label>
+                  </div>
+                </div>
+                <div class="stat-block">
+                  <p>Сравнение волн</p>
+                  <div class="stat-controls">
+                    <span class="seg"><button type="button" class="on">Не сравнивать</button><button type="button">С предыдущей</button><button type="button">С контрольной</button></span>
+                  </div>
+                </div>
+                <div class="stat-block">
+                  <p>Вывод в книге</p>
+                  <div class="stat-controls">
+                    <button class="opt" type="button"><span class="opt-mark"></span>p-value в примечании</button>
+                    <span class="muted" style="font-size:var(--t-xs)">книга заметно тяжелее</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="launch">
+            <div class="grow"><div class="pf ok"><i></i>Проверка пройдена: отчёт можно собирать</div></div>
+            <button class="btn ghost lg" type="button">Скачать статистику</button>
+            <button class="btn lg" type="button">Собрать Excel</button>
+          </div>
+        </div>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     C — ПОЛОСА И СОДЕРЖАНИЕ.
+     Конфигурация — не главное содержимое экрана, а его настройка:
+     она уходит в одну полосу под шапкой, а холст занимает то, чего
+     на экране «Отчёт» до сих пор не было вовсе, — список вопросов,
+     которые попадут в книгу, в порядке будущего содержания.
+     ============================================================ -->
+<section class="mock" data-v="c">
+  <div class="explain">
+    <div class="explain-card">
+      <h2>C · Полоса и содержание</h2>
+      <p>Все восемь параметров сворачиваются в одну полосу пилюль, а холст отдаётся содержанию
+        книги — тем самым 128 вопросам в порядке листа «Содержание», с их собственными базами
+        и пометками. Экран перестаёт быть наполовину пустым: под ним живой список, который
+        можно листать, искать и перекидывать.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Состав книги наконец видно, а не сосчитано: «128 из 147» превращается в список, где сразу заметно лишнее и вопросы со своей базой.</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Список вопросов дублирует раздел «Структура» — придётся решать, где ими правда управляют. Полоса пилюль на восемь параметров ломается в две строки на узком окне.</p></div>
+        <div class="size"><strong>Объём работы</strong><p><span class="measure" data-height="c">—</span> высота полосы параметров. Средняя: полоса дешёвая, список содержания — новый рендер поверх готовых данных структуры.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span><span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+      </nav>
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Конфигурация проекта</p><h1>Отчёт</h1>
+          <p class="lead">Параметры книги — полосой сверху, ниже — её содержание в порядке листов Excel.</p>
+        </div>
+        <div class="pane">
+          <div class="parambar" data-measure="c" style="border-top:0;border-bottom:1px solid var(--c-border)">
+            <button class="param" type="button"><em>Колонки</em><b>Пол × Возраст</b><span class="caret"></span></button>
+            <button class="param" type="button"><em>База</em><b>Покупатели категории</b><span class="caret"></span></button>
+            <button class="param" type="button"><em>Вес</em><b>Пол и возраст, raking</b><span class="caret"></span></button>
+            <span class="param-sep"></span>
+            <button class="param" type="button"><em>Сравнение</em><b>С остатком + попарные</b><span class="caret"></span></button>
+            <button class="param" type="button"><em>Уровень</em><b>95% + Bonferroni</b><span class="caret"></span></button>
+            <button class="param" type="button"><em>Малая база</em><b>&lt; 30</b><span class="caret"></span></button>
+            <button class="param off" type="button"><em>Волны</em><b>не сравнивать</b><span class="caret"></span></button>
+            <button class="param off" type="button"><em>p-value</em><b>скрыт</b><span class="caret"></span></button>
+          </div>
+          <div class="pane-bar"><h2>Содержание книги</h2><span class="pane-count">128 вопросов · 9 колонок · 2 топлайна</span><span class="grow"></span>
+            <span class="chip warn">4 требуют проверки</span><button class="pill" type="button">К структуре</button></div>
+          <div class="toc">
+            <div class="toc-row head"><span>Код</span><span>Вопрос</span><span>Тип</span><span>База</span></div>
+            <div class="toc-row"><span class="toc-code">Q1</span><span class="toc-name">Как часто вы покупаете категорию</span><span class="toc-kind">single</span><span class="toc-base">общая</span></div>
+            <div class="toc-row"><span class="toc-code">Q2</span><span class="toc-name">Марки, о которых вы слышали</span><span class="toc-kind">multiple · 12</span><span class="toc-base">общая</span></div>
+            <div class="toc-row"><span class="toc-code">Q3</span><span class="toc-name">Марка, которую покупаете чаще всего</span><span class="toc-kind">single</span><span class="toc-base">Q1 ∈ 1–3</span></div>
+            <div class="toc-row"><span class="toc-code">Q4</span><span class="toc-name">Оценка марки по параметрам</span><span class="toc-kind">matrix · 8 × 5</span><span class="toc-base">общая</span></div>
+            <div class="toc-row"><span class="toc-code">Q5</span><span class="toc-name">Готовность рекомендовать</span><span class="toc-kind">NPS · 0–10</span><span class="toc-base">общая</span></div>
+            <div class="toc-row"><span class="toc-code">Q6</span><span class="toc-name">Удовлетворённость последней покупкой</span><span class="toc-kind">CSAT · 1–5</span><span class="toc-base">Q3 задан</span></div>
+            <div class="toc-row"><span class="toc-code">Q7</span><span class="toc-name">Знаю марку</span><span class="toc-kind">single</span><span class="toc-base">общая</span></div>
+            <div class="toc-row out"><span class="toc-code">Q8</span><span class="toc-name">Служебный вопрос интервьюера</span><span class="toc-kind">исключён</span><span class="toc-base">—</span></div>
+            <div class="toc-row"><span class="toc-code">Q9</span><span class="toc-name">Источники информации о категории</span><span class="toc-kind">multiple · 9</span><span class="toc-base">общая</span></div>
+            <div class="toc-row"><span class="toc-code">Q10</span><span class="toc-name">Причины отказа от покупки</span><span class="toc-kind">multiple · 7</span><span class="toc-base">Q1 = 4</span></div>
+            <div class="toc-row"><span class="toc-code">D1</span><span class="toc-name">Пол</span><span class="toc-kind">single</span><span class="toc-base">общая</span></div>
+            <div class="toc-row"><span class="toc-code">D2</span><span class="toc-name">Возраст, 6 групп</span><span class="toc-kind">перекодировка</span><span class="toc-base">общая</span></div>
+          </div>
+          <div class="launch">
+            <div class="grow"><div class="pf ok"><i></i>Проверка пройдена: отчёт можно собирать</div></div>
+            <button class="btn ghost lg" type="button">Скачать статистику</button>
+            <button class="btn lg" type="button">Собрать Excel</button>
+          </div>
+        </div>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     D — ДОКУМЕНТ.
+     Не панель настроек, а титульный лист будущего файла: имя,
+     листы, свойства парами «поле — значение». Экран читается как
+     карточка документа перед печатью, а правка идёт по щелчку.
+     ============================================================ -->
+<section class="mock" data-v="d">
+  <div class="explain">
+    <div class="explain-card">
+      <h2>D · Документ</h2>
+      <p>Книга показана как файл: имя, три листа с числом строк и колонок, свойства парами
+        «поле — значение», как в свойствах документа. Статистика стоит там же, отдельным
+        столбцом справа: это не настройки экрана, а свойства выгрузки, записанные на её
+        титульном листе.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Спокойный обзор без плиток и сегментов: всё содержимое читается сверху вниз одним взглядом и печатается как сводка конфигурации.</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Настройки статистики снова уходят под щелчок — v5 специально вынул их наружу. Правка каждого поля требует поповера или листа, быстрых переключателей нет.</p></div>
+        <div class="size"><strong>Объём работы</strong><p><span class="measure" data-height="d">—</span> высота блока. Средняя: разметка новая, но данные те же; листы и число строк считаются из уже готовой структуры.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span><span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+      </nav>
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Конфигурация проекта</p><h1>Отчёт</h1>
+          <p class="lead">Свойства книги, которая получится: листы слева, метод расчёта справа.</p>
+        </div>
+        <div class="pane">
+          <div class="doc" data-measure="d">
+            <div class="doc-main">
+              <div class="doc-title">
+                <h3>Трекер бренда · июль</h3>
+                <span class="doc-file">tracker-july-topline.xlsx</span>
+              </div>
+              <p class="doc-sub">Собран не был · конфигурация изменена 20 августа в 14:12</p>
+              <div class="sheets">
+                <div class="sheet-row">
+                  <svg viewBox="0 0 20 20" fill="none"><path d="M5 3.5h7l3 3v10h-10z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                  <span><b>Содержание</b> <small>навигация по 128 вопросам</small></span><small>128 строк</small>
+                </div>
+                <div class="sheet-row">
+                  <svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="4.5" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 8h13M8 8v7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                  <span><b>topline_main</b> <small>доли от полной базы</small></span><small>128 таблиц · 9 колонок</small>
+                </div>
+                <div class="sheet-row">
+                  <svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="4.5" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 8h13M8 8v7.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                  <span><b>topline_filter</b> <small>доли от валидной базы</small></span><small>23 таблицы</small>
+                </div>
+              </div>
+              <div style="height:13px"></div>
+              <dl class="dl">
+                <dt>Состав</dt>
+                <dd><strong>128 вопросов</strong> из 147<small>4 требуют проверки · 7 со своей базой · 19 исключено</small></dd>
+                <dt>Колонки</dt>
+                <dd><strong>Пол × Возраст</strong><small>2 блока, 9 колонок: Total, 2 пола, 6 возрастных групп</small></dd>
+                <dt>База отчёта</dt>
+                <dd><strong>Покупатели категории</strong><small>1 842 из 2 000 · Q1 ∈ 1, 2, 3 И Q4 ≠ 9</small></dd>
+                <dt>Вес</dt>
+                <dd><strong>Вес по полу и возрасту</strong><small>raking / IPF, 3 распределения, границы 0,3–3,0 · эфф. база 1 620, DEFF 1,14</small></dd>
+              </dl>
+            </div>
+            <div class="doc-side">
+              <h4>Метод расчёта</h4>
+              <dl class="dl">
+                <dt>Сравнение</dt>
+                <dd><strong>Subgroup / Rest</strong><small>плюс попарные внутри блока</small></dd>
+                <dt>Уровень</dt>
+                <dd><strong>95%</strong><small>с поправкой Bonferroni</small></dd>
+                <dt>Малая база</dt>
+                <dd><strong>меньше 30</strong><small>колонка помечается серым</small></dd>
+                <dt>Волны</dt>
+                <dd class="off">не сравниваются</dd>
+                <dt>p-value</dt>
+                <dd class="off">не выводится</dd>
+                <div class="dl-sep"></div>
+                <dt>Тесты</dt>
+                <dd><strong>z-test долей, Welch t-test средних</strong><small>NPS и CSAT — тесты балансов</small></dd>
+              </dl>
+              <button class="pill" type="button">Изменить метод</button>
+            </div>
+          </div>
+          <div class="launch">
+            <div class="grow"><div class="pf ok"><i></i>Проверка пройдена: отчёт можно собирать</div></div>
+            <button class="btn ghost lg" type="button">Скачать статистику</button>
+            <button class="btn lg" type="button">Собрать Excel</button>
+          </div>
+        </div>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     E — ГОТОВНОСТЬ.
+     Preflight перестаёт быть строкой внизу и разбирается по
+     свойствам: у каждого свой статус, и внизу остаётся только
+     кнопка. Экран отвечает на вопрос «можно ли собирать» раньше,
+     чем на вопрос «что настроено».
+     ============================================================ -->
+<section class="mock" data-v="e">
+  <div class="explain">
+    <div class="explain-card">
+      <h2>E · Готовность к сборке</h2>
+      <p>Тот же список свойств, но каждое несёт свой статус проверки: зелёное — годится,
+        жёлтое — соберётся, но с оговоркой, красное — не соберётся. Общий вердикт внизу
+        превращается в одну кнопку, потому что причины уже разложены по строкам.
+        Статистика — одна строка со своим составом настроек по раскрытию.</p>
+      <div class="explain-grid">
+        <div class="plus"><strong>Что даёт</strong><p>Preflight становится адресным: видно не «есть замечания», а какое свойство их вызвало. Это ровно второй контур корректности из P1.0.</p></div>
+        <div class="minus"><strong>Чем платим</strong><p>Сервер сейчас отдаёт вердикт целиком; чтобы разложить его по строкам, нужны коды с привязкой к свойству. Спокойный экран становится светофором даже когда всё в порядке.</p></div>
+        <div class="size"><strong>Объём работы</strong><p><span class="measure" data-height="e">—</span> высота блока. Средняя во фронте, но требует правки контракта preflight на сервере.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="frame">
+    <header class="bar">
+      <span class="brand"><i></i>sav<span>analytics</span></span><span class="bar-sep"></span>
+      <button class="chip-project" type="button">Трекер бренда · июль ▾</button>
+      <span class="project-meta">2 000 респондентов · 147 переменных</span>
+      <span class="bar-grow"></span>
+      <nav class="screens"><button type="button">Главная</button><button type="button" aria-current="page">Ручной режим</button><button type="button">AI-конструктор</button></nav>
+      <span class="bar-sep"></span><span class="avatar">ЛП</span>
+    </header>
+    <div class="shell">
+      <nav class="rail">
+        <p class="rail-cap">Проект</p>
+        <button class="rail-item" type="button"><svg viewBox="0 0 20 20" fill="none"><path d="M3.5 5h13M3.5 10h13M3.5 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Структура</span><em>147</em></button>
+        <button class="rail-item active" type="button"><svg viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 8h13M8.5 8v8.5" stroke="currentColor" stroke-width="1.4"/></svg><span>Отчёт</span></button>
+      </nav>
+      <main class="canvas"><div class="canvas-inner">
+        <div class="canvas-head">
+          <p class="eyebrow">Конфигурация проекта</p><h1>Отчёт</h1>
+          <p class="lead">Что войдёт в книгу и что мешает её собрать — в одном списке.</p>
+        </div>
+        <div class="pane">
+          <div class="pane-bar"><h2>Готовность книги</h2><span class="pane-count">6 из 6 проверок пройдено, 2 с оговоркой</span><span class="grow"></span><button class="pill" type="button">Перепроверить</button></div>
+          <div class="steps" data-measure="e">
+            <div class="step">
+              <span class="dot warn">!</span><span class="step-key">Состав</span>
+              <span class="step-val"><strong>128 вопросов из 147</strong><span class="step-note">4 вопроса требуют проверки в структуре</span></span>
+              <span class="step-act">к структуре →</span>
+            </div>
+            <div class="step">
+              <span class="dot ok">✓</span><span class="step-key">Колонки</span>
+              <span class="step-val"><strong>Пол × Возраст</strong><span>Блоков <b>2</b> · колонок <b>9</b> · база каждой ≥ 196</span></span>
+              <span class="step-act">▾</span>
+            </div>
+            <div class="step">
+              <span class="dot ok">✓</span><span class="step-key">База</span>
+              <span class="step-val"><strong>Покупатели категории</strong><span>Выборка <b>1 842</b> из 2 000</span></span>
+              <span class="step-act">▾</span>
+            </div>
+            <div class="step">
+              <span class="dot warn">!</span><span class="step-key">Вес</span>
+              <span class="step-val"><strong>Вес по полу и возрасту</strong><span class="step-note">DEFF 1,14 — эффективная база ниже фактической на 12%</span></span>
+              <span class="step-act">▾</span>
+            </div>
+            <div class="step">
+              <span class="dot ok">✓</span><span class="step-key">Статистика</span>
+              <span class="step-val"><strong>Subgroup / Rest, 95%, Bonferroni</strong><span>Попарные внутри блока · малая база &lt; <b>30</b> · волны не сравниваются</span></span>
+              <span class="step-act">▾</span>
+            </div>
+            <div class="step">
+              <span class="dot idle"></span><span class="step-key">Листы</span>
+              <span class="step-val"><strong class="off">Содержание · topline_main · topline_filter</strong><span>Второй топлайн для <b>23</b> вопросов с пропусками</span></span>
+              <span class="step-act"></span>
+            </div>
+          </div>
+          <div class="launch tall">
+            <div class="grow"><div class="pf ok"><i></i>Отчёт можно собирать: блокирующих замечаний нет</div></div>
+            <button class="btn ghost lg" type="button">Скачать статистику</button>
+            <button class="btn lg" type="button">Собрать Excel</button>
+          </div>
+        </div>
+      </div></main>
+    </div>
+  </div>
+</section>
+
+<p class="footnote">Высоты меряются по настольной раскладке при ширине окна от 900&nbsp;px и относятся
+  только к блоку конфигурации: шапка раздела и полоса запуска в них не входят.</p>
+
+<script>
+const buttons = document.querySelectorAll(".switch button");
+const mocks = document.querySelectorAll(".mock");
+
+function show(target) {
+  buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.go === target)));
+  mocks.forEach(mock => { mock.hidden = mock.dataset.v !== target; });
+  measureAll();
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+// Высота блока конфигурации — единственная честная мера компоновки:
+// её и показываем в подписи, а не на глаз.
+function measure() {
+  const wide = document.documentElement.clientWidth >= 900;
+  document.querySelectorAll("[data-measure]").forEach(block => {
+    const label = document.querySelector(`.measure[data-height="${block.dataset.measure}"]`);
+    if (!label) return;
+    const height = Math.round(block.getBoundingClientRect().height);
+    label.textContent = wide && height ? `${height} px` : "—";
+  });
+}
+
+// Мерить нужно все варианты сразу, а видим мы один: показываем их на
+// мгновение, снимаем высоты и возвращаем как было.
+function measureAll() {
+  const shown = [...mocks].find(mock => !mock.hidden)?.dataset.v || "a";
+  mocks.forEach(mock => { mock.hidden = false; });
+  measure();
+  mocks.forEach(mock => { mock.hidden = mock.dataset.v !== shown; });
+}
+
+buttons.forEach(button => button.addEventListener("click", () => show(button.dataset.go)));
+window.addEventListener("resize", measureAll);
+window.addEventListener("load", measureAll);
+if (document.fonts?.ready) document.fonts.ready.then(measureAll);
+measureAll();
+</script>
+</body>
+</html>

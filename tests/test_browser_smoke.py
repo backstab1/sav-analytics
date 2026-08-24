@@ -249,10 +249,15 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
         "aria-pressed", "true", timeout=UI_TIMEOUT
     )
 
-    # Состав книги стоит отдельной полосой над плитками свойств.
+    # Раздел стоит двумя колонками: слева свойства книги, справа статистика.
+    expect(page.locator("#entity-list .split > .col")).to_have_count(2, timeout=UI_TIMEOUT)
+
+    # Состав — первая строка левой колонки. Он итог структуры, а не
+    # настройка книги, поэтому действие у него одно: переход в структуру.
     expect(page.locator('[data-block="content"]')).to_contain_text(
-        "Состав книги", timeout=UI_TIMEOUT
+        "Состав", timeout=UI_TIMEOUT
     )
+    expect(page.locator('[data-block="content"] [data-goto="questions"]')).to_be_visible()
 
     # Подготовка и скачивание обоих артефактов.
     workbook = _download_artifact(page, "#download-report", tmp_path / "topline.xlsx")

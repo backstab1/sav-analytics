@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260819-report-b" />
+    <link rel="stylesheet" href="/styles.css?v=20260820-report-split" />
   </head>
   <body>
     <!-- ================================================================
@@ -105,12 +105,12 @@
         </section>
 
         <!-- ================================================================
-             РАБОЧАЯ ОБЛАСТЬ — рельс / холст / инспектор.
+             РАБОЧАЯ ОБЛАСТЬ — рельс / инспектор / холст.
              Страница не прокручивается: прокручиваются панели.
 
              Порядок колонок задаётся в CSS (grid-column), а не разметкой:
-             инспектор стоит справа от холста и в DOM идёт после него —
-             панель читается сразу за строкой, которая её открыла.
+             инспектор стоит слева от холста, а в DOM идёт после него —
+             правят рядом с таблицей, поэтому панель встык к рельсу.
              ================================================================ -->
         <section id="workspace" class="workspace" hidden>
           <div id="app-shell" class="shell">
@@ -231,8 +231,9 @@
                  своей прокруткой, ряд действий. Высота — по содержимому,
                  потолок — экран (см. .insp в styles.css).
 
-                 Док — колонка справа от холста. Пока все инспекторы
-                 скрыты, он нулевой ширины, и колонка не занимает места.
+                 Док — колонка слева от холста, между рельсом и списком.
+                 Пока все инспекторы скрыты, он нулевой ширины, и колонка
+                 не занимает места.
                  ============================================================ -->
             <div class="insp-dock">
 
@@ -501,7 +502,7 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260819-report-b" defer></script>
-    <script src="/app.js?v=20260819-report-b" defer></script>
+    <script src="/shell.js?v=20260820-report-split" defer></script>
+    <script src="/app.js?v=20260820-report-split" defer></script>
   </body>
 </html>
