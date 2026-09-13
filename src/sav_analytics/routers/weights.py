@@ -8,13 +8,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..api_schemas import CalculatedWeightDefinition
 from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.weight_validation import assess_project_weight
 from ..core.weighting import WeightingError, build_raking_export, calculate_raking_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects/{project_id}/weights", tags=["weights"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/weights", tags=["weights"], route_class=ProjectRoute
+)
 
 
 @router.get("/ready/{variable}/diagnostics")

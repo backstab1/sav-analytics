@@ -864,7 +864,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
   } catch (error) {
     showError(editorError, error);
   } finally {
-    setBusy(saveButton, false, "Сохранить изменения");
+    setBusy(saveButton, false, questionSaveLabel(findQuestion(currentQuestionCode)));
   }
 });
 
@@ -950,10 +950,14 @@ function publishVariablesToShell(inspection, questions) {
   );
 }
 
+// Статус приходит с сервера готовым: признак «требует проверки» считается
+// в core/review.py, здесь его только читают — так же, как preflight.
 function questionStatus(question) {
   if (!question.included_in_report) return "excluded";
-  return question.recognition === "auto_review" ? "review" : "ready";
+  return question.needs_review ? "review" : "ready";
 }
+
+const statusLabels = { review: "Проверить", ready: "Готов", excluded: "Исключён" };
 
 // Сводка стоит над окном списка и работает фильтром по статусу. Размер
 // массива в неё не входит: он не меняется по ходу работы и потому стоит
@@ -1814,7 +1818,10 @@ function renderTable() {
   }
   document.querySelector("#table-body").innerHTML = questions.map(question => {
     const sourceLabel = originalQuestionLabel(question);
-    const warnings = (question.warnings || []).join(" · ");
+    // Подтверждённое предупреждение больше не подсвечивается: иначе рядом
+    // окажутся «требует проверки» в строке и «Готов» в статусе.
+    const status = questionStatus(question);
+    const warnings = status === "review" ? (question.warnings || []).join(" · ") : "";
     const title = `${question.code} — ${question.label}`;
     // Группировки видны прямо в списке: иначе о них знает только тот,
     // кто откроет карточку исходного вопроса.
@@ -1831,7 +1838,7 @@ function renderTable() {
       <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</span>${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
       <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
       <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
-      <td class="status-column"><span class="status ${!question.included_in_report ? "excluded" : (question.recognition === "auto_review" ? "review" : "")}">${question.included_in_report ? (question.recognition === "auto_review" ? "Проверить" : "Готов") : "Исключён"}</span></td>
+      <td class="status-column"><span class="status ${status === "ready" ? "" : status}">${statusLabels[status]}</span></td>
     </tr>`;
   }).join("");
 }
@@ -2652,10 +2659,25 @@ function fillEditor(question) {
   document.querySelector("#question-included").checked = question.included_in_report;
   document.querySelector("#question-base-filter").innerHTML = '<option value="">Стандартная база</option>' + configuredFilters().map(filter => `<option value="${filter.id}" ${question.base_filter_id === filter.id ? "selected" : ""}>${escapeHtml(filter.name)}</option>`).join("");
   document.querySelector("#editor-error").hidden = true;
+  renderQuestionReview(question);
   renderQuestionMembers(question);
   renderSpecialAnswers(question);
   renderSpecialMetric(question);
   renderQuestionRecodings(question);
+}
+
+function renderQuestionReview(question) {
+  const notice = document.querySelector("#question-review");
+  const pending = questionStatus(question) === "review";
+  notice.hidden = !pending;
+  notice.innerHTML = pending
+    ? `<p class="question-review-title">Распознавание не подтверждено</p>${(question.warnings || []).map(item => `<p>⚑ ${escapeHtml(item)}</p>`).join("")}<p class="question-review-hint">Проверьте тип и состав. Сохранение подтверждает распознавание.</p>`
+    : "";
+  document.querySelector("#save-question").textContent = questionSaveLabel(question);
+}
+
+function questionSaveLabel(question) {
+  return question && questionStatus(question) === "review" ? "Подтвердить и сохранить" : "Сохранить";
 }
 
 function recodingsForQuestion(question) {

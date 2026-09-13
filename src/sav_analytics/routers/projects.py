@@ -7,10 +7,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import FileResponse
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..core.sav_reader import SavReadError
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects", tags=["projects"])
+router = APIRouter(
+    prefix="/api/projects", tags=["projects"], route_class=ProjectRoute
+)
 
 
 @router.get("")

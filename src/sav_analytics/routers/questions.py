@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..api_schemas import (
     NotApplicableUpdate,
     QuestionBaseUpdate,
@@ -16,7 +17,9 @@ from ..core.not_applicable import suggest_not_applicable_codes
 from ..core.topline import ToplineError, calculate_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects/{project_id}/questions", tags=["questions"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/questions", tags=["questions"], route_class=ProjectRoute
+)
 
 
 @router.get("/not-applicable-suggestions")

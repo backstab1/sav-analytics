@@ -6,12 +6,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..api_schemas import ReportSettingsDefinition
 from ..core.report_settings import ReportSettingsError, validate_report_settings
 from ..core.weight_validation import ensure_project_weight_usable
 from ..repository import ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects/{project_id}", tags=["report-settings"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}", tags=["report-settings"], route_class=ProjectRoute
+)
 
 
 @router.put("/report-settings")

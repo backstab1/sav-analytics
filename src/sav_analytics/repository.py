@@ -23,6 +23,7 @@ from .core.report_settings import (
     REPORT_SETTING_KEYS,
     resolved_report_settings,
 )
+from .core.review import CONFIRMED_RECOGNITIONS
 from .core.sav_reader import SavReadError, inspect_sav, spss_missing_mask
 from .project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
 
@@ -246,8 +247,14 @@ class ProjectRepository:
                 bounds = "0–10" if special_metric == "nps" else "1–5"
                 raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
         # Сохранение вопроса и есть проверка: пользователь открыл карточку,
-        # увидел состав автоматически собранной группы и подтвердил настройки.
-        if question.get("recognition") == "auto_review":
+        # увидел предупреждения распознавания — эвристический тип или состав
+        # автоматически собранной группы — и подтвердил настройки.
+        # Подтверждать нечего, если предупреждений нет: тогда распознавание
+        # не трогаем, как и метаданные SPSS.
+        if (
+            question.get("recognition", "auto") not in CONFIRMED_RECOGNITIONS
+            and question.get("warnings")
+        ):
             question["recognition"] = "manual"
         question.update(changes)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
@@ -386,11 +393,13 @@ class ProjectRepository:
                     }
                 )
                 # Подтверждение проверки переживает перераспознавание, пока состав
-                # группы не изменился: иначе проверять нужно заново.
+                # вопроса не изменился и не появилось новых предупреждений:
+                # подтверждали именно их, остальное нужно проверять заново.
                 if (
                     old.get("recognition") == "manual"
-                    and detected.get("recognition") == "auto_review"
+                    and detected.get("recognition") not in CONFIRMED_RECOGNITIONS
                     and old.get("source_variables") == detected.get("source_variables")
+                    and set(detected.get("warnings") or []) <= set(old.get("warnings") or [])
                 ):
                     configured["recognition"] = "manual"
             else:

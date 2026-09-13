@@ -19,10 +19,13 @@ from typing import Any
 from .filtering import evaluate_filter_frame
 from .reporting.data import ReportData, prepare_report_data
 from .reporting.models import ReportError
+from .review import questions_needing_review
 
 # `requirements.md` §6: при достижении 50 столбцов показывается неблокирующее
 # предупреждение о ширине отчёта.
 WIDE_BANNER_COLUMNS = 50
+# Сколько кодов вопросов перечислить в замечании о непроверенном распознавании.
+REVIEW_CODES_SHOWN = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +93,7 @@ def run_preflight(path: str | Path, project: dict[str, Any]) -> PreflightReport:
         )
 
     errors.extend(_empty_question_bases(data, project))
+    warnings.extend(_review_warnings(project))
     warnings.extend(_banner_warnings(data))
     return PreflightReport(errors=errors, warnings=warnings)
 
@@ -135,6 +139,28 @@ def _empty_question_bases(
                 )
             )
     return findings
+
+
+def _review_warnings(project: dict[str, Any]) -> list[PreflightFinding]:
+    """Неподтверждённое распознавание предупреждает, но сборку не блокирует.
+
+    Массив без подписей значений даёт десятки эвристических шкал сразу, и
+    блокировка сделала бы такой файл несобираемым. Замечание одно на отчёт:
+    список из сорока строк про каждый вопрос читать никто не станет.
+    """
+    pending = questions_needing_review(project)
+    if not pending:
+        return []
+    shown = ", ".join(question["code"] for question in pending[:REVIEW_CODES_SHOWN])
+    rest = len(pending) - REVIEW_CODES_SHOWN
+    tail = f" и ещё {rest}" if rest > 0 else ""
+    return [
+        PreflightFinding(
+            "QUESTIONS_NEED_REVIEW",
+            f"Распознавание не подтверждено у вопросов: {shown}{tail}. "
+            "Откройте вопрос в структуре и сохраните его, если тип и состав верны.",
+        )
+    ]
 
 
 def _banner_warnings(data: ReportData) -> list[PreflightFinding]:

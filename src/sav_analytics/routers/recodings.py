@@ -6,12 +6,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..api_schemas import RecodeDefinition
 from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.recoding import RecodingError, calculate_recode_preview, validate_recode
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects/{project_id}/recodings", tags=["recodings"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/recodings", tags=["recodings"], route_class=ProjectRoute
+)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

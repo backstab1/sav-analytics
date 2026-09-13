@@ -6,12 +6,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..api_schemas import FilterDefinition, QuestionBaseUpdate
 from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.filtering import FilterError, calculate_filter_preview, validate_filter
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects/{project_id}", tags=["filters"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}", tags=["filters"], route_class=ProjectRoute
+)
 
 
 @router.post("/filters", status_code=status.HTTP_201_CREATED)

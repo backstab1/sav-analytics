@@ -365,3 +365,33 @@ def test_identifier_cannot_be_chosen_as_a_report_weight(
         "Вес пригоден", timeout=UI_TIMEOUT
     )
     expect(page.locator("#save-report-settings")).to_be_enabled()
+
+
+def test_heuristic_scale_is_counted_for_review_until_confirmed(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Предупреждение распознавания и «0 проверить» не стоят на экране вместе.
+
+    SCORE — шкала без подписей значений, тип узнан по диапазону. До P1.0 у неё
+    было предупреждение «требует проверки», статус «Готов» и счётчик ноль.
+    """
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    review_count = page.locator("#summary [data-status-filter='review'] b")
+    score_row = page.locator("#table-body tr[data-code='SCORE']")
+    expect(review_count).to_have_text("1", timeout=UI_TIMEOUT)
+    expect(score_row.locator(".status")).to_have_text("Проверить")
+    expect(score_row.locator(".q-sub.warning")).to_contain_text("требует проверки")
+
+    score_row.locator(".question-cell").click()
+    expect(page.locator("#question-review")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#save-question")).to_have_text("Подтвердить и сохранить")
+    page.click("#save-question")
+
+    expect(review_count).to_have_text("0", timeout=UI_TIMEOUT)
+    expect(score_row.locator(".status")).to_have_text("Готов")
+    expect(score_row.locator(".q-sub.warning")).to_have_count(0)
+    expect(page.locator("#question-review")).to_be_hidden()
+    expect(page.locator("#save-question")).to_have_text("Сохранить")

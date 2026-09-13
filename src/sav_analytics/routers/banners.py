@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..api_schemas import BannerDefinition, ReportBannerUpdate
 from ..core.banner import BannerError, calculate_banner_preview, validate_banner
 from ..core.report_settings import (
@@ -15,7 +16,9 @@ from ..core.report_settings import (
 )
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects/{project_id}", tags=["banners"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}", tags=["banners"], route_class=ProjectRoute
+)
 
 
 @router.post("/banners", status_code=status.HTTP_201_CREATED)

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from ..api_dependencies import get_repository
+from ..api_presentation import ProjectRoute
 from ..core.preflight import PreflightBlockedError, run_preflight
 from ..report_cache import (
     PreparedReport,
@@ -17,7 +18,9 @@ from ..report_cache import (
 from ..report_jobs import get_report_job, start_report_job
 from ..repository import ProjectNotFoundError, ProjectRepository
 
-router = APIRouter(prefix="/api/projects/{project_id}/reports", tags=["reports"])
+router = APIRouter(
+    prefix="/api/projects/{project_id}/reports", tags=["reports"], route_class=ProjectRoute
+)
 
 
 @router.get("/preflight")

@@ -35,6 +35,12 @@
   категориями и вне их диапазона; подписанный ноль и переменные вовсе без подписей
   не предлагаются никогда. Предложения группируются по совпадающему множеству
   респондентов и подтверждаются блоком;
+- статус «Проверить» у вопроса, включённого в отчёт, пока его предупреждения
+  распознавания не подтверждены: эвристический тип шкалы, автоматически собранная
+  группа, коды без подписей. Сохранение карточки вопроса подтверждает распознавание,
+  подтверждение переживает перераспознавание, пока не появятся новые предупреждения.
+  Признак вычисляется на сервере и в `project.json` не пишется; preflight показывает
+  непроверенные вопросы предупреждением;
 - предпросмотр распределений и описательной статистики.
 
 ### Расчётные настройки
@@ -147,10 +153,10 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py
 ```
 
-Сейчас набор содержит 148 pytest-кейсов для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 152 pytest-кейса для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, проверки конфигурации
 до сборки, пригодности готового веса, структуры XLSX и
 эталонных расчётов обычных и взвешенных z-test/Welch t-test, Subgroup/Rest,
