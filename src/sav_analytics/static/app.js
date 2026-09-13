@@ -18,7 +18,7 @@ let currentRecodingId = null;
 let currentBannerId = null;
 let currentFilterId = null;
 let currentWeightId = null;
-let currentView = "questions";
+let currentView = "data";
 let structureMode = "questions";
 let structureSearch = "";
 let structureStatusFilter = null;
@@ -174,6 +174,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
   window.Shell.setProjectOpen(false);
+  writeRoute();
   window.scrollTo(0, 0);
   form.reset();
   fileTitle.textContent = "Перетащите SAV сюда";
@@ -295,16 +296,16 @@ document.querySelector("#summary").addEventListener("click", event => {
   const key = card.dataset.statusFilter || null;
   structureStatusFilter = structureStatusFilter === key ? null : key;
   if (structureStatusFilter) {
-    currentView = "questions";
+    currentView = "data";
     structureMode = "questions";
-    renderSectionHead("questions");
+    renderSectionHead("data");
     document.querySelectorAll(".tabs button[data-view]").forEach(button => {
-      button.classList.toggle("active", button.dataset.view === "questions");
+      button.classList.toggle("active", button.dataset.view === "data");
     });
     document.querySelectorAll("[data-structure-mode]").forEach(button => {
       button.classList.toggle("active", button.dataset.structureMode === "questions");
     });
-    syncSectionChrome("questions");
+    syncSectionChrome("data");
   }
   renderSummary(currentProject.inspection, configuredQuestions());
   renderTable();
@@ -342,23 +343,26 @@ function updateStructureSearchCount(shown, total) {
    разделах его нет.
    ================================================================ */
 const sectionHeads = {
-  questions: {
+  data: {
+    eyebrow: "Данные",
     title: "Структура массива",
     lead: "Типы и названия вопросов определены автоматически. Проверьте отмеченное.",
   },
-  report: {
-    title: "Отчёт",
+  reports: {
+    eyebrow: "Отчёты",
+    title: "Книга Excel",
     lead: "Слева — что войдёт в книгу, справа — как считаются различия.",
   },
 };
 
 function renderSectionHead(view) {
-  const head = sectionHeads[view] || sectionHeads.questions;
+  const head = sectionHeads[view] || sectionHeads.data;
+  document.querySelector("#section-eyebrow").textContent = head.eyebrow;
   document.querySelector("#section-title").textContent = head.title;
   document.querySelector("#section-lead").textContent = head.lead;
-  document.querySelector("#find-not-applicable").hidden = view !== "questions";
+  document.querySelector("#find-not-applicable").hidden = view !== "data";
   // Сводка — фильтр таблицы вопросов, в других разделах ей нечего фильтровать.
-  document.querySelector("#summary").hidden = view !== "questions";
+  document.querySelector("#summary").hidden = view !== "data";
 }
 
 // Заголовки и ячейки обрезаются многоточием, поэтому дублируем текст в подсказку.
@@ -583,21 +587,78 @@ function closeAllInspectors() {
 // Хром раздела: подсветка в рельсе, тулбар панели и полоса запуска.
 function syncSectionChrome(view) {
   document.querySelectorAll(".tabs button").forEach(item => {
-    item.classList.toggle("active", item.dataset.view === view);
+    const active = item.dataset.view === view;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
   });
-  document.querySelector("#structure-toolbar").hidden = view !== "questions";
-  document.querySelector("#report-toolbar").hidden = view !== "report";
-  document.querySelector("#report-launch").hidden = view !== "report";
+  document.querySelector("#structure-toolbar").hidden = view !== "data";
+  document.querySelector("#report-toolbar").hidden = view !== "reports";
+  document.querySelector("#report-launch").hidden = view !== "reports";
 }
 
+// Разделы проекта по макету v8. «Данные» и «Отчёты» живут на холсте,
+// «Таблицы» — бывший конструктор, «Анализ» и «Открытые ответы» ещё не
+// построены и показывают только, что в них будет.
+const SECTION_VIEWS = ["data", "tables", "analysis", "text", "reports"];
+const CANVAS_VIEWS = ["data", "reports"];
+
 function setView(view) {
+  if (!SECTION_VIEWS.includes(view)) view = "data";
   currentView = view;
-  renderSectionHead(view);
-  syncSectionChrome(view);
   closePicker();
   closeAllInspectors();
-  renderTable();
-  if (view === "report") void loadReportPreflight();
+  const onCanvas = CANVAS_VIEWS.includes(view);
+  document.querySelector("#app-shell > .canvas").hidden = !onCanvas;
+  document.querySelector("#section-tables").hidden = view !== "tables";
+  document.querySelector("#section-soon").hidden = onCanvas || view === "tables";
+  syncSectionChrome(view);
+  if (onCanvas) {
+    renderSectionHead(view);
+    renderTable();
+    if (view === "reports") void loadReportPreflight();
+  } else if (view === "tables") {
+    window.Shell.activateTables();
+  } else {
+    renderSoonSection(view);
+  }
+  writeRoute();
+}
+
+const soonSections = {
+  analysis: {
+    eyebrow: "Анализ · PQ.10–PQ.11",
+    title: "Описать, связать, найти драйверы",
+    lead: "Раздел строится. Числа здесь появятся, когда их станет считать расчётное ядро: своих формул у экрана не будет.",
+    items: [
+      "карточка переменной: распределение, среднее и пропуски",
+      "связь двух переменных с выбором теста по типам и размером эффекта",
+      "контроль ложных открытий по всем карточкам рабочей области",
+      "регрессия с весом, важность драйверов и сегменты, сохраняемые переменной",
+    ],
+    note: () => `Вопросов в отчёте: ${configuredQuestions().filter(item => item.included_in_report).length}. Их и можно будет анализировать.`,
+  },
+  text: {
+    eyebrow: "Открытые ответы · PQ.12",
+    title: "Кодификатор и темы",
+    lead: "Раздел строится. Ответы разбираются на сервере, без внешних AI-сервисов.",
+    items: [
+      "кодификатор с иерархией тем",
+      "темы по запросам со словоформами",
+      "ручная правка отнесения с пометкой, кто её сделал",
+      "тема становится переменной и работает в таблицах, фильтрах и баннере",
+    ],
+    note: () => `Открытых вопросов в проекте: ${configuredQuestions().filter(item => item.question_type === "open_text").length}. Пока они только исключаются из отчёта.`,
+  },
+};
+
+function renderSoonSection(view) {
+  const section = soonSections[view];
+  document.querySelector("#soon-eyebrow").textContent = section.eyebrow;
+  document.querySelector("#soon-title").textContent = section.title;
+  document.querySelector("#soon-lead").textContent = section.lead;
+  document.querySelector("#soon-list").innerHTML = section.items.map(item => `<li>${escapeHtml(item)}</li>`).join("");
+  document.querySelector("#soon-note").textContent = currentProject ? section.note() : "";
 }
 
 document.querySelectorAll(".tabs button[data-view]").forEach(
@@ -704,7 +765,7 @@ let draggedQuestionCode = null;
 
 document.querySelector("#table-body").addEventListener("dragstart", event => {
   const handle = event.target.closest("[data-drag-code]");
-  if (!handle || currentView !== "questions" || structureMode !== "questions" || structureFiltered()) return;
+  if (!handle || currentView !== "data" || structureMode !== "questions" || structureFiltered()) return;
   draggedQuestionCode = handle.dataset.dragCode;
   handle.closest("tr[data-code]")?.classList.add("is-dragging");
   event.dataTransfer.effectAllowed = "move";
@@ -1009,19 +1070,19 @@ async function loadProjects() {
   }
 }
 
-function showProject(project) {
+function showProject(project, view = "data") {
   currentProject = project;
   currentQuestionCode = null;
   currentRecodingId = null;
   currentBannerId = null;
   currentFilterId = null;
   currentWeightId = null;
-  currentView = "questions";
+  currentView = "data";
   structureMode = "questions";
   resetStructureSearch({ render: false });
   showInspector(null);
-  renderSectionHead("questions");
-  syncSectionChrome("questions");
+  renderSectionHead("data");
+  syncSectionChrome("data");
   closeSheet();
   closePicker();
   document.querySelectorAll("[data-structure-mode]").forEach(button => {
@@ -1032,6 +1093,7 @@ function showProject(project) {
   document.querySelector("#workspace").hidden = false;
   window.Shell.setProjectOpen(true);
   window.scrollTo(0, 0);
+  setView(view);
 }
 
 function renderProject() {
@@ -1362,7 +1424,7 @@ function reportContentRow() {
     key: "content", title: "Состав",
     value: `${plural(included.length, "вопрос", "вопроса", "вопросов")} из ${questions.length}`,
     meta,
-    action: '<button type="button" class="prop-act" data-goto="questions">к структуре</button>',
+    action: '<button type="button" class="prop-act" data-goto="data">к структуре</button>',
   });
 }
 
@@ -1614,7 +1676,7 @@ async function hydrateReadyWeight(variable) {
   } catch {
     readyWeightCache.set(variable, null);
   }
-  if (currentProject?.id === projectId && currentView === "report") renderReportBlocks();
+  if (currentProject?.id === projectId && currentView === "reports") renderReportBlocks();
 }
 
 // Настройки отчёта пишутся целиком: endpoint принимает полный набор,
@@ -1650,7 +1712,7 @@ async function patchReportSettings(partial, { toast = null } = {}) {
     body: JSON.stringify(payload),
   });
   renderProject();
-  if (currentView === "report") void loadReportPreflight();
+  if (currentView === "reports") void loadReportPreflight();
   if (toast) showToast(toast);
   return currentProject;
 }
@@ -1917,7 +1979,7 @@ async function loadReportPreflight() {
   try {
     const report = await api(`/api/projects/${projectId}/reports/preflight`);
     preflightCache = { revision, report };
-    if (currentProject?.id === projectId && currentView === "report") renderLaunchStatus(report);
+    if (currentProject?.id === projectId && currentView === "reports") renderLaunchStatus(report);
   } catch (error) {
     container.innerHTML = `<span class="pf error"><i></i>${escapeHtml(error.message)}</span>`;
   }
@@ -1939,14 +2001,14 @@ function renderTable() {
   if (!currentProject) return;
   const tableWrap = document.querySelector("#table-wrap");
   const entityList = document.querySelector("#entity-list");
-  const cardView = currentView === "report";
+  const cardView = currentView === "reports";
   tableWrap.hidden = cardView;
   entityList.hidden = !cardView;
-  if (currentView === "questions" && structureMode === "variables") {
+  if (currentView === "data" && structureMode === "variables") {
     renderPhysicalVariables();
     return;
   }
-  if (currentView === "report") {
+  if (currentView === "reports") {
     renderReportBlocks();
     return;
   }
@@ -2035,7 +2097,7 @@ function hydrateFilterCards(filters) {
     for (let index = 0; index < pending.length; index += 4) {
       await Promise.all(pending.slice(index, index + 4).map(filter => getFilterCardPreview(filter, projectId)));
     }
-    if (currentProject?.id === projectId && currentView === "report") renderReportBlocks();
+    if (currentProject?.id === projectId && currentView === "reports") renderReportBlocks();
   })().finally(() => { filterCardHydration = null; });
   return filterCardHydration;
 }
@@ -3534,7 +3596,7 @@ async function downloadPreparedReport(event) {
     link.textContent = link.dataset.defaultLabel;
     // Полоса запуска перерисовывает свой вердикт: сборка могла изменить
     // ревизию конфигурации, а с ней и результат проверки.
-    if (currentView === "report") void loadReportPreflight();
+    if (currentView === "reports") void loadReportPreflight();
     // Найденные проблемы и ошибки остаются на экране: их нужно прочитать,
     // а не поймать взглядом за три секунды.
     if (!keepOpen) {
@@ -3638,4 +3700,62 @@ function escapeAttribute(value) {
   return escapeHtml(value).replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
+/* ================================================================
+   АДРЕСА
+
+   `#/projects/<id>/<раздел>` — открытый проект и раздел, `#/home` —
+   лендинг, `#/` — старт. Адрес пишется при каждой смене проекта, раздела
+   и экрана, а при загрузке и кнопках «Назад» / «Вперёд» читается обратно:
+   перезагрузка страницы возвращает туда же (GAP-007).
+   ================================================================ */
+let applyingRoute = false;
+
+function currentRoute() {
+  if (!document.querySelector("#screen-home").hidden) return "#/home";
+  if (currentProject && !document.querySelector("#workspace").hidden) {
+    return `#/projects/${currentProject.id}/${currentView}`;
+  }
+  return "#/";
+}
+
+function writeRoute() {
+  if (applyingRoute) return;
+  const hash = currentRoute();
+  if (location.hash !== hash) history.pushState(null, "", hash);
+}
+
+async function applyRoute() {
+  const match = location.hash.match(/^#\/projects\/([0-9a-f-]{36})(?:\/([a-z]+))?$/);
+  applyingRoute = true;
+  try {
+    if (location.hash === "#/home") {
+      window.Shell.showScreen("home");
+      return;
+    }
+    window.Shell.showScreen("manual");
+    if (!match) {
+      if (currentProject) document.querySelector("#new-project").click();
+      return;
+    }
+    const view = SECTION_VIEWS.includes(match[2]) ? match[2] : "data";
+    if (currentProject?.id === match[1]) {
+      if (currentView !== view) setView(view);
+      return;
+    }
+    try {
+      showProject(await api(`/api/projects/${match[1]}`), view);
+    } catch (error) {
+      history.replaceState(null, "", "#/");
+      showError(errorBox, error);
+    }
+  } finally {
+    applyingRoute = false;
+  }
+  writeRoute();
+}
+
+document.addEventListener("shell:screen", writeRoute);
+window.addEventListener("popstate", () => { void applyRoute(); });
+
 loadProjects();
+void applyRoute();

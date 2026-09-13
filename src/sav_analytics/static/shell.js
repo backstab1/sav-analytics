@@ -11,7 +11,9 @@
 (() => {
   "use strict";
 
-  const SCREENS = { home: {}, manual: {}, builder: {} };
+  // Конструктор перестал быть экраном: это раздел «Таблицы» рабочей области,
+  // его показывает app.js, а оболочка только активирует по вызову.
+  const SCREENS = { home: {}, manual: {} };
 
   const nav = document.querySelector("#screen-nav");
   // Кнопка «Новый проект» стоит в том же ряду, но экраном не является,
@@ -27,8 +29,9 @@
     Object.keys(SCREENS).forEach(key => {
       document.querySelector(`#screen-${key}`).hidden = key !== name;
     });
-    if (name === "builder") builder.activate();
     window.scrollTo(0, 0);
+    // Адрес экрана пишет app.js: у проекта и раздела он свой.
+    document.dispatchEvent(new CustomEvent("shell:screen", { detail: name }));
   }
 
   navButtons.forEach(button => {
@@ -580,6 +583,10 @@
 
   window.Shell = {
     showScreen,
+    /* Вызывается из app.js при входе в раздел «Таблицы». */
+    activateTables() {
+      builder.activate();
+    },
     /* Вызывается из app.js: проект открыли или закрыли. */
     setProjectOpen(open) {
       projectChrome.hidden = !open;

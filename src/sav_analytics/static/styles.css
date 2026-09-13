@@ -312,6 +312,25 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 }
 .rail, .canvas { grid-row: 1; }
 
+/* Разделы проекта делят вторую колонку оболочки: холст «Данных» и
+   «Отчётов», таблица «Таблиц» и описание ещё не построенных разделов.
+   Показан один, остальные скрыты атрибутом hidden. */
+.shell > [hidden] { display: none !important; }
+.shell > .bld { grid-column: 2; grid-row: 1; height: auto; min-height: 0; }
+.soon { grid-column: 2; grid-row: 1; min-width: 0; overflow-y: auto; display: flex; justify-content: center; padding: var(--canvas-pad); }
+.soon-card {
+  align-self: flex-start; width: min(100%, 680px); margin-top: 6vh; padding: 22px 24px;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-3); box-shadow: var(--shadow-card);
+}
+.soon-card .eyebrow { color: var(--c-ink-3); font-size: var(--t-micro); letter-spacing: .09em; text-transform: uppercase; }
+.soon-card h1 { margin: 4px 0 6px; font-size: var(--t-2xl); font-weight: 800; letter-spacing: -0.035em; }
+.soon-card .lead { margin: 0 0 12px; color: var(--c-ink-3); font-size: var(--t-sm); }
+.soon-list { margin: 0 0 14px; padding-left: 18px; display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-sm); }
+.soon-note { margin: 0; padding-top: 10px; border-top: 1px solid var(--c-border); color: var(--c-ink-3); font-size: var(--t-xs); }
+.rail-soon { font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--c-ink-4); }
+.rail-item.active .rail-soon { color: var(--c-brand); }
+
 /* ---------- Рельс: заменяет ряд вкладок внутри панели ---------- */
 .rail {
   grid-column: 1;

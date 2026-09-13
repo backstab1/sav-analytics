@@ -13,6 +13,7 @@ Chromium (`playwright install chromium`).
 
 from __future__ import annotations
 
+import re
 import socket
 import threading
 import time
@@ -128,7 +129,7 @@ def _open_weight_sheet(page: Page) -> None:
     и живут плитками раздела «Отчёт». Статистика листа не требует —
     её варианты видны прямо в панели под плитками.
     """
-    _open_view(page, "report")
+    _open_view(page, "reports")
     page.click('[data-block="weight"] [data-open-sheet="report-settings"]')
 
 
@@ -207,7 +208,7 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     expect(page.locator("#table-body")).to_contain_text("1 группировка", timeout=UI_TIMEOUT)
     page.click("#close-editor")
 
-    _open_view(page, "report")
+    _open_view(page, "reports")
 
     # Фильтр: именованное правило по одному ответу. Создаётся из строки
     # «База отчёта» — отдельного раздела под правила больше нет.
@@ -258,11 +259,11 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     expect(page.locator("#entity-list .split > .col")).to_have_count(2, timeout=UI_TIMEOUT)
 
     # Состав — первая строка левой колонки. Он итог структуры, а не
-    # настройка книги, поэтому действие у него одно: переход в структуру.
+    # настройка книги, поэтому действие у него одно: переход в «Данные».
     expect(page.locator('[data-block="content"]')).to_contain_text(
         "Состав", timeout=UI_TIMEOUT
     )
-    expect(page.locator('[data-block="content"] [data-goto="questions"]')).to_be_visible()
+    expect(page.locator('[data-block="content"] [data-goto="data"]')).to_be_visible()
 
     # Подготовка и скачивание обоих артефактов.
     workbook = _download_artifact(page, "#download-report", tmp_path / "topline.xlsx")
@@ -291,8 +292,14 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     _write_survey(source)
     _open_project(page, live_server, source)
 
-    page.click("#screen-nav button[data-screen='builder']")
-    expect(page.locator("#screen-builder")).to_be_visible(timeout=UI_TIMEOUT)
+    # Конструктор стал разделом «Таблицы» рабочей области, и у раздела есть
+    # адрес: перезагрузка возвращает тот же проект в тот же раздел.
+    _open_view(page, "tables")
+    expect(page.locator("#section-tables")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page).to_have_url(re.compile(r"#/projects/[0-9a-f-]{36}/tables$"))
+    page.reload()
+    expect(page.locator("#section-tables")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#project-name")).to_have_text("Браузерный сценарий")
     # Конструктор получает переменные проекта, а не грузит их сам.
     expect(page.locator("#bld-list .bld-var")).not_to_have_count(0, timeout=UI_TIMEOUT)
     # Полки стали полосой параметров: список переменных открывается из неё.
@@ -301,13 +308,20 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     page.keyboard.press("Escape")
     expect(page.locator("#bld-picker")).to_be_hidden(timeout=UI_TIMEOUT)
 
+    # Непостроенный раздел говорит, что в нём будет, и не показывает чисел.
+    _open_view(page, "analysis")
+    expect(page.locator("#section-soon")).to_contain_text("Раздел строится", timeout=UI_TIMEOUT)
+    expect(page.locator("#section-tables")).to_be_hidden()
+
     page.click("#screen-nav button[data-screen='home']")
     expect(page.locator("#screen-home")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page).to_have_url(re.compile(r"#/home$"))
 
     # «Новый проект» из другого экрана возвращает на ручной режим, а не молчит.
     page.click("#new-project")
     expect(page.locator("#screen-manual")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#start")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page).to_have_url(re.compile(r"#/$"))
 
 
 def test_upload_rejects_a_file_that_is_not_sav(
@@ -411,7 +425,7 @@ def test_marking_a_labelled_category_not_applicable_needs_confirmation(
     _open_project(page, live_server, source)
 
     # Раздел конструктора честно назван демонстрацией, пока числа не считаются.
-    expect(page.locator("#screen-nav button[data-screen='builder']")).to_contain_text("демо")
+    expect(page.locator(".tabs button[data-view='tables']")).to_contain_text("демо")
 
     page.click("#table-body tr[data-code='BRAND'] .question-cell")
     expect(page.locator("#not-applicable")).to_be_visible(timeout=UI_TIMEOUT)
@@ -476,7 +490,7 @@ def test_output_profile_is_read_from_the_chosen_metrics(
     source = tmp_path / "survey.sav"
     _write_survey(source)
     _open_project(page, live_server, source)
-    _open_view(page, "report")
+    _open_view(page, "reports")
 
     profile = page.locator('[data-stat="profile"]')
     expect(profile.filter(has_text="Стандарт")).to_have_attribute(
