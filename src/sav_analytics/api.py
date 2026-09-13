@@ -21,6 +21,7 @@ from .configuration_revision import (
     bind_expected_revision,
     reset_expected_revision,
 )
+from .core.not_applicable import NotApplicableConfirmationRequired
 from .core.preflight import PreflightBlockedError
 from .core.weight_validation import WeightNotUsableError
 from .project_models import InvalidStoredProjectError
@@ -121,6 +122,18 @@ async def preflight_blocked_handler(
         request,
         status_code=422,
         error_code="REPORT_PREFLIGHT_FAILED",
+        detail=str(exc),
+    )
+
+
+@app.exception_handler(NotApplicableConfirmationRequired)
+async def not_applicable_confirmation_handler(
+    request: Request, exc: NotApplicableConfirmationRequired
+) -> JSONResponse:
+    return error_response(
+        request,
+        status_code=422,
+        error_code="NOT_APPLICABLE_CONFIRMATION_REQUIRED",
         detail=str(exc),
     )
 

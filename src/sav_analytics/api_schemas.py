@@ -21,6 +21,9 @@ class QuestionUpdate(BaseModel):
     not_applicable_values: list[str | int | float] | None = Field(
         default=None, max_length=100
     )
+    # Явное «да, это пропуск» для подписанной или частой категории: без него
+    # такая пометка отклоняется, см. `core/not_applicable.assess_not_applicable`.
+    confirm_substantive: bool | None = None
 
 
 class QuestionOrder(BaseModel):
@@ -36,6 +39,11 @@ class NotApplicableUpdate(BaseModel):
     # Подтверждение идёт группой: заглушка обычно лежит сразу в десятках
     # вопросов, и поштучные запросы конфликтовали бы по ревизии конфигурации.
     marks: list[NotApplicableMark] = Field(min_length=1, max_length=500)
+    confirm_substantive: bool = False
+
+
+class NotApplicableAssessmentRequest(BaseModel):
+    values: list[str | int | float] = Field(default_factory=list, max_length=100)
 
 
 class RangeCategory(BaseModel):

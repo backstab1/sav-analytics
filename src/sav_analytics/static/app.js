@@ -2853,6 +2853,10 @@ document.querySelector("#not-applicable-form").addEventListener("submit", async 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         marks: [...marks].map(([code, values]) => ({ code, values: [...values] })),
+        // Лист предлагает только неподписанные коды вне диапазона подписей
+        // и показывает, у скольких респондентов они стоят. Отметка группы
+        // здесь и есть подтверждение с базой перед глазами.
+        confirm_substantive: true,
       }),
     });
     renderProject();
@@ -2882,6 +2886,51 @@ function renderNotApplicable(question, preview) {
     const value = escapeAttribute(JSON.stringify(row.value));
     return `<label class="checkbox"><input type="checkbox" data-not-applicable="${value}" ${checked} /> <code>${escapeHtml(row.value)}</code> ${escapeHtml(row.label)} <em>${row.count.toLocaleString("ru-RU")}</em></label>`;
   }).join("");
+  loadNotApplicableAssessment();
+}
+
+// База до и после и признак «похоже на ответ» считает сервер той же функцией,
+// которой он проверяет пометку при сохранении: показанное не расходится
+// с тем, что потом отклонят.
+let notApplicableAssessmentToken = 0;
+
+document.querySelector("#not-applicable-list").addEventListener("change", loadNotApplicableAssessment);
+
+async function loadNotApplicableAssessment() {
+  const container = document.querySelector("#not-applicable-assessment");
+  if (!currentProject || !currentQuestionCode || document.querySelector("#not-applicable").hidden) {
+    container.innerHTML = "";
+    return;
+  }
+  const token = ++notApplicableAssessmentToken;
+  const values = collectNotApplicable().not_applicable_values || [];
+  try {
+    const assessment = await api(
+      `/api/projects/${currentProject.id}/questions/${encodeURIComponent(currentQuestionCode)}/not-applicable/assessment`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values }),
+      },
+    );
+    if (token !== notApplicableAssessmentToken) return;
+    container.innerHTML = renderNotApplicableAssessment(assessment);
+  } catch (error) {
+    if (token !== notApplicableAssessmentToken) return;
+    container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderNotApplicableAssessment(assessment) {
+  const before = assessment.base_before.toLocaleString("ru-RU");
+  const after = assessment.base_after.toLocaleString("ru-RU");
+  const base = assessment.base_before === assessment.base_after
+    ? `<p class="na-base">Валидная база <b>${before}</b></p>`
+    : `<p class="na-base">Валидная база <b>${before}</b> → <b>${after}</b></p>`;
+  if (!assessment.requires_confirmation) return base;
+  const items = assessment.substantive.map(item => `<p>⚑ ${escapeHtml(item.description)}</p>`).join("");
+  return `${base}<div class="inline-warnings na-confirm">${items}
+    <label class="checkbox"><input id="not-applicable-confirm" type="checkbox" /> Это пропуск по ветке анкеты, а не ответ</label></div>`;
 }
 
 function collectNotApplicable() {
@@ -2891,6 +2940,9 @@ function collectNotApplicable() {
   return {
     not_applicable_values: [...document.querySelectorAll("[data-not-applicable]:checked")]
       .map(item => JSON.parse(item.dataset.notApplicable)),
+    // Без отметки сервер отклонит пометку содержательного кода; отметка
+    // появляется только тогда, когда оценка нашла такой код.
+    confirm_substantive: document.querySelector("#not-applicable-confirm")?.checked || undefined,
   };
 }
 

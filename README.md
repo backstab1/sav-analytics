@@ -34,7 +34,10 @@
   консервативным правилом: код без подписи у переменной с двумя и более подписанными
   категориями и вне их диапазона; подписанный ноль и переменные вовсе без подписей
   не предлагаются никогда. Предложения группируются по совпадающему множеству
-  респондентов и подтверждаются блоком;
+  респондентов и подтверждаются блоком. В карточке вопроса рядом с кодами видна
+  валидная база до и после пометки; подписанную категорию и неподписанный код
+  от 10% валидной базы API помечает только с явным подтверждением
+  (`confirm_substantive`), иначе отвечает `422 NOT_APPLICABLE_CONFIRMATION_REQUIRED`;
 - статус «Проверить» у вопроса, включённого в отчёт, пока его предупреждения
   распознавания не подтверждены: эвристический тип шкалы, автоматически собранная
   группа, коды без подписей. Сохранение карточки вопроса подтверждает распознавание,
@@ -153,10 +156,10 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py
 ```
 
-Сейчас набор содержит 152 pytest-кейса для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 157 pytest-кейсов для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, проверки конфигурации
 до сборки, пригодности готового веса, структуры XLSX и
 эталонных расчётов обычных и взвешенных z-test/Welch t-test, Subgroup/Rest,
@@ -245,7 +248,7 @@ src/sav_analytics/
 │       └── builder.py      # координация сборки XLSX и statistics.txt
 └── static/            # текущий русскоязычный веб-интерфейс
     ├── index.html     # разметка всех трёх экранов
-    ├── shell.js       # переключение экранов, меню выгрузки, AI-конструктор
+    ├── shell.js       # переключение экранов, меню выгрузки, демонстрация конструктора
     ├── app.js         # работа с проектом: структура, редакторы, отчёт
     ├── styles.css     # оформление
     └── prototypes/    # макеты раскладки, вне приложения

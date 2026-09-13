@@ -18,6 +18,7 @@ from .configuration_revision import (
     current_expected_revision,
 )
 from .core.configuration_integrity import ensure_not_referenced
+from .core.not_applicable import NotApplicableConfirmationRequired, assess_not_applicable
 from .core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
     REPORT_SETTING_KEYS,
@@ -158,6 +159,7 @@ class ProjectRepository:
             question = next(item for item in questions if item["code"] == code)
         except StopIteration as exc:
             raise ProjectNotFoundError(code) from exc
+        confirm_substantive = bool(changes.pop("confirm_substantive", False))
         final_role = changes.get("role", question["role"])
         final_type = changes.get("question_type", question["question_type"])
         unsupported_types = {"multiple_choice_categorical", "ranking"}
@@ -246,6 +248,13 @@ class ProjectRepository:
             if not values or not values <= expected:
                 bounds = "0–10" if special_metric == "nps" else "1–5"
                 raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
+        if changes.get("not_applicable_values"):
+            self._require_not_applicable_confirmation(
+                project_id,
+                project,
+                [(question, changes["not_applicable_values"])],
+                confirmed=confirm_substantive,
+            )
         # Сохранение вопроса и есть проверка: пользователь открыл карточку,
         # увидел предупреждения распознавания — эвристический тип или состав
         # автоматически собранной группы — и подтвердил настройки.
@@ -261,7 +270,9 @@ class ProjectRepository:
         self._write_project(project_id, project)
         return project
 
-    def mark_not_applicable(self, project_id: UUID, marks: list[dict]) -> dict:
+    def mark_not_applicable(
+        self, project_id: UUID, marks: list[dict], *, confirm_substantive: bool = False
+    ) -> dict:
         """Проставить коды «не применимо» сразу нескольким вопросам."""
         project = self.get(project_id)
         questions = {item["code"]: item for item in project["configuration"]["questions"]}
@@ -274,11 +285,48 @@ class ProjectRepository:
                     "Для multiple-response пропуск задаётся кодом выбранного ответа, "
                     "а не пометкой «не применимо»."
                 )
+        self._require_not_applicable_confirmation(
+            project_id,
+            project,
+            [(questions[mark["code"]], mark["values"]) for mark in marks if mark["values"]],
+            confirmed=confirm_substantive,
+        )
         for mark in marks:
             questions[mark["code"]]["not_applicable_values"] = list(mark["values"])
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
+
+    def assess_not_applicable(self, project_id: UUID, code: str, values: list) -> dict:
+        project, question = self.question(project_id, code)
+        [assessment] = assess_not_applicable(
+            self.source_path(project_id), project, [(question, list(values))]
+        )
+        return assessment.to_dict()
+
+    def _require_not_applicable_confirmation(
+        self,
+        project_id: UUID,
+        project: dict,
+        marks: list[tuple[dict, list]],
+        *,
+        confirmed: bool,
+    ) -> None:
+        """Отказать, если пометка задевает содержательный код без подтверждения.
+
+        Подписанная категория и частый код по данным неотличимы от заглушки,
+        а ошибка стоит дорого: ответ молча исчезает из распределения и базы.
+        Поэтому решение остаётся за аналитиком, но принимается явно.
+        """
+        if confirmed or not marks:
+            return
+        pending = [
+            item
+            for item in assess_not_applicable(self.source_path(project_id), project, marks)
+            if item.requires_confirmation
+        ]
+        if pending:
+            raise NotApplicableConfirmationRequired(pending)
 
     def reorder_questions(self, project_id: UUID, codes: list[str]) -> dict:
         project = self.get(project_id)

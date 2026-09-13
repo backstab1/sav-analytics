@@ -7,7 +7,11 @@ import pandas as pd
 import pyreadstat
 import pytest
 
-from sav_analytics.core.not_applicable import suggest_not_applicable_codes
+from sav_analytics.core.not_applicable import (
+    FREQUENT_SHARE,
+    assess_not_applicable,
+    suggest_not_applicable_codes,
+)
 from sav_analytics.core.report import build_topline_xlsx
 from sav_analytics.core.sav_reader import inspect_sav
 
@@ -204,3 +208,72 @@ def test_unlabelled_code_inside_the_labelled_range_is_not_suggested(
     )
 
     assert suggest_not_applicable_codes(source, _project(source)) == []
+
+
+def _question(project: dict, code: str) -> dict:
+    return next(item for item in project["configuration"]["questions"] if item["code"] == code)
+
+
+def test_assessment_reports_the_valid_base_before_and_after(tmp_path: Path) -> None:
+    source = tmp_path / "skip.sav"
+    _write_skip_fixture(source)
+    project = _project(source)
+
+    [assessment] = assess_not_applicable(source, project, [(_question(project, "ST_TRUD"), [0])])
+
+    assert (assessment.base_before, assessment.base_after) == (100, 60)
+
+
+def test_labelled_category_is_substantive_whatever_its_frequency(tmp_path: Path) -> None:
+    source = tmp_path / "skip.sav"
+    _write_skip_fixture(source)
+    project = _project(source)
+
+    [assessment] = assess_not_applicable(
+        source, project, [(_question(project, "ST_TRUD"), [11])]
+    )
+
+    assert assessment.requires_confirmation
+    [value] = assessment.substantive
+    assert (value.reason, value.label, value.count) == ("labelled", "Работодатели", 20)
+
+
+def test_frequent_unlabelled_code_asks_and_rare_one_does_not(tmp_path: Path) -> None:
+    source = tmp_path / "rare.sav"
+    frame = pd.DataFrame({"X": [1] * 50 + [2] * 47 + [9] * 3 + [0] * 0})
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"X": "Вопрос"},
+        variable_value_labels={"X": {1: "Да", 2: "Нет"}},
+        variable_measure={"X": "nominal"},
+    )
+    project = _project(source)
+    question = _question(project, "X")
+
+    [rare] = assess_not_applicable(source, project, [(question, [9])])
+    assert 3 / 100 < FREQUENT_SHARE
+    assert not rare.requires_confirmation
+    assert (rare.base_before, rare.base_after) == (100, 97)
+
+    skip = tmp_path / "skip.sav"
+    _write_skip_fixture(skip)
+    skip_project = _project(skip)
+    [frequent] = assess_not_applicable(
+        skip, skip_project, [(_question(skip_project, "ST_TRUD"), [0])]
+    )
+    assert [item.reason for item in frequent.substantive] == ["frequent"]
+    assert frequent.substantive[0].share == pytest.approx(0.4)
+
+
+def test_already_marked_code_is_not_asked_again(tmp_path: Path) -> None:
+    source = tmp_path / "skip.sav"
+    _write_skip_fixture(source)
+    project = _project(source, ST_TRUD=[0])
+
+    [assessment] = assess_not_applicable(
+        source, project, [(_question(project, "ST_TRUD"), [0])]
+    )
+
+    assert not assessment.requires_confirmation
+    assert (assessment.base_before, assessment.base_after) == (60, 60)

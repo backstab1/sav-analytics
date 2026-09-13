@@ -395,3 +395,34 @@ def test_heuristic_scale_is_counted_for_review_until_confirmed(
     expect(score_row.locator(".q-sub.warning")).to_have_count(0)
     expect(page.locator("#question-review")).to_be_hidden()
     expect(page.locator("#save-question")).to_have_text("Сохранить")
+
+
+def test_marking_a_labelled_category_not_applicable_needs_confirmation(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Подписанный ответ не уходит в «не применимо» одним щелчком (GAP-004)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    # Раздел конструктора честно назван демонстрацией, пока числа не считаются.
+    expect(page.locator("#screen-nav button[data-screen='builder']")).to_contain_text("демо")
+
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    expect(page.locator("#not-applicable")).to_be_visible(timeout=UI_TIMEOUT)
+    assessment = page.locator("#not-applicable-assessment")
+    expect(assessment).to_contain_text("Валидная база", timeout=UI_TIMEOUT)
+
+    page.check("#not-applicable-list [data-not-applicable='1']")
+    expect(assessment).to_contain_text("→", timeout=UI_TIMEOUT)
+    expect(assessment).to_contain_text("подписанная категория")
+
+    page.click("#save-question")
+    expect(page.locator("#editor-error")).to_contain_text("Подтвердите", timeout=UI_TIMEOUT)
+
+    page.check("#not-applicable-confirm")
+    page.click("#save-question")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Настройки вопроса сохранены", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#editor-error")).to_be_hidden()

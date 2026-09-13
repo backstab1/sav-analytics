@@ -171,6 +171,171 @@ def suggest_not_applicable_codes(
     )
 
 
+# Доля валидной базы, начиная с которой неподписанный код считается скорее
+# ответом, чем заглушкой. Порог не отсекает заглушку — Росстат пишет её
+# десяткам процентов респондентов, — а только требует подтверждения.
+FREQUENT_SHARE = 0.10
+
+
+@dataclass(frozen=True, slots=True)
+class SubstantiveValue:
+    """Код, пометка которого может убрать из базы настоящий ответ."""
+
+    value: Any
+    label: str | None
+    count: int
+    share: float
+
+    @property
+    def reason(self) -> str:
+        return "labelled" if self.label is not None else "frequent"
+
+    def describe(self) -> str:
+        who = f"{self.count:,} чел. ({self.share:.0%})".replace(",", " ")
+        if self.label is not None:
+            return f"код {_format_value(self.value)} «{self.label}» — подписанная категория, {who}"
+        return f"код {_format_value(self.value)} без подписи, но у {who} валидной базы"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "value": self.value,
+            "label": self.label,
+            "count": self.count,
+            "share": self.share,
+            "reason": self.reason,
+            "description": self.describe(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class NotApplicableAssessment:
+    """Что изменит пометка: валидная база до и после и содержательные коды.
+
+    «До» — база с уже сохранёнными пометками, «после» — с предложенными.
+    Содержательными считаются только добавляемые коды: однажды подтверждённая
+    пометка второй раз не спрашивается.
+    """
+
+    question_code: str
+    base_before: int
+    base_after: int
+    substantive: list[SubstantiveValue] = field(default_factory=list)
+
+    @property
+    def requires_confirmation(self) -> bool:
+        return bool(self.substantive)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "question_code": self.question_code,
+            "base_before": self.base_before,
+            "base_after": self.base_after,
+            "requires_confirmation": self.requires_confirmation,
+            "substantive": [item.to_dict() for item in self.substantive],
+        }
+
+
+class NotApplicableConfirmationRequired(ValueError):
+    """Пометка затрагивает содержательный код и не подтверждена явно."""
+
+    def __init__(self, assessments: list[NotApplicableAssessment]) -> None:
+        details = "; ".join(
+            f"{item.question_code}: {value.describe()}"
+            for item in assessments
+            for value in item.substantive
+        )
+        super().__init__(
+            "Пометка «не применимо» убирает из базы то, что похоже на ответ — "
+            f"{details}. Подтвердите, что это пропуск по ветке анкеты."
+        )
+        self.assessments = assessments
+
+
+def assess_not_applicable(
+    path: str | Path,
+    project: dict[str, Any],
+    marks: list[tuple[dict[str, Any], list[Any]]],
+) -> list[NotApplicableAssessment]:
+    """Оценить пометки сразу для нескольких вопросов одним чтением файла.
+
+    Одна функция служит и предпросмотру в карточке вопроса, и проверке при
+    сохранении: показанная аналитику база не может разойтись с той, по которой
+    сервер решает, нужно ли подтверждение.
+    """
+    columns: list[str] = []
+    for question, _ in marks:
+        for name in question["source_variables"]:
+            if name not in columns:
+                columns.append(name)
+    if not columns:
+        return []
+    # Как в предпросмотре: объявленные пропуски SPSS уже пустые и в базу не входят.
+    frame, _ = pyreadstat.read_sav(
+        path,
+        usecols=columns,
+        apply_value_formats=False,
+        user_missing=False,
+        dates_as_pandas_datetime=False,
+    )
+    variables = {item["name"]: item for item in project["inspection"]["variables"]}
+    assessments = []
+    for question, values in marks:
+        sources = frame[question["source_variables"]]
+        raw_valid = int(sources.notna().any(axis=1).sum())
+        previous = not_applicable_values(question)
+        substantive = []
+        for value in values:
+            if any(_scalars_equal(value, marked) for marked in previous):
+                continue
+            count = int(
+                pd.concat(
+                    [_equals(sources[name], value) for name in sources.columns], axis=1
+                ).any(axis=1).sum()
+            )
+            label = _value_label(question["source_variables"], variables, value)
+            share = count / raw_valid if raw_valid else 0.0
+            if label is not None or (count and share >= FREQUENT_SHARE):
+                substantive.append(SubstantiveValue(value, label, count, share))
+        assessments.append(
+            NotApplicableAssessment(
+                question_code=question["code"],
+                base_before=_valid_base(sources, previous),
+                base_after=_valid_base(sources, list(values)),
+                substantive=substantive,
+            )
+        )
+    return assessments
+
+
+def _valid_base(sources: pd.DataFrame, values: list[Any]) -> int:
+    valid = pd.concat(
+        [
+            sources[name].notna() & ~is_not_applicable(sources[name], values)
+            for name in sources.columns
+        ],
+        axis=1,
+    ).any(axis=1)
+    return int(valid.sum())
+
+
+def _value_label(
+    sources: list[str], variables: dict[str, dict[str, Any]], value: Any
+) -> str | None:
+    for name in sources:
+        for item in variables.get(name, {}).get("value_labels", []):
+            if _scalars_equal(item["value"], value):
+                return str(item["label"])
+    return None
+
+
+def _format_value(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return str(int(number)) if number.is_integer() else str(number)
+
+
 def _labelled_codes(variable: dict[str, Any]) -> set[float]:
     codes: set[float] = set()
     for item in variable.get("value_labels", []):

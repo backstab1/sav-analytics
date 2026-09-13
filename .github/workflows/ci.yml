@@ -50,6 +50,7 @@ jobs:
           src/sav_analytics/core/weight_validation.py
           src/sav_analytics/core/review.py
           src/sav_analytics/api_presentation.py
+          src/sav_analytics/core/not_applicable.py
 
       - name: Pytest с покрытием
         run: >-

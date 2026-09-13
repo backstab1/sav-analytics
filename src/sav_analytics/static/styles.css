@@ -1431,6 +1431,8 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .inline-warnings p { margin: 3px 0; }
 .question-review { margin-top: 0; }
+.na-assessment .na-base { margin: var(--s-2) 0 0; font-size: var(--t-xs); color: var(--c-ink-2); }
+.na-assessment .na-confirm .checkbox { margin-top: 6px; color: var(--c-ink); }
 .question-review .question-review-title { font-weight: 600; }
 .question-review .question-review-hint { color: var(--c-ink-2); }
 

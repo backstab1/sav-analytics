@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
 from ..api_schemas import (
+    NotApplicableAssessmentRequest,
     NotApplicableUpdate,
     QuestionBaseUpdate,
     QuestionOrder,
@@ -44,7 +45,9 @@ def mark_not_applicable(
 ) -> dict:
     marks = [mark.model_dump(mode="json") for mark in update.marks]
     try:
-        return repository.mark_not_applicable(project_id, marks)
+        return repository.mark_not_applicable(
+            project_id, marks, confirm_substantive=update.confirm_substantive
+        )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
     except InvalidUploadError as exc:
@@ -65,6 +68,19 @@ def update_question(
         raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
     except (ToplineError, InvalidUploadError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{code}/not-applicable/assessment")
+def assess_not_applicable(
+    project_id: UUID,
+    code: str,
+    request: NotApplicableAssessmentRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.assess_not_applicable(project_id, code, request.values)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
 
 
 @router.put("/order")

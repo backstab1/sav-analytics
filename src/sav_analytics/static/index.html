@@ -52,7 +52,7 @@
         <button type="button" data-screen="home" title="Главная — страница в разработке">Главная</button>
         <button id="new-project" class="nav-action" type="button">Новый проект</button>
         <button type="button" data-screen="manual" aria-current="page">Ручной режим</button>
-        <button type="button" data-screen="builder">AI-конструктор</button>
+        <button type="button" data-screen="builder" title="Демонстрация: числа на экране пока не считаются по данным проекта">Конструктор · демо</button>
       </nav>
 
       <div class="bar-sep"></div>
@@ -262,7 +262,7 @@
                   <label class="f">Пользовательская база<select id="question-base-filter"><option value="">Стандартная база</option></select></label>
                   <section id="question-members" class="question-members" hidden></section>
                   <section id="special-answers" class="special-answers" hidden><div class="grp-cap"><strong>Исключить ответы</strong><small>Останутся в распределении, но не в средних</small></div><div id="special-answer-list"></div></section>
-                  <section id="not-applicable" class="special-answers" hidden><div class="grp-cap"><strong>Не применимо</strong><small>Код пропуска по ветке анкеты: ответ уходит из распределения, база Total сохраняется</small></div><div id="not-applicable-list"></div></section>
+                  <section id="not-applicable" class="special-answers" hidden><div class="grp-cap"><strong>Не применимо</strong><small>Код пропуска по ветке анкеты: ответ уходит из распределения, база Total сохраняется</small></div><div id="not-applicable-list"></div><div id="not-applicable-assessment" class="na-assessment" aria-live="polite"></div></section>
                   <!-- Группировки этого вопроса. Перекодировка — свойство
                        переменной, а не отчёта, поэтому она правится здесь же,
                        рядом с типом и специальными ответами. -->
@@ -403,7 +403,10 @@
         </section>
       </section>
 
-      <!-- ================= Экран «AI-конструктор» =================
+      <!-- ================= Экран «Конструктор · демо» =================
+
+           Называется демонстрацией, пока числа не считаются по данным
+           проекта (roadmap, P1.0 и PQ.3). Ассистент — regex-заглушка.
 
            Главный объект экрана — сама таблица, а не настройки вокруг
            неё: раскладка «палитра / стол / чат» отдавала кросстабу
@@ -418,7 +421,7 @@
 
         <div class="bld-head">
           <div class="bld-head-text">
-            <p class="eyebrow">Кросстаб</p>
+            <p class="eyebrow">Кросстаб · демонстрация</p>
             <h1>Таблица</h1>
           </div>
           <p class="bld-warning" role="status">Числа демонстрационные: расчёт на данных проекта ещё не подключён — нужен эндпоинт произвольного кросса.</p>

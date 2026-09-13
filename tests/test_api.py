@@ -644,15 +644,27 @@ def test_not_applicable_marks_a_whole_group_in_one_revision(tmp_path: Path) -> N
             }
 
             before = project["configuration"]["revision"]
+            marks = [
+                {"code": item["question_code"], "values": [item["value"]]}
+                for item in groups[0]["candidates"]
+            ]
+            # Заглушка стоит у 40% — это частый код, и без подтверждения
+            # пометка отклоняется целиком, не задев ни один вопрос.
+            refused = client.post(
+                f"/api/projects/{project_id}/questions/not-applicable",
+                headers={"If-Match": str(before)},
+                json={"marks": marks},
+            )
+            assert refused.status_code == 422
+            assert refused.json()["error_code"] == "NOT_APPLICABLE_CONFIRMATION_REQUIRED"
+            unchanged = client.get(f"/api/projects/{project_id}").json()["configuration"]
+            assert unchanged["revision"] == before
+            assert all(not item.get("not_applicable_values") for item in unchanged["questions"])
+
             applied = client.post(
                 f"/api/projects/{project_id}/questions/not-applicable",
                 headers={"If-Match": str(before)},
-                json={
-                    "marks": [
-                        {"code": item["question_code"], "values": [item["value"]]}
-                        for item in groups[0]["candidates"]
-                    ]
-                },
+                json={"marks": marks, "confirm_substantive": True},
             )
             assert applied.status_code == 200
             configuration = applied.json()["configuration"]
@@ -671,6 +683,68 @@ def test_not_applicable_marks_a_whole_group_in_one_revision(tmp_path: Path) -> N
     finally:
         app.dependency_overrides.clear()
 
+
+
+def test_labelled_category_needs_confirmation_and_shows_the_base_change(
+    tmp_path: Path,
+) -> None:
+    """Содержательную категорию нельзя пометить «не применимо» молча (GAP-004)."""
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "labelled.sav"
+    frame = pd.DataFrame({"ST_TRUD": [11] * 20 + [41] * 40 + [0] * 40})
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"ST_TRUD": "Статус"},
+        variable_value_labels={"ST_TRUD": {11: "Работодатели", 41: "Наемные"}},
+        variable_measure={"ST_TRUD": "nominal"},
+    )
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("labelled.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            question_url = f"/api/projects/{project_id}/questions/ST_TRUD"
+
+            assessment = client.post(
+                f"{question_url}/not-applicable/assessment", json={"values": [41]}
+            ).json()
+            assert (assessment["base_before"], assessment["base_after"]) == (100, 60)
+            assert assessment["requires_confirmation"] is True
+            assert assessment["substantive"][0]["reason"] == "labelled"
+            assert "Наемные" in assessment["substantive"][0]["description"]
+
+            refused = client.patch(question_url, json={"not_applicable_values": [41]})
+            assert refused.status_code == 422
+            assert refused.json()["error_code"] == "NOT_APPLICABLE_CONFIRMATION_REQUIRED"
+            assert "Наемные" in refused.json()["detail"]
+
+            saved = client.patch(
+                question_url,
+                json={"not_applicable_values": [41], "confirm_substantive": True},
+            )
+            assert saved.status_code == 200
+            question = next(
+                item
+                for item in saved.json()["configuration"]["questions"]
+                if item["code"] == "ST_TRUD"
+            )
+            assert question["not_applicable_values"] == [41]
+            # Флаг подтверждения — часть запроса, а не конфигурации.
+            assert "confirm_substantive" not in question
+
+            # Однажды подтверждённый код второй раз не спрашивается.
+            again = client.patch(question_url, json={"not_applicable_values": [41]})
+            assert again.status_code == 200
+            kept = client.post(
+                f"{question_url}/not-applicable/assessment", json={"values": [41]}
+            ).json()
+            assert kept["requires_confirmation"] is False
+            assert (kept["base_before"], kept["base_after"]) == (60, 60)
+    finally:
+        app.dependency_overrides.clear()
 
 def test_schema_1_settings_move_off_the_banner_and_leave_a_backup(
     tmp_path: Path,
