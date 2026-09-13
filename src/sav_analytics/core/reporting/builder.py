@@ -49,7 +49,7 @@ def build_topline_artifacts(
             "author": "sav-analytics",
         }
     )
-    formats = _formats(workbook)
+    formats = _formats(workbook, data.statistical_settings)
     audit_entries: list[StatisticalAuditEntry] = []
     statistics_buffer = StringIO() if statistics_stream is None else statistics_stream
     audit_writer = _StatisticsAuditWriter(

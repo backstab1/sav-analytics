@@ -54,6 +54,10 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
                 "calculated_weight_id": None,
                 "wave_comparison": "none",
                 "wave_control_value": None,
+                "scale_metrics": ["distribution", "mean", "top2", "bottom2"],
+                "numeric_metrics": ["mean", "median", "min", "max", "std", "stderr"],
+                "percent_decimals": 0,
+                "mean_decimals": 1,
             }
             not_prepared = client.get(
                 f"/api/projects/{project['id']}/reports/topline.xlsx"
@@ -1508,3 +1512,38 @@ def test_recoding_source_values_list_answers_with_counts(tmp_path: Path) -> None
     finally:
         app.dependency_overrides.clear()
 
+
+def test_output_metrics_are_stored_in_canonical_order_and_never_empty(
+    tmp_path: Path,
+) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            url = f"/api/projects/{project_id}/report-settings"
+
+            saved = client.put(
+                url,
+                json={
+                    "scale_metrics": ["top2", "mean", "top2"],
+                    "numeric_metrics": ["stderr", "mean"],
+                    "percent_decimals": 1,
+                },
+            )
+            assert saved.status_code == 200
+            settings = saved.json()["configuration"]["report_settings"]
+            assert settings["scale_metrics"] == ["mean", "top2"]
+            assert settings["numeric_metrics"] == ["mean", "stderr"]
+            assert (settings["percent_decimals"], settings["mean_decimals"]) == (1, 1)
+
+            assert client.put(url, json={"scale_metrics": []}).status_code == 422
+            assert client.put(url, json={"numeric_metrics": ["mode"]}).status_code == 422
+            assert client.put(url, json={"percent_decimals": 3}).status_code == 422
+    finally:
+        app.dependency_overrides.clear()

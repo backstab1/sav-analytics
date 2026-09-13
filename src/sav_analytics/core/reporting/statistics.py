@@ -790,6 +790,7 @@ class _StatisticsAuditWriter:
             f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
             f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
             f"Порог малой базы: N < {settings['minimum_base']}",
+            _output_line(settings),
             "",
             _comparison_scheme_line(banner),
             "",
@@ -820,6 +821,31 @@ class _StatisticsAuditWriter:
     def finish(self) -> None:
         if self.entry_count == 0:
             self.stream.write("\nСтатистические сравнения не включены.\n")
+
+_OUTPUT_LABELS = {
+    "distribution": "распределение",
+    "mean": "среднее",
+    "top2": "Top-2",
+    "bottom2": "Bottom-2",
+    "median": "медиана",
+    "min": "минимум",
+    "max": "максимум",
+    "std": "стандартное отклонение",
+    "stderr": "стандартная ошибка",
+}
+
+
+def _output_line(settings: dict[str, Any]) -> str:
+    """Что выведено в книгу: без этой строки аудит не объясняет отсутствующие строки."""
+    scale = settings.get("scale_metrics", ("distribution", "mean", "top2", "bottom2"))
+    numeric = settings.get("numeric_metrics", ("mean", "median", "min", "max", "std", "stderr"))
+    return (
+        f"Вывод: шкалы — {', '.join(_OUTPUT_LABELS[item] for item in scale)}; "
+        f"числовые — {', '.join(_OUTPUT_LABELS[item] for item in numeric)}; "
+        f"знаков после запятой: доли {settings.get('percent_decimals', 0)}, "
+        f"средние {settings.get('mean_decimals', 1)}"
+    )
+
 
 def _report_filter_line(project: dict[str, Any], configuration: dict[str, Any]) -> str:
     """Название общего фильтра и его правило тем же текстом, что в редакторе."""
@@ -860,6 +886,7 @@ def _render_statistics_txt(
         f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
         f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
         f"Порог малой базы: N < {settings['minimum_base']}",
+        _output_line(settings),
         "",
         _comparison_scheme_line(banner),
         "",

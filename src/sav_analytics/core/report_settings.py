@@ -4,6 +4,11 @@ from typing import Any
 
 from .weight_validation import WEIGHT_ROLE, weight_role
 
+# Показатели вывода в каноническом порядке. Порядок строк в книге задаёт он,
+# а не порядок отметок: две одинаковые конфигурации дают один ключ кэша.
+SCALE_METRICS = ("distribution", "mean", "top2", "bottom2")
+NUMERIC_METRICS = ("mean", "median", "min", "max", "std", "stderr")
+
 DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "compare_to_total": False,
     "compare_target": "rest",
@@ -16,6 +21,12 @@ DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "calculated_weight_id": None,
     "wave_comparison": "none",
     "wave_control_value": None,
+    # Значения по умолчанию повторяют книгу до появления настроек: проект,
+    # сохранённый раньше, собирается так же и открывается без миграции.
+    "scale_metrics": list(SCALE_METRICS),
+    "numeric_metrics": list(NUMERIC_METRICS),
+    "percent_decimals": 0,
+    "mean_decimals": 1,
 }
 
 REPORT_SETTING_KEYS = tuple(DEFAULT_REPORT_SETTINGS)

@@ -153,6 +153,10 @@ def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData
         "weights": weights,
         "wave_comparison": report_settings["wave_comparison"],
         "wave_control_value": report_settings.get("wave_control_value"),
+        "scale_metrics": tuple(report_settings["scale_metrics"]),
+        "numeric_metrics": tuple(report_settings["numeric_metrics"]),
+        "percent_decimals": report_settings["percent_decimals"],
+        "mean_decimals": report_settings["mean_decimals"],
     }
     return ReportData(
         frame=frame,

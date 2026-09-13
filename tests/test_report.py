@@ -1422,3 +1422,86 @@ def test_statistics_txt_names_the_report_filter_with_its_rule(tmp_path: Path) ->
     audit = build_statistics_txt(source, project)
 
     assert "Общий фильтр: Женщины — Ваш пол: Женщина" in audit
+
+
+def _output_project(source: Path, frame: pd.DataFrame, **settings: object) -> dict:
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"SCALE": "Оценка", "AMOUNT": "Сумма покупки"},
+        variable_value_labels={"SCALE": {value: str(value) for value in range(1, 6)}},
+        variable_measure={"SCALE": "scale", "AMOUNT": "scale"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    questions = inspection["questions"]
+    for question in questions:
+        # Тип задаём явно: тест про набор вывода, а не про распознавание.
+        question["question_type"] = "scale" if question["code"] == "SCALE" else "numeric"
+        question["included_in_report"] = True
+    return {
+        "name": "Вывод",
+        "inspection": inspection,
+        "configuration": {
+            "questions": questions,
+            "recodings": [],
+            "banners": [],
+            "filters": [],
+            "report_filter_id": None,
+            "report_settings": settings,
+        },
+    }
+
+
+def _output_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "SCALE": [1, 2, 3, 4, 5, 5],
+            "AMOUNT": [120.0, 80.5, 99.0, 310.25, 45.0, 150.0],
+        }
+    )
+
+
+def test_default_output_keeps_every_row_the_workbook_had(tmp_path: Path) -> None:
+    project = _output_project(tmp_path / "output.sav", _output_frame())
+
+    labels = _row_labels(build_topline_xlsx(tmp_path / "output.sav", project))
+
+    for label in ("3", "Среднее", "Top-2", "Bottom-2", "Медиана", "Стандартная ошибка"):
+        assert label in labels
+
+
+def test_output_metrics_choose_the_rows_and_keep_their_numbers(tmp_path: Path) -> None:
+    source = tmp_path / "output.sav"
+    project = _output_project(
+        source,
+        _output_frame(),
+        scale_metrics=["mean", "top2"],
+        numeric_metrics=["median"],
+    )
+
+    content = build_topline_xlsx(source, project)
+    labels = _row_labels(content)
+
+    assert "Bottom-2" not in labels
+    assert "3" not in labels, "распределение шкалы выключено"
+    assert "Минимум" not in labels
+    assert labels.count("Среднее") == 1, "среднее осталось только у шкалы"
+    # Скрытие соседних строк не меняет посчитанного.
+    assert _cell_value(content, "Top-2", "B") == pytest.approx(50.0)
+    assert _cell_value(content, "Медиана", "B") == pytest.approx(109.5)
+
+    audit = build_statistics_txt(source, project)
+    assert "Вывод: шкалы — среднее, Top-2; числовые — медиана;" in audit
+
+
+def test_decimals_change_the_format_not_the_stored_value(tmp_path: Path) -> None:
+    source = tmp_path / "output.sav"
+    project = _output_project(
+        source, _output_frame(), percent_decimals=1, mean_decimals=3
+    )
+
+    content = build_topline_xlsx(source, project)
+
+    assert _cell_num_format(content, "Top-2", "B").endswith("0.0")
+    assert _cell_num_format(content, "Среднее", "B").endswith("0.000")
+    assert _cell_value(content, "Bottom-2", "B") == pytest.approx(100 / 3)

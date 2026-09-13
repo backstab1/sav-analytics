@@ -110,6 +110,31 @@ class ReportSettingsDefinition(BaseModel):
     calculated_weight_id: UUID | None = None
     wave_comparison: Literal["none", "previous", "control"] = "none"
     wave_control_value: str | int | float | None = None
+    # Что выводится в книге. База не входит в набор: она пишется всегда,
+    # иначе значимость в книге было бы не на чем проверить.
+    scale_metrics: list[Literal["distribution", "mean", "top2", "bottom2"]] = Field(
+        default_factory=lambda: ["distribution", "mean", "top2", "bottom2"],
+        min_length=1,
+        max_length=8,
+    )
+    numeric_metrics: list[Literal["mean", "median", "min", "max", "std", "stderr"]] = Field(
+        default_factory=lambda: ["mean", "median", "min", "max", "std", "stderr"],
+        min_length=1,
+        max_length=12,
+    )
+    percent_decimals: int = Field(default=0, ge=0, le=2)
+    mean_decimals: int = Field(default=1, ge=0, le=3)
+
+    @model_validator(mode="after")
+    def normalize_output_metrics(self) -> Self:
+        order = {
+            "scale_metrics": ("distribution", "mean", "top2", "bottom2"),
+            "numeric_metrics": ("mean", "median", "min", "max", "std", "stderr"),
+        }
+        for field, canonical in order.items():
+            chosen = set(getattr(self, field))
+            setattr(self, field, [metric for metric in canonical if metric in chosen])
+        return self
 
     @model_validator(mode="after")
     def validate_weight_selection(self) -> Self:

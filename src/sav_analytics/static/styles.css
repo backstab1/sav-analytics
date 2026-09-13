@@ -588,6 +588,10 @@ button.prop-val:hover { background: transparent; transform: none; }
 }
 .stat-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .stat-hint { margin: 7px 0 0; font-size: var(--t-xs); }
+.stat-row { margin-top: 7px; }
+.stat-label { flex: 0 0 64px; color: var(--c-ink-3); font-size: var(--t-xs); }
+.stat-label-inline { color: var(--c-ink-3); font-size: var(--t-xs); }
+.stat-custom { color: var(--c-ink-3); font-size: var(--t-xs); font-style: italic; }
 
 /* Сегменты: варианты одного вопроса стоят рядом, выбранный залит.
    Радиогруппа читается быстрее селекта — видно и выбор, и альтернативы. */

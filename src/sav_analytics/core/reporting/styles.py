@@ -58,7 +58,11 @@ class ReportFormats:
     xlsxwriter заводит новый объект на каждый вызов.
     """
 
-    def __init__(self, workbook: Any) -> None:
+    def __init__(
+        self, workbook: Any, *, percent_decimals: int = 0, mean_decimals: int = 1
+    ) -> None:
+        self.percent_decimals = percent_decimals
+        self.mean_decimals = mean_decimals
         self._workbook = workbook
         self._cache: dict[tuple[tuple[str, Any], ...], Any] = {}
 
@@ -179,7 +183,11 @@ class ReportFormats:
         отбивку ``_▴_`` шириной ровно в маркер, поэтому цифры всех колонок
         стоят на одной вертикали.
         """
-        digits = "0.0" if family == "mean" else "0"
+        # Число хранится полной точностью, знаки задаёт только формат
+        # (requirements.md §8.2): округление в книге не меняет ни значение,
+        # ни решение теста.
+        places = self.mean_decimals if family == "mean" else self.percent_decimals
+        digits = "0." + "0" * places if places else "0"
         if wave == "higher":
             num_format = f'"{UP} "{digits}'
         elif wave == "lower":
@@ -243,8 +251,13 @@ class ReportFormats:
         return {"bottom": 2, "bottom_color": RULE} if rule else {}
 
 
-def _formats(workbook: Any) -> ReportFormats:
-    return ReportFormats(workbook)
+def _formats(workbook: Any, settings: dict[str, Any] | None = None) -> ReportFormats:
+    settings = settings or {}
+    return ReportFormats(
+        workbook,
+        percent_decimals=settings.get("percent_decimals", 0),
+        mean_decimals=settings.get("mean_decimals", 1),
+    )
 
 
 def _result_format(

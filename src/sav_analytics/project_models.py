@@ -57,6 +57,17 @@ class StoredReportSettings(_StoredModel):
     calculated_weight_id: UUID | None
     wave_comparison: Literal["none", "previous", "control"]
     wave_control_value: str | int | float | None
+    # Появились позже схемы 2 и тоже со значениями по умолчанию: форма файла
+    # не изменилась, к ней добавились ключи.
+    scale_metrics: list[Literal["distribution", "mean", "top2", "bottom2"]] = Field(
+        default_factory=lambda: ["distribution", "mean", "top2", "bottom2"], min_length=1
+    )
+    numeric_metrics: list[Literal["mean", "median", "min", "max", "std", "stderr"]] = Field(
+        default_factory=lambda: ["mean", "median", "min", "max", "std", "stderr"],
+        min_length=1,
+    )
+    percent_decimals: int = Field(default=0, ge=0, le=2)
+    mean_decimals: int = Field(default=1, ge=0, le=3)
 
 
 class StoredConfiguration(_StoredModel):

@@ -468,3 +468,30 @@ def test_category_groups_are_built_by_moving_answers(
         "Перекодировка сохранена", timeout=UI_TIMEOUT
     )
 
+
+def test_output_profile_is_read_from_the_chosen_metrics(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Набор вывода выбирается одним щелчком и узнаётся по отметкам."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "report")
+
+    profile = page.locator('[data-stat="profile"]')
+    expect(profile.filter(has_text="Стандарт")).to_have_attribute(
+        "aria-checked", "true", timeout=UI_TIMEOUT
+    )
+
+    profile.filter(has_text="Аудит").click()
+    expect(page.locator('[data-stat="pvalues"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=UI_TIMEOUT
+    )
+    expect(page.locator('[data-stat="percent-decimals"][data-value="1"]')).to_have_attribute(
+        "aria-checked", "true"
+    )
+
+    # Сняли одну отметку — набор перестал совпадать с образцом.
+    page.click('[data-stat="scale:bottom2"]')
+    expect(page.locator("#stat-panel")).to_contain_text("свой набор", timeout=UI_TIMEOUT)
+    expect(page.locator('[data-stat="scale:bottom2"]')).to_have_attribute("aria-pressed", "false")

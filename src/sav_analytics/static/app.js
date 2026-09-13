@@ -41,7 +41,60 @@ const defaultReportSettings = Object.freeze({
   calculated_weight_id: null,
   wave_comparison: "none",
   wave_control_value: null,
+  scale_metrics: ["distribution", "mean", "top2", "bottom2"],
+  numeric_metrics: ["mean", "median", "min", "max", "std", "stderr"],
+  percent_decimals: 0,
+  mean_decimals: 1,
 });
+
+const scaleMetricOptions = [
+  { value: "distribution", label: "Распределение" },
+  { value: "mean", label: "Среднее" },
+  { value: "top2", label: "Top-2" },
+  { value: "bottom2", label: "Bottom-2" },
+];
+const numericMetricOptions = [
+  { value: "mean", label: "Среднее" },
+  { value: "median", label: "Медиана" },
+  { value: "min", label: "Мин." },
+  { value: "max", label: "Макс." },
+  { value: "std", label: "SD" },
+  { value: "stderr", label: "SE" },
+];
+
+// Набор вывода — не сохраняемое поле, а совпадение отметок с образцом:
+// у настройки одно место хранения, и «свой» набор не расходится с «клиентским»,
+// из которого его собрали.
+const outputProfiles = {
+  standard: {
+    label: "Стандарт",
+    title: "Всё, что книга выводила до появления настроек",
+    settings: { scale_metrics: ["distribution", "mean", "top2", "bottom2"], numeric_metrics: ["mean", "median", "min", "max", "std", "stderr"], percent_decimals: 0, mean_decimals: 1, show_p_values: false },
+  },
+  client: {
+    label: "Клиенту",
+    title: "Распределение, среднее и Top-2; для числовых — среднее и медиана",
+    settings: { scale_metrics: ["distribution", "mean", "top2"], numeric_metrics: ["mean", "median"], percent_decimals: 0, mean_decimals: 1, show_p_values: false },
+  },
+  quick: {
+    label: "Быстрый",
+    title: "Без распределения шкал: среднее, Top-2 и Bottom-2",
+    settings: { scale_metrics: ["mean", "top2", "bottom2"], numeric_metrics: ["mean"], percent_decimals: 0, mean_decimals: 1, show_p_values: false },
+  },
+  audit: {
+    label: "Аудит",
+    title: "Все показатели, лишний знак и p-value в примечаниях",
+    settings: { scale_metrics: ["distribution", "mean", "top2", "bottom2"], numeric_metrics: ["mean", "median", "min", "max", "std", "stderr"], percent_decimals: 1, mean_decimals: 2, show_p_values: true },
+  },
+};
+
+function currentOutputProfile(settings) {
+  const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+  return Object.keys(outputProfiles).find(name => {
+    const profile = outputProfiles[name].settings;
+    return Object.keys(profile).every(key => same(settings[key], profile[key]));
+  }) || "custom";
+}
 
 const typeLabels = {
   single_choice: "Один ответ",
@@ -613,9 +666,10 @@ document.querySelector("#entity-list").addEventListener("click", event => {
   }
   const stat = event.target.closest("[data-stat]");
   if (stat) {
-    if (stat.getAttribute("aria-checked") !== "true") {
-      void applyStatSetting(statPatch(stat.dataset.stat, stat.dataset.value));
-    }
+    const patch = stat.getAttribute("aria-checked") === "true"
+      ? null
+      : statPatch(stat.dataset.stat, stat.dataset.value);
+    if (patch) void applyStatSetting(patch);
     return;
   }
   const recodeCard = event.target.closest("[data-recode-id]");
@@ -1435,6 +1489,7 @@ function reportStatisticsColumn(settings) {
     const selected = String(item.value) === String(settings.wave_control_value) ? "selected" : "";
     return `<option value="${escapeAttribute(value)}" ${selected}>${escapeHtml(item.label)}</option>`;
   }).join("");
+  const profile = currentOutputProfile(settings);
   const totalWarning = scheme === "total"
     ? '<p class="stat-hint warning-hint">Total включает саму подгруппу: выборки пересекаются, различия занижаются. Выбирайте, только если этого требует шаблон заказчика.</p>'
     : "";
@@ -1493,9 +1548,26 @@ function reportStatisticsColumn(settings) {
       <div class="stat-block">
         <p>Вывод в книге</p>
         <div class="stat-controls">
+          ${statSegment("profile", Object.entries(outputProfiles).map(([value, profile]) => ({ value, label: profile.label })), profile)}
+          ${profile === "custom" ? '<span class="stat-custom">свой набор</span>' : ""}
+        </div>
+        <div class="stat-controls stat-row"><span class="stat-label">Шкалы</span>
+          ${scaleMetricOptions.map(option => statToggle(`scale:${option.value}`, option.label, settings.scale_metrics.includes(option.value))).join("")}
+        </div>
+        <div class="stat-controls stat-row"><span class="stat-label">Числовые</span>
+          ${numericMetricOptions.map(option => statToggle(`numeric:${option.value}`, option.label, settings.numeric_metrics.includes(option.value))).join("")}
+        </div>
+        <div class="stat-controls stat-row"><span class="stat-label">Знаков</span>
+          <span class="stat-label-inline">доли</span>
+          ${statSegment("percent-decimals", ["0", "1", "2"].map(value => ({ value, label: value })), String(settings.percent_decimals))}
+          <span class="stat-label-inline">средние</span>
+          ${statSegment("mean-decimals", ["0", "1", "2", "3"].map(value => ({ value, label: value })), String(settings.mean_decimals))}
+        </div>
+        <div class="stat-controls stat-row">
           ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
             "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
         </div>
+        <p class="stat-hint muted">База выводится всегда: без неё значимость в книге не на чем проверить. NPS и CSAT выводятся полностью.</p>
       </div>
 
     </div>
@@ -1548,9 +1620,8 @@ async function hydrateReadyWeight(variable) {
 // Настройки отчёта пишутся целиком: endpoint принимает полный набор,
 // поэтому любой переключатель отправляет текущие значения с одной
 // заменённой парой. Так же поступает и лист выбора веса.
-async function patchReportSettings(partial, { toast = null } = {}) {
-  const settings = { ...configuredReportSettings(), ...partial };
-  const payload = {
+function reportSettingsPayload(settings) {
+  return {
     compare_to_total: settings.compare_to_total,
     compare_target: settings.compare_target,
     compare_pairwise: settings.compare_pairwise,
@@ -1564,7 +1635,15 @@ async function patchReportSettings(partial, { toast = null } = {}) {
     wave_control_value: settings.wave_comparison === "control"
       ? settings.wave_control_value
       : null,
+    scale_metrics: settings.scale_metrics,
+    numeric_metrics: settings.numeric_metrics,
+    percent_decimals: settings.percent_decimals,
+    mean_decimals: settings.mean_decimals,
   };
+}
+
+async function patchReportSettings(partial, { toast = null } = {}) {
+  const payload = reportSettingsPayload({ ...configuredReportSettings(), ...partial });
   currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1597,6 +1676,24 @@ function statPatch(name, value) {
   if (name === "pairwise") return { compare_pairwise: value === "on" };
   if (name === "bonferroni") return { bonferroni: value === "on" };
   if (name === "pvalues") return { show_p_values: value === "on" };
+  if (name === "profile") return { ...outputProfiles[value].settings };
+  if (name === "percent-decimals") return { percent_decimals: Number(value) };
+  if (name === "mean-decimals") return { mean_decimals: Number(value) };
+  if (name.startsWith("scale:") || name.startsWith("numeric:")) {
+    const [group, metric] = name.split(":");
+    const key = `${group}_metrics`;
+    const options = group === "scale" ? scaleMetricOptions : numericMetricOptions;
+    const chosen = new Set(configuredReportSettings()[key]);
+    if (value === "on") chosen.add(metric);
+    else chosen.delete(metric);
+    if (!chosen.size) {
+      alert(group === "scale"
+        ? "Оставьте для шкал хотя бы один показатель."
+        : "Оставьте для числовых вопросов хотя бы один показатель.");
+      return null;
+    }
+    return { [key]: options.map(option => option.value).filter(item => chosen.has(item)) };
+  }
   if (name === "wave") {
     return value === "control"
       ? {
@@ -1762,20 +1859,11 @@ async function applyPick(kind, value) {
 // Вес живёт в report_settings целиком, поэтому переключение отправляет
 // текущие настройки с заменённым весом: сервер заодно проверит пригодность.
 async function assignReportWeight(value) {
-  const settings = configuredReportSettings();
-  const payload = {
-    compare_to_total: settings.compare_to_total,
-    compare_target: settings.compare_target,
-    compare_pairwise: settings.compare_pairwise,
-    confidence_level: settings.confidence_level,
-    bonferroni: settings.bonferroni,
-    show_p_values: settings.show_p_values,
-    minimum_base: settings.minimum_base,
+  const payload = reportSettingsPayload({
+    ...configuredReportSettings(),
     weight_variable: value.startsWith("ready:") ? value.slice(6) : null,
     calculated_weight_id: value.startsWith("calculated:") ? value.slice(11) : null,
-    wave_comparison: settings.wave_comparison,
-    wave_control_value: settings.wave_comparison === "control" ? settings.wave_control_value : null,
-  };
+  });
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {
       method: "PUT",
