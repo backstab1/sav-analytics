@@ -1347,7 +1347,7 @@ function reportBaseRow() {
     meta: filter
       ? (preview
         ? `${escapeHtml(preview.description)} · ${sample}`
-        : `${plural(countFilterConditions(filter.rule), "Условие", "Условия", "Условий")} <b>${countFilterConditions(filter.rule)}</b> · ${sample}`)
+        : `${plural(countFilterConditions(filter.rule), "условие", "условия", "условий")} · ${sample}`)
       : `Все <b>${total.toLocaleString("ru-RU")}</b> респондентов`,
     hint: preview?.description || "",
     action: filter
@@ -2809,8 +2809,8 @@ function refreshCategoryZones() {
     const chips = [...zone.querySelector(".value-chips").children];
     const people = chips.reduce((total, chip) => total + Number(chip.dataset.count || 0), 0);
     zone.querySelector(".category-zone-count").textContent = chips.length
-      ? `${chips.length} ${plural(chips.length, "ответ", "ответа", "ответов")} · ${people.toLocaleString("ru-RU")} чел.`
-      : (zone.dataset.zone === "pool" ? "все ответы разложены" : "пусто");
+      ? `${plural(chips.length, "ответ", "ответа", "ответов")} · ${people.toLocaleString("ru-RU")} чел.`
+      : (zone.dataset.zone === "pool" ? "все ответы разложены" : "");
     const move = zone.querySelector(".zone-move");
     move.hidden = pressed === 0;
     move.textContent = pressed > 1 ? `Сюда · ${pressed}` : "Сюда";
