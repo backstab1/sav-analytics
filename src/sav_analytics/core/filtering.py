@@ -17,6 +17,22 @@ class FilterError(ValueError):
     pass
 
 
+# Операции, которые имеют смысл для источника условия. Сервер остаётся
+# единственным местом, где это записано: редактор получает список вместе
+# с вариантами ответа. Прежние `eq` и `ne` по-прежнему принимаются при
+# сохранении — это частные случаи `in` и `not_in` с одним значением.
+OPERATORS_BY_KIND: dict[str, list[str]] = {
+    "categorical": ["in", "not_in", "filled", "missing"],
+    "scale": ["in", "not_in", "between", "gt", "lt", "filled", "missing"],
+    "numeric": ["between", "gt", "lt", "filled", "missing"],
+    "multiple": ["selected_any", "selected_all", "selected_none", "filled", "missing"],
+}
+
+# Больше вариантов в списке галочек не читается; такой источник всё равно
+# фильтруют диапазоном.
+MAX_OPTIONS = 200
+
+
 def validate_filter(definition: dict[str, Any], project: dict[str, Any]) -> None:
     _validate_group(definition["rule"], project, depth=1)
 
@@ -33,9 +49,10 @@ def calculate_filter_preview(
         user_missing=False,
         dates_as_pandas_datetime=False,
     )
-    mask, steps = _evaluate_group(definition["rule"], project, frame)
+    mask, steps = _evaluate_group(definition["rule"], project, frame, root=True)
     total = len(frame)
     selected = int(mask.sum())
+    emptied = next((step for step in steps if step.get("running") == 0), None)
     return {
         "id": definition.get("id"),
         "name": definition["name"],
@@ -45,7 +62,89 @@ def calculate_filter_preview(
         "empty": selected == 0,
         "small_base": 0 < selected < 30,
         "steps": steps,
-        "description": _describe_group(definition["rule"], project),
+        "description": describe_rule(definition["rule"], project),
+        "emptied_after": emptied["description"] if emptied else None,
+    }
+
+
+def describe_rule(rule: dict[str, Any], project: dict[str, Any]) -> str:
+    """Правило фильтра обычным текстом: `Возраст: 18–34 И (Москва ИЛИ Самара)`.
+
+    Единственный форматтер правила. Редактор, строка «База» раздела «Отчёт»
+    и `statistics.txt` получают текст отсюда, поэтому проверяемое до сборки
+    и записанное в аудит правило не могут разойтись. Коды SPSS заменяются
+    подписями значений; код без подписи остаётся числом.
+    """
+    return _describe_group(rule, project)
+
+
+def condition_source_options(
+    path: str | Path, source: dict[str, str], project: dict[str, Any]
+) -> dict[str, Any]:
+    """Варианты ответа источника условия с частотами — вместо ввода кодов SPSS."""
+    resolved = _resolve_source(source, project)
+    kind = _source_kind(source, resolved)
+    if source["kind"] == "question":
+        columns = list(resolved["source_variables"])
+        if kind != "multiple" and len(columns) != 1:
+            raise FilterError("Для этого условия нужен одиночный вопрос.")
+    else:
+        columns = [resolved["source_variable"]]
+    frame, _ = pyreadstat.read_sav(
+        path,
+        usecols=columns,
+        apply_value_formats=False,
+        user_missing=False,
+        dates_as_pandas_datetime=False,
+    )
+    total = len(frame)
+    variables = _variables(project)
+    label = _source_label(source, resolved)
+    options: list[dict[str, Any]] = []
+    minimum = maximum = None
+    if kind == "multiple":
+        try:
+            answered = answered_mask(frame, resolved)
+            for name in columns:
+                options.append(
+                    {
+                        "value": name,
+                        "label": _item_label(label, variables.get(name, {}), name),
+                        "code": name,
+                        "labelled": True,
+                        "count": int(selected_mask(frame, resolved, name).sum()),
+                    }
+                )
+        except MultipleResponseError as exc:
+            raise FilterError(str(exc)) from exc
+        missing = total - int(answered.sum())
+    else:
+        series = _source_series(source, resolved, frame)
+        missing = int(series.isna().sum())
+        if source["kind"] == "recoding":
+            for category in resolved["categories"]:
+                name = category["label"]
+                count = int(series.map(lambda value, name=name: _matches_any(value, [name])).sum())
+                options.append(
+                    {"value": name, "label": name, "code": None, "labelled": True, "count": count}
+                )
+        else:
+            numeric = pd.to_numeric(series, errors="coerce")
+            if numeric.notna().any():
+                minimum, maximum = _scalar(numeric.min()), _scalar(numeric.max())
+            if kind != "numeric":
+                options = _categorical_options(series, variables.get(columns[0], {}))
+    return {
+        "source": source,
+        "label": label,
+        "kind": kind,
+        "operators": OPERATORS_BY_KIND[kind],
+        "total": total,
+        "missing": missing,
+        "minimum": minimum,
+        "maximum": maximum,
+        "options": options[:MAX_OPTIONS],
+        "truncated": len(options) > MAX_OPTIONS,
     }
 
 
@@ -120,9 +219,19 @@ def _required_columns(group: dict[str, Any], project: dict[str, Any]) -> set[str
 
 
 def _evaluate_group(
-    group: dict[str, Any], project: dict[str, Any], frame: pd.DataFrame
+    group: dict[str, Any],
+    project: dict[str, Any],
+    frame: pd.DataFrame,
+    *,
+    root: bool = False,
 ) -> tuple[pd.Series, list[dict[str, Any]]]:
-    masks: list[pd.Series] = []
+    """Маска группы и шаги расчёта.
+
+    `selected` — сколько подходит под само условие, `running` — сколько
+    осталось после него вместе с предыдущими условиями верхнего уровня.
+    Второе и отвечает на вопрос, на каком условии обнулилась выборка.
+    """
+    result: pd.Series | None = None
     steps: list[dict[str, Any]] = []
     for item in group["items"]:
         if item["kind"] == "group":
@@ -130,12 +239,21 @@ def _evaluate_group(
             steps.extend(nested_steps)
         else:
             mask = _evaluate_condition(item, project, frame)
-        masks.append(mask)
-        steps.append({"description": _describe_item(item, project), "selected": int(mask.sum())})
-    result = masks[0].copy()
-    for mask in masks[1:]:
-        result = result & mask if group["operator"] == "and" else result | mask
-    return result.fillna(False), steps
+        mask = mask.fillna(False).astype(bool)
+        if result is None:
+            result = mask.copy()
+        else:
+            result = result & mask if group["operator"] == "and" else result | mask
+        step: dict[str, Any] = {
+            "description": _describe_item(item, project),
+            "selected": int(mask.sum()),
+        }
+        if root:
+            step["running"] = int(result.sum())
+        steps.append(step)
+    if result is None:
+        raise FilterError("Добавьте хотя бы одно условие.")
+    return result, steps
 
 
 def _evaluate_condition(
@@ -214,39 +332,156 @@ def _matches_any(value: Any, expected: list[Any]) -> bool:
     return any(value == item or str(value) == str(item) for item in expected)
 
 
-def _describe_group(group: dict[str, Any], project: dict[str, Any]) -> str:
+def _describe_group(
+    group: dict[str, Any], project: dict[str, Any], *, nested: bool = False
+) -> str:
     separator = " И " if group["operator"] == "and" else " ИЛИ "
     parts = [_describe_item(item, project) for item in group["items"]]
-    return separator.join(parts)
+    text = separator.join(parts)
+    return f"({text})" if nested and len(parts) > 1 else text
 
 
 def _describe_item(item: dict[str, Any], project: dict[str, Any]) -> str:
     if item["kind"] == "group":
-        return f"({_describe_group(item, project)})"
-    resolved = _resolve_source(item["source"], project)
-    label = resolved.get("label") or resolved.get("name") or item["source"]["ref"]
-    operator_labels = {
-        "eq": "=",
-        "ne": "≠",
-        "in": "входит в",
-        "not_in": "не входит в",
-        "gt": ">",
-        "lt": "<",
-        "between": "между",
-        "filled": "заполнено",
-        "missing": "пропущено",
-        "selected": "выбран вариант",
-        "selected_any": "выбран хотя бы один",
-        "selected_all": "выбраны все",
-        "selected_none": "не выбран ни один",
+        return _describe_group(item, project, nested=True)
+    source = item["source"]
+    resolved = _resolve_source(source, project)
+    label = _source_label(source, resolved)
+    values = [_value_text(source, resolved, project, value) for value in item.get("values", [])]
+    operator = item["operator"]
+    if operator in {"eq", "in"}:
+        return f"{label}: {' или '.join(values)}"
+    if operator in {"ne", "not_in"}:
+        return f"{label}: кроме {', '.join(values)}"
+    if operator == "gt":
+        return f"{label} > {_code(item['lower'])}"
+    if operator == "lt":
+        return f"{label} < {_code(item['upper'])}"
+    if operator == "between":
+        return f"{label}: {_code(item['lower'])}–{_code(item['upper'])}"
+    if operator == "filled":
+        return f"{label}: ответ есть"
+    if operator == "missing":
+        return f"{label}: пропуск"
+    if operator in {"selected", "selected_any"}:
+        if len(values) == 1:
+            return f"{label}: выбран {values[0]}"
+        return f"{label}: выбран хотя бы один из {', '.join(values)}"
+    if operator == "selected_all":
+        return f"{label}: выбраны все из {', '.join(values)}"
+    if operator == "selected_none":
+        return f"{label}: не выбран ни один из {', '.join(values)}"
+    raise FilterError("Неизвестная операция фильтра.")
+
+
+def _source_kind(source: dict[str, str], resolved: dict[str, Any]) -> str:
+    if source["kind"] == "recoding":
+        return "categorical"
+    question_type = str(resolved.get("question_type", ""))
+    if question_type.startswith("multiple_choice"):
+        return "multiple"
+    if question_type == "single_choice":
+        return "categorical"
+    if question_type in {"scale", "numeric"}:
+        return question_type
+    raise FilterError("Этот вопрос нельзя использовать в условии фильтра.")
+
+
+def _source_label(source: dict[str, str], resolved: dict[str, Any]) -> str:
+    if source["kind"] == "question":
+        label = str(resolved.get("label") or source["ref"])
+    else:
+        label = str(resolved.get("name") or resolved.get("code") or source["ref"])
+    # «Ваш пол?: Женщина» читается хуже, чем «Ваш пол: Женщина».
+    return label.strip().rstrip("?:.").strip() or source["ref"]
+
+
+def _value_text(
+    source: dict[str, str], resolved: dict[str, Any], project: dict[str, Any], value: Any
+) -> str:
+    if source["kind"] == "recoding":
+        return str(value)
+    variables = _variables(project)
+    if str(resolved.get("question_type", "")).startswith("multiple_choice"):
+        name = str(value)
+        return _item_label(_source_label(source, resolved), variables.get(name, {}), name)
+    for name in resolved.get("source_variables", []):
+        for item in variables.get(name, {}).get("value_labels", []):
+            if _key(item["value"]) == _key(value):
+                return str(item["label"])
+    return _code(value)
+
+
+def _item_label(question_label: str, variable: dict[str, Any], name: str) -> str:
+    """Подпись варианта multiple без повторения самого вопроса."""
+    label = str(variable.get("label") or name)
+    if question_label and label.startswith(question_label):
+        rest = label[len(question_label):].lstrip(" :—–-").strip()
+        if rest:
+            return rest
+    return label
+
+
+def _categorical_options(series: pd.Series, variable: dict[str, Any]) -> list[dict[str, Any]]:
+    counts: dict[Any, tuple[Any, int]] = {}
+    for value, count in series.dropna().value_counts().items():
+        counts[_key(value)] = (_scalar(value), int(count))
+    options = []
+    for item in variable.get("value_labels", []):
+        observed = counts.pop(_key(item["value"]), (item["value"], 0))
+        options.append(
+            {
+                "value": _scalar(item["value"]),
+                "label": str(item["label"]),
+                "code": _code(item["value"]),
+                "labelled": True,
+                "count": observed[1],
+            }
+        )
+    # Код без подписи тоже ответ: он показывается числом после подписанных.
+    for value, count in sorted(counts.values(), key=lambda pair: _sort_key(pair[0])):
+        options.append(
+            {
+                "value": value,
+                "label": _code(value),
+                "code": _code(value),
+                "labelled": False,
+                "count": count,
+            }
+        )
+    return options
+
+
+def _variables(project: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        item["name"]: item
+        for item in (project.get("inspection") or {}).get("variables", [])
     }
-    suffix = ""
-    if item.get("values"):
-        suffix = " " + ", ".join(map(str, item["values"]))
-    elif item["operator"] == "between":
-        suffix = f" {item['lower']}–{item['upper']}"
-    elif item["operator"] == "gt":
-        suffix = f" {item['lower']}"
-    elif item["operator"] == "lt":
-        suffix = f" {item['upper']}"
-    return f"{label} {operator_labels[item['operator']]}{suffix}"
+
+
+def _key(value: Any) -> Any:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _sort_key(value: Any) -> tuple[int, float, str]:
+    key = _key(value)
+    return (0, key, "") if isinstance(key, float) else (1, 0.0, str(key))
+
+
+def _scalar(value: Any) -> Any:
+    if hasattr(value, "item"):
+        value = value.item()
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+def _code(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return str(int(number)) if number.is_integer() else str(number)

@@ -1100,6 +1100,26 @@ def test_filter_crud_preview_and_question_base(tmp_path: Path) -> None:
             assert draft_preview.status_code == 200
             assert draft_preview.json()["selected"] == 3
             assert len(draft_preview.json()["steps"]) == 3
+            assert draft_preview.json()["description"].startswith("Ваш пол: Мужчина ИЛИ ")
+            running = [
+                step["running"] for step in draft_preview.json()["steps"] if "running" in step
+            ]
+            assert running == [2, 3]
+
+            options = client.get(
+                f"/api/projects/{project_id}/filters/source-options",
+                params={"kind": "question", "ref": "Q1"},
+            )
+            assert options.status_code == 200
+            assert [(item["label"], item["count"]) for item in options.json()["options"]] == [
+                ("Мужчина", 2),
+                ("Женщина", 2),
+            ]
+            unknown = client.get(
+                f"/api/projects/{project_id}/filters/source-options",
+                params={"kind": "question", "ref": "NOPE"},
+            )
+            assert unknown.status_code == 422
 
             preview = client.get(
                 f"/api/projects/{project_id}/filters/{filter_id}/preview"

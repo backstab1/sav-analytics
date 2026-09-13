@@ -434,10 +434,19 @@ document.querySelector("#filter-condition-list").addEventListener("click", event
   }
 });
 document.querySelector("#filter-condition-list").addEventListener("change", event => {
-  if (event.target.matches(".filter-operation")) syncFilterConditionValue(event.target.closest(".filter-condition"));
+  const condition = event.target.closest(".filter-condition");
+  if (event.target.matches(".filter-source")) void loadFilterConditionSource(condition, {});
+  if (event.target.matches(".filter-operation")) renderFilterConditionValues(condition, filterConditionDraft(condition));
   if (event.target.matches(".filter-group-operator")) {
     refreshFilterJoins(event.target.closest(".filter-group").querySelector(".filter-group-items"));
   }
+});
+document.querySelector("#filter-condition-list").addEventListener("input", event => {
+  if (!event.target.matches(".filter-option-search")) return;
+  const query = event.target.value.trim().toLowerCase();
+  event.target.closest(".filter-values").querySelectorAll(".filter-option").forEach(option => {
+    option.hidden = Boolean(query) && !option.dataset.search.includes(query);
+  });
 });
 document.querySelector("#filter-form").addEventListener("input", scheduleFilterPreview);
 document.querySelector("#filter-form").addEventListener("change", scheduleFilterPreview);
@@ -1282,9 +1291,14 @@ function reportBaseRow() {
     key: "filter", title: "База", picker: "filter",
     value: filter ? escapeHtml(filter.name) : "Все респонденты",
     off: !filter,
+    // Правило — тем же текстом, что в редакторе и statistics.txt: его строит
+    // один форматтер на сервере. Пока предпросмотр не пришёл, видно число условий.
     meta: filter
-      ? `${plural(countFilterConditions(filter.rule), "Условие", "Условия", "Условий")} <b>${countFilterConditions(filter.rule)}</b> · ${sample}`
+      ? (preview
+        ? `${escapeHtml(preview.description)} · ${sample}`
+        : `${plural(countFilterConditions(filter.rule), "Условие", "Условия", "Условий")} <b>${countFilterConditions(filter.rule)}</b> · ${sample}`)
       : `Все <b>${total.toLocaleString("ru-RU")}</b> респондентов`,
+    hint: preview?.description || "",
     action: filter
       ? `<button type="button" class="prop-act" data-edit="filter" data-id="${escapeAttribute(filter.id)}">править</button>`
       : '<button type="button" class="prop-act" data-new="filter">новое</button>',
@@ -1943,11 +1957,10 @@ function openFilter(filterId = null) {
   document.querySelector("#delete-filter").hidden = !filter;
   document.querySelector("#copy-filter").hidden = !filter;
   document.querySelector("#filter-error").hidden = true;
-  document.querySelector("#filter-preview").innerHTML = filter
-    ? '<p class="muted">Считаем…</p>'
-    : '<p class="muted">Сохраните правило для расчёта.</p>';
+  // Предпросмотр запускает сама загрузка ответов условия: до неё правило
+  // собрать нельзя.
+  document.querySelector("#filter-preview").innerHTML = '<p class="muted">Считаем…</p>';
   renderTable();
-  if (filter) loadFilterPreview();
 }
 
 function closeFilter() {
@@ -1966,12 +1979,10 @@ function addFilterCondition(condition = {}, container = document.querySelector("
   const element = document.createElement("div");
   element.className = "filter-condition";
   const sourceValue = condition.source ? `${condition.source.kind}:${condition.source.ref}` : "";
-  const rawValue = condition.values?.join(", ")
-    || (condition.operator === "between" ? `${condition.lower ?? ""}, ${condition.upper ?? ""}` : condition.lower ?? condition.upper ?? "");
-  element.innerHTML = `<select class="filter-source" aria-label="Вопрос">${filterSourceOptions(sourceValue)}</select><div class="filter-condition-details"><select class="filter-operation" aria-label="Условие">${filterOperatorOptions(condition.operator || "eq")}</select><input class="filter-value" value="${escapeAttribute(rawValue)}" aria-label="Значение" /></div><button type="button" data-remove-filter-condition title="Удалить условие" aria-label="Удалить условие">×</button>`;
+  element.innerHTML = `<select class="filter-source" aria-label="Вопрос">${filterSourceOptions(sourceValue)}</select><div class="filter-condition-details"><select class="filter-operation" aria-label="Условие"></select><div class="filter-values"></div></div><button type="button" data-remove-filter-condition title="Удалить условие" aria-label="Удалить условие">×</button>`;
   container.append(element);
-  syncFilterConditionValue(element);
   refreshFilterJoins(container);
+  void loadFilterConditionSource(element, condition);
 }
 
 function addFilterGroup(group = {}, container = document.querySelector("#filter-condition-list")) {
@@ -1986,16 +1997,101 @@ function addFilterGroup(group = {}, container = document.querySelector("#filter-
   refreshFilterJoins(container);
 }
 
-function syncFilterConditionValue(condition) {
-  const operation = condition.querySelector(".filter-operation").value;
-  const value = condition.querySelector(".filter-value");
-  value.hidden = ["filled", "missing"].includes(operation);
-  const placeholders = {
-    in: "Значения через запятую", not_in: "Значения через запятую",
-    selected_any: "Варианты через запятую", selected_all: "Варианты через запятую", selected_none: "Варианты через запятую",
-    between: "От, до", gt: "Число", lt: "Число",
+// Варианты ответа и допустимые операции приходят с сервера вместе с частотами
+// (`GET …/filters/source-options`): код SPSS в основном пути больше не
+// вводится и остаётся подсказкой рядом с подписью.
+const filterSourceOptionsCache = new Map();
+
+const filterOperatorLabels = {
+  in: "Один из ответов", not_in: "Кроме ответов", between: "Между", gt: "Больше", lt: "Меньше",
+  filled: "Ответ есть", missing: "Пропуск",
+  selected_any: "Выбран хотя бы один", selected_all: "Выбраны все", selected_none: "Не выбран ни один",
+};
+
+function filterSourceOptionsFor(source) {
+  const key = `${currentProject.id}:${currentProject.configuration.revision}:${source.kind}:${source.ref}`;
+  if (!filterSourceOptionsCache.has(key)) {
+    const params = new URLSearchParams({ kind: source.kind, ref: source.ref });
+    const request = api(`/api/projects/${currentProject.id}/filters/source-options?${params}`);
+    request.catch(() => filterSourceOptionsCache.delete(key));
+    filterSourceOptionsCache.set(key, request);
+  }
+  return filterSourceOptionsCache.get(key);
+}
+
+async function loadFilterConditionSource(element, draft) {
+  const sourceSelect = element.querySelector(".filter-source");
+  const sourceValue = sourceSelect.value;
+  const operation = element.querySelector(".filter-operation");
+  const box = element.querySelector(".filter-values");
+  element.filterOptions = null;
+  operation.innerHTML = "";
+  if (!sourceValue) {
+    box.innerHTML = '<p class="muted">Нет вопросов, по которым можно отбирать.</p>';
+    return;
+  }
+  box.innerHTML = '<p class="muted">Загружаем ответы…</p>';
+  try {
+    const options = await filterSourceOptionsFor(parseBannerSource(sourceValue));
+    if (sourceSelect.value !== sourceValue || !element.isConnected) return;
+    element.filterOptions = options;
+    // Сохранённые раньше «равно» и «не равно» — частный случай списка.
+    const legacy = { eq: "in", ne: "not_in", selected: "selected_any" };
+    const wanted = legacy[draft.operator] || draft.operator;
+    const selected = options.operators.includes(wanted) ? wanted : options.operators[0];
+    operation.innerHTML = options.operators
+      .map(value => `<option value="${value}" ${value === selected ? "selected" : ""}>${filterOperatorLabels[value]}</option>`)
+      .join("");
+    renderFilterConditionValues(element, draft);
+  } catch (error) {
+    if (sourceSelect.value !== sourceValue) return;
+    box.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+  scheduleFilterPreview();
+}
+
+function renderFilterConditionValues(element, draft) {
+  const options = element.filterOptions;
+  if (!options) return;
+  const box = element.querySelector(".filter-values");
+  const operator = element.querySelector(".filter-operation").value;
+  if (operator === "filled" || operator === "missing") {
+    const count = operator === "missing" ? options.missing : options.total - options.missing;
+    box.innerHTML = `<p class="filter-hint">${filterOperatorLabels[operator]} у <b>${count.toLocaleString("ru-RU")}</b> из ${options.total.toLocaleString("ru-RU")}</p>`;
+    return;
+  }
+  if (["between", "gt", "lt"].includes(operator)) {
+    const bound = value => (value == null ? "" : escapeAttribute(value));
+    const lower = operator === "lt" ? "" : `<label><span>${operator === "gt" ? "Больше" : "От"}</span><input class="filter-lower" type="number" step="any" value="${bound(draft.lower)}" /></label>`;
+    const upper = operator === "gt" ? "" : `<label><span>${operator === "lt" ? "Меньше" : "До"}</span><input class="filter-upper" type="number" step="any" value="${bound(draft.upper)}" /></label>`;
+    const range = options.minimum == null ? "" : `<p class="filter-hint">В данных от ${escapeHtml(options.minimum)} до ${escapeHtml(options.maximum)}</p>`;
+    box.innerHTML = `<div class="filter-range">${lower}${upper}</div>${range}`;
+    return;
+  }
+  const chosen = draft.values || [];
+  const search = options.options.length > 8
+    ? '<input class="filter-option-search" type="search" placeholder="Найти ответ" aria-label="Найти ответ" />'
+    : "";
+  const items = options.options.map(option => {
+    const code = option.code != null && option.code !== option.label ? `<code>${escapeHtml(option.code)}</code>` : "";
+    return `<label class="checkbox filter-option" data-search="${escapeAttribute(`${option.label} ${option.code ?? ""}`.toLowerCase())}"><input type="checkbox" data-filter-value="${escapeAttribute(JSON.stringify(option.value))}" ${containsComparable(chosen, option.value) ? "checked" : ""} /><span>${escapeHtml(option.label)}</span>${code}<em>${option.count.toLocaleString("ru-RU")}</em></label>`;
+  }).join("");
+  const empty = options.options.length ? "" : '<p class="muted">В данных нет ответов.</p>';
+  const truncated = options.truncated ? '<p class="filter-hint">Показаны первые 200 ответов — остальные отбирайте диапазоном.</p>' : "";
+  box.innerHTML = `${search}<div class="filter-options scroll">${items}</div>${empty}${truncated}`;
+}
+
+function filterConditionDraft(element) {
+  const bound = selector => {
+    const input = element.querySelector(selector);
+    return input && input.value !== "" ? Number(input.value) : null;
   };
-  value.placeholder = placeholders[operation] || "Значение";
+  return {
+    operator: element.querySelector(".filter-operation").value,
+    values: [...element.querySelectorAll("[data-filter-value]:checked")].map(input => JSON.parse(input.dataset.filterValue)),
+    lower: bound(".filter-lower"),
+    upper: bound(".filter-upper"),
+  };
 }
 
 function refreshFilterJoins(container) {
@@ -2016,17 +2112,21 @@ function refreshFilterJoins(container) {
 }
 
 function filterSourceOptions(selectedValue) {
-  const options = [];
-  configuredQuestions()
-    .filter(item => !["open_text", "technical"].includes(item.question_type))
-    .forEach(item => options.push(`<option value="question:${escapeAttribute(item.code)}" ${selectedValue === `question:${item.code}` ? "selected" : ""}>${escapeHtml(item.code)} — ${escapeHtml(item.label)}</option>`));
-  configuredRecodings().forEach(item => options.push(`<option value="recoding:${item.id}" ${selectedValue === `recoding:${item.id}` ? "selected" : ""}>↳ ${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`));
-  return options.join("");
-}
-
-function filterOperatorOptions(selected) {
-  const labels = { eq: "Равно", ne: "Не равно", in: "Входит в список", not_in: "Не входит в список", gt: "Больше", lt: "Меньше", between: "Между", filled: "Заполнено", missing: "Пропущено", selected_any: "Выбран хотя бы один вариант", selected_all: "Выбраны все варианты", selected_none: "Не выбран ни один" };
-  return Object.entries(labels).map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
+  const option = (value, text) => `<option value="${escapeAttribute(value)}" ${selectedValue === value ? "selected" : ""}>${escapeHtml(text)}</option>`;
+  const usable = configuredQuestions()
+    .filter(item => ["single_choice", "scale", "numeric", "multiple_choice_dichotomy"].includes(item.question_type));
+  const values = [
+    ...usable.map(item => `question:${item.code}`),
+    ...configuredRecodings().map(item => `recoding:${item.id}`),
+  ];
+  // Источник сохранённого правила, который больше нельзя выбрать, остаётся
+  // в списке: иначе select молча подставил бы первый вопрос.
+  const orphan = selectedValue && !values.includes(selectedValue)
+    ? option(selectedValue, bannerSourceLabel(parseBannerSource(selectedValue)))
+    : "";
+  const questions = usable.map(item => option(`question:${item.code}`, `${item.code} — ${item.label}`)).join("");
+  const recodings = configuredRecodings().map(item => option(`recoding:${item.id}`, `${item.code} — ${item.name}`)).join("");
+  return `${orphan}<optgroup label="Вопросы">${questions}</optgroup>${recodings ? `<optgroup label="Группировки">${recodings}</optgroup>` : ""}`;
 }
 
 function collectFilterRule() {
@@ -2047,13 +2147,12 @@ function collectFilterItem(element) {
     return { kind: "group", operator: element.querySelector(".filter-group-operator").value, items: nested.map(collectFilterItem) };
   }
   const source = parseBannerSource(element.querySelector(".filter-source").value);
-  const operator = element.querySelector(".filter-operation").value;
-  const values = element.querySelector(".filter-value").value.split(",").map(value => value.trim()).filter(Boolean).map(parseFilterValue);
-  const condition = { kind: "condition", source, operator, values: [] };
-  if (["eq", "ne", "in", "not_in", "selected_any", "selected_all", "selected_none"].includes(operator)) condition.values = values;
-  if (operator === "gt") condition.lower = Number(values[0]);
-  if (operator === "lt") condition.upper = Number(values[0]);
-  if (operator === "between") [condition.lower, condition.upper] = values.map(Number);
+  if (!element.filterOptions) throw new Error("Дождитесь, пока загрузятся ответы условия.");
+  const draft = filterConditionDraft(element);
+  const condition = { kind: "condition", source, operator: draft.operator, values: [] };
+  if (["in", "not_in", "selected_any", "selected_all", "selected_none"].includes(draft.operator)) condition.values = draft.values;
+  if (["gt", "between"].includes(draft.operator)) condition.lower = draft.lower;
+  if (["lt", "between"].includes(draft.operator)) condition.upper = draft.upper;
   return condition;
 }
 
@@ -2071,11 +2170,6 @@ function scheduleFilterPreview() {
   filterPreviewTimer = setTimeout(() => { void loadFilterPreview(); }, 350);
 }
 
-function parseFilterValue(value) {
-  if (value !== "" && Number.isFinite(Number(value))) return Number(value);
-  return value;
-}
-
 async function loadFilterPreview() {
   if (!currentProject) return;
   clearTimeout(filterPreviewTimer);
@@ -2085,9 +2179,19 @@ async function loadFilterPreview() {
   try {
     const payload = { name: document.querySelector("#filter-name").value.trim() || "Предпросмотр", rule: collectFilterRule() };
     const preview = await api(`/api/projects/${currentProject.id}/filters/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const warning = preview.empty ? "Пустая база — использовать её нельзя." : preview.small_base ? "Малая база: результаты будут отмечены серым." : "";
-    const steps = preview.steps?.length ? `<div class="filter-steps">${preview.steps.map((step, index) => `<div><span>После условия ${index + 1}</span><strong>${step.selected.toLocaleString("ru-RU")}</strong></div>`).join("")}</div>` : "";
-    container.innerHTML = `<div class="filter-result"><strong>${preview.selected.toLocaleString("ru-RU")}</strong><span>из ${preview.total.toLocaleString("ru-RU")} · ${formatPercent(preview.share)}</span></div>${steps}${warning ? `<p class="inline-warnings">${escapeHtml(warning)}</p>` : ""}`;
+    const warning = preview.empty
+      ? (preview.emptied_after
+        ? `Пустая база: выборка обнулилась на условии «${preview.emptied_after}». Использовать её нельзя.`
+        : "Пустая база — использовать её нельзя.")
+      : preview.small_base ? "Малая база: результаты будут отмечены серым." : "";
+    // Шаги верхнего уровня накопительные: сколько осталось после условия
+    // вместе со всеми предыдущими, а не сколько подходит под него одно.
+    const running = (preview.steps || []).filter(step => step.running != null);
+    const steps = running.length > 1
+      ? `<div class="filter-steps">${running.map(step => `<div><span title="${escapeAttribute(step.description)}">${escapeHtml(step.description)}</span><strong>${step.running.toLocaleString("ru-RU")}</strong></div>`).join("")}</div>`
+      : "";
+    const rule = `<p class="filter-rule-text"><span>Правило</span>${escapeHtml(preview.description)}</p>`;
+    container.innerHTML = `<div class="filter-result"><strong>${preview.selected.toLocaleString("ru-RU")}</strong><span>из ${preview.total.toLocaleString("ru-RU")} · ${formatPercent(preview.share)}</span></div>${rule}${steps}${warning ? `<p class="inline-warnings">${escapeHtml(warning)}</p>` : ""}`;
   } catch (error) {
     container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
   }

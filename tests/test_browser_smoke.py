@@ -216,9 +216,14 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     page.fill("#filter-name", "Только женщины")
     condition = page.locator("#filter-condition-list .filter-condition").first
     condition.locator("select.filter-source").select_option("question:SEX")
-    # Операция по умолчанию — «равно», значение вводится кодом ответа.
-    expect(condition.locator("select.filter-operation")).to_have_value("eq", timeout=UI_TIMEOUT)
-    condition.locator("input.filter-value").fill("2")
+    # Ответ выбирается галочкой по подписи, код SPSS вводить не нужно,
+    # а правило тут же читается обычным текстом.
+    expect(condition.locator("select.filter-operation")).to_have_value("in", timeout=UI_TIMEOUT)
+    condition.locator(".filter-option", has_text="Женщина").locator("input").check()
+    expect(page.locator("#filter-preview")).to_contain_text("Ваш пол: Женщина", timeout=UI_TIMEOUT)
+    expect(page.locator("#filter-preview .filter-result strong")).to_have_text(
+        "120", timeout=UI_TIMEOUT
+    )
     page.click("#save-filter")
     # Сохранённое правило попадает в поповер выбора базы — бывший экран целиком.
     page.click('[data-picker="filter"]')

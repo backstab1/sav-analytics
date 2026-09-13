@@ -1311,10 +1311,27 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   background: var(--c-surface-soft); border: 1px solid var(--c-border); border-radius: 11px;
 }
 .filter-condition .filter-source { grid-column: 1; padding: 7px 9px; background: var(--c-surface); font-size: var(--t-xs); }
-.filter-condition-details {
-  grid-column: 1; display: grid; grid-template-columns: minmax(118px, .8fr) minmax(0, 1fr); gap: 6px;
+.filter-condition-details { grid-column: 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.filter-values { display: grid; gap: 6px; min-width: 0; }
+.filter-options {
+  display: grid; gap: 1px; max-height: 220px; overflow-y: auto; padding: 4px;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 9px;
 }
-.filter-condition-details:has(.filter-value[hidden]) { grid-template-columns: 1fr; }
+.filter-option {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px;
+  padding: 4px 6px; border-radius: 7px; font-size: var(--t-xs);
+}
+.filter-option[hidden] { display: none; }
+.filter-option:hover { background: var(--c-surface-soft); }
+.filter-condition-details .filter-option input { padding: 0; }
+.filter-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-option code { color: var(--c-ink-4); font-size: 11px; }
+.filter-option em { color: var(--c-ink-3); font-style: normal; font-variant-numeric: tabular-nums; }
+.filter-range { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
+.filter-range label { display: grid; gap: 3px; }
+.filter-range span, .filter-hint { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); }
+.filter-rule-text { display: grid; gap: 2px; margin: var(--s-2) 0 0; color: var(--c-ink); font-size: var(--t-xs); }
+.filter-rule-text span { color: var(--c-ink-3); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .filter-condition-details select, .filter-condition-details input { padding: 7px 9px; background: var(--c-surface); font-size: var(--t-xs); }
 .filter-condition button { width: 26px; height: 26px; padding: 0; background: transparent; color: var(--c-ink-4); border-radius: 50%; font-size: 16px; font-weight: 400; }
 .filter-condition > button { grid-column: 2; grid-row: 1 / 3; }

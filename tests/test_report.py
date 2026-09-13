@@ -1388,3 +1388,37 @@ def test_banner_defaults_to_the_rest_comparison(tmp_path: Path) -> None:
 
     assert "Subgroup/Rest" in audit
     assert "Subgroup/Total" not in audit
+
+
+def test_statistics_txt_names_the_report_filter_with_its_rule(tmp_path: Path) -> None:
+    """Правило общего фильтра в аудите — той же строкой, что в редакторе."""
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    rule = {
+        "kind": "group",
+        "operator": "and",
+        "items": [
+            {
+                "kind": "condition",
+                "source": {"kind": "question", "ref": "Q1"},
+                "operator": "in",
+                "values": [2],
+            }
+        ],
+    }
+    project = {
+        "name": "Тест",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [{"id": "women", "name": "Женщины", "rule": rule}],
+            "report_filter_id": "women",
+        },
+    }
+
+    audit = build_statistics_txt(source, project)
+
+    assert "Общий фильтр: Женщины — Ваш пол: Женщина" in audit

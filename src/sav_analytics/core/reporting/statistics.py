@@ -9,6 +9,7 @@ from typing import Any, TextIO
 import numpy as np
 import pandas as pd
 
+from ..filtering import FilterError, describe_rule
 from ..statistics import (
     StatisticalTestResult,
     balance_z_test,
@@ -777,18 +778,7 @@ class _StatisticsAuditWriter:
         self.current_question: tuple[str, str] | None = None
         self.current_row: str | None = None
         self.entry_count = 0
-        report_filter = "не используется"
-        report_filter_id = configuration.get("report_filter_id")
-        if report_filter_id:
-            selected_filter = next(
-                (
-                    item
-                    for item in configuration.get("filters", [])
-                    if item["id"] == report_filter_id
-                ),
-                None,
-            )
-            report_filter = selected_filter["name"] if selected_filter else str(report_filter_id)
+        report_filter = _report_filter_line(project, configuration)
         lines = [
             "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
             f"Проект: {project['name']}",
@@ -831,6 +821,26 @@ class _StatisticsAuditWriter:
         if self.entry_count == 0:
             self.stream.write("\nСтатистические сравнения не включены.\n")
 
+def _report_filter_line(project: dict[str, Any], configuration: dict[str, Any]) -> str:
+    """Название общего фильтра и его правило тем же текстом, что в редакторе."""
+    report_filter_id = configuration.get("report_filter_id")
+    if not report_filter_id:
+        return "не используется"
+    selected_filter = next(
+        (item for item in configuration.get("filters", []) if item["id"] == report_filter_id),
+        None,
+    )
+    if selected_filter is None:
+        return str(report_filter_id)
+    try:
+        rule = describe_rule(
+            selected_filter["rule"], {**project, "configuration": configuration}
+        )
+    except FilterError:
+        return str(selected_filter["name"])
+    return f"{selected_filter['name']} — {rule}"
+
+
 def _render_statistics_txt(
     project: dict[str, Any],
     banner: dict[str, Any],
@@ -838,18 +848,7 @@ def _render_statistics_txt(
     settings: dict[str, Any],
     entries: list[StatisticalAuditEntry],
 ) -> str:
-    report_filter = "не используется"
-    report_filter_id = configuration.get("report_filter_id")
-    if report_filter_id:
-        selected_filter = next(
-            (
-                item
-                for item in configuration.get("filters", [])
-                if item["id"] == report_filter_id
-            ),
-            None,
-        )
-        report_filter = selected_filter["name"] if selected_filter else str(report_filter_id)
+    report_filter = _report_filter_line(project, configuration)
     lines = [
         "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
         f"Проект: {project['name']}",

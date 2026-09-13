@@ -1,20 +1,43 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
 from ..api_schemas import FilterDefinition, QuestionBaseUpdate
 from ..core.configuration_integrity import ConfigurationIntegrityError
-from ..core.filtering import FilterError, calculate_filter_preview, validate_filter
+from ..core.filtering import (
+    FilterError,
+    calculate_filter_preview,
+    condition_source_options,
+    validate_filter,
+)
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(
     prefix="/api/projects/{project_id}", tags=["filters"], route_class=ProjectRoute
 )
+
+
+@router.get("/filters/source-options")
+def filter_source_options(
+    project_id: UUID,
+    kind: Annotated[Literal["question", "recoding"], Query()],
+    ref: Annotated[str, Query(min_length=1, max_length=64)],
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project = repository.get(project_id)
+        return condition_source_options(
+            repository.source_path(project_id), {"kind": kind, "ref": ref}, project
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except FilterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/filters", status_code=status.HTTP_201_CREATED)
