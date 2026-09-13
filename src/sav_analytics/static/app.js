@@ -152,17 +152,18 @@ document.querySelector("#question-type").addEventListener("change", () => {
 });
 document.querySelector("#close-recode-editor").addEventListener("click", closeRecoding);
 document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
-document.querySelector("#add-category-group").addEventListener("click", () => addCategoryGroup());
+document.querySelector("#add-category-group").addEventListener("click", () => {
+  const count = document.querySelectorAll("#category-group-list .category-group").length;
+  addCategoryGroup(`Группа ${count + 1}`);
+  refreshCategoryZones();
+});
 document.querySelector("#recode-mode").addEventListener("change", () => {
   fillRecodeSources();
-  document.querySelector("#category-group-list").innerHTML = "";
   renderRecodeMode();
+  if (document.querySelector("#recode-mode").value === "categories") void renderCategoryEditor(defaultCategoryGroups());
 });
 document.querySelector("#recode-source").addEventListener("change", () => {
-  if (document.querySelector("#recode-mode").value === "categories") {
-    document.querySelector("#category-group-list").innerHTML = "";
-    renderRecodeMode();
-  }
+  if (document.querySelector("#recode-mode").value === "categories") void renderCategoryEditor(defaultCategoryGroups());
 });
 document.querySelector("#refresh-recode-preview").addEventListener("click", loadRecodePreview);
 document.querySelector("#delete-recoding").addEventListener("click", deleteRecoding);
@@ -397,9 +398,59 @@ document.querySelector("#range-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-range]");
   if (button) button.closest(".range-row").remove();
 });
-document.querySelector("#category-group-list").addEventListener("click", event => {
-  const button = event.target.closest("button[data-remove-category-group]");
-  if (button) button.closest(".category-group").remove();
+const categoryEditorElement = document.querySelector("#category-editor");
+categoryEditorElement.addEventListener("click", event => {
+  const remove = event.target.closest("button[data-remove-category-group]");
+  if (remove) {
+    const group = remove.closest(".category-group");
+    const pool = document.querySelector('#category-pool [data-zone="pool"]');
+    if (pool) moveValueChips([...group.querySelectorAll(".value-chip")], pool);
+    group.remove();
+    refreshCategoryZones();
+    return;
+  }
+  const move = event.target.closest(".zone-move");
+  if (move) {
+    moveValueChips([...categoryEditorElement.querySelectorAll('.value-chip[aria-pressed="true"]')], move.closest(".category-zone"));
+    return;
+  }
+  const chip = event.target.closest(".value-chip");
+  if (chip) {
+    chip.setAttribute("aria-pressed", chip.getAttribute("aria-pressed") === "true" ? "false" : "true");
+    refreshCategoryZones();
+  }
+});
+categoryEditorElement.addEventListener("dragstart", event => {
+  const chip = event.target.closest?.(".value-chip");
+  if (!chip) return;
+  // Выбранные ответы тянутся вместе, если среди них тот, за который взялись.
+  const pressed = [...categoryEditorElement.querySelectorAll('.value-chip[aria-pressed="true"]')];
+  draggedValueChips = pressed.includes(chip) ? pressed : [chip];
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", chip.dataset.sourceValue);
+  draggedValueChips.forEach(item => item.classList.add("dragging"));
+});
+categoryEditorElement.addEventListener("dragover", event => {
+  const zone = event.target.closest?.(".category-zone");
+  if (!zone || !draggedValueChips.length) return;
+  event.preventDefault();
+  zone.classList.add("drop-target");
+});
+categoryEditorElement.addEventListener("dragleave", event => {
+  const zone = event.target.closest?.(".category-zone");
+  if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove("drop-target");
+});
+categoryEditorElement.addEventListener("drop", event => {
+  const zone = event.target.closest?.(".category-zone");
+  if (!zone || !draggedValueChips.length) return;
+  event.preventDefault();
+  zone.classList.remove("drop-target");
+  moveValueChips(draggedValueChips, zone);
+});
+categoryEditorElement.addEventListener("dragend", () => {
+  draggedValueChips.forEach(item => item.classList.remove("dragging"));
+  draggedValueChips = [];
+  categoryEditorElement.querySelectorAll(".drop-target").forEach(zone => zone.classList.remove("drop-target"));
 });
 document.querySelector("#filter-condition-list").addEventListener("click", event => {
   const join = event.target.closest("button[data-filter-join]");
@@ -2582,8 +2633,8 @@ function openRecoding(recodingId = null, options = {}) {
   rangeList.innerHTML = "";
   const categoryList = document.querySelector("#category-group-list");
   categoryList.innerHTML = "";
-  if (recoding?.mode === "categories") {
-    recoding.categories.forEach(category => addCategoryGroup(category));
+  if (document.querySelector("#recode-mode").value === "categories") {
+    void renderCategoryEditor(recoding?.categories || defaultCategoryGroups());
   } else if (recoding) {
     recoding.categories.forEach(category => addRangeRow(category));
   } else if (document.querySelector("#recode-mode").value === "ranges") {
@@ -2626,10 +2677,6 @@ function renderRecodeMode() {
   const categorical = document.querySelector("#recode-mode").value === "categories";
   document.querySelector("#range-editor").hidden = categorical;
   document.querySelector("#category-editor").hidden = !categorical;
-  if (categorical && document.querySelectorAll("#category-group-list .category-group").length === 0) {
-    addCategoryGroup({ label: "Группа 1", values: [] });
-    addCategoryGroup({ label: "Группа 2", values: [] });
-  }
 }
 
 function addRangeRow(category = {}) {
@@ -2661,25 +2708,124 @@ function collectRanges() {
   });
 }
 
-function addCategoryGroup(category = {}) {
-  const source = document.querySelector("#recode-source").value;
-  const variable = currentProject.inspection.variables.find(item => item.name === source);
-  const values = category.values || [];
+// Группы собираются раскладкой ответов: из пула «Не распределены» ответ
+// перетаскивается в группу. С клавиатуры и для нескольких ответов сразу ответ
+// выбирается щелчком и переносится кнопкой «Сюда». Частоты ответов и базы групп
+// видны до сохранения — их отдаёт `GET …/recodings/source-values`.
+const recodeSourceValuesCache = new Map();
+let categoryEditorToken = 0;
+let categoryEditorLoading = false;
+let draggedValueChips = [];
+
+function defaultCategoryGroups() {
+  return [{ label: "Группа 1", values: [] }, { label: "Группа 2", values: [] }];
+}
+
+function recodeSourceValues(variableName) {
+  const key = `${currentProject.id}:${variableName}`;
+  if (!recodeSourceValuesCache.has(key)) {
+    const request = api(`/api/projects/${currentProject.id}/recodings/source-values?variable=${encodeURIComponent(variableName)}`);
+    request.catch(() => recodeSourceValuesCache.delete(key));
+    recodeSourceValuesCache.set(key, request);
+  }
+  return recodeSourceValuesCache.get(key);
+}
+
+async function renderCategoryEditor(groups) {
+  const token = ++categoryEditorToken;
+  const pool = document.querySelector("#category-pool");
+  const variableName = document.querySelector("#recode-source").value;
+  document.querySelector("#category-group-list").innerHTML = "";
+  if (!variableName) {
+    pool.innerHTML = '<p class="muted">Нет переменных с подписями значений.</p>';
+    categoryEditorLoading = false;
+    return;
+  }
+  pool.innerHTML = '<p class="muted">Загружаем ответы…</p>';
+  categoryEditorLoading = true;
+  let source;
+  try {
+    source = await recodeSourceValues(variableName);
+  } catch (error) {
+    if (token === categoryEditorToken) {
+      pool.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      categoryEditorLoading = false;
+    }
+    return;
+  }
+  if (token !== categoryEditorToken) return;
+  // Группируются только подписанные коды: значение без подписи сервер
+  // отвергнет. Неподписанные остаются вне групп и названы под пулом.
+  const labelled = source.values.filter(item => item.labelled);
+  const taken = [];
+  groups.forEach(group => {
+    const options = (group.values || []).map(value =>
+      labelled.find(item => String(item.value) === String(value))
+        || { value, label: String(value), code: String(value), count: 0 });
+    options.forEach(option => taken.push(option.value));
+    addCategoryGroup(group.label, options);
+  });
+  const free = labelled.filter(item => !containsComparable(taken, item.value));
+  const unlabelled = source.values.filter(item => !item.labelled);
+  const unlabelledCount = unlabelled.reduce((total, item) => total + item.count, 0);
+  const note = unlabelled.length
+    ? `<p class="category-pool-note">Коды без подписи (${unlabelled.map(item => escapeHtml(item.code)).join(", ")}) у ${unlabelledCount.toLocaleString("ru-RU")} чел. в группы не входят.</p>`
+    : "";
+  pool.innerHTML = `<div class="category-zone category-pool-zone" data-zone="pool">
+      <div class="category-zone-head"><strong>Не распределены</strong><span class="category-zone-count"></span><button type="button" class="zone-move" hidden>Сюда</button></div>
+      <div class="value-chips">${free.map(valueChipMarkup).join("")}</div>
+    </div>${note}`;
+  categoryEditorLoading = false;
+  refreshCategoryZones();
+}
+
+function valueChipMarkup(option) {
+  const code = option.code != null && option.code !== option.label ? `<code>${escapeHtml(option.code)}</code>` : "";
+  return `<button type="button" class="value-chip" draggable="true" aria-pressed="false" data-source-value="${escapeAttribute(JSON.stringify(option.value))}" data-count="${option.count}" title="Щелчок — выбрать, перетаскивание — перенести в группу"><span>${escapeHtml(option.label)}</span>${code}<em>${option.count.toLocaleString("ru-RU")}</em></button>`;
+}
+
+function addCategoryGroup(label, options = []) {
   const group = document.createElement("div");
-  group.className = "category-group";
-  group.innerHTML = `<div class="category-group-head"><input class="category-group-label" aria-label="Название новой категории" value="${escapeAttribute(category.label || "")}" placeholder="Название группы" /><button type="button" data-remove-category-group title="Удалить группу">×</button></div><div class="source-value-list">${(variable?.value_labels || []).map(item => `<label class="checkbox"><input type="checkbox" data-source-value="${escapeAttribute(JSON.stringify(item.value))}" ${containsComparable(values, item.value) ? "checked" : ""} /><code>${escapeHtml(item.value)}</code> ${escapeHtml(item.label)}</label>`).join("")}</div>`;
+  group.className = "category-group category-zone";
+  group.dataset.zone = "group";
+  group.innerHTML = `<div class="category-group-head"><input class="category-group-label" aria-label="Название новой категории" value="${escapeAttribute(label || "")}" placeholder="Название группы" /><button type="button" data-remove-category-group title="Удалить группу" aria-label="Удалить группу">×</button></div>
+    <div class="category-zone-head"><span class="category-zone-count"></span><button type="button" class="zone-move" hidden>Сюда</button></div>
+    <div class="value-chips">${options.map(valueChipMarkup).join("")}</div>`;
   document.querySelector("#category-group-list").append(group);
 }
 
+function moveValueChips(chips, zone) {
+  const target = zone.querySelector(".value-chips");
+  chips.forEach(chip => {
+    chip.setAttribute("aria-pressed", "false");
+    target.append(chip);
+  });
+  refreshCategoryZones();
+}
+
+function refreshCategoryZones() {
+  const pressed = document.querySelectorAll('#category-editor .value-chip[aria-pressed="true"]').length;
+  document.querySelectorAll("#category-editor .category-zone").forEach(zone => {
+    const chips = [...zone.querySelector(".value-chips").children];
+    const people = chips.reduce((total, chip) => total + Number(chip.dataset.count || 0), 0);
+    zone.querySelector(".category-zone-count").textContent = chips.length
+      ? `${chips.length} ${plural(chips.length, "ответ", "ответа", "ответов")} · ${people.toLocaleString("ru-RU")} чел.`
+      : (zone.dataset.zone === "pool" ? "все ответы разложены" : "пусто");
+    const move = zone.querySelector(".zone-move");
+    move.hidden = pressed === 0;
+    move.textContent = pressed > 1 ? `Сюда · ${pressed}` : "Сюда";
+  });
+}
+
 function collectCategoryGroups() {
+  if (categoryEditorLoading) throw new Error("Дождитесь, пока загрузятся ответы.");
   const groups = [...document.querySelectorAll("#category-group-list .category-group")];
   if (groups.length < 2) throw new Error("Добавьте минимум две новые категории.");
   return groups.map(group => {
     const label = group.querySelector(".category-group-label").value.trim();
-    const values = [...group.querySelectorAll("[data-source-value]:checked")]
-      .map(item => JSON.parse(item.dataset.sourceValue));
+    const values = [...group.querySelectorAll(".value-chip")].map(chip => JSON.parse(chip.dataset.sourceValue));
     if (!label) throw new Error("У каждой новой категории должно быть название.");
-    if (!values.length) throw new Error(`В категории «${label}» ничего не выбрано.`);
+    if (!values.length) throw new Error(`В категории «${label}» нет ни одного ответа.`);
     return { label, values };
   });
 }
@@ -2796,8 +2942,12 @@ function questionRecodeSource(question) {
   const variable = currentProject.inspection.variables
     .find(item => item.name === question.source_variables[0]);
   if (!variable) return null;
+  // Одиночный выбор с подписями группируют ответами, даже если коды числовые:
+  // диапазоны по кодам «1–2» для марок и регионов смысла не имеют.
+  const labelled = variable.value_labels?.length > 0;
+  if (labelled && question.question_type === "single_choice") return { variable, mode: "categories" };
   if (variable.storage_type === "numeric") return { variable, mode: "ranges" };
-  return variable.value_labels?.length ? { variable, mode: "categories" } : null;
+  return labelled ? { variable, mode: "categories" } : null;
 }
 
 function renderQuestionRecodings(question) {

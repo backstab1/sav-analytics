@@ -431,3 +431,40 @@ def test_marking_a_labelled_category_not_applicable_needs_confirmation(
         "Настройки вопроса сохранены", timeout=UI_TIMEOUT
     )
     expect(page.locator("#editor-error")).to_be_hidden()
+
+
+def test_category_groups_are_built_by_moving_answers(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Группы перекодировки собираются из ответов с частотами — мышью и без неё."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    page.click("#question-recodings [data-new-recoding='BRAND']")
+    expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#recode-mode")).to_have_value("categories")
+    page.fill("#recode-code", "BRANDGRP")
+    page.fill("#recode-name", "Марки группами")
+
+    pool = page.locator("#category-pool")
+    expect(pool.locator(".value-chip")).to_have_count(2, timeout=UI_TIMEOUT)
+    groups = page.locator("#category-group-list .category-group")
+
+    # Без мыши: ответ выбирается щелчком и переносится кнопкой.
+    pool.locator(".value-chip", has_text="Первая").click()
+    groups.nth(0).locator(".zone-move").click()
+    expect(groups.nth(0).locator(".category-zone-count")).to_contain_text("160")
+
+    # Мышью: ответ перетаскивается в другую группу.
+    pool.locator(".value-chip", has_text="Вторая").drag_to(groups.nth(1).locator(".value-chips"))
+    expect(groups.nth(1).locator(".value-chip")).to_contain_text("Вторая", timeout=UI_TIMEOUT)
+    expect(groups.nth(1).locator(".category-zone-count")).to_contain_text("80")
+    expect(pool).to_contain_text("все ответы разложены")
+
+    page.click("#save-recoding")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Перекодировка сохранена", timeout=UI_TIMEOUT
+    )
+

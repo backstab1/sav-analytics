@@ -6,6 +6,7 @@ from sav_analytics.core.filtering import (
     describe_rule,
     validate_filter,
 )
+from sav_analytics.core.recoding import recode_source_values
 from sav_analytics.core.sav_reader import inspect_sav
 from tests.test_sav_reader import write_counted_value_fixture, write_fixture
 
@@ -252,3 +253,17 @@ def test_source_options_for_multiple_drop_the_question_from_item_labels(
         _condition("MR", "selected_any", values=["MR_1"])
     ]}
     assert describe_rule(rule, project) == "Марки: выбран Альфа"
+
+
+def test_recoding_groups_see_the_same_answers_as_filter_conditions(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    project = _fixture_project(source)
+    variable = next(item for item in project["inspection"]["variables"] if item["name"] == "Q1")
+
+    values = recode_source_values(source, variable)
+    options = condition_source_options(source, {"kind": "question", "ref": "Q1"}, project)
+
+    # Один ответ не может иметь разную частоту в фильтре и в группировке.
+    assert values["values"] == options["options"]
+    assert (values["total"], values["missing"]) == (4, 0)
+

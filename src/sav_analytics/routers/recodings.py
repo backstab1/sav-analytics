@@ -3,18 +3,44 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
 from ..api_schemas import RecodeDefinition
 from ..core.configuration_integrity import ConfigurationIntegrityError
-from ..core.recoding import RecodingError, calculate_recode_preview, validate_recode
+from ..core.recoding import (
+    RecodingError,
+    calculate_recode_preview,
+    recode_source_values,
+    validate_recode,
+)
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(
     prefix="/api/projects/{project_id}/recodings", tags=["recodings"], route_class=ProjectRoute
 )
+
+
+@router.get("/source-values")
+def recoding_source_values(
+    project_id: UUID,
+    variable: Annotated[str, Query(min_length=1, max_length=64)],
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project = repository.get(project_id)
+        source = next(
+            (item for item in project["inspection"]["variables"] if item["name"] == variable),
+            None,
+        )
+        if source is None:
+            raise RecodingError("Исходная переменная не найдена в SAV.")
+        return recode_source_values(repository.source_path(project_id), source)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except RecodingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

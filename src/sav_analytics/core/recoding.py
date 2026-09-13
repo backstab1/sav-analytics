@@ -6,6 +6,8 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
+from .filtering import value_options
+
 
 class RecodingError(ValueError):
     pass
@@ -46,6 +48,30 @@ def validate_recode(
                 raise RecodingError(
                     f"Диапазоны «{left['label']}» и «{right['label']}» пересекаются."
                 )
+
+
+def recode_source_values(path: str | Path, variable: dict[str, Any]) -> dict[str, Any]:
+    """Ответы исходной переменной для раскладки по группам — до сохранения.
+
+    Редактор показывает частоту у каждого ответа и сумму у каждой группы,
+    поэтому база новой категории видна, пока её собирают, а не после сохранения.
+    """
+    name = variable["name"]
+    frame, _ = pyreadstat.read_sav(
+        path,
+        usecols=[name],
+        apply_value_formats=False,
+        user_missing=False,
+        dates_as_pandas_datetime=False,
+    )
+    series = frame[name]
+    return {
+        "variable": name,
+        "label": variable.get("label") or name,
+        "total": len(series),
+        "missing": int(series.isna().sum()),
+        "values": value_options(series, variable),
+    }
 
 
 def calculate_recode_preview(path: str | Path, definition: dict[str, Any]) -> dict[str, Any]:

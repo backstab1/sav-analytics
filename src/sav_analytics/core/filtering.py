@@ -133,7 +133,7 @@ def condition_source_options(
             if numeric.notna().any():
                 minimum, maximum = _scalar(numeric.min()), _scalar(numeric.max())
             if kind != "numeric":
-                options = _categorical_options(series, variables.get(columns[0], {}))
+                options = value_options(series, variables.get(columns[0], {}))
     return {
         "source": source,
         "label": label,
@@ -422,7 +422,13 @@ def _item_label(question_label: str, variable: dict[str, Any], name: str) -> str
     return label
 
 
-def _categorical_options(series: pd.Series, variable: dict[str, Any]) -> list[dict[str, Any]]:
+def value_options(series: pd.Series, variable: dict[str, Any]) -> list[dict[str, Any]]:
+    """Значения переменной с подписями и частотами: подписанные по порядку подписей,
+    затем неподписанные по возрастанию.
+
+    Общая для условий фильтра и групп перекодировки, чтобы один и тот же ответ
+    не показывался в двух местах с разной частотой.
+    """
     counts: dict[Any, tuple[Any, int]] = {}
     for value, count in series.dropna().value_counts().items():
         counts[_key(value)] = (_scalar(value), int(count))

@@ -164,7 +164,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py
 ```
 
-Сейчас набор содержит 162 pytest-кейса для импорта SAV, распознавания структуры, API,
+Сейчас набор содержит 164 pytest-кейса для импорта SAV, распознавания структуры, API,
 перекодировок, баннеров, вложенных фильтров, предпросмотров, проверки конфигурации
 до сборки, пригодности готового веса, структуры XLSX и
 эталонных расчётов обычных и взвешенных z-test/Welch t-test, Subgroup/Rest,

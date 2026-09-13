@@ -1138,6 +1138,31 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .category-group-head button { padding: 4px; background: transparent; color: var(--c-danger); border-radius: 8px; font-size: 16px; font-weight: 400; }
 .source-value-list { display: grid; gap: 4px; max-height: 170px; overflow: auto; padding: var(--s-2); }
 .source-value-list .checkbox { align-items: flex-start; font-size: var(--t-xs); font-weight: 500; padding: 2px 0; }
+.category-pool { display: grid; gap: 6px; margin-bottom: var(--s-2); }
+.category-pool-zone { background: var(--c-surface-soft); border: 1px dashed var(--c-border-strong); border-radius: 10px; }
+.category-pool-note { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); }
+.category-zone-head { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 6px var(--s-2) 0; font-size: var(--t-xs); }
+.category-zone-count { color: var(--c-ink-3); font-variant-numeric: tabular-nums; }
+.category-zone .zone-move {
+  margin-left: auto; padding: 3px 10px; border-radius: 999px;
+  background: var(--c-brand-tint); color: var(--c-brand); font-size: var(--t-xs); font-weight: 600;
+}
+.category-zone .zone-move[hidden] { display: none; }
+.value-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px; min-height: 42px; padding: var(--s-2); }
+.value-chips:empty::before { content: "Перетащите сюда ответы"; align-self: center; color: var(--c-ink-4); font-size: var(--t-xs); }
+.category-pool-zone .value-chips:empty::before { content: "Все ответы разложены по группам"; }
+.value-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 9px;
+  background: var(--c-surface); color: var(--c-ink); border: 1px solid var(--c-border); border-radius: 999px;
+  font-size: var(--t-xs); font-weight: 500; cursor: grab;
+}
+.value-chip:hover { transform: none; border-color: var(--c-border-strong); background: var(--c-surface); }
+.value-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.value-chip code { color: var(--c-ink-4); font-size: 11px; }
+.value-chip em { color: var(--c-ink-3); font-style: normal; font-variant-numeric: tabular-nums; }
+.value-chip[aria-pressed="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
+.value-chip.dragging { opacity: .45; }
+.category-zone.drop-target { outline: 2px solid var(--c-brand); outline-offset: -2px; }
 
 /* Banner editor */
 .banner-block-list { display: grid; gap: var(--s-2); }

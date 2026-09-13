@@ -1483,3 +1483,28 @@ def test_declared_weight_passes_and_cannot_lose_its_role_while_selected(
             )
     finally:
         app.dependency_overrides.clear()
+
+
+def test_recoding_source_values_list_answers_with_counts(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            url = f"/api/projects/{project_id}/recodings/source-values"
+
+            values = client.get(url, params={"variable": "Q1"})
+            assert values.status_code == 200
+            assert [(item["label"], item["count"]) for item in values.json()["values"]] == [
+                ("Мужчина", 2),
+                ("Женщина", 2),
+            ]
+            assert client.get(url, params={"variable": "NOPE"}).status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
