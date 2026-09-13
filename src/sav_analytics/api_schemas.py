@@ -94,6 +94,26 @@ class BannerBlock(BaseModel):
     sources: list[BannerSource] = Field(min_length=1, max_length=2)
 
 
+class TablePreviewRequest(BaseModel):
+    """Раскладка экрана «Таблицы»: строки, разрез и фильтр.
+
+    Разрез задаётся либо сохранённым баннером, либо разовыми блоками — теми же,
+    что у баннера, но нигде не сохраняемыми.
+    """
+
+    questions: list[str] = Field(min_length=1, max_length=50)
+    banner_id: UUID | None = None
+    blocks: list[BannerBlock] | None = Field(default=None, max_length=20)
+    filter_id: UUID | None = None
+    sheet: Literal["main", "filter"] = "main"
+
+    @model_validator(mode="after")
+    def validate_single_cut(self) -> Self:
+        if self.banner_id and self.blocks:
+            raise ValueError("Задайте разрез баннером или блоками, но не тем и другим сразу.")
+        return self
+
+
 class ReportSettingsDefinition(BaseModel):
     compare_to_total: bool = False
     # С кем сравнивается подгруппа: с непересекающимся остатком (по умолчанию)

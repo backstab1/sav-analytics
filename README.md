@@ -82,7 +82,12 @@
   в редакторе, строке «База» и `statistics.txt`, а предпросмотр показывает
   базу после каждого условия;
 - условия по single choice, multiple response и перекодировкам;
-- отдельная база вопроса и общий фильтр отчёта.
+- отдельная база вопроса и общий фильтр отчёта;
+- раздел «Таблицы»: вопросы строками, вопросы и группировки колонками, сохранённый
+  фильтр и доли от всех или от ответивших. Таблицу пишет тот же код, что лист книги
+  (`core/reporting/live.py`), поэтому числа, цвет значимости, стрелки волн и число
+  знаков совпадают с Excel. Буквы колонок показывают попарные различия, щелчок по
+  числу с тестом открывает его протокол тем же текстом, что в `statistics.txt`.
 
 ### Excel-топлайн
 
@@ -166,7 +171,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py
 ```
 
 Сейчас набор содержит 168 pytest-кейсов для импорта SAV, распознавания структуры, API,
@@ -277,7 +282,7 @@ src/sav_analytics/
   Разделов пять, по макету v8: «Данные» (`data`), «Таблицы» (`tables`),
   «Анализ» (`analysis`), «Открытые ответы» (`text`), «Отчёты» (`reports`).
   «Данные» и «Отчёты» живут на холсте, «Таблицы» — бывший экран конструктора
-  в `#section-tables`, «Анализ» и «Открытые ответы» ещё не построены и
+  в `#section-tables`, он считает таблицу через `POST …/tables/preview`, «Анализ» и «Открытые ответы» ещё не построены и
   в `#section-soon` описывают, что в них будет, без чисел. Кнопки стоят
   в контракте `.tabs button[data-view]`, активная несёт `aria-current`.
   Баннер, база, вес и статистика разделами не являются: это свойства книги

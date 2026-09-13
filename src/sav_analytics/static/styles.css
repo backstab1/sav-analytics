@@ -2034,6 +2034,39 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .bld-grid td.bld-val .bld-sig { margin-left: 3px; color: var(--c-brand);
                                 font: 700 9px/1 "SF Mono", Menlo, Consolas, monospace; vertical-align: super; }
 .bld-grid tbody tr:hover td { background: #f7fbf9; }
+
+/* Живая таблица: цвет, стрелка и знаки приходят с сервера из формата книги. */
+.bld-lead { margin: 0; max-width: 560px; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
+.bld-grid.bld-live .bld-rowhead { left: 0; }
+.bld-grid-wrap.loading { opacity: .55; transition: opacity .15s; }
+.bld-grid th.bld-basecell { background: var(--c-surface); color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500; text-align: center; }
+.bld-grid th.bld-basecell.bld-lowbase { color: var(--c-ink-4); }
+.bld-grid td.bld-val.bld-up { color: #17724a; font-weight: 700; }
+.bld-grid td.bld-val.bld-down { color: #ae382b; font-weight: 700; }
+.bld-grid td.bld-val.bld-absent { color: var(--c-ink-4); }
+.bld-grid td.bld-val .bld-wave { margin-right: 3px; color: var(--c-ink-3); font-size: 10px; }
+.bld-grid tr.bld-derived td { background: var(--c-surface-soft); }
+.bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-brand); font-weight: 600; }
+/* У каждого посчитанного числа есть протокол, поэтому пунктир появляется
+   только под числом, над которым курсор, — иначе подчёркнута вся таблица.
+   Общие стили кнопок заливают фон при наведении и фокусе; ячейке это не нужно. */
+.bld-grid .bld-cell-button,
+.bld-grid .bld-cell-button:hover,
+.bld-grid .bld-cell-button:focus,
+.bld-grid .bld-cell-button:active {
+  all: unset; cursor: pointer; border-bottom: 1px dotted transparent;
+  background: transparent; color: inherit; box-shadow: none; transform: none;
+}
+.bld-grid td:hover .bld-cell-button { border-bottom-color: currentColor; }
+.bld-grid .bld-cell-button:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 2px; }
+.bld-protocol {
+  position: fixed; z-index: 60; width: min(440px, calc(100vw - 24px)); max-height: 60vh; overflow: auto;
+  padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-2); box-shadow: 0 14px 36px rgba(15, 23, 20, .16);
+}
+.bld-protocol-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: var(--t-xs); }
+.bld-protocol-close { padding: 0 6px; background: transparent; color: var(--c-ink-3); font-size: 16px; }
+.bld-protocol pre { margin: 0 0 6px; white-space: pre-wrap; color: var(--c-ink-2); font: 11px/1.5 "SF Mono", Menlo, Consolas, monospace; }
 .bld-empty { height: 100%; display: grid; place-content: center; justify-items: center;
              gap: var(--s-3); padding: var(--s-6); text-align: center; }
 .bld-empty p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); max-width: 320px; line-height: 1.55; }

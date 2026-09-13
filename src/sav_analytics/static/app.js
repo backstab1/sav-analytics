@@ -1108,22 +1108,40 @@ function renderProject() {
   publishVariablesToShell(inspection, questions);
 }
 
-// Конструктор берёт список переменных отсюда: своей загрузки у него нет,
-// иначе один и тот же проект читался бы дважды.
+// Раздел «Таблицы» берёт список переменных отсюда: своей загрузки у него
+// нет, иначе один и тот же проект читался бы дважды. Строками годятся типы,
+// которые раскладывает лист книги, колонками — одиночный выбор с подписями
+// и группировки.
+const TABLE_ROW_TYPES = ["single_choice", "scale", "numeric", "multiple_choice_dichotomy", "matrix"];
+
 function publishVariablesToShell(inspection, questions) {
-  window.Shell.setProjectVariables(
-    questions
-      .filter(question => question.included_in_report)
-      .map(question => ({
+  const questionItems = questions
+    .filter(question => question.included_in_report)
+    .map(question => {
+      const labels = inspection.variables
+        .find(item => item.name === question.source_variables?.[0])?.value_labels || [];
+      return {
         code: question.code,
         label: question.label,
-        type: question.type,
-        categories: (inspection.variables
-          .find(item => item.name === question.source_variables?.[0])?.value_labels || [])
-          .map(item => item.label),
-      })),
-    inspection.row_count,
-  );
+        type: question.question_type,
+        source: { kind: "question", ref: question.code },
+        canRow: TABLE_ROW_TYPES.includes(question.question_type),
+        canCol: question.question_type === "single_choice" && labels.length > 0,
+      };
+    });
+  const recodingItems = configuredRecodings().map(recoding => ({
+    code: `recoding:${recoding.id}`,
+    display: recoding.code,
+    label: recoding.name,
+    type: "recoding",
+    source: { kind: "recoding", ref: recoding.id },
+    canRow: false,
+    canCol: true,
+  }));
+  window.Shell.setProjectVariables([...questionItems, ...recodingItems], {
+    projectId: currentProject?.id || null,
+    filters: configuredFilters().map(item => ({ id: item.id, name: item.name })),
+  });
 }
 
 // Статус приходит с сервера готовым: признак «требует проверки» считается

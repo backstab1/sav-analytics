@@ -424,9 +424,6 @@ def test_marking_a_labelled_category_not_applicable_needs_confirmation(
     _write_survey(source)
     _open_project(page, live_server, source)
 
-    # Раздел конструктора честно назван демонстрацией, пока числа не считаются.
-    expect(page.locator(".tabs button[data-view='tables']")).to_contain_text("демо")
-
     page.click("#table-body tr[data-code='BRAND'] .question-cell")
     expect(page.locator("#not-applicable")).to_be_visible(timeout=UI_TIMEOUT)
     assessment = page.locator("#not-applicable-assessment")
@@ -509,3 +506,35 @@ def test_output_profile_is_read_from_the_chosen_metrics(
     page.click('[data-stat="scale:bottom2"]')
     expect(page.locator("#stat-panel")).to_contain_text("свой набор", timeout=UI_TIMEOUT)
     expect(page.locator('[data-stat="scale:bottom2"]')).to_have_attribute("aria-pressed", "false")
+
+
+def test_tables_section_shows_the_numbers_of_the_workbook(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Раздел «Таблицы» считает ядром, а не рисует демонстрацию (PQ.3)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    _open_view(page, "tables")
+    expect(page.locator(".tabs button[data-view='tables']")).not_to_contain_text("демо")
+    grid = page.locator("#bld-grid-wrap")
+    expect(grid).to_contain_text("Выберите вопросы", timeout=UI_TIMEOUT)
+
+    page.click('.bld-param[data-zone="rows"]')
+    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.keyboard.press("Escape")
+    page.click('.bld-param[data-zone="cols"]')
+    page.click('#bld-list .bld-var[data-code="SEX"]')
+    page.keyboard.press("Escape")
+
+    table = grid.locator("table.bld-grid")
+    expect(table).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
+    expect(table.locator("thead tr.bld-base").first.locator("th.bld-basecell")).to_have_text(
+        ["240", "120", "120"]
+    )
+    # 160 из 240 — 66,7%; книга выводит доли целыми, и экран показывает так же.
+    first = table.locator("tbody tr", has_text="Первая").first.locator("td.bld-val")
+    expect(first.first).to_have_text("67")
+    expect(page.locator("#bld-tests")).to_have_text("не считаются")
+

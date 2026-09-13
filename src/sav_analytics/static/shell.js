@@ -86,11 +86,12 @@
     });
   });
 
-  /* ================= Экран конструктора =================
-   * Раскладка настоящая, числа — нет. Пока нет эндпоинта, который считает
-   * произвольный кросс, таблица заполняется детерминированной заглушкой:
-   * одна и та же раскладка всегда даёт одну и ту же картинку, поэтому её
-   * можно обсуждать, но нельзя принять за результат расчёта.
+  /* ================= Раздел «Таблицы» =================
+   * Раскладка — строки, разрез, фильтр — уходит на сервер, а таблица
+   * приходит посчитанной тем же кодом, что пишет книгу Excel
+   * (`core/reporting/live.py`). Своих формул у экрана нет: число здесь
+   * равно числу в выгрузке, и цвет значимости, стрелка волны и число
+   * знаков тоже берутся из книги.
    */
   const builder = (() => {
     const KIND_LABEL = {
@@ -103,6 +104,7 @@
       matrix: "матрица",
       open_text: "текст",
       technical: "тех.",
+      recoding: "группы",
     };
     // Пилюля параметра показывает значение, а не приглашение: пустое
     // состояние — это тоже значение, «только Total» и «вся выборка».
@@ -126,38 +128,49 @@
     const params = document.querySelectorAll(".bld-param[data-zone]");
     const wrap = document.querySelector("#bld-grid-wrap");
     const note = document.querySelector("#bld-stage-note");
-    const measure = document.querySelector("#bld-measure");
-    const sig = document.querySelector("#bld-sig");
+    const sheetSelect = document.querySelector("#bld-sheet");
+    const testsSlot = document.querySelector("#bld-tests");
     const log = document.querySelector("#bld-log");
     const form = document.querySelector("#bld-form");
     const input = document.querySelector("#bld-input");
 
     let variables = [];
     let byCode = new Map();
-    let rowCount = 0;
+    let projectId = null;
+    let filters = [];
+    // Таблица пересчитывается, только когда раздел виден; изменения,
+    // пришедшие в скрытый раздел, помечают её устаревшей до показа.
+    let stale = true;
+    let requestToken = 0;
+    let lastTable = null;
     const layout = { rows: [], cols: [], filter: [] };
 
-    function setVariables(next, respondents) {
+    function setVariables(next, context = {}) {
       variables = next;
       byCode = new Map(next.map(item => [item.code, item]));
-      rowCount = respondents || 0;
-      Object.keys(layout).forEach(key => {
-        layout[key] = layout[key].filter(code => byCode.has(code));
-      });
+      projectId = context.projectId || null;
+      filters = context.filters || [];
+      layout.rows = layout.rows.filter(code => byCode.get(code)?.canRow);
+      layout.cols = layout.cols.filter(code => byCode.get(code)?.canCol);
+      layout.filter = layout.filter.filter(id => filters.some(item => item.id === id));
       render();
     }
 
-    // В строки и колонки годится только то, у чего есть категории: у ID,
-    // открытых текстов и голых чисел раскладывать нечего.
-    function usable(code) {
-      return Boolean(byCode.get(code)?.categories.length);
+    // Строкой может стать вопрос, который умеет лист книги; колонкой — то,
+    // у чего есть категории: одиночный выбор с подписями или группировка.
+    function usable(code, zone) {
+      const item = byCode.get(code);
+      return Boolean(item && (zone === "rows" ? item.canRow : item.canCol));
     }
 
     function addToZone(code, zone) {
-      if (zone !== "filter" && !usable(code)) return;
-      Object.keys(layout).forEach(key => {
-        layout[key] = layout[key].filter(item => item !== code);
-      });
+      if (zone === "filter") {
+        layout.filter = filters.some(item => item.id === code) ? [code] : [];
+        render();
+        return;
+      }
+      if (!usable(code, zone)) return;
+      layout[zone] = layout[zone].filter(item => item !== code);
       layout[zone].push(code);
       render();
     }
@@ -202,23 +215,25 @@
     function renderPalette() {
       const zone = pickerZone || "rows";
       const query = search.value.trim().toLowerCase();
-      const matched = variables.filter(item =>
-        !query || item.code.toLowerCase().includes(query) || item.label.toLowerCase().includes(query));
-      count.textContent = variables.length ? `${matched.length} из ${variables.length}` : "";
       list.innerHTML = "";
+      if (zone === "filter") {
+        renderFilterPalette(query);
+        return;
+      }
+      const matched = variables.filter(item =>
+        !query || (item.display || item.code).toLowerCase().includes(query) || item.label.toLowerCase().includes(query));
+      count.textContent = variables.length ? `${matched.length} из ${variables.length}` : "";
 
       if (!variables.length) {
         const empty = document.createElement("p");
         empty.className = "bld-placeholder bld-list-empty";
-        empty.textContent = "Откройте проект в ручном режиме — переменные появятся здесь.";
+        empty.textContent = "Откройте проект — переменные появятся здесь.";
         list.append(empty);
         return;
       }
 
       matched.forEach(item => {
-        // В строки и колонки годится только то, у чего есть категории;
-        // в фильтр — что угодно.
-        const flat = !item.categories.length && zone !== "filter";
+        const flat = !usable(item.code, zone);
         const chosen = layout[zone].includes(item.code);
         const chip = document.createElement("button");
         chip.type = "button";
@@ -227,13 +242,13 @@
         chip.draggable = !flat;
         chip.dataset.code = item.code;
         chip.title = flat
-          ? `${item.label} — нет категорий, раскладывать нечего`
+          ? `${item.label} — ${zone === "rows" ? "такой вопрос лист книги не раскладывает" : "нет категорий для колонок"}`
           : item.label;
         chip.innerHTML =
           `<span class="bld-var-mark" aria-hidden="true"></span>` +
           `<span class="bld-var-code"></span><span class="bld-var-name"></span>` +
           `<span class="bld-var-kind">${KIND_LABEL[item.type] || ""}</span>`;
-        chip.querySelector(".bld-var-code").textContent = item.code;
+        chip.querySelector(".bld-var-code").textContent = item.display || item.code;
         chip.querySelector(".bld-var-name").textContent = item.label;
         chip.setAttribute("aria-pressed", String(chosen));
         chip.addEventListener("click", event => {
@@ -255,39 +270,51 @@
       });
     }
 
+    // Фильтр таблицы — сохранённое правило проекта: условие собирается в
+    // редакторе фильтра, и текст правила там же, одной строкой для всех мест.
+    function renderFilterPalette(query) {
+      const matched = filters.filter(item => !query || item.name.toLowerCase().includes(query));
+      count.textContent = filters.length ? `${matched.length} из ${filters.length}` : "";
+      const options = [{ id: null, name: "Вся выборка" }, ...matched];
+      options.forEach(item => {
+        const chosen = item.id ? layout.filter.includes(item.id) : !layout.filter.length;
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `bld-var${chosen ? " chosen" : ""}`;
+        chip.dataset.filter = item.id || "";
+        chip.setAttribute("aria-pressed", String(chosen));
+        chip.innerHTML = `<span class="bld-var-mark" aria-hidden="true"></span><span class="bld-var-name"></span>`;
+        chip.querySelector(".bld-var-name").textContent = item.name;
+        chip.addEventListener("click", event => {
+          event.stopPropagation();
+          if (item.id) addToZone(item.id, "filter");
+          else { layout.filter = []; render(); }
+          renderPalette();
+        });
+        list.append(chip);
+      });
+      if (!filters.length) {
+        const empty = document.createElement("p");
+        empty.className = "bld-placeholder bld-list-empty";
+        empty.textContent = "Сохранённых фильтров нет. Правило собирается в разделе «Отчёты», строка «База».";
+        list.append(empty);
+      }
+    }
+
     // Полоса параметров: пилюля несёт имя свойства и его значение —
-    // ровно как строки свойств книги в разделе «Отчёт».
+    // ровно как строки свойств книги в разделе «Отчёты».
     function renderParams() {
-      Object.keys(layout).forEach(zone => {
+      const slots = {
+        rows: layout.rows.map(code => byCode.get(code)?.label).filter(Boolean).join(", "),
+        cols: layout.cols.map(code => byCode.get(code)?.label).filter(Boolean).join(", "),
+        filter: layout.filter.map(id => filters.find(item => item.id === id)?.name).filter(Boolean).join(", "),
+      };
+      Object.entries(slots).forEach(([zone, text]) => {
         const slot = document.querySelector(`[data-slot="${zone}"]`);
         if (!slot) return;
-        const labels = layout[zone]
-          .map(code => byCode.get(code)?.label)
-          .filter(Boolean);
-        slot.textContent = labels.length
-          ? labels.join(zone === "cols" ? " × " : ", ")
-          : ZONE_EMPTY[zone];
-        slot.closest(".bld-param").classList.toggle("off", !labels.length);
+        slot.textContent = text || ZONE_EMPTY[zone];
+        slot.closest(".bld-param").classList.toggle("off", !text);
       });
-    }
-
-    function hash(text) {
-      let value = 2166136261;
-      for (let index = 0; index < text.length; index += 1) {
-        value ^= text.charCodeAt(index);
-        value = Math.imul(value, 16777619);
-      }
-      return (value >>> 0) / 4294967295;
-    }
-
-    function sheetLetter(index) {
-      let label = "";
-      let value = index;
-      do {
-        label = LETTERS[value % 26] + label;
-        value = Math.floor(value / 26) - 1;
-      } while (value >= 0);
-      return label;
     }
 
     // Смещения ярусов липкой шапки считаются из фактических высот: жёстко
@@ -301,119 +328,184 @@
       });
     }
 
-    function combine(codes) {
-      return codes.reduce((accumulator, code) => {
-        const variable = byCode.get(code);
-        const next = [];
-        accumulator.forEach(prefix => {
-          variable.categories.forEach(value => { next.push(prefix.concat([{ code, value }])); });
-        });
-        return next;
-      }, [[]]);
+    function renderEmpty(text) {
+      wrap.innerHTML = `<div class="bld-empty"><p>${escapeHtml(text)}</p></div>`;
+      note.textContent = "";
+      lastTable = null;
     }
 
-    function renderGrid() {
-      if (!layout.rows.length || !byCode.get(layout.rows[0])?.categories.length) {
-        wrap.innerHTML = `<div class="bld-empty"><p>${
-          layout.rows.length
-            ? "У выбранного вопроса нет категорий для строк."
-            : "Выберите вопрос в «Строках» — таблица соберётся сама."
-        }</p></div>`;
-        note.textContent = "";
+    async function renderGrid() {
+      if (!wrap.offsetParent) {
+        stale = true;
         return;
       }
+      stale = false;
+      closeProtocol();
+      if (!projectId) {
+        testsSlot.textContent = "—";
+        renderEmpty("Откройте проект — таблица строится по его данным.");
+        return;
+      }
+      if (!layout.rows.length) {
+        renderEmpty("Выберите вопросы в «Строках» — таблица соберётся сама.");
+        return;
+      }
+      const token = ++requestToken;
+      const request = { questions: layout.rows, sheet: sheetSelect.value };
+      if (layout.cols.length) {
+        request.blocks = layout.cols.map(code => ({ label: byCode.get(code).label, sources: [byCode.get(code).source] }));
+      }
+      if (layout.filter.length) request.filter_id = layout.filter[0];
+      wrap.classList.add("loading");
+      if (!lastTable) wrap.innerHTML = '<div class="bld-empty"><p>Считаем…</p></div>';
+      let table;
+      try {
+        const response = await fetch(`/api/projects/${projectId}/tables/preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof payload.detail === "string" ? payload.detail : "Таблицу посчитать не удалось.");
+        }
+        table = payload;
+      } catch (error) {
+        if (token !== requestToken) return;
+        wrap.classList.remove("loading");
+        renderEmpty(error.message);
+        return;
+      }
+      if (token !== requestToken) return;
+      wrap.classList.remove("loading");
+      renderTable(table);
+    }
 
-      const usableCols = layout.cols.filter(code => byCode.get(code)?.categories.length);
-      const colCombos = usableCols.length ? combine(usableCols) : [];
-      const columns = [{ key: "total", label: "Total", group: "" }].concat(colCombos.map(combo => ({
-        key: combo.map(part => `${part.code}=${part.value}`).join("|"),
-        label: combo[combo.length - 1].value,
-        group: combo.length > 1
-          ? combo.slice(0, -1).map(part => part.value).join(" · ")
-          : byCode.get(combo[0].code).label,
-      })));
+    function formatNumber(value, decimals) {
+      return Number(value).toLocaleString("ru-RU", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      });
+    }
 
-      const totalBase = rowCount || 1000;
-      const bases = columns.map((column, index) =>
-        index === 0 ? totalBase : Math.round(totalBase * (0.06 + hash(column.key) * 0.26)));
+    function cellHtml(cell, index, sheetRow) {
+      const classes = ["bld-val"];
+      if (index === 0) classes.push("bld-total");
+      if (cell.value == null) return `<td class="${classes.join(" ")} bld-absent">–</td>`;
+      if (cell.small) classes.push("bld-lowbase");
+      if (cell.direction === "higher") classes.push("bld-up");
+      if (cell.direction === "lower") classes.push("bld-down");
+      const wave = cell.wave === "higher" ? '<span class="bld-wave" title="Выше волны сравнения">▴</span>'
+        : cell.wave === "lower" ? '<span class="bld-wave" title="Ниже волны сравнения">▾</span>' : "";
+      const letters = cell.higher_than?.length
+        ? `<span class="bld-sig" title="Значимо выше колонок ${cell.higher_than.join(", ")}">${cell.higher_than.join("")}</span>`
+        : "";
+      const text = `${wave}${formatNumber(cell.value, cell.decimals)}${letters}`;
+      if (!cell.protocol) return `<td class="${classes.join(" ")}">${text}</td>`;
+      return `<td class="${classes.join(" ")}"><button type="button" class="bld-cell-button" data-protocol="${sheetRow}:${index}" aria-label="Протокол теста для ячейки">${text}</button></td>`;
+    }
 
-      let head = `<thead><tr><th class="bld-corner bld-ref"></th><th class="bld-ref">A</th>`;
-      columns.forEach((column, index) => { head += `<th class="bld-ref">${sheetLetter(index + 1)}</th>`; });
-      head += `</tr><tr><th class="bld-corner"></th><th class="bld-rowhead bld-grouphead" style="left:34px"></th>`;
+    function renderTable(table) {
+      const columns = table.columns;
+      const width = columns.length + 1;
+      const groups = columns.map(() => "");
+      table.blocks.forEach(block => {
+        for (let index = block.first; index <= block.last; index += 1) groups[index] = block.label;
+      });
+      let head = '<thead><tr><th class="bld-rowhead bld-grouphead"></th>';
       let cursor = 0;
       while (cursor < columns.length) {
         let span = 1;
-        while (cursor + span < columns.length && columns[cursor + span].group === columns[cursor].group) span += 1;
-        head += `<th class="bld-grouphead" colspan="${span}">${escapeHtml(columns[cursor].group) || "&nbsp;"}</th>`;
+        while (groups[cursor] && cursor + span < columns.length && groups[cursor + span] === groups[cursor]) span += 1;
+        head += `<th class="bld-grouphead" colspan="${span}">${escapeHtml(groups[cursor]) || "&nbsp;"}</th>`;
         cursor += span;
       }
-      head += `</tr><tr><th class="bld-corner bld-ref">1</th>` +
-              `<th class="bld-rowhead bld-cathead" style="left:34px;text-align:left">Показатель</th>`;
-      columns.forEach((column, index) => {
-        head += `<th class="bld-cathead"><span class="bld-letter">${sheetLetter(index + 1)}</span>${escapeHtml(column.label)}</th>`;
+      head += '</tr><tr><th class="bld-rowhead bld-cathead" style="text-align:left">Показатель</th>';
+      columns.forEach(column => {
+        head += `<th class="bld-cathead"><span class="bld-letter">${column.letter}</span>${escapeHtml(column.label)}</th>`;
       });
-      head += `</tr></thead>`;
-
-      const rowVariable = byCode.get(layout.rows[0]);
-      const nested = layout.rows.slice(1).filter(code => byCode.get(code)?.categories.length);
-      const nestedCombos = nested.length ? combine(nested) : [[]];
-      const showSig = sig.value === "on";
-      const mode = measure.value;
-
-      let rowNumber = 2;
-      let body = `<tbody><tr class="bld-qrow"><td class="bld-rownum">${rowNumber}</td>` +
-                 `<td class="bld-rowhead" colspan="${columns.length + 1}">${escapeHtml(rowVariable.code)} · ${escapeHtml(rowVariable.label)}</td></tr>`;
-      rowNumber += 1;
-      body += `<tr class="bld-base"><td class="bld-rownum">${rowNumber}</td><td class="bld-rowhead">База, чел.</td>`;
-      bases.forEach((base, index) => {
-        body += `<td class="bld-val${index === 0 ? " bld-total" : ""}">${base}</td>`;
+      head += '</tr><tr class="bld-base"><th class="bld-rowhead">База, N</th>';
+      columns.forEach(column => {
+        head += `<th class="bld-basecell${column.small ? " bld-lowbase" : ""}">${formatNumber(column.base, 0)}</th>`;
       });
-      body += `</tr>`;
+      head += "</tr>";
+      if (columns.some(column => column.weighted_base != null)) {
+        head += '<tr class="bld-base"><th class="bld-rowhead">База, взвеш.</th>';
+        columns.forEach(column => { head += `<th class="bld-basecell">${formatNumber(column.weighted_base, 0)}</th>`; });
+        head += "</tr>";
+      }
+      head += "</thead>";
 
-      nestedCombos.forEach(nestedCombo => {
-        if (nestedCombo.length) {
-          rowNumber += 1;
-          body += `<tr class="bld-qrow"><td class="bld-rownum">${rowNumber}</td>` +
-                  `<td class="bld-rowhead" colspan="${columns.length + 1}">${escapeHtml(nestedCombo.map(part => part.value).join(" · "))}</td></tr>`;
-        }
-        rowVariable.categories.forEach(category => {
-          const seed = `${category}|${nestedCombo.map(part => part.value).join("|")}`;
-          rowNumber += 1;
-          const values = columns.map(column => 0.04 + hash(`${seed}#${column.key}`) * 0.62);
-          body += `<tr><td class="bld-rownum">${rowNumber}</td><td class="bld-rowhead">${escapeHtml(category)}</td>`;
-          values.forEach((share, index) => {
-            const lowBase = bases[index] < 100;
-            let text;
-            if (mode === "n") text = Math.round(share * bases[index]);
-            else if (mode === "index") text = Math.round((share / values[0]) * 100);
-            else text = `${(share * 100).toFixed(1).replace(".", ",")}%`;
-
-            let marks = "";
-            if (showSig && index > 0 && mode !== "index" && !lowBase) {
-              const beaten = values
-                .map((other, position) => ({ other, position }))
-                .filter(item => item.position > 0 && item.position !== index
-                  && columns[item.position].group === columns[index].group
-                  && share - item.other > 0.1)
-                .map(item => sheetLetter(item.position + 1));
-              if (beaten.length) marks = `<span class="bld-sig">${beaten.join("")}</span>`;
-            }
-            body += `<td class="bld-val${index === 0 ? " bld-total" : ""}${lowBase ? " bld-lowbase" : ""}">${text}${marks}</td>`;
-          });
-          body += `</tr>`;
+      let body = "<tbody>";
+      table.questions.forEach(question => {
+        body += `<tr class="bld-qrow"><td class="bld-rowhead" colspan="${width}">${escapeHtml(question.code)} · ${escapeHtml(question.label)}</td></tr>`;
+        question.rows.forEach(row => {
+          if (row.kind === "subquestion") {
+            body += `<tr class="bld-subrow"><td class="bld-rowhead" colspan="${width}">${escapeHtml(row.label)}</td></tr>`;
+            return;
+          }
+          const rowClass = row.kind === "base" ? "bld-base" : row.derived ? "bld-derived" : "";
+          body += `<tr class="${rowClass}"><td class="bld-rowhead">${escapeHtml(row.label)}</td>`;
+          row.cells.forEach((cell, index) => { body += cellHtml(cell, index, row.sheet_row); });
+          body += "</tr>";
         });
       });
-      body += `</tbody>`;
+      body += "</tbody>";
 
-      wrap.innerHTML = `<table class="bld-grid">${head}${body}</table>`;
+      wrap.innerHTML = `<table class="bld-grid bld-live">${head}${body}</table>`;
+      lastTable = table;
       stackStickyHeader(wrap.querySelector("table.bld-grid"));
 
+      const settings = table.settings;
+      const schemes = [];
+      if (settings.compare_to_total) schemes.push(settings.compare_target === "total" ? "с Total" : "с остатком");
+      if (settings.compare_pairwise) schemes.push("попарные");
+      testsSlot.textContent = schemes.length
+        ? `${schemes.join(" + ")}, ${Math.round(settings.confidence_level * 100)}%`
+        : "не считаются";
+
       const parts = [`${columns.length} ${plural(columns.length, "колонка", "колонки", "колонок")}`];
-      if (usableCols.length) parts.push(`разрез: ${usableCols.map(code => byCode.get(code).label).join(" × ")}`);
-      if (layout.filter.length) parts.push(`фильтр: ${layout.filter.map(code => byCode.get(code).label).join(", ")}`);
-      if (bases.some(base => base < 100)) parts.push("серым — база меньше 100");
+      if (table.tests) parts.push(`${table.tests} ${plural(table.tests, "тест", "теста", "тестов")}`);
+      if (settings.weight) parts.push(`вес: ${settings.weight}`);
+      if (columns.some(column => column.small)) parts.push(`серым — база меньше ${settings.minimum_base}`);
+      if (table.empty_columns.length) parts.push(`без респондентов: ${table.empty_columns.join(", ")}`);
       note.textContent = parts.join(" · ");
     }
+
+    /* Протокол теста по щелчку на ячейке — тот же текст, что примечание
+       ячейки в книге и запись в statistics.txt (PQ.3, «лучше Qualtrics»). */
+    const protocolBox = document.createElement("div");
+    protocolBox.className = "bld-protocol";
+    protocolBox.hidden = true;
+    protocolBox.setAttribute("role", "dialog");
+    protocolBox.setAttribute("aria-label", "Протокол теста");
+    document.querySelector("#section-tables").append(protocolBox);
+
+    function closeProtocol() {
+      protocolBox.hidden = true;
+    }
+
+    wrap.addEventListener("click", event => {
+      const button = event.target.closest("[data-protocol]");
+      if (!button || !lastTable) return;
+      event.stopPropagation();
+      const [sheetRow, index] = button.dataset.protocol.split(":").map(Number);
+      const row = lastTable.questions.flatMap(question => question.rows).find(item => item.sheet_row === sheetRow);
+      const column = lastTable.columns[index];
+      protocolBox.innerHTML =
+        `<div class="bld-protocol-head"><strong></strong><button type="button" class="bld-protocol-close" aria-label="Закрыть протокол">×</button></div>` +
+        `<pre></pre><p class="bld-dim">Тот же текст — в примечании ячейки книги и в statistics.txt.</p>`;
+      protocolBox.querySelector("strong").textContent = `${row.label} · ${column.letter} — ${column.label}`;
+      protocolBox.querySelector("pre").textContent = row.cells[index].protocol;
+      protocolBox.querySelector(".bld-protocol-close").addEventListener("click", closeProtocol);
+      protocolBox.hidden = false;
+      const box = button.getBoundingClientRect();
+      const boxWidth = protocolBox.offsetWidth;
+      const boxHeight = protocolBox.offsetHeight;
+      protocolBox.style.left = `${Math.round(Math.max(12, Math.min(box.left, window.innerWidth - boxWidth - 12)))}px`;
+      protocolBox.style.top = `${Math.round(Math.max(12, Math.min(box.bottom + 6, window.innerHeight - boxHeight - 12)))}px`;
+      protocolBox.querySelector(".bld-protocol-close").focus();
+    });
 
     // Своя копия склонения: shell.js и app.js — разные бандлы без общего
     // модуля, а «1 колонок» в подписи под таблицей видно сразу.
@@ -442,6 +534,10 @@
 
     // Экран показан — только теперь у шапки таблицы есть настоящие высоты.
     function activate() {
+      if (stale) {
+        void renderGrid();
+        return;
+      }
       stackStickyHeader(wrap.querySelector("table.bld-grid"));
     }
 
@@ -464,15 +560,18 @@
     });
 
     document.addEventListener("click", event => {
+      if (!event.target.closest(".bld-protocol")) closeProtocol();
       if (event.target.closest("#bld-picker") || event.target.closest(".bld-param[data-zone]")) return;
       closePicker();
     });
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape") closePicker();
+      if (event.key !== "Escape") return;
+      closePicker();
+      closeProtocol();
     });
 
     search.addEventListener("input", renderPalette);
-    [measure, sig].forEach(control => control.addEventListener("change", renderGrid));
+    sheetSelect.addEventListener("change", () => { void renderGrid(); });
     window.addEventListener("resize", activate);
 
     /* Ассистент. Заранее записанные сценарии: каждый меняет раскладку,
@@ -490,14 +589,22 @@
     }
 
     function firstOfType(...types) {
-      return variables.find(item => types.includes(item.type) && item.categories.length);
+      return variables.find(item => types.includes(item.type) && item.canRow);
     }
 
     const SCENARIOS = [
       {
+        match: /ответивш/i,
+        run: () => {
+          sheetSelect.value = "filter";
+          void renderGrid();
+          return { reply: "Доли теперь считаются от ответивших на вопрос, как на листе topline_filter.", did: "Доли: от ответивших" };
+        },
+      },
+      {
         match: /разрез|колонк|разбей/i,
         run: () => {
-          const target = variables.find(item => item.categories.length && !layout.cols.includes(item.code)
+          const target = variables.find(item => item.canCol && !layout.cols.includes(item.code)
             && item.code !== layout.rows[0]);
           if (!target) return { reply: "Не нашёл подходящую переменную с категориями.", did: null };
           addToZone(target.code, "cols");
@@ -512,14 +619,6 @@
           layout.rows = [target.code];
           render();
           return { reply: `Собрал <code>${escapeHtml(target.code)}</code> по строкам.`, did: `Строки: ${target.label}` };
-        },
-      },
-      {
-        match: /индекс/i,
-        run: () => {
-          measure.value = "index";
-          renderGrid();
-          return { reply: "Переключил показатель на индекс к Total: 100 — уровень всей выборки.", did: "Показатель: индекс" };
         },
       },
       {
@@ -539,7 +638,7 @@
       window.setTimeout(() => {
         if (!scenario) {
           pushMessage("ai", "Ассистент ещё не подключён. В заглушке работают: «разбей по…», " +
-            "«покажи…», «переключи на индекс», «очисти стол».", null);
+            "«покажи…», «доли от ответивших», «очисти стол».", null);
           return;
         }
         const result = scenario.run();
@@ -560,7 +659,7 @@
     });
 
     const suggestBox = document.querySelector("#bld-suggest");
-    ["Разбей по другой переменной", "Покажи первый вопрос", "Переключи на индекс", "Очисти стол"].forEach(text => {
+    ["Разбей по другой переменной", "Покажи первый вопрос", "Доли от ответивших", "Очисти стол"].forEach(text => {
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = text;
@@ -569,7 +668,7 @@
     });
 
     pushMessage("ai", "Здесь можно будет попросить любой расчёт словами. " +
-      "Пока это заглушка: раскладка меняется, числа не считаются.", null);
+      "Пока ассистент — заглушка: он только меняет раскладку, а таблицу считает то же ядро, что книгу Excel.", null);
 
     render();
     return { setVariables, activate };
@@ -591,13 +690,13 @@
     setProjectOpen(open) {
       projectChrome.hidden = !open;
       if (!open) {
-        builder.setVariables([], 0);
+        builder.setVariables([], {});
         closeExportMenu();
       }
     },
     /* Вызывается из app.js после разбора проекта. */
-    setProjectVariables(items, respondents) {
-      builder.setVariables(items, respondents);
+    setProjectVariables(items, context) {
+      builder.setVariables(items, context);
     },
   };
 
