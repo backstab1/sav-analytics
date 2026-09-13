@@ -101,16 +101,26 @@
       open_text: "текст",
       technical: "тех.",
     };
-    const ZONE_PLACEHOLDER = {
-      rows: "Перетащите вопрос — он станет строками таблицы",
-      cols: "Перетащите переменную — она станет разрезом",
-      filter: "Необязательно: ограничить выборку",
+    // Пилюля параметра показывает значение, а не приглашение: пустое
+    // состояние — это тоже значение, «только Total» и «вся выборка».
+    const ZONE_EMPTY = {
+      rows: "не выбраны",
+      cols: "только Total",
+      filter: "вся выборка",
+    };
+    const ZONE_TITLE = {
+      rows: "Строки таблицы",
+      cols: "Колонки — разрез",
+      filter: "Фильтр выборки",
     };
     const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     const list = document.querySelector("#bld-list");
     const search = document.querySelector("#bld-search");
     const count = document.querySelector("#bld-count");
+    const picker = document.querySelector("#bld-picker");
+    const pickerTitle = document.querySelector("#bld-picker-title");
+    const params = document.querySelectorAll(".bld-param[data-zone]");
     const wrap = document.querySelector("#bld-grid-wrap");
     const note = document.querySelector("#bld-stage-note");
     const measure = document.querySelector("#bld-measure");
@@ -154,7 +164,40 @@
       render();
     }
 
+    /* Палитра переменных живёт в поповере: экран отдан таблице, а
+       «строки / колонки / фильтр» стали полосой параметров под ней.
+       Поповер знает свою зону, поэтому строка списка — переключатель:
+       щелчок кладёт переменную в зону, повторный забирает. */
+    let pickerZone = null;
+
+    function openPicker(zone, anchor) {
+      if (pickerZone === zone) {
+        closePicker();
+        return;
+      }
+      pickerZone = zone;
+      pickerTitle.textContent = ZONE_TITLE[zone];
+      search.value = "";
+      picker.hidden = false;
+      renderPalette();
+      // Поповер раскрывается вверх: полоса параметров стоит внизу экрана.
+      const box = anchor.getBoundingClientRect();
+      const width = picker.offsetWidth;
+      picker.style.left = `${Math.round(Math.max(12, Math.min(box.left, window.innerWidth - width - 12)))}px`;
+      picker.style.bottom = `${Math.round(window.innerHeight - box.top + 8)}px`;
+      params.forEach(item => item.setAttribute("aria-expanded", String(item.dataset.zone === zone)));
+      search.focus();
+    }
+
+    function closePicker() {
+      if (!pickerZone) return;
+      pickerZone = null;
+      picker.hidden = true;
+      params.forEach(item => item.setAttribute("aria-expanded", "false"));
+    }
+
     function renderPalette() {
+      const zone = pickerZone || "rows";
       const query = search.value.trim().toLowerCase();
       const matched = variables.filter(item =>
         !query || item.code.toLowerCase().includes(query) || item.label.toLowerCase().includes(query));
@@ -170,59 +213,58 @@
       }
 
       matched.forEach(item => {
-        const flat = !item.categories.length;
-        const chip = document.createElement("div");
-        chip.className = flat ? "bld-var bld-var-flat" : "bld-var";
+        // В строки и колонки годится только то, у чего есть категории;
+        // в фильтр — что угодно.
+        const flat = !item.categories.length && zone !== "filter";
+        const chosen = layout[zone].includes(item.code);
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `bld-var${flat ? " bld-var-flat" : ""}${chosen ? " chosen" : ""}`;
+        chip.disabled = flat;
         chip.draggable = !flat;
         chip.dataset.code = item.code;
         chip.title = flat
-          ? `${item.label} — нет категорий, разложить по строкам или колонкам нечего`
+          ? `${item.label} — нет категорий, раскладывать нечего`
           : item.label;
         chip.innerHTML =
+          `<span class="bld-var-mark" aria-hidden="true"></span>` +
           `<span class="bld-var-code"></span><span class="bld-var-name"></span>` +
-          `<span class="bld-var-kind">${KIND_LABEL[item.type] || ""}</span>` +
-          (flat ? "" : `<span class="bld-quick"><button type="button" data-zone="rows">СТР</button>` +
-          `<button type="button" data-zone="cols">КОЛ</button></span>`);
+          `<span class="bld-var-kind">${KIND_LABEL[item.type] || ""}</span>`;
         chip.querySelector(".bld-var-code").textContent = item.code;
         chip.querySelector(".bld-var-name").textContent = item.label;
+        chip.setAttribute("aria-pressed", String(chosen));
+        chip.addEventListener("click", event => {
+          // Список тут же пересобирается, и щелчок всплыл бы уже от
+          // оторванного узла — обработчик «щёлкнули мимо» принял бы это
+          // за клик вне поповера и закрыл его после каждого выбора.
+          event.stopPropagation();
+          if (chosen) removeFromZone(item.code, zone);
+          else addToZone(item.code, zone);
+          renderPalette();
+        });
         chip.addEventListener("dragstart", event => {
           event.dataTransfer.setData("text/plain", item.code);
           event.dataTransfer.effectAllowed = "copy";
           chip.classList.add("dragging");
         });
         chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
-        chip.querySelectorAll(".bld-quick button").forEach(button => {
-          button.addEventListener("click", () => addToZone(item.code, button.dataset.zone));
-        });
         list.append(chip);
       });
     }
 
-    function renderShelves() {
-      document.querySelectorAll(".bld-zone").forEach(zone => {
-        const key = zone.dataset.zone;
-        zone.innerHTML = "";
-        if (!layout[key].length) {
-          const hint = document.createElement("span");
-          hint.className = "bld-placeholder";
-          hint.textContent = ZONE_PLACEHOLDER[key];
-          zone.append(hint);
-          return;
-        }
-        layout[key].forEach(code => {
-          const pill = document.createElement("span");
-          pill.className = "bld-pill";
-          pill.draggable = true;
-          pill.innerHTML = `<strong></strong><span></span><button type="button" aria-label="Убрать">×</button>`;
-          pill.querySelector("strong").textContent = code;
-          pill.querySelector("span").textContent = byCode.get(code).label;
-          pill.querySelector("button").addEventListener("click", () => removeFromZone(code, key));
-          pill.addEventListener("dragstart", event => {
-            event.dataTransfer.setData("text/plain", code);
-            event.dataTransfer.effectAllowed = "copy";
-          });
-          zone.append(pill);
-        });
+    // Полоса параметров: пилюля несёт имя свойства и его значение —
+    // ровно как строки свойств книги в разделе «Отчёт».
+    function renderParams() {
+      Object.keys(layout).forEach(zone => {
+        const slot = document.querySelector(`[data-slot="${zone}"]`);
+        if (!slot) return;
+        const labels = layout[zone]
+          .map(code => byCode.get(code)?.label)
+          .filter(Boolean);
+        slot.textContent = labels.length
+          ? labels.join(zone === "cols" ? " × " : ", ")
+          : ZONE_EMPTY[zone];
+        slot.closest(".bld-param").classList.toggle("off", !labels.length);
       });
     }
 
@@ -272,7 +314,7 @@
         wrap.innerHTML = `<div class="bld-empty"><p>${
           layout.rows.length
             ? "У выбранного вопроса нет категорий для строк."
-            : "Перетащите вопрос в «Строки» — таблица соберётся сама."
+            : "Выберите вопрос в «Строках» — таблица соберётся сама."
         }</p></div>`;
         note.textContent = "";
         return;
@@ -363,11 +405,22 @@
       wrap.innerHTML = `<table class="bld-grid">${head}${body}</table>`;
       stackStickyHeader(wrap.querySelector("table.bld-grid"));
 
-      const parts = [`${columns.length} колонок`];
+      const parts = [`${columns.length} ${plural(columns.length, "колонка", "колонки", "колонок")}`];
       if (usableCols.length) parts.push(`разрез: ${usableCols.map(code => byCode.get(code).label).join(" × ")}`);
       if (layout.filter.length) parts.push(`фильтр: ${layout.filter.map(code => byCode.get(code).label).join(", ")}`);
       if (bases.some(base => base < 100)) parts.push("серым — база меньше 100");
       note.textContent = parts.join(" · ");
+    }
+
+    // Своя копия склонения: shell.js и app.js — разные бандлы без общего
+    // модуля, а «1 колонок» в подписи под таблицей видно сразу.
+    function plural(count, one, few, many) {
+      const tens = Math.abs(count) % 100;
+      const units = count % 10;
+      if (tens > 10 && tens < 20) return many;
+      if (units === 1) return one;
+      if (units >= 2 && units <= 4) return few;
+      return many;
     }
 
     function escapeHtml(value) {
@@ -377,8 +430,10 @@
     }
 
     function render() {
+      renderParams();
+      // Список пересобирается всегда, даже пока поповер закрыт: он —
+      // отражение переменных проекта, а не состояния поповера.
       renderPalette();
-      renderShelves();
       renderGrid();
     }
 
@@ -387,7 +442,10 @@
       stackStickyHeader(wrap.querySelector("table.bld-grid"));
     }
 
-    document.querySelectorAll(".bld-zone").forEach(zone => {
+    // Пилюля — и кнопка выбора, и зона приёма: перетаскивание из
+    // открытого поповера работает так же, как раньше из палитры.
+    params.forEach(zone => {
+      zone.addEventListener("click", () => openPicker(zone.dataset.zone, zone));
       zone.addEventListener("dragover", event => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "copy";
@@ -400,6 +458,14 @@
         const code = event.dataTransfer.getData("text/plain");
         if (byCode.has(code)) addToZone(code, zone.dataset.zone);
       });
+    });
+
+    document.addEventListener("click", event => {
+      if (event.target.closest("#bld-picker") || event.target.closest(".bld-param[data-zone]")) return;
+      closePicker();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") closePicker();
     });
 
     search.addEventListener("input", renderPalette);
@@ -416,6 +482,7 @@
         `<div class="bld-bubble">${html}</div>` +
         (did ? `<div class="bld-did">Изменено: ${escapeHtml(did)}</div>` : "");
       log.append(message);
+      log.classList.add("has-messages");
       log.scrollTop = log.scrollHeight;
     }
 

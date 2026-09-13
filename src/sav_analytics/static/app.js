@@ -116,11 +116,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   currentBannerId = null;
   currentFilterId = null;
   currentWeightId = null;
-  editor.hidden = true;
-  recodeEditor.hidden = true;
-  bannerEditor.hidden = true;
-  filterEditor.hidden = true;
-  weightEditor.hidden = true;
+  showInspector(null);
   closeSheet();
   document.querySelector("#workspace").hidden = true;
   document.querySelector("#start").hidden = false;
@@ -455,12 +451,15 @@ document.querySelector("#filter-form").addEventListener("change", scheduleFilter
    свёрнуты в поповер выбора, поэтому собственных экранов у них нет.
    Контракт `.tabs button[data-view]` сохранён.
    ================================================================ */
+// Колонка редактора в панели одна, поэтому и открытый инспектор один:
+// показать любой — значит закрыть остальные.
+function showInspector(panel) {
+  [editor, recodeEditor, bannerEditor, filterEditor, weightEditor]
+    .forEach(item => { item.hidden = item !== panel; });
+}
+
 function closeAllInspectors() {
-  editor.hidden = true;
-  recodeEditor.hidden = true;
-  bannerEditor.hidden = true;
-  filterEditor.hidden = true;
-  weightEditor.hidden = true;
+  showInspector(null);
   currentQuestionCode = null;
   currentRecodingId = null;
   currentBannerId = null;
@@ -906,11 +905,7 @@ function showProject(project) {
   currentView = "questions";
   structureMode = "questions";
   resetStructureSearch({ render: false });
-  editor.hidden = true;
-  recodeEditor.hidden = true;
-  bannerEditor.hidden = true;
-  filterEditor.hidden = true;
-  weightEditor.hidden = true;
+  showInspector(null);
   renderSectionHead("questions");
   syncSectionChrome("questions");
   closeSheet();
@@ -1927,11 +1922,7 @@ function openFilter(filterId = null) {
   currentQuestionCode = null;
   currentRecodingId = null;
   currentBannerId = null;
-  editor.hidden = true;
-  recodeEditor.hidden = true;
-  bannerEditor.hidden = true;
-  weightEditor.hidden = true;
-  filterEditor.hidden = false;
+  showInspector(filterEditor);
   const filter = filterId ? configuredFilters().find(item => item.id === filterId) : null;
   setHeadingText(document.querySelector("#filter-editor-title"), filter?.name || "Новое правило");
   document.querySelector("#filter-name").value = filter?.name || "";
@@ -2186,11 +2177,7 @@ function openWeight(weightId = null) {
   currentRecodingId = null;
   currentBannerId = null;
   currentFilterId = null;
-  editor.hidden = true;
-  recodeEditor.hidden = true;
-  bannerEditor.hidden = true;
-  filterEditor.hidden = true;
-  weightEditor.hidden = false;
+  showInspector(weightEditor);
   const weight = weightId ? configuredWeights().find(item => item.id === weightId) : null;
   setHeadingText(document.querySelector("#weight-editor-title"), weight ? weight.name : "Новый вес");
   document.querySelector("#weight-name").value = weight?.name || "Вес по целевым распределениям";
@@ -2348,9 +2335,7 @@ function openBanner(bannerId = null) {
   currentBannerId = bannerId;
   currentQuestionCode = null;
   currentRecodingId = null;
-  editor.hidden = true;
-  recodeEditor.hidden = true;
-  bannerEditor.hidden = false;
+  showInspector(bannerEditor);
   const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
   setHeadingText(document.querySelector("#banner-editor-title"), banner?.name || "Новый баннер");
   document.querySelector("#banner-name").value = banner?.name || `Баннер ${configuredBanners().length + 1}`;
@@ -2475,8 +2460,7 @@ function openRecoding(recodingId = null, options = {}) {
   if ("returnTo" in options) recodeReturnTo = options.returnTo || null;
   currentRecodingId = recodingId;
   currentQuestionCode = null;
-  editor.hidden = true;
-  recodeEditor.hidden = false;
+  showInspector(recodeEditor);
   const recoding = recodingId ? configuredRecodings().find(item => item.id === recodingId) : null;
   setHeadingText(document.querySelector("#recode-editor-title"), recoding ? recoding.code : "Новая");
   document.querySelector("#recode-code").value = recoding?.code || suggestRecodeCode();
@@ -2647,7 +2631,7 @@ async function moveQuestionTo(code, targetCode, placeAfter) {
 function openQuestion(code) {
   currentQuestionCode = code;
   fillEditor(findQuestion(code));
-  editor.hidden = false;
+  showInspector(editor);
   renderTable();
   loadPreview();
 }

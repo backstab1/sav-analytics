@@ -73,7 +73,6 @@
   /* Оболочка рабочей области: рельс разделов, инспектор слева, окно
      списка по центру и воздух вокруг него. */
   --rail: 80px;
-  --insp: 356px;
   --sheet: 480px;
   --canvas-pad: 20px;
   --canvas-max: 1180px;
@@ -302,20 +301,16 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .link-button { padding: 9px 20px; font-size: var(--t-sm); font-weight: 600; }
 .link-button[aria-disabled="true"] { cursor: wait; opacity: 0.55; pointer-events: none; }
 
-/* Три колонки: рельс, док инспекторов, холст. Инспектор стоит слева от
-   списка, между рельсом и холстом; справа остаётся поле. Порядок задан
-   grid-column, а не разметкой: в DOM панель по-прежнему идёт после
-   таблицы, которая её открывает. */
+/* Две колонки: рельс и холст. Инспекторы перестали быть колонкой
+   оболочки — они лежат внутри панели, справа от её содержимого, и
+   появляются рядом со строкой, которая их открыла (см. .pane-body). */
 .shell {
   height: calc(100dvh - var(--bar));
   display: grid;
-  grid-template-columns: var(--rail) auto minmax(0, 1fr);
+  grid-template-columns: var(--rail) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
-/* Ряд один и тот же для всех трёх: колонки расставлены явно, а порядок
-   в разметке другой, и автоматическая раскладка отправила бы док во
-   второй ряд. */
-.rail, .insp-dock, .canvas { grid-row: 1; }
+.rail, .canvas { grid-row: 1; }
 
 /* ---------- Рельс: заменяет ряд вкладок внутри панели ---------- */
 .rail {
@@ -358,7 +353,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
    потолком по ширине и серым полем справа. Над окном — шапка раздела:
    где мы, что здесь делают и действие раздела. Раньше всё это было
    ужато в один ряд .toolbar внутри самой панели. */
-.canvas { grid-column: 3; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+.canvas { grid-column: 2; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
 .canvas-inner {
   width: min(100%, var(--canvas-max));
   padding: var(--canvas-pad);
@@ -415,10 +410,49 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
   box-shadow: var(--shadow-card); overflow: clip;
 }
 /* Конфигурация книги короткая: панель тянется по содержимому, а не на всю
-   высоту рабочей области — иначе под плитками остаётся поле пустоты. */
-.pane:has(.report-blocks:not([hidden])) { flex: 0 0 auto; }
+   высоту рабочей области — иначе под строками остаётся поле пустоты.
+   Сжиматься при этом можно: с открытым редактором содержимое бывает выше
+   холста, и тогда прокручивается редактор, а не страница. */
+.pane:has(.report-blocks:not([hidden])) { flex: 0 1 auto; }
 .pane-bar { flex: 0 0 auto; border-bottom: 1px solid var(--c-border); }
-.pane-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+/* ================================================================
+   ТЕЛО ПАНЕЛИ — содержимое и редактор
+
+   Редактор больше не выезжает сбоку. Он стоит правой частью той же
+   панели: щёлкнули строку — редактор появился рядом с ней, а не у
+   края экрана. Пока все инспекторы скрыты, колонка `auto`
+   схлопывается сама, и тело панели ничем не отличается от прежнего.
+   ================================================================ */
+.pane-body {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+}
+.pane-content { min-width: 0; min-height: 0; overflow: auto; }
+
+/* Ширина редактора — доля панели, а не константа: на широком окне он
+   получает место под два столбца полей, на узком не съедает список. */
+.pane-body:has(.insp:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 38%, 480px);
+}
+.insp-dock {
+  min-width: 0; display: flex; align-items: stretch;
+  container-type: inline-size; container-name: insp;
+}
+.pane-body:has(.insp:not([hidden])) .insp-dock {
+  border-left: 1px solid var(--c-border);
+}
+
+/* Раздел «Отчёт»: пока правят свойство, статистика уступает место
+   редактору. Две колонки свойств и редактор рядом не помещаются, а
+   статистика — единственное, что здесь можно убрать без потери: она
+   не про то свойство, которое сейчас правится. */
+.pane-body:has(.insp:not([hidden])) .report-blocks .split {
+  grid-template-columns: minmax(0, 1fr);
+}
+.pane-body:has(.insp:not([hidden])) .report-blocks .stat-col { display: none; }
+
 
 .report-feedback {
   flex: 0 0 auto;
@@ -928,34 +962,21 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
    прибивала панель к высоте экрана через --drawer-height. Панель на
    440px содержимого занимала 814px, остальное было воздухом.
 
-   Теперь оболочка одна. Панель занимает всю высоту рабочей области
-   и стоит прямоугольником встык к рельсу: она выезжает сбоку, а не
-   всплывает карточкой. Тело прокручивается, ряд действий всегда внизу.
-
-   Док — вторая колонка оболочки, между рельсом и холстом. Пока все
-   инспекторы скрыты, он нулевой ширины: колонка `auto` схлопывается сама,
-   синхронизировать класс из app.js по-прежнему не нужно. Условие на :has()
-   осталось ровно для оформления дока — тени и рамки, которых у пустой
-   колонки быть не должно.
+   Теперь оболочка одна, и стоит она внутри панели — правой её частью,
+   рядом с тем, что правят. Тень и выезд убраны: панель не всплывает
+   над страницей, а занимает своё место в ней. Тело прокручивается,
+   ряд действий всегда внизу.
    ================================================================ */
-.insp-dock {
-  grid-column: 2; display: flex; align-items: stretch;
-  min-width: 0;
-}
-.shell:has(.insp:not([hidden])) .insp-dock {
-  border-right: 1px solid var(--c-border);
-}
 .insp {
-  align-self: stretch; height: 100%; max-height: 100%;
-  flex: 0 0 var(--insp); width: var(--insp);
+  flex: 1 1 auto; width: 100%; max-height: 100%;
   display: flex; flex-direction: column; min-width: 0; min-height: 0;
-  --editor-pad: 15px;
+  --editor-pad: 14px;
   background: var(--c-surface); border: 0; border-radius: 0;
-  box-shadow: var(--shadow-drawer); overflow: clip;
-  animation: insp-in 220ms var(--ease);
+  overflow: clip;
+  animation: insp-in 180ms var(--ease);
 }
 .insp[hidden] { display: none !important; }
-@keyframes insp-in { from { opacity: 0; transform: translateX(-10px); } }
+@keyframes insp-in { from { opacity: 0; transform: translateY(-6px); } }
 
 /* Форма внутри инспектора повторяет его же три яруса и тянется на всю
    высоту панели: ряд действий стоит внизу, а не там, где кончился текст. */
@@ -979,8 +1000,19 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 .insp-body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  display: grid; align-content: start; gap: 12px;
-  padding: 14px var(--editor-pad);
+  display: grid; align-content: start; gap: 9px;
+  padding: 11px var(--editor-pad);
+}
+
+/* Колонка шире прежних 330px, и форма перестаёт быть лентой: короткие
+   поля встают парами, а секции со своей внутренней раскладкой —
+   предпросмотры, списки блоков и условий — остаются во всю ширину.
+   Запрос по контейнеру, а не по окну: ширина колонки — доля панели. */
+@container insp (min-width: 400px) {
+  .insp-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .insp-body > * { grid-column: 1 / -1; }
+  .insp-body > label:has(> input:not([type="checkbox"])),
+  .insp-body > label:has(> select) { grid-column: auto; }
 }
 .insp-foot {
   flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
@@ -1251,6 +1283,10 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .weight-dimension-source-field > span { color: var(--c-ink-3); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .weight-dimension-source-field select { padding: 7px 10px; background: var(--c-surface-soft); font-size: var(--t-xs); font-weight: 600; }
 .weight-targets { display: grid; gap: 0; }
+@container insp (min-width: 400px) {
+  .weight-targets { grid-template-columns: 1fr 1fr; column-gap: 16px; }
+  .t-row { grid-template-columns: 72px minmax(0, 1fr) 44px; gap: 8px; }
+}
 .weight-preview-section { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--c-border); }
 .weight-preview-section[hidden] { display: none; }
 .weight-preview-section .preview-title > div { display: grid; gap: 2px; }
@@ -1471,20 +1507,19 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 @keyframes toast-out { to { opacity: 0; transform: translateY(-8px) scale(.95); } }
 
 /* ================================================================
-/* ================================================================
    SLIDE-OVER И RESPONSIVE
 
-   На широком экране инспектор — колонка слева от списка. Когда её уже
-   некуда положить, он выезжает поверх списка с той же стороны.
+   На широком экране инспектор — правая часть панели. Когда места на
+   колонку уже нет, он выезжает поверх списка с той же стороны.
    ================================================================ */
 .editor-backdrop { display: none; }
-@keyframes slide-over-in { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes slide-over-in { from { opacity: 0; transform: translateX(24px); } }
 @keyframes backdrop-in { from { opacity: 0; } }
 /* На неё ссылается меню выгрузки. */
 @keyframes drawer-rise { from { opacity: 0; transform: translateY(10px); } }
 
 @media (max-width: 1280px) {
-  :root { --insp: 330px; --sheet: 440px; --canvas-pad: 14px; }
+  :root { --sheet: 440px; --canvas-pad: 14px; }
   .screens button, .screens .nav-action { padding: 5px 9px; font-size: var(--t-xs); }
   /* Обрезанное «420 респо…» не несёт ничего: ниже этой ширины размер
      массива убирается целиком. */
@@ -1492,12 +1527,16 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 
 @media (max-width: 1080px) {
+  /* Колонки на редактор уже не хватает: он выезжает поверх списка
+     с той же стороны, где стоял бы. */
+  .pane-body:has(.insp:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+  .pane-body:has(.insp:not([hidden])) .report-blocks .stat-col { display: revert; }
   .insp-dock { position: static; padding: 0; }
-  .shell:has(.insp:not([hidden])) .insp-dock { border-right: 0; }
+  .pane-body:has(.insp:not([hidden])) .insp-dock { border-left: 0; }
   .insp:not([hidden]) {
-    position: fixed; top: 0; right: auto; left: 0; bottom: 0; z-index: 140;
+    position: fixed; top: 0; left: auto; right: 0; bottom: 0; z-index: 140;
     width: min(400px, 100vw); max-height: none; height: 100%;
-    border: 0; border-radius: 0; box-shadow: 18px 0 54px rgba(15, 20, 17, .26);
+    border: 0; border-radius: 0; box-shadow: -18px 0 54px rgba(15, 20, 17, .26);
     animation: slide-over-in 240ms var(--ease);
   }
   body:has(.insp:not([hidden])) .editor-backdrop {
@@ -1749,101 +1788,134 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .lp-card p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1.55; }
 
-/* ---------- Экран «AI-конструктор» ---------- */
+/* ---------- Экран «AI-конструктор» ----------
+
+   Главный объект экрана — таблица. Прежняя раскладка «палитра / стол /
+   чат» отдавала кросстабу треть ширины и делила внимание натрое, хотя
+   по решению 002 живой кросстаб — сам продукт, а ассистент над ним
+   тонкий слой. Поэтому ярусы идут сверху вниз: шапка, таблица,
+   полоса параметров, полоса ассистента. Список переменных открывается
+   из пилюли поповером — как выбор баннера в разделе «Отчёт».
+   ------------------------------------------------------------------ */
 .bld {
   height: calc(100dvh - var(--bars));
   min-height: 560px;
-  display: grid; grid-template-columns: 268px minmax(0, 1fr) 340px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 10px; padding: 12px var(--canvas-pad) var(--canvas-pad);
   background: var(--c-bg);
 }
-.bld-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.bld-col + .bld-col { border-left: 1px solid var(--c-border); }
 .bld-dim { color: var(--c-ink-3); font-size: var(--t-xs); }
-.bld-pane-head {
-  padding: 13px var(--s-4); border-bottom: 1px solid var(--c-border); background: var(--c-surface);
-  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); flex-shrink: 0;
-}
-.bld-pane-head h3 { font-size: var(--t-base); }
+
+.bld-head { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+.bld-head-text { min-width: 0; }
+.bld-head h1 { margin: 0; font-size: var(--t-2xl); font-weight: 800; letter-spacing: -0.035em; }
 .bld-warning {
-  margin: 0; padding: 8px var(--s-4); flex-shrink: 0;
+  flex: 1 1 320px; min-width: 0; margin: 0 0 3px;
+  padding: 7px 12px; border-radius: var(--r-2);
   background: var(--c-warn-tint); color: var(--c-warn-ink);
-  font-size: var(--t-xs); line-height: 1.5; border-bottom: 1px solid var(--c-border);
+  font-size: var(--t-xs); line-height: 1.45;
 }
 
-.bld-palette { background: var(--c-surface); }
-.bld-search { padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--c-border); }
+/* Таблица занимает всю оставшуюся высоту и прокручивается внутри себя:
+   полоса параметров и ассистент не должны уезжать за нижний край. */
+.bld-table {
+  min-height: 0; display: flex; overflow: hidden;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-3); box-shadow: var(--shadow-card);
+}
+
+/* Полоса параметров. Пилюля несёт имя свойства и его значение — тот же
+   приём, что и в строках свойств книги: значение и есть кнопка выбора. */
+.bld-params {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  padding: 9px 12px; background: var(--c-surface);
+  border: 1px solid var(--c-border); border-radius: var(--r-3);
+  box-shadow: var(--shadow-card);
+}
+.bld-param {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  font-size: var(--t-xs); color: var(--c-ink); white-space: nowrap; max-width: 100%;
+}
+.bld-param:hover { border-color: var(--c-border-strong); }
+.bld-param em { font-style: normal; color: var(--c-ink-4); }
+.bld-param b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.bld-param.off b { font-weight: 500; color: var(--c-ink-3); }
+.bld-param[aria-expanded="true"] { border-color: transparent; background: var(--c-brand-tint); color: var(--c-brand); }
+.bld-param[aria-expanded="true"] em { color: var(--c-brand); }
+.bld-param.over { border-color: var(--c-brand); background: var(--c-brand-tint); }
+.bld-caret {
+  width: 0; height: 0; margin-top: 3px;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 4px solid currentColor; opacity: .5;
+}
+.bld-param-field { gap: 6px; cursor: default; }
+.bld-param-field select {
+  height: 22px; padding: 0 4px; border: 0; border-radius: var(--r-1);
+  background: var(--c-surface-soft); color: var(--c-ink);
+  font-size: var(--t-xs); font-weight: 600;
+}
+.bld-param-sep { width: 1px; height: 18px; background: var(--c-border); margin: 0 3px; }
+.bld-note { margin-left: auto; color: var(--c-ink-3); font-size: var(--t-xs); }
+
+/* Поповер переменных — бывшая колонка «Переменные» целиком: поиск,
+   список, счётчик. Раскрывается вверх, потому что полоса внизу. */
+.bld-picker {
+  position: fixed; z-index: 120; width: min(420px, calc(100vw - 24px));
+  max-height: min(60vh, 520px); display: flex; flex-direction: column;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-3); box-shadow: var(--shadow-pop);
+  overflow: hidden; animation: drawer-rise 160ms var(--ease);
+}
+.bld-picker[hidden] { display: none !important; }
+.bld-picker-head {
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 10px 14px 6px;
+}
+.bld-picker-head strong { font-size: var(--t-sm); }
+.bld-search { padding: 0 12px 8px; }
 .bld-search input {
-  width: 100%; padding: 8px 12px; border: 1px solid var(--c-border-strong);
-  border-radius: var(--r-1); background: var(--c-surface-soft); font-size: var(--t-sm);
+  width: 100%; height: 30px; padding: 0 10px;
+  border: 1px solid var(--c-border); border-radius: var(--r-2);
+  background: var(--c-surface-soft); font-size: var(--t-sm);
 }
 .bld-search input:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
-.bld-list { flex: 1; overflow-y: auto; padding: var(--s-2) var(--s-2) var(--s-5); }
+.bld-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 10px; }
 .bld-list-empty { padding: var(--s-4) var(--s-2); line-height: 1.5; }
+
+/* Строка списка — переключатель: поповер знает свою зону, поэтому
+   щелчок кладёт переменную туда, а повторный забирает. */
 .bld-var {
-  display: flex; align-items: center; gap: var(--s-2);
-  padding: 7px var(--s-2); border-radius: var(--r-1); cursor: grab; user-select: none;
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: var(--r-2);
+  background: transparent; text-align: left; cursor: grab;
 }
-.bld-var:hover { background: var(--c-surface-soft); }
+.bld-var:hover { background: var(--c-surface-soft); transform: none; }
 .bld-var.dragging { opacity: .4; }
-/* Нет value labels — раскладывать нечего, поэтому не перетаскивается. */
+.bld-var-mark {
+  width: 14px; height: 14px; flex: 0 0 auto; border-radius: 4px;
+  border: 1.5px solid var(--c-ink-4); background: var(--c-surface);
+}
+.bld-var.chosen .bld-var-mark {
+  border-color: var(--c-brand); background: var(--c-brand);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6.4 4.8 8.7 9.5 3.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-size: 11px 11px; background-position: center; background-repeat: no-repeat;
+}
+.bld-var.chosen { background: var(--c-brand-tint); }
 .bld-var-flat { cursor: default; color: var(--c-ink-4); }
 .bld-var-flat:hover { background: transparent; }
 .bld-var-flat .bld-var-code { background: var(--c-surface-soft); color: var(--c-ink-4); }
 .bld-var-flat .bld-var-name { color: var(--c-ink-4); }
 .bld-var-code {
-  flex-shrink: 0; min-width: 34px; padding: 2px 5px; border-radius: 5px;
+  flex-shrink: 0; padding: 1px 6px; border-radius: 5px;
   background: var(--c-brand-tint); color: var(--c-brand);
-  font: 600 11px/1.5 "SF Mono", Menlo, Consolas, monospace; text-align: center;
+  font: 600 10.5px/1.5 "SF Mono", Menlo, Consolas, monospace;
 }
 .bld-var-name { flex: 1; min-width: 0; font-size: var(--t-sm); color: var(--c-ink-2);
-                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bld-var-kind { flex-shrink: 0; color: var(--c-ink-4); font-size: 11px; font-weight: 600; }
-.bld-quick { display: none; gap: 3px; flex-shrink: 0; }
-.bld-var:hover .bld-quick { display: flex; }
-.bld-var:hover .bld-var-kind { display: none; }
-.bld-quick button {
-  padding: 2px 7px; border-radius: 5px; background: var(--c-surface-soft);
-  color: var(--c-ink-2); font-size: 10px; font-weight: 700;
-}
-.bld-quick button:hover { background: var(--c-brand); color: #fff; }
-
-.bld-stage { background: var(--c-bg); }
-.bld-shelves { padding: var(--s-3) var(--s-4); background: var(--c-surface);
-               border-bottom: 1px solid var(--c-border); display: grid; gap: var(--s-2); flex-shrink: 0; }
-.bld-shelf { display: flex; align-items: flex-start; gap: var(--s-3); }
-.bld-shelf-label { flex-shrink: 0; width: 74px; padding-top: 7px; color: var(--c-ink-3);
-                   font-size: var(--t-xs); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.bld-zone {
-  flex: 1; min-height: 38px; padding: 4px;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
-  border: 1px dashed var(--c-border-strong); border-radius: var(--r-1);
-  transition: border-color 140ms var(--ease), background 140ms var(--ease);
-}
-.bld-zone.over { border-color: var(--c-brand); border-style: solid; background: var(--c-brand-tint); }
 .bld-placeholder { padding: 0 var(--s-2); color: var(--c-ink-4); font-size: var(--t-sm); }
-.bld-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 6px 5px 9px; border-radius: var(--r-pill);
-  background: var(--c-surface-soft); border: 1px solid var(--c-border);
-  font-size: var(--t-sm); cursor: grab;
-}
-.bld-pill strong { font: 600 11px/1.4 "SF Mono", Menlo, Consolas, monospace; color: var(--c-brand); }
-.bld-pill button { width: 17px; height: 17px; padding: 0; border-radius: 50%;
-                   background: transparent; color: var(--c-ink-3); font-size: 14px; }
-.bld-pill button:hover { background: var(--c-danger); color: #fff; }
-
-.bld-toolbar {
-  display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap;
-  padding: 10px var(--s-4); background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border); flex-shrink: 0;
-}
-.bld-toolbar label { display: flex; align-items: center; gap: 6px; color: var(--c-ink-3);
-                     font-size: var(--t-xs); font-weight: 600; }
-.bld-toolbar select {
-  padding: 5px 8px; border: 1px solid var(--c-border-strong); border-radius: 6px;
-  background: var(--c-surface); font-size: var(--t-xs); font-weight: 500;
-}
-.bld-note { margin-left: auto; color: var(--c-ink-3); font-size: var(--t-xs); }
 
 .bld-grid-wrap { flex: 1; overflow: auto; background: var(--c-surface); }
 .bld-grid { border-collapse: separate; border-spacing: 0; font-size: var(--t-sm); }
@@ -1896,44 +1968,60 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
              gap: var(--s-3); padding: var(--s-6); text-align: center; }
 .bld-empty p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); max-width: 320px; line-height: 1.55; }
 
-.bld-chat { background: var(--c-surface); }
-.bld-log { flex: 1; overflow-y: auto; padding: var(--s-4); display: grid; gap: var(--s-3); align-content: start; }
+/* Ассистент — полоса, а не колонка: по решению 002 он тонкий слой над
+   расчётом, и пока это заглушка, забирать треть экрана ему тем более
+   не за что. Лог занимает место, только когда в нём что-то есть. */
+.bld-assistant {
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-3); box-shadow: var(--shadow-card); overflow: hidden;
+}
+.bld-log {
+  display: none; max-height: 168px; overflow-y: auto;
+  padding: 11px 14px; gap: var(--s-3); align-content: start;
+  border-bottom: 1px solid var(--c-border);
+}
+.bld-log.has-messages { display: grid; }
 .bld-msg { display: grid; gap: 5px; }
 .bld-who { color: var(--c-ink-4); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.bld-bubble { padding: 10px 13px; border-radius: var(--r-2); font-size: var(--t-sm); line-height: 1.55; }
+.bld-bubble { padding: 8px 12px; border-radius: var(--r-2); font-size: var(--t-sm); line-height: 1.55; }
 .bld-msg.user { justify-items: end; }
 .bld-msg.user .bld-bubble { background: var(--c-brand); color: #fff; border-bottom-right-radius: 5px; }
 .bld-msg.ai .bld-bubble { background: var(--c-surface-soft); color: var(--c-ink-2); border-bottom-left-radius: 5px; }
 .bld-did {
-  margin-top: 3px; padding: 7px 11px; border-left: 2px solid var(--c-brand);
+  margin-top: 3px; padding: 6px 11px; border-left: 2px solid var(--c-brand);
   background: var(--c-brand-tint); border-radius: 0 6px 6px 0;
   color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.5;
 }
-.bld-suggest { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 var(--s-4) var(--s-3); flex-shrink: 0; }
+
+/* Подсказки и строка ввода стоят в один ряд: это одна полоса, а не
+   два яруса — экран уже отдан таблице. */
+.bld-ask { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+.bld-suggest { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
 .bld-suggest button {
-  padding: 6px 11px; border: 1px solid var(--c-border); border-radius: var(--r-pill);
+  padding: 5px 10px; border: 1px solid var(--c-border); border-radius: var(--r-pill);
   background: var(--c-surface); color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
 }
 .bld-suggest button:hover { border-color: var(--c-brand); color: var(--c-brand); background: var(--c-surface); }
-.bld-form { display: flex; gap: var(--s-2); align-items: flex-end;
-            padding: var(--s-3) var(--s-4); border-top: 1px solid var(--c-border); flex-shrink: 0; }
+.bld-form { flex: 1 1 260px; min-width: 200px; display: flex; gap: 8px; align-items: center; }
 .bld-form textarea {
-  flex: 1; min-height: 40px; max-height: 120px; padding: 10px 12px; resize: none;
-  border: 1px solid var(--c-border-strong); border-radius: var(--r-2);
+  flex: 1; min-height: 32px; max-height: 88px; padding: 6px 11px; resize: none;
+  border: 1px solid var(--c-border-strong); border-radius: var(--r-pill);
   background: var(--c-surface-soft); font-size: var(--t-sm); line-height: 1.45;
 }
 .bld-form textarea:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
-.bld-form button { flex-shrink: 0; width: 40px; height: 40px; padding: 0; border-radius: 50%; }
-.bld-form button svg { width: 17px; height: 17px; }
-.bld-disclaimer { margin: 0; padding: var(--s-2) var(--s-4); background: var(--c-surface-soft);
-                  color: var(--c-ink-3); font-size: 11px; line-height: 1.5; text-align: center; flex-shrink: 0; }
-
-@media (max-width: 1180px) {
-  .bld { grid-template-columns: 232px minmax(0, 1fr); }
-  .bld-chat { display: none; }
+.bld-form button { flex-shrink: 0; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+.bld-form button svg { width: 16px; height: 16px; }
+.bld-disclaimer {
+  margin: 0; padding: 6px 14px; background: var(--c-surface-soft);
+  color: var(--c-ink-3); font-size: 11px; line-height: 1.5; text-align: center;
 }
+
 @media (max-width: 900px) {
   .screens button { padding: 6px 9px; font-size: var(--t-xs); }
+  /* Ярусы конструктора те же, просто теснее: колонок, которые нужно
+     было бы прятать, здесь больше нет. */
+  .bld { padding: 10px; gap: 8px; }
+  .bld-ask { flex-wrap: wrap; }
 }
 
 /* ---------- «Новый проект» в верхнем ряду ----------

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260820-report-split" />
+    <link rel="stylesheet" href="/styles.css?v=20260828-builder-table-first" />
   </head>
   <body>
     <!-- ================================================================
@@ -105,12 +105,12 @@
         </section>
 
         <!-- ================================================================
-             РАБОЧАЯ ОБЛАСТЬ — рельс / инспектор / холст.
+             РАБОЧАЯ ОБЛАСТЬ — рельс / холст.
              Страница не прокручивается: прокручиваются панели.
 
-             Порядок колонок задаётся в CSS (grid-column), а не разметкой:
-             инспектор стоит слева от холста, а в DOM идёт после него —
-             правят рядом с таблицей, поэтому панель встык к рельсу.
+             Инспекторы больше не колонка оболочки: они лежат внутри
+             панели, справа от её содержимого, и появляются на месте —
+             см. .pane-body ниже.
              ================================================================ -->
         <section id="workspace" class="workspace" hidden>
           <div id="app-shell" class="shell">
@@ -206,36 +206,26 @@
 
               <div id="report-feedback" class="report-feedback" aria-live="polite" hidden></div>
 
-              <div class="pane-body scroll">
-                <div id="table-wrap" class="table-wrap">
-                  <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
+              <!-- ========================================================
+                   ТЕЛО ПАНЕЛИ. Слева содержимое раздела, справа редактор.
+
+                   Инспекторы — вопроса, перекодировки, баннера, фильтра и
+                   веса — раньше были колонкой всей оболочки и выезжали
+                   сбоку: панель появлялась у края экрана, а строка, которая
+                   её открыла, оставалась в другой части холста. Теперь док
+                   стоит внутри панели, справа от списка, и правка идёт
+                   рядом с тем, что правят. Пока все инспекторы скрыты,
+                   колонка нулевой ширины (см. .pane-body в styles.css).
+                   ======================================================== -->
+              <div class="pane-body">
+                <div class="pane-content">
+                  <div id="table-wrap" class="table-wrap">
+                    <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
+                  </div>
+                  <div id="entity-list" class="entity-list" hidden></div>
                 </div>
-                <div id="entity-list" class="entity-list" hidden></div>
-              </div>
 
-              <!-- Полоса запуска. Стоит под телом панели, а не внутри него:
-                   preflight и кнопка сборки не должны уезжать с прокруткой. -->
-              <div id="report-launch" class="launch" hidden>
-                <div id="report-preflight" class="launch-status"></div>
-                <div class="toolbar-grow"></div>
-                <button id="launch-statistics" class="btn ghost compact" type="button" data-report-kind="statistics">Скачать статистику</button>
-                <button id="launch-report" class="btn compact" type="button" data-report-kind="topline">Собрать Excel</button>
-              </div>
-            </div>
-
-              </div>
-            </main>
-
-            <!-- ============================================================
-                 ИНСПЕКТОРЫ. Одна оболочка на все сущности: голова, тело со
-                 своей прокруткой, ряд действий. Высота — по содержимому,
-                 потолок — экран (см. .insp в styles.css).
-
-                 Док — колонка слева от холста, между рельсом и списком.
-                 Пока все инспекторы скрыты, он нулевой ширины, и колонка
-                 не занимает места.
-                 ============================================================ -->
-            <div class="insp-dock">
+                <div class="insp-dock">
 
             <aside id="question-editor" class="insp structure-editor" hidden>
               <div class="insp-head">
@@ -391,52 +381,99 @@
               </form>
             </aside>
 
+                </div>
+              </div>
+
+              <!-- Полоса запуска. Стоит под телом панели, а не внутри него:
+                   preflight и кнопка сборки не должны уезжать с прокруткой. -->
+              <div id="report-launch" class="launch" hidden>
+                <div id="report-preflight" class="launch-status"></div>
+                <div class="toolbar-grow"></div>
+                <button id="launch-statistics" class="btn ghost compact" type="button" data-report-kind="statistics">Скачать статистику</button>
+                <button id="launch-report" class="btn compact" type="button" data-report-kind="topline">Собрать Excel</button>
+              </div>
             </div>
+
+              </div>
+            </main>
+
 
           </div>
         </section>
       </section>
 
-      <!-- ================= Экран «AI-конструктор» ================= -->
+      <!-- ================= Экран «AI-конструктор» =================
+
+           Главный объект экрана — сама таблица, а не настройки вокруг
+           неё: раскладка «палитра / стол / чат» отдавала кросстабу
+           треть ширины и делила внимание натрое. Полки «строки,
+           колонки, фильтр» вместе с показателем и тестами свёрнуты
+           в полосу параметров под таблицей, список переменных
+           открывается из неё поповером, ассистент стоит внизу полосой.
+
+           Порядок ярусов: шапка — таблица — параметры — ассистент.
+           ============================================================ -->
       <section id="screen-builder" class="screen bld" hidden>
-        <div class="bld-col bld-palette">
-          <div class="bld-pane-head">
-            <h3>Переменные</h3>
-            <span id="bld-count" class="bld-dim"></span>
+
+        <div class="bld-head">
+          <div class="bld-head-text">
+            <p class="eyebrow">Кросстаб</p>
+            <h1>Таблица</h1>
           </div>
+          <p class="bld-warning" role="status">Числа демонстрационные: расчёт на данных проекта ещё не подключён — нужен эндпоинт произвольного кросса.</p>
+        </div>
+
+        <div class="bld-table">
+          <div id="bld-grid-wrap" class="bld-grid-wrap"></div>
+        </div>
+
+        <!-- Полоса параметров. Каждая пилюля — и значение, и кнопка
+             выбора: список переменных открывается из неё же. Пилюли
+             остаются зонами приёма, поэтому перетаскивание из поповера
+             работает по-прежнему. -->
+        <div class="bld-params">
+          <button type="button" class="bld-param bld-zone" data-zone="rows" aria-haspopup="dialog" aria-expanded="false">
+            <em>Строки</em><b data-slot="rows">не выбраны</b><span class="bld-caret" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="bld-param bld-zone" data-zone="cols" aria-haspopup="dialog" aria-expanded="false">
+            <em>Колонки</em><b data-slot="cols">только Total</b><span class="bld-caret" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="bld-param bld-zone" data-zone="filter" aria-haspopup="dialog" aria-expanded="false">
+            <em>Фильтр</em><b data-slot="filter">вся выборка</b><span class="bld-caret" aria-hidden="true"></span>
+          </button>
+          <span class="bld-param-sep" aria-hidden="true"></span>
+          <label class="bld-param bld-param-field"><em>Показатель</em><select id="bld-measure"><option value="pct">% от базы</option><option value="n">Число ответов</option><option value="index">Индекс к Total</option></select></label>
+          <label class="bld-param bld-param-field"><em>Тесты</em><select id="bld-sig"><option value="on">Попарные, 95%</option><option value="off">Не считать</option></select></label>
+          <span id="bld-stage-note" class="bld-note"></span>
+        </div>
+
+        <!-- Ассистент. По решению 002 он тонкий слой над расчётом, а не
+             сам продукт, поэтому и места занимает полосу: лог раскрыт,
+             только когда в нём что-то есть. -->
+        <div class="bld-assistant">
+          <div id="bld-log" class="bld-log"></div>
+          <div class="bld-ask">
+            <div id="bld-suggest" class="bld-suggest"></div>
+            <form id="bld-form" class="bld-form">
+              <textarea id="bld-input" rows="1" placeholder="Например: разбей по возрасту" aria-label="Запрос к ассистенту"></textarea>
+              <button type="submit" aria-label="Отправить">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
+            </form>
+          </div>
+          <p class="bld-disclaimer">Ассистент не подключён: ответы заранее записаны, числа не считаются.</p>
+        </div>
+
+        <!-- Бывшая колонка «Переменные»: тот же список и поиск, но
+             открывается из пилюли и знает, в какую зону кладёт. -->
+        <div id="bld-picker" class="bld-picker" role="dialog" aria-label="Выбор переменной" hidden>
+          <div class="bld-picker-head"><strong id="bld-picker-title">Строки</strong><span id="bld-count" class="bld-dim"></span></div>
           <div class="bld-search">
             <input id="bld-search" type="search" placeholder="Поиск по коду и названию" autocomplete="off" aria-label="Поиск по переменным" />
           </div>
           <div id="bld-list" class="bld-list"></div>
         </div>
 
-        <div class="bld-col bld-stage">
-          <p class="bld-warning" role="status">Числа в таблице демонстрационные. Расчёт на данных проекта ещё не подключён — нужен эндпоинт для произвольного кросса.</p>
-          <div class="bld-shelves">
-            <div class="bld-shelf"><span class="bld-shelf-label">Строки</span><div class="bld-zone" data-zone="rows"></div></div>
-            <div class="bld-shelf"><span class="bld-shelf-label">Колонки</span><div class="bld-zone" data-zone="cols"></div></div>
-            <div class="bld-shelf"><span class="bld-shelf-label">Фильтр</span><div class="bld-zone" data-zone="filter"></div></div>
-          </div>
-          <div class="bld-toolbar">
-            <label>Показатель<select id="bld-measure"><option value="pct">% от базы</option><option value="n">Число ответов</option><option value="index">Индекс к Total</option></select></label>
-            <label>Тесты<select id="bld-sig"><option value="on">Попарные, 95%</option><option value="off">Не считать</option></select></label>
-            <span id="bld-stage-note" class="bld-note"></span>
-          </div>
-          <div id="bld-grid-wrap" class="bld-grid-wrap"></div>
-        </div>
-
-        <div class="bld-col bld-chat">
-          <div class="bld-pane-head"><h3>Расчёты по запросу</h3><span class="bld-dim">на данных проекта</span></div>
-          <div id="bld-log" class="bld-log"></div>
-          <div id="bld-suggest" class="bld-suggest"></div>
-          <form id="bld-form" class="bld-form">
-            <textarea id="bld-input" rows="1" placeholder="Например: разбей по возрасту" aria-label="Запрос к ассистенту"></textarea>
-            <button type="submit" aria-label="Отправить">
-              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-            </button>
-          </form>
-          <p class="bld-disclaimer">Ассистент не подключён: ответы заранее записаны.</p>
-        </div>
       </section>
     </main>
 
@@ -502,7 +539,7 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260820-report-split" defer></script>
-    <script src="/app.js?v=20260820-report-split" defer></script>
+    <script src="/shell.js?v=20260828-builder-table-first" defer></script>
+    <script src="/app.js?v=20260828-builder-table-first" defer></script>
   </body>
 </html>

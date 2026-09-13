@@ -290,6 +290,11 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     expect(page.locator("#screen-builder")).to_be_visible(timeout=UI_TIMEOUT)
     # Конструктор получает переменные проекта, а не грузит их сам.
     expect(page.locator("#bld-list .bld-var")).not_to_have_count(0, timeout=UI_TIMEOUT)
+    # Полки стали полосой параметров: список переменных открывается из неё.
+    page.click('.bld-param[data-zone="rows"]')
+    expect(page.locator("#bld-picker")).to_be_visible(timeout=UI_TIMEOUT)
+    page.keyboard.press("Escape")
+    expect(page.locator("#bld-picker")).to_be_hidden(timeout=UI_TIMEOUT)
 
     page.click("#screen-nav button[data-screen='home']")
     expect(page.locator("#screen-home")).to_be_visible(timeout=UI_TIMEOUT)
