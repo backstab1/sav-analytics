@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from numbers import Number
 from typing import Any
 
@@ -16,6 +17,7 @@ from .data import ReportData
 from .models import ReportError, StatisticalAuditEntry
 from .statistics import (
     _balance_result,
+    _column_position,
     _mean_test,
     _pairwise_balance_entries,
     _pairwise_mean_entries,
@@ -557,6 +559,10 @@ def _write_metric_row(
         if weights is None
         else None
     )
+    # Строка сначала считается целиком и только потом пишется: число знаков
+    # выбирается для всей строки, а решить это можно лишь после последней
+    # колонки. Порядок записей аудита тот же, что при записи по ходу.
+    cells: list[_RowCell] = []
     for index, column in enumerate(columns, start=1):
         position = index - 1
         mask = column["mask"] & eligible_mask if vectorized is None else None
@@ -590,23 +596,6 @@ def _write_metric_row(
         wave_entry = _record_wave_comparison(
             audit_entries, audit_context, label, column, columns, wave_target, wave_result
         )
-        separated = context.separated(index)
-        if value is None:
-            sheet.write_string(
-                row, index, "–", formats.absent(separated=separated, derived=derived)
-            )
-        else:
-            cell_format = _result_format(
-                formats,
-                format_family,
-                base,
-                result,
-                statistical_settings,
-                wave_result,
-                separated=separated,
-                derived=derived,
-            )
-            sheet.write_number(row, index, value * 100, cell_format)
         pairwise = _pairwise_proportion_entries(
             outcome,
             column,
@@ -619,9 +608,13 @@ def _write_metric_row(
             pairwise_cache,
             vectorized,
         )
-        _write_cell_note(
-            context, row, index, [total_entry, wave_entry], pairwise
+        cells.append(
+            _RowCell(
+                value, base, result, wave_target, wave_result,
+                [total_entry, wave_entry], pairwise,
+            )
         )
+    _write_row_cells(context, row, cells, format_family, pairwise_cache, derived=derived)
     return row + 1
 
 def _write_numeric_metric(
@@ -762,7 +755,8 @@ def _write_balance_metric_row(
     sheet.write(row, 0, label, formats.derived_label())
     total_mask = columns[0]["mask"] & eligible_mask
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
-    for index, column in enumerate(columns, start=1):
+    cells: list[_RowCell] = []
+    for column in columns:
         current_mask = column["mask"] & eligible_mask
         weights = settings["weights"]
         if not current_mask.any():
@@ -823,31 +817,113 @@ def _write_balance_metric_row(
             method,
             pairwise_cache,
         )
+        cells.append(
+            _RowCell(
+                value, int(current_mask.sum()), total_result, wave_target, wave_result,
+                [total_entry, wave_entry], pairwise,
+            )
+        )
+    _write_row_cells(context, row, cells, "percent", pairwise_cache, derived=True)
+    return row + 1
+
+
+@dataclass(frozen=True)
+class _RowCell:
+    """Посчитанная ячейка строки долей, ещё не записанная в лист."""
+
+    value: float | None
+    base: int
+    result: StatisticalTestResult | None
+    wave_target: dict[str, Any] | None
+    wave_result: StatisticalTestResult | None
+    comparisons: list[StatisticalAuditEntry | None]
+    pairwise: list[StatisticalAuditEntry]
+
+
+def _write_row_cells(
+    context: _RowContext,
+    row: int,
+    cells: list[_RowCell],
+    family: str,
+    pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None],
+    *,
+    derived: bool,
+) -> None:
+    extra_decimal = family == "percent" and _rounding_hides_difference(
+        context.columns, cells, pairwise_cache, context.formats.percent_decimals
+    )
+    for index, cell in enumerate(cells, start=1):
         separated = context.separated(index)
-        if value is None:
-            sheet.write_string(
-                row, index, "–", formats.absent(separated=separated, derived=True)
+        if cell.value is None:
+            context.sheet.write_string(
+                row, index, "–", context.formats.absent(separated=separated, derived=derived)
             )
         else:
             cell_format = _result_format(
-                formats,
-                "percent",
-                int(current_mask.sum()),
-                total_result,
-                settings,
-                wave_result,
+                context.formats,
+                family,
+                cell.base,
+                cell.result,
+                context.settings,
+                cell.wave_result,
                 separated=separated,
-                derived=True,
+                derived=derived,
+                extra_decimal=extra_decimal,
             )
-            sheet.write_number(row, index, value * 100, cell_format)
-        _write_cell_note(context, row, index, [total_entry, wave_entry], pairwise)
-    return row + 1
+            context.sheet.write_number(row, index, cell.value * 100, cell_format)
+        _write_cell_note(context, row, index, cell.comparisons, cell.pairwise)
+
+
+def _rounding_hides_difference(
+    columns: list[dict[str, Any]],
+    cells: list[_RowCell],
+    pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None],
+    decimals: int,
+) -> bool:
+    """Выглядят ли одинаково после округления две значимо различные ячейки строки.
+
+    Пары — те, что читатель сравнивает на листе: две колонки попарного теста,
+    колонка и её волна, колонка и Total. Последняя пара берётся и при сравнении
+    с остатком: колонки остатка на листе нет, и выделенное цветом число,
+    совпадающее с Total, выглядит ошибкой. Решение о значимости принято по
+    полной точности; здесь выбирается только число знаков (requirements.md §9.6).
+    """
+    pairs = [
+        pair
+        for pair, result in pairwise_cache.items()
+        if result is not None and result.significant
+    ]
+    for position, cell in enumerate(cells):
+        if cell.result is not None and cell.result.significant:
+            pairs.append((position, 0))
+        if cell.wave_target is not None and cell.wave_result is not None:
+            if cell.wave_result.significant:
+                pairs.append((position, _column_position(columns, cell.wave_target)))
+    return any(
+        _shown_equal(cells[left].value, cells[right].value, decimals)
+        for left, right in pairs
+        if left != right
+    )
+
+
+def _shown_equal(left: float | None, right: float | None, decimals: int) -> bool:
+    """Одинаковы ли доли в процентах так, как их округлит Excel — половина вверх."""
+    if left is None or right is None:
+        return False
+    quantum = Decimal(1).scaleb(-decimals)
+
+    def shown(value: float) -> Decimal:
+        return Decimal(repr(value * 100)).quantize(quantum, rounding=ROUND_HALF_UP)
+
+    return shown(left) == shown(right)
 
 LEGEND = (
     "Цвет числа — отличие от тотала: зелёное выше, красное ниже.",
     "▴ ▾ слева от числа — отличие от предыдущей волны.",
     "Попарные сравнения внутри блока баннера — в примечании к ячейке.",
     "Серое число — база меньше минимальной, тест не проводился.",
+    "Лишний знак после запятой в строке — без него значимое различие "
+    "округлилось бы до одинаковых чисел.",
     "Бледное тире — значения нет.",
 )
 

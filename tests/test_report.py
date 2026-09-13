@@ -1505,3 +1505,89 @@ def test_decimals_change_the_format_not_the_stored_value(tmp_path: Path) -> None
     assert _cell_num_format(content, "Top-2", "B").endswith("0.0")
     assert _cell_num_format(content, "Среднее", "B").endswith("0.000")
     assert _cell_value(content, "Bottom-2", "B") == pytest.approx(100 / 3)
+
+
+def _rounding_project(source: Path, size: int) -> dict:
+    """Доли 50,49% и 49,51%: при целых процентах обе выглядят как 50."""
+    successes = round(size * 0.5049)
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * size + [2] * size,
+            "OUTCOME": [1] * successes
+            + [2] * (size - successes)
+            + [1] * (size - successes)
+            + [2] * successes,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"GROUP": "Группа", "OUTCOME": "Результат"},
+        variable_value_labels={
+            "GROUP": {1: "Первая", 2: "Вторая"},
+            "OUTCOME": {1: "Да", 2: "Нет"},
+        },
+        variable_measure={"GROUP": "nominal", "OUTCOME": "nominal"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    return {
+        "name": "Округление",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "filters": [],
+            "report_filter_id": None,
+            "banners": [
+                {
+                    "name": "Основной",
+                    "blocks": [
+                        {"label": "Группа", "sources": [{"kind": "question", "ref": "GROUP"}]}
+                    ],
+                }
+            ],
+            "report_settings": {
+                "confidence_level": 0.95,
+                "minimum_base": 30,
+                "compare_to_total": True,
+                "compare_pairwise": True,
+            },
+        },
+    }
+
+
+def test_row_gets_a_decimal_when_rounding_hides_a_significant_difference(
+    tmp_path: Path,
+) -> None:
+    """requirements.md §9.6: значимое различие не может выглядеть равенством."""
+    source = tmp_path / "rounding.sav"
+    content = build_topline_xlsx(source, _rounding_project(source, 40_000))
+
+    # 50,49% против 49,51% на 40 000 в группе — z ≈ 2,8.
+    # В примечании буквы баннера: Total = A, «Первая» = B, «Вторая» = C.
+    assert "Значимо выше: C — Вторая" in (_cell_comment(content, "Да", "C") or "")
+    for column in ("B", "C", "D"):
+        assert _cell_num_format(content, "Да", column).endswith(" 0.0")
+    # Хранится полная точность, знак добавляет только формат.
+    assert _cell_value(content, "Да", "C") == pytest.approx(50.49)
+
+
+def test_row_keeps_its_decimals_when_equal_looking_cells_do_not_differ(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "rounding.sav"
+    # Те же доли на 10 000 в группе: z ≈ 1,4, различие незначимо.
+    content = build_topline_xlsx(source, _rounding_project(source, 10_000))
+
+    assert _cell_num_format(content, "Да", "C").endswith(" 0")
+
+
+def test_row_keeps_its_decimals_when_a_significant_difference_is_visible(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "p_values.sav"
+    # 70% против 50%: значимо и видно без лишнего знака.
+    content = build_topline_xlsx(source, _significance_project(source))
+
+    assert _cell_font_color(content, "Да", "C") == "FF17724A"
+    assert _cell_num_format(content, "Да", "C").endswith(" 0")

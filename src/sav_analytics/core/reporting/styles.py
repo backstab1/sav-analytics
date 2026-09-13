@@ -175,6 +175,7 @@ class ReportFormats:
         wave: str | None = None,
         separated: bool = False,
         derived: bool = False,
+        extra_decimal: bool = False,
     ) -> Any:
         """Числовая ячейка.
 
@@ -187,6 +188,10 @@ class ReportFormats:
         # (requirements.md §8.2): округление в книге не меняет ни значение,
         # ни решение теста.
         places = self.mean_decimals if family == "mean" else self.percent_decimals
+        if extra_decimal:
+            # Строка, где округление спрятало бы значимое различие, получает
+            # знак сверх настроенного (requirements.md §9.6).
+            places += 1
         digits = "0." + "0" * places if places else "0"
         if wave == "higher":
             num_format = f'"{UP} "{digits}'
@@ -270,6 +275,7 @@ def _result_format(
     *,
     separated: bool = False,
     derived: bool = False,
+    extra_decimal: bool = False,
 ) -> Any:
     small = 0 < base < settings["minimum_base"]
     direction = None
@@ -287,4 +293,5 @@ def _result_format(
         wave=wave,
         separated=separated,
         derived=derived,
+        extra_decimal=extra_decimal,
     )
