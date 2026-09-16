@@ -43,6 +43,14 @@ class QuestionUpdate(BaseModel):
     confirm_substantive: bool | None = None
 
 
+class QuestionBulkUpdate(BaseModel):
+    """Массовая правка вопросов из структуры."""
+
+    codes: list[str] = Field(min_length=1, max_length=5000)
+    included_in_report: bool | None = None
+    confirm_review: bool = False
+
+
 class QuestionOrder(BaseModel):
     codes: list[str]
 

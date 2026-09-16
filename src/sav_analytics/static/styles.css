@@ -2245,3 +2245,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 /* Предупреждающая подпись под выбором схемы сравнения. */
 .warning-hint { color: var(--c-warn-ink); font-weight: 500; }
+
+/* Массовые операции над вопросами */
+.select-cell { width: 30px; text-align: center; }
+.select-cell input { margin: 0; cursor: pointer; }
+.bulk-bar { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 10px; }
+.bulk-bar[hidden] { display: none; }
+.bulk-bar b { color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+

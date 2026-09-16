@@ -1281,6 +1281,9 @@ document.querySelector("#project-trash-toggle").addEventListener("click", () => 
 
 function showProject(project, view = "data") {
   if (!confirmDiscard(openInspectorPanel())) return;
+  // Выбор вопросов принадлежит проекту: в другом проекте тех кодов может не быть.
+  selectedQuestionCodes.clear();
+  document.querySelector("#bulk-bar").hidden = true;
   currentProject = project;
   currentQuestionCode = null;
   currentRecodingId = null;
@@ -2323,15 +2326,18 @@ function renderTable() {
   updateStructureSearchCount(questions.length, allQuestions.length);
   // Код вынесен в свою колонку: раньше он был приклеен к названию, и
   // колонка «Вопрос» забирала 76% ширины ни на что.
+  const shownSelected = questions.length > 0
+    && questions.every(question => selectedQuestionCodes.has(question.code));
   document.querySelector("#table-head").innerHTML =
-    "<th class=\"drag-cell\" aria-label=\"Порядок\"></th>"
+    `<th class="select-cell"><input type="checkbox" id="select-all-questions" aria-label="Выбрать все показанные вопросы" ${shownSelected ? "checked" : ""} /></th>`
+    + "<th class=\"drag-cell\" aria-label=\"Порядок\"></th>"
     + "<th class=\"code-column\">Код</th>"
     + "<th class=\"question-cell\">Вопрос</th>"
     + "<th class=\"type-column\">Тип</th>"
     + "<th class=\"count-column\">Перем.</th>"
     + "<th class=\"status-column\">Статус</th>";
   if (!questions.length) {
-    document.querySelector("#table-body").innerHTML = emptySearchRow(6, "Вопросы не найдены.");
+    document.querySelector("#table-body").innerHTML = emptySearchRow(7, "Вопросы не найдены.");
     return;
   }
   document.querySelector("#table-body").innerHTML = questions.map(question => {
@@ -2350,7 +2356,9 @@ function renderTable() {
     ].filter(Boolean).join(" · ");
     // Пока список отфильтрован, порядок менять нельзя: соседи в выдаче не соседи в отчёте.
     const draggable = structureFiltered() ? "false" : "true";
+    const checked = selectedQuestionCodes.has(question.code) ? "checked" : "";
     return `<tr class="question-row ${question.code === currentQuestionCode ? "selected" : ""}" data-code="${escapeHtml(question.code)}">
+      <td class="select-cell"><input type="checkbox" class="select-question" data-select-code="${escapeAttribute(question.code)}" aria-label="Выбрать ${escapeAttribute(question.code)}" ${checked} /></td>
       <td class="drag-cell"><button type="button" class="drag-handle" draggable="${draggable}" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="${structureFiltered() ? "Сбросьте фильтр, чтобы менять порядок" : "Перетащите, чтобы изменить порядок"}"><span aria-hidden="true">⋮⋮</span></button></td>
       <td class="code-column"><code>${escapeHtml(question.code)}</code></td>
       <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</span>${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
@@ -2360,6 +2368,80 @@ function renderTable() {
     </tr>`;
   }).join("");
 }
+
+/* Массовые операции над вопросами. Выбор живёт на экране; правка уходит
+   одним запросом и одной ревизией, всё или ничего. */
+const selectedQuestionCodes = new Set();
+
+function updateBulkBar() {
+  const known = new Set(configuredQuestions().map(question => question.code));
+  [...selectedQuestionCodes].forEach(code => { if (!known.has(code)) selectedQuestionCodes.delete(code); });
+  const bar = document.querySelector("#bulk-bar");
+  bar.hidden = selectedQuestionCodes.size === 0;
+  document.querySelector("#bulk-count").textContent = `Выбрано: ${selectedQuestionCodes.size}`;
+}
+
+// Флажок строки не должен открывать карточку вопроса: щелчок останавливается
+// на фазе перехвата, до обработчиков строки.
+document.querySelector("#table-body").addEventListener("click", event => {
+  if (event.target.closest(".select-cell")) event.stopPropagation();
+}, true);
+document.querySelector("#table-body").addEventListener("change", event => {
+  const box = event.target.closest(".select-question");
+  if (!box) return;
+  if (box.checked) selectedQuestionCodes.add(box.dataset.selectCode);
+  else selectedQuestionCodes.delete(box.dataset.selectCode);
+  const all = document.querySelector("#select-all-questions");
+  if (all) {
+    const boxes = [...document.querySelectorAll("#table-body .select-question")];
+    all.checked = boxes.length > 0 && boxes.every(item => item.checked);
+  }
+  updateBulkBar();
+});
+document.querySelector("#table-head").addEventListener("change", event => {
+  if (event.target.id !== "select-all-questions") return;
+  document.querySelectorAll("#table-body .select-question").forEach(box => {
+    box.checked = event.target.checked;
+    if (box.checked) selectedQuestionCodes.add(box.dataset.selectCode);
+    else selectedQuestionCodes.delete(box.dataset.selectCode);
+  });
+  updateBulkBar();
+});
+document.querySelector("#bulk-bar").addEventListener("click", async event => {
+  const button = event.target.closest("[data-bulk]");
+  if (!button || !currentProject) return;
+  const action = button.dataset.bulk;
+  if (action === "clear") {
+    selectedQuestionCodes.clear();
+    renderTable();
+    updateBulkBar();
+    return;
+  }
+  const body = { codes: [...selectedQuestionCodes] };
+  if (action === "include") body.included_in_report = true;
+  if (action === "exclude") body.included_in_report = false;
+  if (action === "confirm") body.confirm_review = true;
+  button.disabled = true;
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/questions`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const count = body.codes.length;
+    renderProject();
+    showToast({
+      include: `В отчёт: ${plural(count, "вопрос", "вопроса", "вопросов")}`,
+      exclude: `Исключено: ${plural(count, "вопрос", "вопроса", "вопросов")}`,
+      confirm: `Распознавание подтверждено: ${plural(count, "вопрос", "вопроса", "вопросов")}`,
+    }[action]);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
+    updateBulkBar();
+  }
+});
 
 function emptySearchRow(columns, message) {
   const reason = structureSearch

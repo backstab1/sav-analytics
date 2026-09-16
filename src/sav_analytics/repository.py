@@ -154,11 +154,68 @@ class ProjectRepository:
 
     def update_question(self, project_id: UUID, code: str, changes: dict) -> dict:
         project = self.get(project_id)
-        questions = project["configuration"]["questions"]
+        question = self._find_question(project, code)
+        self._apply_question_changes(project_id, project, question, changes)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_questions(
+        self,
+        project_id: UUID,
+        codes: list[str],
+        changes: dict,
+        *,
+        confirm_recognition: bool = False,
+    ) -> dict:
+        """Одна правка для многих вопросов: одной ревизией и всё или ничего.
+
+        Каждый вопрос проходит ту же проверку, что при правке по одному. Ошибка
+        в любом отменяет всю правку: проект читается заново на каждый запрос,
+        и запись происходит только после проверки всех вопросов.
+        """
+        project = self.get(project_id)
+        for code in dict.fromkeys(codes):
+            question = self._find_question(project, code)
+            try:
+                self._apply_question_changes(
+                    project_id,
+                    project,
+                    question,
+                    dict(changes),
+                    confirm_recognition=confirm_recognition,
+                )
+            except InvalidUploadError as exc:
+                raise InvalidUploadError(f"Вопрос {code}: {exc}") from exc
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    @staticmethod
+    def _find_question(project: dict, code: str) -> dict:
         try:
-            question = next(item for item in questions if item["code"] == code)
+            return next(
+                item for item in project["configuration"]["questions"] if item["code"] == code
+            )
         except StopIteration as exc:
             raise ProjectNotFoundError(code) from exc
+
+    def _apply_question_changes(
+        self,
+        project_id: UUID,
+        project: dict,
+        question: dict,
+        changes: dict,
+        *,
+        confirm_recognition: bool = True,
+    ) -> None:
+        """Проверить и применить правку вопроса к проекту в памяти, без записи.
+
+        Сохранение карточки вопроса подтверждает распознавание; массовое
+        включение и исключение — нет, для этого есть отдельное действие.
+        """
+        questions = project["configuration"]["questions"]
+        code = question["code"]
         confirm_substantive = bool(changes.pop("confirm_substantive", False))
         final_role = changes.get("role", question["role"])
         final_type = changes.get("question_type", question["question_type"])
@@ -264,15 +321,12 @@ class ProjectRepository:
         # автоматически собранной группы — и подтвердил настройки.
         # Подтверждать нечего, если предупреждений нет: тогда распознавание
         # не трогаем, как и метаданные SPSS.
-        if (
+        if confirm_recognition and (
             question.get("recognition", "auto") not in CONFIRMED_RECOGNITIONS
             and question.get("warnings")
         ):
             question["recognition"] = "manual"
         question.update(changes)
-        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
-        self._write_project(project_id, project)
-        return project
 
     def mark_not_applicable(
         self, project_id: UUID, marks: list[dict], *, confirm_substantive: bool = False

@@ -751,3 +751,29 @@ def test_unsaved_question_edits_are_not_lost_silently(
     page.click("#close-editor")
     expect(page.locator("#question-editor")).to_be_hidden(timeout=UI_TIMEOUT)
 
+
+def test_several_questions_are_excluded_at_once(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.check("#table-body tr[data-code='BRAND'] .select-question")
+    page.check("#table-body tr[data-code='SEX'] .select-question")
+    expect(page.locator("#bulk-bar")).to_be_visible()
+    expect(page.locator("#bulk-count")).to_have_text("Выбрано: 2")
+    # Флажок не открывает карточку вопроса.
+    expect(page.locator("#question-editor")).to_be_hidden()
+
+    page.click('#bulk-bar [data-bulk="exclude"]')
+    for code in ("BRAND", "SEX"):
+        expect(page.locator(f"#table-body tr[data-code='{code}'] .status")).to_have_text(
+            "Исключён", timeout=UI_TIMEOUT
+        )
+
+    page.check("#select-all-questions")
+    expect(page.locator("#bulk-count")).to_have_text("Выбрано: 5")
+    page.click('#bulk-bar [data-bulk="clear"]')
+    expect(page.locator("#bulk-bar")).to_be_hidden()
+

@@ -11,6 +11,7 @@ from ..api_schemas import (
     NotApplicableAssessmentRequest,
     NotApplicableUpdate,
     QuestionBaseUpdate,
+    QuestionBulkUpdate,
     QuestionOrder,
     QuestionUpdate,
 )
@@ -47,6 +48,27 @@ def mark_not_applicable(
     try:
         return repository.mark_not_applicable(
             project_id, marks, confirm_substantive=update.confirm_substantive
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("")
+def update_questions(
+    project_id: UUID,
+    update: QuestionBulkUpdate,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    changes = {}
+    if update.included_in_report is not None:
+        changes["included_in_report"] = update.included_in_report
+    if not changes and not update.confirm_review:
+        raise HTTPException(status_code=422, detail="Не выбрано, что менять у вопросов.")
+    try:
+        return repository.update_questions(
+            project_id, update.codes, changes, confirm_recognition=update.confirm_review
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc

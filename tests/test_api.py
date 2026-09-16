@@ -1663,3 +1663,63 @@ def test_question_output_set_is_checked_against_the_question_type(tmp_path: Path
     finally:
         app.dependency_overrides.clear()
 
+
+def test_bulk_question_update_is_one_revision_and_all_or_nothing(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            url = f"/api/projects/{project['id']}/questions"
+            before = project["configuration"]["revision"]
+
+            def included(response) -> dict:
+                return {
+                    item["code"]: item["included_in_report"]
+                    for item in response.json()["configuration"]["questions"]
+                }
+
+            excluded = client.patch(
+                url, json={"codes": ["Q1", "Q2"], "included_in_report": False}
+            )
+            assert excluded.status_code == 200
+            assert included(excluded)["Q1"] is False
+            assert included(excluded)["Q2"] is False
+            assert excluded.json()["configuration"]["revision"] == before + 1
+
+            # Неизвестный код отменяет всю правку: Q1 остаётся исключённым.
+            refused = client.patch(
+                url, json={"codes": ["Q1", "NOPE"], "included_in_report": True}
+            )
+            assert refused.status_code == 404
+            current = client.get(f"/api/projects/{project['id']}")
+            assert included(current)["Q1"] is False
+            assert current.json()["configuration"]["revision"] == before + 1
+
+            assert client.patch(url, json={"codes": ["Q1"]}).status_code == 422
+
+            # Включение не подтверждает распознавание — это отдельное действие.
+            after_include = client.patch(
+                url, json={"codes": ["Q1", "Q2"], "included_in_report": True}
+            )
+            assert after_include.status_code == 200
+            pending = [
+                item["code"]
+                for item in after_include.json()["configuration"]["questions"]
+                if item.get("needs_review")
+            ]
+            if pending:
+                confirmed = client.patch(url, json={"codes": pending, "confirm_review": True})
+                assert not any(
+                    item["needs_review"]
+                    for item in confirmed.json()["configuration"]["questions"]
+                    if item["code"] in pending
+                )
+    finally:
+        app.dependency_overrides.clear()
+
