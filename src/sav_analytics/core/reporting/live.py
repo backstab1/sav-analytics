@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from ..banner import BannerError, banner_columns
+from ..filtering import FilterError, filter_columns
 from ..report_settings import resolved_report_settings
 from .data import prepare_report_data
 from .excel_layout import _banner_blocks, _excel_column_name, _write_topline
@@ -98,7 +100,7 @@ def build_live_table(
     от валидной базы вопроса, как `topline_filter`.
     """
     live = _live_project(project, questions, banner_id, blocks, filter_id)
-    data = prepare_report_data(path, live)
+    data = prepare_report_data(path, live, columns=_needed_columns(live))
     recording = _RecordingSheet()
     valid = sheet == "filter"
     chosen = data.filter_questions if valid else data.questions
@@ -136,6 +138,62 @@ def build_live_table(
         "questions": _questions(recording, chosen, positions, len(data.columns)),
         "tests": len(entries),
     }
+
+
+def _needed_columns(live: dict[str, Any]) -> list[str] | None:
+    """Столбцы SAV, нужные этой раскладке, или None — если нужны все.
+
+    Читать весь массив на каждый пересчёт незачем: таблице нужны вопросы
+    строк, переменные разреза, фильтров и веса. Список собирают сами модули,
+    чтобы имена столбцов не приходилось угадывать снаружи.
+    """
+    configuration = live["configuration"]
+    settings = configuration.get("report_settings") or {}
+    if settings.get("calculated_weight_id"):
+        # Raking считается по целям веса: какие столбцы ему нужны, знает он сам.
+        return None
+    names: list[str] = []
+
+    def add(name: str) -> None:
+        if name not in names:
+            names.append(name)
+
+    filters = {item["id"]: item for item in configuration.get("filters", [])}
+    rules = [configuration.get("report_filter_id")]
+    for question in configuration["questions"]:
+        if not question["included_in_report"]:
+            continue
+        for name in question["source_variables"]:
+            add(name)
+        rules.append(question.get("base_filter_id"))
+    for rule_id in rules:
+        definition = filters.get(rule_id) if rule_id else None
+        if definition is None:
+            continue
+        try:
+            for name in sorted(filter_columns(definition, live)):
+                add(name)
+        except FilterError:
+            # Правило сломано — пусть об этом скажет расчёт, а не чтение файла.
+            return None
+    active = next(
+        (
+            item
+            for item in configuration.get("banners", [])
+            if str(item.get("id")) == str(configuration.get("report_banner_id"))
+        ),
+        None,
+    )
+    if active is not None:
+        try:
+            for name in sorted(banner_columns(active, live)):
+                add(name)
+        except BannerError:
+            return None
+    weight = settings.get("weight_variable")
+    if weight:
+        add(weight)
+    return names
 
 
 def _live_project(
@@ -260,17 +318,35 @@ def _row(recording: _RecordingSheet, row: int, width: int) -> dict[str, Any]:
         kind = "base"
     else:
         kind = "value"
+    cells = [
+        _cell(value, fmt, recording.notes.get((row, col)))
+        for col, (value, fmt) in enumerate(written, start=1)
+    ]
+    if kind == "value":
+        _add_index(cells)
     return {
         # Номер строки на листе книги, считая с единицы, — для сверки с Excel.
         "sheet_row": row + 1,
         "label": label,
         "kind": kind,
         "derived": kind == "value" and "bg_color" in label_format,
-        "cells": [
-            _cell(value, fmt, recording.notes.get((row, col)))
-            for col, (value, fmt) in enumerate(written, start=1)
-        ],
+        "cells": cells,
     }
+
+
+def _add_index(cells: list[dict[str, Any]]) -> None:
+    """Индекс к Total: 100 — уровень всей выборки.
+
+    Считается из тех же двух чисел строки, что уже показаны рядом, и только
+    для них: своего расчёта у индекса нет, поэтому и расходиться ему не с чем.
+    Строки базы индекса не получают — сравнивать размеры групп бессмысленно.
+    """
+    total = cells[0].get("value") if cells else None
+    if not total:
+        return
+    for cell in cells:
+        if cell.get("value") is not None:
+            cell["index"] = cell["value"] / total * 100
 
 
 def _cell(value: Any, fmt: dict[str, Any], note: str | None) -> dict[str, Any]:

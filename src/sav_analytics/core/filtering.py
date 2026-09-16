@@ -148,6 +148,11 @@ def condition_source_options(
     }
 
 
+def filter_columns(definition: dict[str, Any], project: dict[str, Any]) -> set[str]:
+    """Столбцы SAV, без которых правило не посчитать."""
+    return _required_columns(definition["rule"], project)
+
+
 def evaluate_filter_frame(
     definition: dict[str, Any], project: dict[str, Any], frame: pd.DataFrame
 ) -> pd.Series:

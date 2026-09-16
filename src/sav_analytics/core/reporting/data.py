@@ -41,9 +41,18 @@ class ReportData:
         return len(self.questions) + len(self.filter_questions) + 2
 
 
-def prepare_report_data(path: str | Path, project: dict[str, Any]) -> ReportData:
+def prepare_report_data(
+    path: str | Path, project: dict[str, Any], *, columns: list[str] | None = None
+) -> ReportData:
+    """Собрать данные отчёта.
+
+    `columns` ограничивает чтение SAV нужными столбцами. Книге они нужны все,
+    а таблице на экране — только вопросы раскладки, разрез, фильтр и вес,
+    поэтому список считает вызывающий: он же знает раскладку.
+    """
     frame, _ = pyreadstat.read_sav(
         path,
+        usecols=columns,
         apply_value_formats=False,
         user_missing=False,
         dates_as_pandas_datetime=False,

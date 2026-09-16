@@ -75,6 +75,15 @@ def calculate_banner_preview(
     }
 
 
+def banner_columns(definition: dict[str, Any], project: dict[str, Any]) -> set[str]:
+    """Столбцы SAV, из которых строятся колонки баннера."""
+    return {
+        _source_variable(source, project)
+        for block in definition["blocks"]
+        for source in block["sources"]
+    }
+
+
 def build_banner_columns(
     frame: pd.DataFrame, definition: dict[str, Any], project: dict[str, Any]
 ) -> list[dict[str, Any]]:

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
 from sav_analytics.core.report import build_topline_xlsx
-from sav_analytics.core.reporting.live import build_live_table
+from sav_analytics.core.reporting.live import _needed_columns, build_live_table
 from sav_analytics.core.reporting.models import ReportError
 from sav_analytics.repository import ProjectRepository
 from tests.test_report import _significance_project
@@ -178,3 +178,56 @@ def test_table_preview_endpoint(tmp_path: Path) -> None:
             assert both.status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_cells_carry_the_index_to_total(tmp_path: Path) -> None:
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source)
+    _, blocks = _layout(project)
+
+    table = build_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
+
+    yes = next(row for row in table["questions"][0]["rows"] if row["label"] == "Да")
+    # 70% в первой группе против 62% по всей выборке.
+    assert yes["cells"][0]["index"] == pytest.approx(100.0)
+    assert yes["cells"][1]["index"] == pytest.approx(70 / 62 * 100)
+    # База — не доля, индекса у неё нет.
+    base_rows = [row for row in table["questions"][0]["rows"] if row["kind"] == "base"]
+    assert all("index" not in cell for row in base_rows for cell in row["cells"])
+
+
+def test_only_the_columns_of_the_layout_are_read(tmp_path: Path) -> None:
+    """Пересчёт таблицы не читает весь массив (роадмап, PQ.3)."""
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source)
+    configuration = project["configuration"]
+    configuration["banners"][0]["id"] = "banner"
+    configuration["report_banner_id"] = "banner"
+    configuration["filters"] = [
+        {
+            "id": "men",
+            "name": "Первая группа",
+            "rule": {
+                "kind": "group",
+                "operator": "and",
+                "items": [
+                    {
+                        "kind": "condition",
+                        "source": {"kind": "question", "ref": "GROUP"},
+                        "operator": "in",
+                        "values": [1],
+                    }
+                ],
+            },
+        }
+    ]
+    configuration["report_filter_id"] = "men"
+    for question in configuration["questions"]:
+        question["included_in_report"] = question["code"] == "OUTCOME"
+
+    assert _needed_columns(project) == ["OUTCOME", "GROUP"]
+
+    # Рассчитанный вес читает массив сам, поэтому столбцы не ограничиваются.
+    configuration["report_settings"]["calculated_weight_id"] = "whatever"
+    assert _needed_columns(project) is None
+
