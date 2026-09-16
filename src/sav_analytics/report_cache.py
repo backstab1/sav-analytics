@@ -7,6 +7,7 @@ import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -83,6 +84,10 @@ def prepare_report(
                 "cache_version": REPORT_CACHE_VERSION,
                 "configuration_revision": revision,
                 "source_sha256": project.get("source", {}).get("sha256"),
+                # Время и сводка нужны истории запусков: без них список сборок
+                # — это только хэши, по которым не понять, что в какой книге.
+                "created_at": _now(),
+                "summary": _run_summary(project),
                 "files": {
                     "topline.xlsx": _file_metadata(topline_temporary),
                     "statistics.txt": _file_metadata(statistics_temporary),
@@ -130,6 +135,58 @@ def get_report_artifact(
     if prepared is None:
         raise ReportArtifactNotFoundError(artifact_id)
     return prepared
+
+
+def list_report_runs(
+    repository: ProjectRepository,
+    project_id: UUID,
+    project: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """История запусков: все целые сборки проекта, новые сверху (роадмап, P1.6).
+
+    Хранилища у истории нет — это индекс по уже неизменным артефактам.
+    Каждый проходит ту же сверку файлов с манифестом, что и скачивание:
+    повреждённая сборка в историю не попадает и скачать её оттуда нельзя.
+    """
+    root = repository.report_cache_dir(project_id) / "artifacts"
+    if not root.is_dir():
+        return []
+    current = report_cache_key(project)
+    runs = []
+    for directory in root.iterdir():
+        if not directory.is_dir() or not _ARTIFACT_ID.fullmatch(directory.name):
+            continue
+        prepared = _cached_report(repository, project_id, directory.name)
+        if prepared is None:
+            continue
+        manifest_path = directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        # Сборки до появления истории времени не записывали; время файла
+        # манифеста — момент, когда сборка была закончена.
+        created_at = manifest.get("created_at") or datetime.fromtimestamp(
+            manifest_path.stat().st_mtime, UTC
+        ).isoformat(timespec="seconds")
+        base = f"/api/projects/{project_id}/reports/artifacts/{directory.name}"
+        runs.append(
+            {
+                "artifact_id": directory.name,
+                "created_at": created_at,
+                "configuration_revision": prepared.configuration_revision,
+                "source_sha256": manifest.get("source_sha256"),
+                "summary": manifest.get("summary"),
+                "sizes": {
+                    name: meta.get("size")
+                    for name, meta in (manifest.get("files") or {}).items()
+                    if isinstance(meta, dict)
+                },
+                "current": directory.name == current,
+                "downloads": {
+                    "topline": f"{base}/topline.xlsx",
+                    "statistics": f"{base}/statistics.txt",
+                },
+            }
+        )
+    return sorted(runs, key=lambda run: run["created_at"], reverse=True)
 
 
 def report_cache_key(project: dict[str, Any]) -> str:
@@ -209,6 +266,49 @@ def _artifact_dir(
     artifact_id: str,
 ) -> Path:
     return repository.report_cache_dir(project_id) / "artifacts" / artifact_id
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _run_summary(project: dict[str, Any]) -> dict[str, Any]:
+    """Что за книга, в словах: сколько вопросов, какой разрез, фильтр и вес."""
+    configuration = project.get("configuration", {})
+    settings = configuration.get("report_settings") or {}
+    banner = next(
+        (
+            item
+            for item in configuration.get("banners", [])
+            if str(item.get("id")) == str(configuration.get("report_banner_id"))
+        ),
+        None,
+    )
+    report_filter = next(
+        (
+            item
+            for item in configuration.get("filters", [])
+            if str(item.get("id")) == str(configuration.get("report_filter_id"))
+        ),
+        None,
+    )
+    calculated = next(
+        (
+            item
+            for item in configuration.get("calculated_weights", [])
+            if str(item.get("id")) == str(settings.get("calculated_weight_id"))
+        ),
+        None,
+    )
+    return {
+        "questions": sum(
+            1 for item in configuration.get("questions", []) if item.get("included_in_report")
+        ),
+        "banner": banner.get("name") if banner else None,
+        "filter": report_filter.get("name") if report_filter else None,
+        "weight": settings.get("weight_variable")
+        or (calculated.get("name") if calculated else None),
+    }
 
 
 def _configuration_revision(project: dict[str, Any]) -> int:

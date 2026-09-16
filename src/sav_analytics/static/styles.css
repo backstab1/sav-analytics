@@ -539,6 +539,26 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 }
 .col-note { font-size: var(--t-xs); color: var(--c-ink-4); }
 
+/* История запусков: строка — одна неизменная сборка. */
+.runs { border-top: 1px solid var(--c-border); }
+.runs-list { display: grid; }
+.run {
+  display: grid; grid-template-columns: minmax(190px, auto) minmax(0, 1fr) auto; align-items: center; gap: 14px;
+  padding: 8px 16px; border-top: 1px solid var(--c-border); font-size: var(--t-xs);
+}
+.run:first-child { border-top: 0; }
+.run time { color: var(--c-ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.run-meta { overflow: hidden; color: var(--c-ink-3); text-overflow: ellipsis; white-space: nowrap; }
+.run-meta b { color: var(--c-ink); font-weight: 600; }
+.run-current {
+  margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+  background: var(--c-brand-tint); color: var(--c-brand); font-size: 10px; font-weight: 700;
+}
+.run-links { display: flex; gap: 12px; }
+.run-links a { color: var(--c-brand); font-weight: 600; text-decoration: none; }
+.run-links a:hover { text-decoration: underline; }
+.runs-empty { margin: 0; padding: 10px 16px; color: var(--c-ink-3); font-size: var(--t-xs); }
+
 /* Строка свойства: имя, значение с метриками, действие. Значение — оно
    же кнопка выбора: щёлкать по названию естественнее, чем искать
    отдельную пилюлю. */

@@ -269,6 +269,11 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     workbook = _download_artifact(page, "#download-report", tmp_path / "topline.xlsx")
     audit = _download_artifact(page, "#download-statistics", tmp_path / "statistics.txt")
 
+    # Сборка попала в историю запусков и собрана по текущим настройкам.
+    expect(page.locator("#report-runs .run").first).to_contain_text(
+        "текущие настройки", timeout=UI_TIMEOUT
+    )
+
     # Скачалось именно то, что должно: настоящая книга и настоящий аудит.
     with ZipFile(workbook) as archive:
         names = set(archive.namelist())

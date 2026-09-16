@@ -10,6 +10,7 @@ from sav_analytics.report_cache import (
     PreparedReport,
     ReportArtifactNotFoundError,
     get_report_artifact,
+    list_report_runs,
     prepare_report,
 )
 from sav_analytics.repository import ProjectRepository
@@ -225,3 +226,96 @@ def test_a_failed_build_leaves_no_half_written_artifact(tmp_path: Path, monkeypa
     assert len(attempts) == 2
     assert recovered.cached is False
     assert recovered.topline_path.read_bytes() == b"xlsx"
+
+
+def _fake_build(monkeypatch) -> None:
+    def build_artifacts(
+        _path, _project, *, statistics_stream, progress_callback
+    ) -> ToplineArtifacts:
+        statistics_stream.write("statistics")
+        return ToplineArtifacts(xlsx=b"xlsx", statistics_txt="statistics")
+
+    monkeypatch.setattr("sav_analytics.report_cache.build_topline_artifacts", build_artifacts)
+
+
+def test_history_lists_every_whole_run_newest_first(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    project = repository.create("Report", "fixture.sav", BytesIO(source.read_bytes()))
+    project_id = UUID(project["id"])
+    _fake_build(monkeypatch)
+    times = iter(["2026-09-16T10:00:00+00:00", "2026-09-16T11:00:00+00:00"])
+    monkeypatch.setattr("sav_analytics.report_cache._now", lambda: next(times))
+
+    first = prepare_report(repository, project_id, project)
+    question = project["configuration"]["questions"][0]
+    updated = repository.update_question(project_id, question["code"], {"label": "Changed"})
+    second = prepare_report(repository, project_id, updated)
+
+    runs = list_report_runs(repository, project_id, updated)
+    assert [run["artifact_id"] for run in runs] == [second.artifact_id, first.artifact_id]
+    assert [run["current"] for run in runs] == [True, False]
+    assert runs[1]["configuration_revision"] == project["configuration"]["revision"]
+    assert runs[0]["summary"]["questions"] == sum(
+        1 for item in updated["configuration"]["questions"] if item["included_in_report"]
+    )
+    assert runs[0]["summary"]["banner"] is None
+    assert runs[1]["downloads"]["topline"].endswith(
+        f"/reports/artifacts/{first.artifact_id}/topline.xlsx"
+    )
+
+    # Повреждённая сборка из истории исчезает: скачать её оттуда нельзя.
+    (_artifact_files(repository, project_id, first.artifact_id) / "topline.xlsx").write_bytes(
+        b"broken"
+    )
+    assert [run["artifact_id"] for run in list_report_runs(repository, project_id, updated)] == [
+        second.artifact_id
+    ]
+
+
+def test_history_keeps_runs_built_before_it_recorded_a_time(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    project = repository.create("Report", "fixture.sav", BytesIO(source.read_bytes()))
+    project_id = UUID(project["id"])
+    _fake_build(monkeypatch)
+    prepared = prepare_report(repository, project_id, project)
+    manifest_path = _artifact_files(repository, project_id, prepared.artifact_id) / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["created_at"], manifest["summary"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    [run] = list_report_runs(repository, project_id, project)
+
+    assert run["created_at"]
+    assert run["summary"] is None
+    assert run["current"] is True
+
+
+def test_history_endpoint_answers_for_a_project_without_runs(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from sav_analytics.api import app, get_repository
+
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+            response = client.get(f"/api/projects/{project_id}/reports/history")
+            assert response.status_code == 200
+            assert response.json() == {"runs": []}
+    finally:
+        app.dependency_overrides.clear()
+

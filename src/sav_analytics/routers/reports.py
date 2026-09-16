@@ -14,6 +14,7 @@ from ..report_cache import (
     ReportArtifactNotFoundError,
     get_cached_report,
     get_report_artifact,
+    list_report_runs,
 )
 from ..report_jobs import get_report_job, start_report_job
 from ..repository import ProjectNotFoundError, ProjectRepository
@@ -34,6 +35,18 @@ def report_preflight(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
     return run_preflight(source, project).to_dict()
+
+
+@router.get("/history")
+def report_history(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        project = repository.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    return {"runs": list_report_runs(repository, project_id, project)}
 
 
 @router.post("/prepare")

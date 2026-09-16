@@ -1682,7 +1682,12 @@ function renderReportBlocks() {
       ].join("")}
     </section>
     ${reportStatisticsColumn(settings)}
-  </div>`;
+  </div>
+  <section class="runs">
+    <div class="col-head"><h3>История запусков</h3><span class="col-note">каждая сборка хранится неизменной и скачивается снова</span></div>
+    <div id="report-runs" class="runs-list"><p class="runs-empty">Загружаем…</p></div>
+  </section>`;
+  void loadRunHistory();
   const activeBanner = configuredBanners().find(item => item.id === selectedReportBannerId());
   const included = configuredQuestions().filter(question => question.included_in_report).length;
   const columns = activeBanner ? reportBannerColumnCount(activeBanner) : 1;
@@ -2013,6 +2018,55 @@ async function loadReportPreflight() {
   } catch (error) {
     container.innerHTML = `<span class="pf error"><i></i>${escapeHtml(error.message)}</span>`;
   }
+}
+
+// История запусков — индекс неизменных сборок проекта. Кэшируется на проект
+// и сбрасывается после каждой сборки: только тогда в ней что-то меняется.
+const runHistoryCache = new Map();
+
+async function loadRunHistory(force = false) {
+  if (!currentProject) return;
+  const projectId = currentProject.id;
+  if (!force && runHistoryCache.has(projectId)) {
+    renderRunHistory(runHistoryCache.get(projectId));
+    return;
+  }
+  try {
+    const history = await api(`/api/projects/${projectId}/reports/history`);
+    runHistoryCache.set(projectId, history.runs);
+    if (currentProject?.id === projectId && currentView === "reports") renderRunHistory(history.runs);
+  } catch (error) {
+    const box = document.querySelector("#report-runs");
+    if (box) box.innerHTML = `<p class="runs-empty">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderRunHistory(runs) {
+  const box = document.querySelector("#report-runs");
+  if (!box) return;
+  if (!runs.length) {
+    box.innerHTML = '<p class="runs-empty">Отчёт ещё не собирался. Каждая сборка появится здесь и останется доступной.</p>';
+    return;
+  }
+  box.innerHTML = runs.map(run => {
+    const when = new Date(run.created_at).toLocaleString("ru-RU", {
+      day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+    });
+    const parts = [`ревизия <b>${escapeHtml(run.configuration_revision)}</b>`];
+    const summary = run.summary;
+    if (summary) {
+      parts.push(escapeHtml(plural(summary.questions, "вопрос", "вопроса", "вопросов")));
+      parts.push(summary.banner ? `баннер «${escapeHtml(summary.banner)}»` : "только Total");
+      if (summary.filter) parts.push(`фильтр «${escapeHtml(summary.filter)}»`);
+      if (summary.weight) parts.push(`вес ${escapeHtml(summary.weight)}`);
+    }
+    const current = run.current ? '<span class="run-current">текущие настройки</span>' : "";
+    return `<div class="run">
+      <time datetime="${escapeAttribute(run.created_at)}">${escapeHtml(when)}${current}</time>
+      <span class="run-meta">${parts.join(" · ")}</span>
+      <span class="run-links"><a href="${escapeAttribute(run.downloads.topline)}">Excel</a><a href="${escapeAttribute(run.downloads.statistics)}">statistics.txt</a></span>
+    </div>`;
+  }).join("");
 }
 
 function renderLaunchStatus(report) {
@@ -3627,6 +3681,9 @@ async function downloadPreparedReport(event) {
     // Полоса запуска перерисовывает свой вердикт: сборка могла изменить
     // ревизию конфигурации, а с ней и результат проверки.
     if (currentView === "reports") void loadReportPreflight();
+    // Сборка — единственное, что меняет историю запусков.
+    if (currentProject) runHistoryCache.delete(currentProject.id);
+    if (currentView === "reports") void loadRunHistory(true);
     // Найденные проблемы и ошибки остаются на экране: их нужно прочитать,
     // а не поймать взглядом за три секунды.
     if (!keepOpen) {
