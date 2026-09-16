@@ -777,3 +777,16 @@ def test_several_questions_are_excluded_at_once(
     page.click('#bulk-bar [data-bulk="clear"]')
     expect(page.locator("#bulk-bar")).to_be_hidden()
 
+
+def test_csv_upload_opens_a_project(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.csv"
+    source.write_bytes("Пол;Оценка\nМужчина;4\nЖенщина;5\nЖенщина;3\n".encode("utf-8-sig"))
+    page.goto(live_server)
+    expect(page.locator("#start")).to_be_visible(timeout=UI_TIMEOUT)
+    page.set_input_files("#file", str(source))
+    page.click("#submit")
+    expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body")).to_contain_text("Пол", timeout=UI_TIMEOUT)
+

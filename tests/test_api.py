@@ -110,7 +110,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
         app.dependency_overrides.clear()
 
 
-def test_rejects_non_sav_extension(tmp_path: Path) -> None:
+def test_rejects_unsupported_extension(tmp_path: Path) -> None:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=1024)
     app.dependency_overrides[get_repository] = lambda: repository
     try:
@@ -118,7 +118,8 @@ def test_rejects_non_sav_extension(tmp_path: Path) -> None:
             response = client.post(
                 "/api/projects",
                 headers={"X-Request-ID": "upload-test-1"},
-                files={"file": ("data.csv", b"a,b\n1,2", "text/csv")},
+                # CSV и TSV принимаются с импортом таблицы; XLSX — пока нет.
+                files={"file": ("data.xlsx", b"PK\x03\x04", "application/octet-stream")},
             )
         assert response.status_code == 422
         assert response.json()["error_code"] == "UNPROCESSABLE_ENTITY"

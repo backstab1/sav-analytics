@@ -129,8 +129,13 @@ def download_source(
     try:
         project = repository.get(project_id)
         path = repository.source_path(project_id)
+        original = repository.original_path(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    if original is not None:
+        # Исходник — то, что загрузили: CSV, а не SAV, собранный из него.
+        media_type = "text/tab-separated-values" if original.suffix == ".tsv" else "text/csv"
+        return FileResponse(original, media_type=media_type, filename=project["original_filename"])
     return FileResponse(
         path,
         media_type="application/x-spss-sav",

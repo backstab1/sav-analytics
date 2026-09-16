@@ -26,6 +26,7 @@ from .core.report_settings import (
 )
 from .core.review import CONFIRMED_RECOGNITIONS
 from .core.sav_reader import SavReadError, inspect_sav, spss_missing_mask
+from .core.tabular_import import TabularImportError, convert_to_sav, is_tabular
 from .project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
 
 STRUCTURE_VERSION = 6
@@ -48,17 +49,24 @@ class ProjectRepository:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def create(self, name: str, original_filename: str, source: BinaryIO) -> dict:
-        if not original_filename.lower().endswith(".sav"):
-            raise InvalidUploadError("Допускаются только файлы с расширением .sav.")
+        tabular = is_tabular(original_filename)
+        if not original_filename.lower().endswith(".sav") and not tabular:
+            raise InvalidUploadError("Допускаются файлы SAV, CSV и TSV.")
         project_id = uuid4()
         temporary = self.root / f".{project_id}.uploading"
         destination = self.root / str(project_id)
         temporary.mkdir()
         source_path = temporary / "source.sav"
+        # CSV хранится неизменным оригиналом, а расчёт идёт по SAV из него.
+        upload_path = (
+            temporary / f"original{Path(original_filename).suffix.lower()}"
+            if tabular
+            else source_path
+        )
         digest = hashlib.sha256()
         size = 0
         try:
-            with source_path.open("xb") as output:
+            with upload_path.open("xb") as output:
                 while chunk := source.read(1024 * 1024):
                     size += len(chunk)
                     if size > self.max_upload_bytes:
@@ -68,6 +76,11 @@ class ProjectRepository:
 
             if size == 0:
                 raise InvalidUploadError("Загружен пустой файл.")
+            if tabular:
+                try:
+                    convert_to_sav(upload_path, source_path)
+                except TabularImportError as exc:
+                    raise InvalidUploadError(str(exc)) from exc
             inspection = inspect_sav(source_path)
             created_at = datetime.now(UTC).isoformat()
             project = {
@@ -763,6 +776,8 @@ class ProjectRepository:
             shutil.copy2(
                 self.root / str(project_id) / "source.sav", temporary / "source.sav"
             )
+            for original in (self.root / str(project_id)).glob("original.*"):
+                shutil.copy2(original, temporary / original.name)
             created_at = datetime.now(UTC).isoformat()
             copied = json.loads(json.dumps(project))
             copied["id"] = str(copy_id)
@@ -836,6 +851,11 @@ class ProjectRepository:
                 ) from exc
             (target / "trashed.json").unlink(missing_ok=True)
         return self.get(project_id)
+
+    def original_path(self, project_id: UUID) -> Path | None:
+        """Загруженный CSV или TSV, если проект создан из таблицы."""
+        self.get(project_id)
+        return next((self.root / str(project_id)).glob("original.*"), None)
 
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
