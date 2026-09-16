@@ -131,6 +131,8 @@
     const sheetSelect = document.querySelector("#bld-sheet");
     const measureSelect = document.querySelector("#bld-measure");
     const nestToggle = document.querySelector("#bld-nest");
+    const saveCutButton = document.querySelector("#bld-save-cut");
+    const exportButton = document.querySelector("#bld-export");
     const testsSlot = document.querySelector("#bld-tests");
     const log = document.querySelector("#bld-log");
     const form = document.querySelector("#bld-form");
@@ -145,6 +147,9 @@
     let stale = true;
     let requestToken = 0;
     let lastTable = null;
+    // Сообщение о действии над таблицей держится до следующей правки раскладки:
+    // пересчёт после сохранения иначе стёр бы его своей подписью.
+    let notice = "";
     // Разрез задаётся либо сохранённым баннером, либо переменными в колонках.
     let banners = [];
     let bannerId = null;
@@ -173,6 +178,7 @@
     }
 
     function addToZone(code, zone) {
+      notice = "";
       if (zone === "filter") {
         layout.filter = filters.some(item => item.id === code) ? [code] : [];
         render();
@@ -188,6 +194,7 @@
     }
 
     function removeFromZone(code, zone) {
+      notice = "";
       layout[zone] = layout[zone].filter(item => item !== code);
       render();
     }
@@ -356,6 +363,8 @@
           : layout.cols.map(code => byCode.get(code)?.label).filter(Boolean).join(nested ? " × " : ", "),
         filter: layout.filter.map(id => filters.find(item => item.id === id)?.name).filter(Boolean).join(", "),
       };
+      saveCutButton.hidden = Boolean(bannerId) || !layout.cols.length;
+      exportButton.hidden = !layout.rows.length;
       nestToggle.hidden = Boolean(bannerId) || layout.cols.length < 2;
       nestToggle.setAttribute("aria-pressed", String(nested));
       Object.entries(slots).forEach(([zone, text]) => {
@@ -400,13 +409,7 @@
         return;
       }
       const token = ++requestToken;
-      const request = { questions: layout.rows, sheet: sheetSelect.value };
-      if (bannerId) {
-        request.banner_id = bannerId;
-      } else if (layout.cols.length) {
-        request.blocks = blocksOfLayout();
-      }
-      if (layout.filter.length) request.filter_id = layout.filter[0];
+      const request = tableRequest();
       wrap.classList.add("loading");
       if (!lastTable) wrap.innerHTML = '<div class="bld-empty"><p>Считаем…</p></div>';
       let table;
@@ -430,6 +433,19 @@
       if (token !== requestToken) return;
       wrap.classList.remove("loading");
       renderTable(table);
+    }
+
+    // Раскладка для сервера: её же выгружает кнопка «Excel», поэтому книга
+    // собирается по тому, что стоит на экране, а не по чему-то похожему.
+    function tableRequest() {
+      const request = { questions: layout.rows, sheet: sheetSelect.value };
+      if (bannerId) {
+        request.banner_id = bannerId;
+      } else if (layout.cols.length) {
+        request.blocks = blocksOfLayout();
+      }
+      if (layout.filter.length) request.filter_id = layout.filter[0];
+      return request;
     }
 
     /* Блоки разреза: рядом — по блоку на переменную, вложенно — парами,
@@ -539,8 +555,70 @@
       if (measureSelect.value === "index") parts.push("индекс: 100 — уровень всей выборки");
       if (columns.some(column => column.small)) parts.push(`серым — база меньше ${settings.minimum_base}`);
       if (table.empty_columns.length) parts.push(`без респондентов: ${table.empty_columns.join(", ")}`);
+      if (notice) parts.push(notice);
       note.textContent = parts.join(" · ");
     }
+
+    /* Мост в отчёт: разрез сохраняется баннером, таблица выгружается книгой.
+       Имя баннера складывается из подписей переменных — переименовать его
+       можно там же, где правят баннеры, в разделе «Отчёты». */
+    async function saveCut() {
+      const blocks = blocksOfLayout();
+      if (!projectId || !blocks.length) return;
+      const name = blocks.map(block => block.label).join(" · ").slice(0, 500);
+      saveCutButton.disabled = true;
+      try {
+        const response = await fetch(`/api/projects/${projectId}/banners`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, blocks }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof payload.detail === "string" ? payload.detail : "Баннер сохранить не удалось.");
+        }
+        // Конфигурацию проекта держит app.js — он же перечитает её и обновит
+        // список баннеров в поповере.
+        await window.SavApp?.refreshProject();
+        notice = `Разрез сохранён баннером «${name}»`;
+        note.textContent = notice;
+      } catch (error) {
+        note.textContent = error.message;
+      } finally {
+        saveCutButton.disabled = false;
+      }
+    }
+
+    async function exportTable() {
+      if (!projectId || !layout.rows.length) return;
+      exportButton.disabled = true;
+      try {
+        const response = await fetch(`/api/projects/${projectId}/tables/export`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(tableRequest()),
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(typeof payload.detail === "string" ? payload.detail : "Выгрузить не удалось.");
+        }
+        const blob = await response.blob();
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "table.xlsx";
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      } catch (error) {
+        note.textContent = error.message;
+      } finally {
+        exportButton.disabled = false;
+      }
+    }
+
+    saveCutButton.addEventListener("click", () => { void saveCut(); });
+    exportButton.addEventListener("click", () => { void exportTable(); });
 
     /* Протокол теста по щелчку на ячейке — тот же текст, что примечание
        ячейки в книге и запись в statistics.txt (PQ.3, «лучше Qualtrics»). */
@@ -646,6 +724,7 @@
     measureSelect.addEventListener("change", () => { if (lastTable) renderTable(lastTable); });
     nestToggle.addEventListener("click", () => {
       nested = !nested;
+      notice = "";
       render();
     });
     window.addEventListener("resize", activate);

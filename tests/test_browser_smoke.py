@@ -555,3 +555,17 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     )
     expect(table).to_contain_text("Ваш пол × Какой маркой пользуетесь")
 
+    # Мост в отчёт: разрез сохраняется баннером и появляется в выборе колонок.
+    page.click("#bld-save-cut")
+    expect(page.locator("#bld-stage-note")).to_contain_text("баннером", timeout=UI_TIMEOUT)
+    page.click('.bld-param[data-zone="cols"]')
+    expect(page.locator("#bld-list")).to_contain_text("Баннеры отчёта", timeout=UI_TIMEOUT)
+    page.keyboard.press("Escape")
+
+    # Та же раскладка выгружается книгой Excel.
+    with page.expect_download() as download:
+        page.click("#bld-export")
+    exported = tmp_path / "table.xlsx"
+    download.value.save_as(exported)
+    assert exported.stat().st_size > 5000
+

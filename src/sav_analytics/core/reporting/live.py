@@ -23,6 +23,7 @@ from uuid import uuid4
 from ..banner import BannerError, banner_columns
 from ..filtering import FilterError, filter_columns
 from ..report_settings import resolved_report_settings
+from .builder import build_topline_artifacts
 from .data import prepare_report_data
 from .excel_layout import _banner_blocks, _excel_column_name, _write_topline
 from .models import ReportError, StatisticalAuditEntry
@@ -140,6 +141,27 @@ def build_live_table(
     }
 
 
+def export_live_table(
+    path: str | Path,
+    project: dict[str, Any],
+    *,
+    questions: list[str],
+    banner_id: str | None = None,
+    blocks: list[dict[str, Any]] | None = None,
+    filter_id: str | None = None,
+) -> tuple[bytes, str]:
+    """Книга по раскладке экрана — тем же сборщиком и в том же стиле.
+
+    Отличие от полного отчёта только в составе: в книгу идут вопросы строк,
+    разрез экрана и его фильтр. Настройки вывода, тесты и вес — проектные,
+    поэтому выгруженная таблица совпадает с тем же местом полного отчёта.
+    Возвращается книга и `statistics.txt` к ней.
+    """
+    live = _live_project(project, questions, banner_id, blocks, filter_id, show_protocol=False)
+    artifacts = build_topline_artifacts(path, live)
+    return artifacts.xlsx, artifacts.statistics_txt
+
+
 def _needed_columns(live: dict[str, Any]) -> list[str] | None:
     """Столбцы SAV, нужные этой раскладке, или None — если нужны все.
 
@@ -202,6 +224,8 @@ def _live_project(
     banner_id: str | None,
     blocks: list[dict[str, Any]] | None,
     filter_id: str | None,
+    *,
+    show_protocol: bool = True,
 ) -> dict[str, Any]:
     live = copy.deepcopy(project)
     configuration = live["configuration"]
@@ -239,9 +263,10 @@ def _live_project(
     configuration["report_filter_id"] = str(filter_id) if filter_id else None
 
     settings = dict(configuration.get("report_settings") or {})
-    # Экран показывает протокол теста по щелчку, поэтому примечание собирается
-    # полным. На числа и решение теста эта настройка не влияет.
-    settings["show_p_values"] = True
+    if show_protocol:
+        # Экран показывает протокол теста по щелчку, поэтому примечание
+        # собирается полным. На числа и решение теста это не влияет.
+        settings["show_p_values"] = True
     if settings.get("wave_comparison", "none") != "none" and not _has_wave_column(configuration):
         settings["wave_comparison"] = "none"
         settings["wave_control_value"] = None
@@ -379,4 +404,4 @@ def _cell(value: Any, fmt: dict[str, Any], note: str | None) -> dict[str, Any]:
     }
 
 
-__all__ = ["LIVE_QUESTION_TYPES", "build_live_table"]
+__all__ = ["LIVE_QUESTION_TYPES", "build_live_table", "export_live_table"]

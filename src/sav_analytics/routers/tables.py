@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..api_dependencies import get_repository
 from ..api_schemas import TablePreviewRequest
-from ..core.reporting.live import build_live_table
+from ..core.reporting.live import build_live_table, export_live_table
 from ..core.reporting.models import ReportError
 from ..repository import ProjectNotFoundError, ProjectRepository
 
@@ -39,3 +40,37 @@ def preview_table(
         )
     except ReportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/export")
+def export_table(
+    project_id: UUID,
+    request: TablePreviewRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> Response:
+    """Выгрузить таблицу экрана книгой Excel."""
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    try:
+        workbook, _ = export_live_table(
+            source,
+            project,
+            questions=request.questions,
+            banner_id=str(request.banner_id) if request.banner_id else None,
+            blocks=[block.model_dump(mode="json") for block in request.blocks]
+            if request.blocks
+            else None,
+            filter_id=str(request.filter_id) if request.filter_id else None,
+        )
+    except ReportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    name = f"{project['name']}_таблица.xlsx"
+    return Response(
+        content=workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"},
+    )
+

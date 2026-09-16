@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
 from sav_analytics.core.report import build_topline_xlsx
-from sav_analytics.core.reporting.live import _needed_columns, build_live_table
+from sav_analytics.core.reporting.live import (
+    _needed_columns,
+    build_live_table,
+    export_live_table,
+)
 from sav_analytics.core.reporting.models import ReportError
 from sav_analytics.repository import ProjectRepository
 from tests.test_report import _significance_project
@@ -230,4 +234,53 @@ def test_only_the_columns_of_the_layout_are_read(tmp_path: Path) -> None:
     # Рассчитанный вес читает массив сам, поэтому столбцы не ограничиваются.
     configuration["report_settings"]["calculated_weight_id"] = "whatever"
     assert _needed_columns(project) is None
+
+
+def test_export_gives_the_workbook_of_the_same_layout(tmp_path: Path) -> None:
+    """Выгрузка таблицы — та же книга, что соответствующая часть отчёта."""
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source)
+    _, blocks = _layout(project)
+
+    workbook, audit = export_live_table(
+        source, project, questions=["OUTCOME"], blocks=blocks
+    )
+
+    assert workbook.startswith(b"PK")
+    cells = _numeric_cells(workbook)
+    table = build_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
+    shown = {
+        f"{_column_letter(index)}{row['sheet_row']}": cell["value"]
+        for row in table["questions"][0]["rows"]
+        for index, cell in enumerate(row["cells"], start=2)
+        if cell["value"] is not None
+    }
+    for ref, value in shown.items():
+        assert cells[ref] == pytest.approx(value), ref
+    assert "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА" in audit
+
+
+def test_export_endpoint_returns_a_named_workbook(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()["id"]
+
+            response = client.post(
+                f"/api/projects/{project_id}/tables/export",
+                json={"questions": ["Q1"]},
+            )
+
+            assert response.status_code == 200
+            assert response.content.startswith(b"PK")
+            assert "filename*=UTF-8''" in response.headers["content-disposition"]
+            assert response.headers["content-disposition"].endswith("%D1%86%D0%B0.xlsx")
+    finally:
+        app.dependency_overrides.clear()
 
