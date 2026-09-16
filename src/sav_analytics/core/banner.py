@@ -73,6 +73,56 @@ def calculate_banner_preview(
     }
 
 
+def source_category_options(
+    path: str | Path, source: dict[str, Any], project: dict[str, Any]
+) -> dict[str, Any]:
+    """Категории источника с базами — для настройки порядка, подписей и скрытия."""
+    frame = read_project_frame(path, project, _source_columns(source, project))
+    resolved = _source_categories(source, project, frame)
+    return {
+        "label": resolved["label"],
+        "total_base": len(frame),
+        "categories": [
+            {
+                "key": category["key"],
+                "label": category["label"],
+                "base": int(category["mask"].sum()),
+            }
+            for category in resolved["categories"]
+        ],
+    }
+
+
+def _configured_categories(source: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
+    """Применить настройки категорий баннера: порядок, подписи, скрытие.
+
+    Настройка по ключу, которого больше нет в данных, молча пропускается: она
+    ничего не показывает и не мешает. Новые категории, которых в настройке
+    нет, выводятся в конце — так они не теряются незаметно.
+    """
+    settings = source.get("categories") or []
+    if not settings:
+        return resolved
+    by_key = {category["key"]: category for category in resolved["categories"]}
+    ordered = []
+    seen = set()
+    for setting in settings:
+        category = by_key.get(setting["key"])
+        if category is None or setting["key"] in seen:
+            continue
+        seen.add(setting["key"])
+        if setting.get("hidden"):
+            continue
+        label = (setting.get("label") or "").strip()
+        ordered.append({**category, "label": label or category["label"]})
+    ordered.extend(
+        category for category in resolved["categories"] if category["key"] not in seen
+    )
+    if not ordered:
+        raise BannerError(f"В «{resolved['label']}» скрыты все категории.")
+    return {**resolved, "categories": ordered}
+
+
 def _block_overlaps(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Сколько респондентов блока попали больше чем в одну колонку.
 
@@ -131,7 +181,10 @@ def build_banner_columns(
             block.get("compare_pairwise", False) for block in definition["blocks"]
         )
     for block_index, block in enumerate(definition["blocks"]):
-        resolved = [_source_categories(source, project, frame) for source in block["sources"]]
+        resolved = [
+            _configured_categories(source, _source_categories(source, project, frame))
+            for source in block["sources"]
+        ]
         overlapping = any(item.get("overlapping") for item in resolved)
         if len(resolved) == 1:
             combinations = ((category,) for category in resolved[0]["categories"])

@@ -112,3 +112,43 @@ def test_banner_builds_control_wave_metadata(tmp_path: Path) -> None:
 
     assert [column["wave_value"] for column in preview["columns"][1:]] == [1.0, 2.0]
     assert all(column["wave_comparison"] == "control" for column in preview["columns"][1:])
+
+
+def test_banner_categories_are_reordered_renamed_and_hidden(tmp_path: Path) -> None:
+    from sav_analytics.core.banner import calculate_banner_preview, source_category_options
+
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    project = project_fixture(source)
+    banner_source = {"kind": "question", "ref": "Q1"}
+    options = source_category_options(source, banner_source, project)
+    keys = [item["key"] for item in options["categories"]]
+    assert [item["base"] for item in options["categories"]] == [2, 2]
+
+    definition = {
+        "name": "Пол",
+        "blocks": [
+            {
+                "label": None,
+                "sources": [
+                    {
+                        **banner_source,
+                        "categories": [
+                            {"key": keys[1], "label": "Женщины", "hidden": False},
+                            {"key": keys[0], "label": None, "hidden": True},
+                            {"key": "question:Q1:устарел", "label": "x", "hidden": False},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    preview = calculate_banner_preview(source, definition, project)
+    assert [column["label"] for column in preview["columns"]] == ["Total", "Женщины"]
+
+    definition["blocks"][0]["sources"][0]["categories"] = [
+        {"key": key, "label": None, "hidden": True} for key in keys
+    ]
+    with pytest.raises(BannerError, match="скрыты все категории"):
+        calculate_banner_preview(source, definition, project)
+

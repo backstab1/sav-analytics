@@ -849,3 +849,26 @@ def test_formula_is_checked_saved_and_opened_as_a_question(
     expect(page.locator("#formula-editor")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#formula-name")).to_have_js_property("readOnly", True)
 
+
+def test_banner_category_can_be_hidden_and_renamed(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+
+    page.click('[data-block="banner"] [data-new="banner"]')
+    expect(page.locator("#banner-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#banner-name", "Пол")
+    page.locator("#banner-block-list select").first.select_option("question:SEX")
+    page.locator("#banner-block-list .banner-categories summary").first.click()
+    rows = page.locator("#banner-block-list .banner-category")
+    expect(rows).to_have_count(2, timeout=UI_TIMEOUT)
+    rows.nth(0).locator(".banner-category-shown").uncheck()
+    rows.nth(1).locator(".banner-category-label").fill("Женщины")
+    page.click("#save-banner")
+    expect(page.locator("#banner-preview")).to_contain_text("Женщины", timeout=UI_TIMEOUT)
+    expect(page.locator("#banner-preview")).not_to_contain_text("Мужчина")
+    expect(page.locator("#banner-preview-count")).to_have_text("2 колонок")
+

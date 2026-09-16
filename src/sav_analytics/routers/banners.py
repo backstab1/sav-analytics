@@ -7,8 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
-from ..api_schemas import BannerDefinition, ReportBannerUpdate
-from ..core.banner import BannerError, calculate_banner_preview, validate_banner
+from ..api_schemas import BannerDefinition, BannerSource, ReportBannerUpdate
+from ..core.banner import (
+    BannerError,
+    calculate_banner_preview,
+    source_category_options,
+    validate_banner,
+)
 from ..core.report_settings import (
     REPORT_SETTING_KEYS,
     ReportSettingsError,
@@ -98,6 +103,24 @@ def delete_banner(
         return repository.delete_banner(project_id, banner_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или баннер не найдены.") from exc
+
+
+@router.post("/banners/source-categories")
+def banner_source_categories(
+    project_id: UUID,
+    source: BannerSource,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Категории источника блока с базами — до сохранения баннера."""
+    try:
+        project = repository.get(project_id)
+        return source_category_options(
+            repository.source_path(project_id), source.model_dump(mode="json"), project
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except BannerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/banners/{banner_id}/preview")

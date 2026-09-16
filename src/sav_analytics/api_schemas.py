@@ -112,9 +112,20 @@ class CategoricalRecodeDefinition(BaseModel):
 
 
 
+class BannerCategorySetting(BaseModel):
+    """Настройка категории в конкретном баннере: порядок списка, подпись, скрытие."""
+
+    key: str = Field(min_length=1, max_length=300)
+    label: str | None = Field(default=None, max_length=250)
+    hidden: bool = False
+
+
 class BannerSource(BaseModel):
     kind: Literal["question", "recoding"]
     ref: str = Field(min_length=1, max_length=64)
+    # Порядок списка — порядок колонок; не перечисленные категории идут следом
+    # в исходном порядке. Пусто — всё как в данных.
+    categories: list[BannerCategorySetting] | None = Field(default=None, max_length=500)
 
 
 class BannerBlock(BaseModel):
