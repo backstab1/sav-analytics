@@ -856,8 +856,15 @@ def _output_line(settings: dict[str, Any]) -> str:
     """Что выведено в книгу: без этой строки аудит не объясняет отсутствующие строки."""
     scale = settings.get("scale_metrics", ("distribution", "mean", "top2", "bottom2"))
     numeric = settings.get("numeric_metrics", ("mean", "median", "min", "max", "std", "stderr"))
+    size = settings.get("scale_box", 2)
+
+    def scale_label(item: str) -> str:
+        if item in {"top2", "bottom2"}:
+            return f"{'Top' if item == 'top2' else 'Bottom'}-{size}"
+        return _OUTPUT_LABELS[item]
+
     return (
-        f"Вывод: шкалы — {', '.join(_OUTPUT_LABELS[item] for item in scale)}; "
+        f"Вывод: шкалы — {', '.join(scale_label(item) for item in scale)}; "
         f"числовые — {', '.join(_OUTPUT_LABELS[item] for item in numeric)}; "
         f"знаков после запятой: доли {settings.get('percent_decimals', 0)}, "
         f"средние {settings.get('mean_decimals', 1)}"

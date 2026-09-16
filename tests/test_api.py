@@ -1602,3 +1602,25 @@ def test_question_nets_are_validated_and_stored(tmp_path: Path) -> None:
     finally:
         app.dependency_overrides.clear()
 
+
+def test_report_settings_accept_one_to_three_extreme_codes(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            url = f"/api/projects/{project['id']}/report-settings"
+            assert project["configuration"]["report_settings"].get("scale_box", 2) == 2
+
+            saved = client.put(url, json={"scale_box": 3})
+            assert saved.status_code == 200
+            assert saved.json()["configuration"]["report_settings"]["scale_box"] == 3
+            assert client.put(url, json={"scale_box": 4}).status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+

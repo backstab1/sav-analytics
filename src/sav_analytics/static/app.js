@@ -45,6 +45,7 @@ const defaultReportSettings = Object.freeze({
   numeric_metrics: ["mean", "median", "min", "max", "std", "stderr"],
   percent_decimals: 0,
   mean_decimals: 1,
+  scale_box: 2,
 });
 
 const scaleMetricOptions = [
@@ -53,6 +54,14 @@ const scaleMetricOptions = [
   { value: "top2", label: "Top-2" },
   { value: "bottom2", label: "Bottom-2" },
 ];
+// Ключи `top2` и `bottom2` хранятся как есть, а подпись следует настройке
+// «крайних кодов»: для семибалльной шкалы привычен Top-3.
+function scaleMetricLabel(option, size) {
+  if (option.value === "top2") return `Top-${size}`;
+  if (option.value === "bottom2") return `Bottom-${size}`;
+  return option.label;
+}
+
 const numericMetricOptions = [
   { value: "mean", label: "Среднее" },
   { value: "median", label: "Медиана" },
@@ -1645,7 +1654,9 @@ function reportStatisticsColumn(settings) {
           ${profile === "custom" ? '<span class="stat-custom">свой набор</span>' : ""}
         </div>
         <div class="stat-controls stat-row"><span class="stat-label">Шкалы</span>
-          ${scaleMetricOptions.map(option => statToggle(`scale:${option.value}`, option.label, settings.scale_metrics.includes(option.value))).join("")}
+          ${scaleMetricOptions.map(option => statToggle(`scale:${option.value}`, scaleMetricLabel(option, settings.scale_box), settings.scale_metrics.includes(option.value))).join("")}
+          <span class="stat-label-inline">крайних кодов</span>
+          ${statSegment("scale-box", ["1", "2", "3"].map(value => ({ value, label: value })), String(settings.scale_box))}
         </div>
         <div class="stat-controls stat-row"><span class="stat-label">Числовые</span>
           ${numericMetricOptions.map(option => statToggle(`numeric:${option.value}`, option.label, settings.numeric_metrics.includes(option.value))).join("")}
@@ -1737,6 +1748,7 @@ function reportSettingsPayload(settings) {
     numeric_metrics: settings.numeric_metrics,
     percent_decimals: settings.percent_decimals,
     mean_decimals: settings.mean_decimals,
+    scale_box: settings.scale_box,
   };
 }
 
@@ -1777,6 +1789,7 @@ function statPatch(name, value) {
   if (name === "profile") return { ...outputProfiles[value].settings };
   if (name === "percent-decimals") return { percent_decimals: Number(value) };
   if (name === "mean-decimals") return { mean_decimals: Number(value) };
+  if (name === "scale-box") return { scale_box: Number(value) };
   if (name.startsWith("scale:") || name.startsWith("numeric:")) {
     const [group, metric] = name.split(":");
     const key = `${group}_metrics`;

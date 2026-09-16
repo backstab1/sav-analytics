@@ -27,6 +27,7 @@ DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "numeric_metrics": list(NUMERIC_METRICS),
     "percent_decimals": 0,
     "mean_decimals": 1,
+    "scale_box": 2,
 }
 
 REPORT_SETTING_KEYS = tuple(DEFAULT_REPORT_SETTINGS)

@@ -166,6 +166,7 @@ def prepare_report_data(
         "numeric_metrics": tuple(report_settings["numeric_metrics"]),
         "percent_decimals": report_settings["percent_decimals"],
         "mean_decimals": report_settings["mean_decimals"],
+        "scale_box": report_settings["scale_box"],
     }
     return ReportData(
         frame=frame,

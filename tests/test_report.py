@@ -1705,3 +1705,18 @@ def test_net_of_multiple_response_counts_who_chose_any_of_its_items(tmp_path: Pa
     assert _cell_value(content, "NET: Любая марка", "B") == pytest.approx(75.0)
     assert _cell_value(content, "NET: Любая марка", "B", sheet_index=2) == pytest.approx(100.0)
 
+
+def test_top_and_bottom_take_as_many_extreme_codes_as_set(tmp_path: Path) -> None:
+    source = tmp_path / "output.sav"
+    project = _output_project(source, _output_frame(), scale_box=3)
+
+    content = build_topline_xlsx(source, project)
+    labels = _row_labels(content)
+
+    assert "Top-2" not in labels
+    # Коды 3, 4, 5 у четырёх из шести; 1, 2, 3 — у трёх из шести.
+    assert _cell_value(content, "Top-3", "B") == pytest.approx(4 / 6 * 100)
+    assert _cell_value(content, "Bottom-3", "B") == pytest.approx(3 / 6 * 100)
+    audit = build_statistics_txt(source, project)
+    assert "шкалы — распределение, среднее, Top-3, Bottom-3" in audit
+

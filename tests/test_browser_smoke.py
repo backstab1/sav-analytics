@@ -611,3 +611,16 @@ def test_net_group_set_on_a_question_reaches_the_table(
     expect(row).to_have_count(1, timeout=UI_TIMEOUT)
     expect(row.locator("td.bld-val").first).to_have_text("67")
 
+
+def test_top_bottom_size_renames_the_scale_toggles(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+
+    page.click('[data-stat="scale-box"][data-value="3"]')
+    expect(page.locator('[data-stat="scale:top2"]')).to_have_text("Top-3", timeout=UI_TIMEOUT)
+    expect(page.locator('[data-stat="scale:bottom2"]')).to_have_text("Bottom-3")
+

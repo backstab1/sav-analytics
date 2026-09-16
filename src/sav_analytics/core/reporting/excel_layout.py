@@ -463,12 +463,16 @@ def _write_scale_aggregates(
     top: bool = True,
     bottom: bool = True,
 ) -> int:
-    """Строки Top-2 и Bottom-2 под шкалой — те, что отмечены."""
-    for label, take_highest in (("Top-2", True), ("Bottom-2", False)):
+    """Строки Top-N и Bottom-N под шкалой — те, что отмечены.
+
+    N — настройка отчёта: сколько крайних кодов шкалы входит в агрегат.
+    """
+    size = int(context.settings.get("scale_box", 2))
+    for label, take_highest in ((f"Top-{size}", True), (f"Bottom-{size}", False)):
         if not (top if take_highest else bottom):
             continue
         selected = _scale_aggregate(
-            working, variable, special_values, take_highest=take_highest
+            working, variable, special_values, take_highest=take_highest, size=size
         )
         row = _write_metric_row(
             context,
@@ -1126,6 +1130,7 @@ def _scale_aggregate(
     special_values: list[Any],
     *,
     take_highest: bool,
+    size: int = 2,
 ) -> pd.Series:
     raw_values = [item["value"] for item in variable.get("value_labels", [])]
     raw_values.extend(series.dropna().unique())
@@ -1140,8 +1145,8 @@ def _scale_aggregate(
         if math.isfinite(numeric):
             codes.add(numeric)
     ordered = sorted(codes)
-    selected_codes = ordered[-2:] if take_highest else ordered[:2]
-    if len(selected_codes) == 2:
+    selected_codes = ordered[-size:] if take_highest else ordered[:size]
+    if len(selected_codes) == size:
         return series.isin(selected_codes)
     return pd.Series(False, index=series.index)
 

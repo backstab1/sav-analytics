@@ -158,6 +158,9 @@ class ReportSettingsDefinition(BaseModel):
     )
     percent_decimals: int = Field(default=0, ge=0, le=2)
     mean_decimals: int = Field(default=1, ge=0, le=3)
+    # Сколько крайних кодов шкалы входит в Top и Bottom. Ключи набора вывода
+    # остаются `top2` и `bottom2`: так сохранённые проекты читаются без миграции.
+    scale_box: int = Field(default=2, ge=1, le=3)
 
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:
