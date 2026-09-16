@@ -232,6 +232,7 @@
                     <input id="structure-search" type="text" placeholder="Код или название" autocomplete="off" aria-label="Поиск по структуре массива" />
                     <button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button>
                   </div>
+                  <button id="new-formula" class="secondary compact-button" type="button" title="Новая числовая переменная по формуле из переменных массива">+ Формула</button>
                   <div class="structure-view-switch">
                     <button type="button" data-structure-mode="questions" class="active">Вопросы</button>
                     <button type="button" data-structure-mode="variables">Столбцы SAV</button>
@@ -314,6 +315,7 @@
                   <!-- Группировки этого вопроса. Перекодировка — свойство
                        переменной, а не отчёта, поэтому она правится здесь же,
                        рядом с типом и специальными ответами. -->
+                  <section id="question-formula" class="question-recodings" hidden></section>
                   <section id="question-recodings" class="question-recodings" hidden></section>
                   <section class="preview"><div class="preview-title"><h3>Предпросмотр Total</h3><span class="preview-base" id="preview-base"></span></div><div id="preview-content" class="preview-content"><p class="muted">Выберите вопрос.</p></div></section>
                   <p id="editor-error" class="error" hidden></p>
@@ -321,6 +323,32 @@
                 <div class="insp-foot editor-actions">
                   <button id="save-question" type="submit">Сохранить</button>
                   <button id="refresh-preview" class="secondary" type="button">Пересчитать</button>
+                </div>
+              </form>
+            </aside>
+
+            <aside id="formula-editor" class="insp recode-editor formula-editor" hidden>
+              <div class="insp-head">
+                <div><p class="kicker">Формула</p><h3 id="formula-editor-title">Новая</h3></div>
+                <button id="close-formula-editor" class="icon-button" type="button" aria-label="Закрыть редактор формулы">×</button>
+              </div>
+              <form id="formula-form">
+                <div class="insp-body editor-scroll scroll">
+                  <div class="form-row">
+                    <label class="f">Имя переменной<input id="formula-name" required maxlength="64" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="CSI" /></label>
+                    <label class="f">Название<input id="formula-label" required maxlength="500" placeholder="Индекс удовлетворённости" /></label>
+                  </div>
+                  <label class="f">Выражение<textarea id="formula-expression" required maxlength="2000" rows="4" spellcheck="false" placeholder="MEAN(Q5_1, Q5_2, Q5_3) * 20"></textarea>
+                    <small>Знаки + − * /, сравнения = &lt;&gt; &lt; &lt;= &gt; &gt;=, AND, OR, NOT. Функции: SUM, MEAN, MIN, MAX — по заполненным полям; COUNT(значение, поля…); IF(условие, да, нет); ABS; ROUND(x, знаки). Имя с точкой — в [скобках].</small>
+                  </label>
+                  <div id="formula-variables" class="formula-variables"></div>
+                  <section class="preview"><div class="preview-title"><h3>Проверка до сохранения</h3><button id="check-formula" class="text-button" type="button">Проверить</button></div><div id="formula-preview" class="preview-content"><p class="muted">Нажмите «Проверить»: будет видно, у скольких респондентов формула посчиталась и из-за какого поля пусто.</p></div></section>
+                  <p id="formula-error" class="error" hidden></p>
+                </div>
+                <div class="insp-foot editor-actions">
+                  <button id="save-formula" type="submit">Сохранить</button>
+                  <span class="foot-grow"></span>
+                  <button id="delete-formula" class="danger-button" type="button" hidden>Удалить</button>
                 </div>
               </form>
             </aside>

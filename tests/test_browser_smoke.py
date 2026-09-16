@@ -817,3 +817,35 @@ def test_csv_upload_opens_a_project(
     expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#table-body")).to_contain_text("Пол", timeout=UI_TIMEOUT)
 
+
+def test_formula_is_checked_saved_and_opened_as_a_question(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#new-formula")
+    expect(page.locator("#formula-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#formula-name", "DOUBLE")
+    page.fill("#formula-label", "Двойная оценка")
+    page.fill("#formula-expression", "NOPE * 2")
+    page.click("#check-formula")
+    expect(page.locator("#formula-preview")).to_contain_text("NOPE", timeout=UI_TIMEOUT)
+
+    page.fill("#formula-expression", "")
+    page.locator("#formula-variables button").first.click()
+    page.locator("#formula-expression").press("End")
+    page.locator("#formula-expression").type(" * 2")
+    page.click("#check-formula")
+    expect(page.locator("#formula-preview")).to_contain_text("Посчитано", timeout=UI_TIMEOUT)
+
+    page.click("#save-formula")
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#question-formula")).to_contain_text("* 2")
+    expect(page.locator("#table-body tr[data-code='DOUBLE']")).to_be_visible()
+
+    page.click("#question-formula [data-open-formula]")
+    expect(page.locator("#formula-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#formula-name")).to_have_js_property("readOnly", True)
+

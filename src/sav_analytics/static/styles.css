@@ -1361,6 +1361,12 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 /* Weight editor */
 /* Оболочку задаёт .insp — здесь остались только внутренности. */
+.formula-editor textarea { width: 100%; min-height: 88px; resize: vertical; font-family: var(--f-mono, ui-monospace, monospace); font-size: var(--t-sm, 13px); }
+.formula-variables { display: flex; flex-wrap: wrap; gap: 6px; }
+.formula-variables button { border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: transparent; padding: 2px 8px; font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.formula-variables button:hover { border-color: var(--c-brand); }
+.formula-missing { display: grid; gap: 4px; margin-top: 8px; }
+.formula-missing div { display: flex; justify-content: space-between; gap: 10px; font-size: var(--t-xs); }
 .weight-editor .insp-foot .link-button { min-height: 34px; display: inline-flex; align-items: center; }
 .weight-limit-card { padding: 3px 14px 12px; background: var(--c-surface-soft); border-radius: 11px; }
 .weight-limit-card .weight-toggle-setting { padding: 9px 0; }
