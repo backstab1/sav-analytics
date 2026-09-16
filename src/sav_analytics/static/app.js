@@ -1322,6 +1322,7 @@ function renderProject() {
   const questions = configuredQuestions();
   document.querySelector("#project-name").textContent = currentProject.name;
   document.querySelector("#download-source").href = `/api/projects/${currentProject.id}/source`;
+  document.querySelector("#download-derived-sav").href = `/api/projects/${currentProject.id}/export.sav`;
   document.querySelector("#download-report").href = `/api/projects/${currentProject.id}/reports/topline.xlsx`;
   document.querySelector("#download-statistics").href = `/api/projects/${currentProject.id}/reports/statistics.txt`;
   renderSummary(inspection, questions);

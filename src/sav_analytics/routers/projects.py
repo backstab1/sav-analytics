@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
 from ..api_schemas import ProjectRename
+from ..core.sav_export import SavExportError, export_project_sav
 from ..core.sav_reader import SavReadError
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
@@ -141,3 +145,35 @@ def download_source(
         media_type="application/x-spss-sav",
         filename=project["original_filename"],
     )
+
+
+@router.get("/{project_id}/export.sav")
+def export_sav(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    """SAV с производными переменными: формулы, перекодировки, рассчитанные веса."""
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    handle = tempfile.NamedTemporaryFile(suffix=".sav", delete=False)
+    handle.close()
+    target = Path(handle.name)
+    try:
+        export_project_sav(source, project, target)
+    except SavExportError as exc:
+        target.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    stem = Path(project.get("original_filename") or "project").stem
+    return FileResponse(
+        target,
+        media_type="application/x-spss-sav",
+        filename=f"{stem}_производные.sav",
+        background=BackgroundTask(target.unlink, missing_ok=True),
+    )
+
