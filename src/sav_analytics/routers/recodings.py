@@ -52,7 +52,7 @@ def create_recoding(
     payload = definition.model_dump(mode="json")
     try:
         project = repository.get(project_id)
-        validate_recode(payload, project["inspection"]["variables"])
+        validate_recode(payload, project["inspection"]["variables"], project)
         return repository.create_recoding(project_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
@@ -70,7 +70,7 @@ def update_recoding(
     payload = definition.model_dump(mode="json")
     try:
         project = repository.get(project_id)
-        validate_recode(payload, project["inspection"]["variables"])
+        validate_recode(payload, project["inspection"]["variables"], project)
         return repository.update_recoding(project_id, recoding_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или перекодировка не найдены.") from exc
@@ -100,8 +100,8 @@ def preview_recoding(
 ) -> dict:
     try:
         project, recoding = repository.recoding(project_id, recoding_id)
-        validate_recode(recoding, project["inspection"]["variables"])
-        return calculate_recode_preview(repository.source_path(project_id), recoding)
+        validate_recode(recoding, project["inspection"]["variables"], project)
+        return calculate_recode_preview(repository.source_path(project_id), recoding, project)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или перекодировка не найдены.") from exc
     except RecodingError as exc:

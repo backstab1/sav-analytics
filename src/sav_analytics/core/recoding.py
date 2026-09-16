@@ -6,7 +6,13 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
-from .filtering import value_options
+from .filtering import (
+    FilterError,
+    conditional_series,
+    recoding_columns,
+    validate_condition_rules,
+    value_options,
+)
 
 
 class RecodingError(ValueError):
@@ -14,8 +20,15 @@ class RecodingError(ValueError):
 
 
 def validate_recode(
-    definition: dict[str, Any], variables: list[dict[str, Any]]
+    definition: dict[str, Any],
+    variables: list[dict[str, Any]],
+    project: dict[str, Any] | None = None,
 ) -> None:
+    if definition.get("mode") == "conditions":
+        if project is None:
+            raise RecodingError("Логическую переменную можно проверить только в проекте.")
+        _validate_conditional_recode(definition, project)
+        return
     source = next(
         (item for item in variables if item["name"] == definition["source_variable"]), None
     )
@@ -74,7 +87,13 @@ def recode_source_values(path: str | Path, variable: dict[str, Any]) -> dict[str
     }
 
 
-def calculate_recode_preview(path: str | Path, definition: dict[str, Any]) -> dict[str, Any]:
+def calculate_recode_preview(
+    path: str | Path, definition: dict[str, Any], project: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    if definition.get("mode") == "conditions":
+        if project is None:
+            raise RecodingError("Логическую переменную можно посчитать только в проекте.")
+        return _conditional_preview(path, definition, project)
     source_variable = definition["source_variable"]
     frame, _ = pyreadstat.read_sav(
         path,
@@ -206,3 +225,63 @@ def _scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
+
+
+def _validate_conditional_recode(definition: dict[str, Any], project: dict[str, Any]) -> None:
+    categories = definition["categories"]
+    if len(categories) < 2:
+        raise RecodingError("Нужно задать минимум две категории.")
+    labels = [category["label"].strip().casefold() for category in categories]
+    if len(labels) != len(set(labels)):
+        raise RecodingError("Названия категорий не должны повторяться.")
+    try:
+        validate_condition_rules(definition, project)
+    except FilterError as exc:
+        raise RecodingError(str(exc)) from exc
+
+
+def _conditional_preview(
+    path: str | Path, definition: dict[str, Any], project: dict[str, Any]
+) -> dict[str, Any]:
+    try:
+        columns = sorted(recoding_columns(definition, project))
+    except FilterError as exc:
+        raise RecodingError(str(exc)) from exc
+    frame, _ = pyreadstat.read_sav(
+        path,
+        usecols=columns,
+        apply_value_formats=False,
+        user_missing=False,
+        dates_as_pandas_datetime=False,
+    )
+    try:
+        series = conditional_series(definition, project, frame)
+    except FilterError as exc:
+        raise RecodingError(str(exc)) from exc
+    total = len(frame)
+    rows = []
+    for position, category in enumerate(definition["categories"], start=1):
+        label = category["label"]
+        count = int(series.map(lambda item, expected=label: item == expected).sum())
+        rows.append(
+            {
+                "value": position,
+                "label": label,
+                "count": count,
+                "percent_total": count / total if total else None,
+            }
+        )
+    unassigned = int(series.isna().sum())
+    return {
+        "id": definition.get("id"),
+        "code": definition["code"],
+        "name": definition["name"],
+        "source_variable": None,
+        "mode": "conditions",
+        "total_base": total,
+        "source_valid_base": total - unassigned,
+        "source_missing_count": 0,
+        "out_of_range_count": unassigned,
+        "rows": rows,
+    }
+

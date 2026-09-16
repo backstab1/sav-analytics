@@ -7,6 +7,8 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
+from .filtering import conditional_series, recoding_columns
+
 
 class BannerError(ValueError):
     pass
@@ -52,9 +54,9 @@ def calculate_banner_preview(
     required = []
     for block in definition["blocks"]:
         for source in block["sources"]:
-            variable = _source_variable(source, project)
-            if variable not in required:
-                required.append(variable)
+            for variable in _source_columns(source, project):
+                if variable not in required:
+                    required.append(variable)
     frame, _ = pyreadstat.read_sav(
         path,
         usecols=required,
@@ -78,9 +80,10 @@ def calculate_banner_preview(
 def banner_columns(definition: dict[str, Any], project: dict[str, Any]) -> set[str]:
     """Столбцы SAV, из которых строятся колонки баннера."""
     return {
-        _source_variable(source, project)
+        column
         for block in definition["blocks"]
         for source in block["sources"]
+        for column in _source_columns(source, project)
     }
 
 
@@ -186,10 +189,32 @@ def _source_variable(source: dict[str, Any], project: dict[str, Any]) -> str:
     return resolved["source_variable"]
 
 
+def _source_columns(source: dict[str, Any], project: dict[str, Any]) -> list[str]:
+    resolved = _resolve_source(source, project)
+    if source["kind"] == "recoding" and resolved.get("mode") == "conditions":
+        return sorted(recoding_columns(resolved, project))
+    return [_source_variable(source, project)]
+
+
 def _source_categories(
     source: dict[str, Any], project: dict[str, Any], frame: pd.DataFrame
 ) -> dict[str, Any]:
     resolved = _resolve_source(source, project)
+    if source["kind"] == "recoding" and resolved.get("mode") == "conditions":
+        labels = conditional_series(resolved, project, frame)
+        return {
+            "label": resolved["name"],
+            "categories": [
+                {
+                    "key": f"recoding:{resolved['id']}:{position}",
+                    "label": category["label"],
+                    "value": position,
+                    "is_wave": False,
+                    "mask": labels.map(lambda item, expected=category["label"]: item == expected),
+                }
+                for position, category in enumerate(resolved["categories"], start=1)
+            ],
+        }
     variable_name = _source_variable(source, project)
     series = frame[variable_name]
     if source["kind"] == "question":

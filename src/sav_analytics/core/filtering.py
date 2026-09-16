@@ -89,7 +89,7 @@ def condition_source_options(
         if kind != "multiple" and len(columns) != 1:
             raise FilterError("Для этого условия нужен одиночный вопрос.")
     else:
-        columns = [resolved["source_variable"]]
+        columns = sorted(recoding_columns(resolved, project))
     frame, _ = pyreadstat.read_sav(
         path,
         usecols=columns,
@@ -119,7 +119,7 @@ def condition_source_options(
             raise FilterError(str(exc)) from exc
         missing = total - int(answered.sum())
     else:
-        series = _source_series(source, resolved, frame)
+        series = _source_series(source, resolved, frame, project)
         missing = int(series.isna().sum())
         if source["kind"] == "recoding":
             for category in resolved["categories"]:
@@ -151,6 +151,64 @@ def condition_source_options(
 def filter_columns(definition: dict[str, Any], project: dict[str, Any]) -> set[str]:
     """Столбцы SAV, без которых правило не посчитать."""
     return _required_columns(definition["rule"], project)
+
+
+def recoding_columns(recoding: dict[str, Any], project: dict[str, Any]) -> set[str]:
+    """Столбцы SAV перекодировки: исходная переменная или переменные её правил."""
+    if recoding.get("mode") == "conditions":
+        columns: set[str] = set()
+        for category in recoding["categories"]:
+            columns |= _required_columns(category["rule"], project)
+        return columns
+    return {recoding["source_variable"]}
+
+
+def conditional_series(
+    recoding: dict[str, Any], project: dict[str, Any], frame: pd.DataFrame
+) -> pd.Series:
+    """Логическая переменная: каждому — подпись первой категории, чьё правило он проходит.
+
+    Категории не пересекаются по построению: прошедший правило раньше дальше не
+    проверяется. Поэтому такую переменную можно ставить в баннер, не решая, как
+    сравнивать пересекающиеся колонки. Не прошедший ни одно правило — пропуск.
+    """
+    result = pd.Series(pd.NA, index=frame.index, dtype="object")
+    assigned = pd.Series(False, index=frame.index)
+    for category in recoding["categories"]:
+        mask, _ = _evaluate_group(category["rule"], project, frame)
+        chosen = mask & ~assigned
+        result.loc[chosen] = category["label"]
+        assigned |= chosen
+    return result
+
+
+def validate_condition_rules(definition: dict[str, Any], project: dict[str, Any]) -> None:
+    """Правила логической переменной — обычные правила фильтра, но без ссылок на
+    другие логические переменные: так исключены циклы и цепочки, которые
+    пришлось бы пересчитывать в правильном порядке."""
+    for category in definition["categories"]:
+        _validate_group(category["rule"], project, depth=1)
+        for source in rule_sources(category["rule"]):
+            if source["kind"] != "recoding":
+                continue
+            target = _resolve_source(source, project)
+            if target.get("mode") == "conditions" or (
+                definition.get("id") and str(target.get("id")) == str(definition["id"])
+            ):
+                raise FilterError(
+                    "Условие логической переменной не может ссылаться на другую "
+                    "логическую переменную."
+                )
+
+
+def rule_sources(group: dict[str, Any]) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    for item in group.get("items", []):
+        if item.get("kind") == "group":
+            sources.extend(rule_sources(item))
+        else:
+            sources.append(item["source"])
+    return sources
 
 
 def evaluate_filter_frame(
@@ -219,7 +277,7 @@ def _required_columns(group: dict[str, Any], project: dict[str, Any]) -> set[str
         if item["source"]["kind"] == "question":
             result.update(resolved["source_variables"])
         else:
-            result.add(resolved["source_variable"])
+            result |= recoding_columns(resolved, project)
     return result
 
 
@@ -285,7 +343,7 @@ def _evaluate_condition(
             return available & ~pd.concat(selected, axis=1).any(axis=1)
         return available if operator == "filled" else ~available
 
-    series = _source_series(condition["source"], resolved, frame)
+    series = _source_series(condition["source"], resolved, frame, project)
     values = condition.get("values", [])
     if operator == "filled":
         return series.notna()
@@ -306,12 +364,19 @@ def _evaluate_condition(
 
 
 def _source_series(
-    source: dict[str, str], resolved: dict[str, Any], frame: pd.DataFrame
+    source: dict[str, str],
+    resolved: dict[str, Any],
+    frame: pd.DataFrame,
+    project: dict[str, Any] | None = None,
 ) -> pd.Series:
     if source["kind"] == "question":
         if len(resolved["source_variables"]) != 1:
             raise FilterError("Для этого условия нужен одиночный вопрос.")
         return frame[resolved["source_variables"][0]]
+    if resolved.get("mode") == "conditions":
+        if project is None:
+            raise FilterError("Для логической переменной нужен проект.")
+        return conditional_series(resolved, project, frame)
     series = frame[resolved["source_variable"]]
     result = pd.Series(pd.NA, index=series.index, dtype="object")
     for category in resolved["categories"]:

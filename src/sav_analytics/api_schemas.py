@@ -94,7 +94,6 @@ class CategoricalRecodeDefinition(BaseModel):
     categories: list[CategoryGroup] = Field(min_length=2, max_length=100)
 
 
-RecodeDefinition = NumericRecodeDefinition | CategoricalRecodeDefinition
 
 
 class BannerSource(BaseModel):
@@ -262,6 +261,25 @@ class FilterGroup(BaseModel):
 class FilterDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
     rule: FilterGroup
+
+
+class ConditionCategory(BaseModel):
+    label: str = Field(min_length=1, max_length=250)
+    rule: FilterGroup
+
+
+class ConditionalRecodeDefinition(BaseModel):
+    """Логическая переменная: категория — правило, респондент — в первой подходящей."""
+
+    mode: Literal["conditions"]
+    code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+    name: str = Field(min_length=1, max_length=500)
+    categories: list[ConditionCategory] = Field(min_length=2, max_length=50)
+
+
+RecodeDefinition = (
+    NumericRecodeDefinition | CategoricalRecodeDefinition | ConditionalRecodeDefinition
+)
 
 
 class QuestionBaseUpdate(BaseModel):

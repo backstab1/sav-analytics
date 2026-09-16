@@ -38,6 +38,20 @@ def find_references(
                             )
                         )
 
+        for recoding in _conditional_recodings(configuration):
+            if any(
+                source.get("kind") == target_kind and str(source.get("ref")) == identifier
+                for category in recoding.get("categories", [])
+                for source in _filter_sources(category.get("rule", {}))
+            ):
+                references.append(
+                    ConfigurationReference(
+                        target_kind,
+                        identifier,
+                        f"логическая переменная «{recoding.get('name') or recoding.get('code')}»",
+                    )
+                )
+
         for definition in configuration.get("filters", []):
             if any(
                 source.get("kind") == target_kind
@@ -131,6 +145,19 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
                     f"{kind}:{reference}"
                 )
 
+    for recoding in _conditional_recodings(configuration):
+        recoding_label = recoding.get("name") or recoding.get("code")
+        for category in recoding.get("categories", []):
+            for source in _filter_sources(category.get("rule", {})):
+                kind = source.get("kind")
+                reference = str(source.get("ref"))
+                known = questions if kind == "question" else recodings
+                if kind not in {"question", "recoding"} or reference not in known:
+                    problems.append(
+                        f"логическая переменная «{recoding_label}» ссылается на отсутствующий "
+                        f"источник {kind}:{reference}"
+                    )
+
     for question in configuration.get("questions", []):
         filter_id = question.get("base_filter_id")
         if filter_id and str(filter_id) not in filters:
@@ -153,6 +180,12 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
         raise ConfigurationIntegrityError(
             "Конфигурация содержит повреждённые ссылки: " + "; ".join(problems) + "."
         )
+
+
+def _conditional_recodings(configuration: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        item for item in configuration.get("recodings", []) if item.get("mode") == "conditions"
+    ]
 
 
 def _filter_sources(group: dict[str, Any]) -> Iterator[dict[str, Any]]:
