@@ -317,3 +317,17 @@ def test_export_of_the_whole_report_takes_every_included_question(tmp_path: Path
     finally:
         app.dependency_overrides.clear()
 
+
+def test_count_rows_reach_the_table_as_bases(tmp_path: Path) -> None:
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source, show_counts=True)
+    _, blocks = _layout(project)
+
+    table = build_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
+
+    rows = {row["label"]: row for row in table["questions"][0]["rows"]}
+    counts = rows["Да, N"]
+    assert counts["kind"] == "base"
+    assert [cell["value"] for cell in counts["cells"]] == [62, 42, 20]
+    assert all("index" not in cell for cell in counts["cells"])
+

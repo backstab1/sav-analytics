@@ -624,3 +624,8 @@ def test_top_bottom_size_renames_the_scale_toggles(
     expect(page.locator('[data-stat="scale:top2"]')).to_have_text("Top-3", timeout=UI_TIMEOUT)
     expect(page.locator('[data-stat="scale:bottom2"]')).to_have_text("Bottom-3")
 
+    page.click('[data-stat="counts"]')
+    expect(page.locator('[data-stat="counts"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=UI_TIMEOUT
+    )
+

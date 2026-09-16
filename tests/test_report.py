@@ -1720,3 +1720,24 @@ def test_top_and_bottom_take_as_many_extreme_codes_as_set(tmp_path: Path) -> Non
     audit = build_statistics_txt(source, project)
     assert "шкалы — распределение, среднее, Top-3, Bottom-3" in audit
 
+
+def test_counts_under_shares_show_how_many_gave_the_answer(tmp_path: Path) -> None:
+    source = tmp_path / "counts.sav"
+    project = _significance_project(source, show_counts=True)
+
+    content = build_topline_xlsx(source, project)
+    labels = _row_labels(content)
+
+    assert labels[labels.index("Да") + 1] == "Да, N"
+    # 62 из 100 по выборке, 42 из 60 в первой группе, 20 из 40 во второй.
+    assert [_cell_value(content, "Да, N", column) for column in "BCD"] == [62, 42, 20]
+    assert _cell_value(content, "Да", "C") == pytest.approx(70.0)
+    assert "под долями — число ответивших, N" in build_statistics_txt(source, project)
+
+
+def test_counts_are_off_by_default(tmp_path: Path) -> None:
+    source = tmp_path / "counts.sav"
+    content = build_topline_xlsx(source, _significance_project(source))
+
+    assert "Да, N" not in _row_labels(content)
+

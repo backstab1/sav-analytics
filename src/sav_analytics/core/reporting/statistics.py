@@ -868,6 +868,7 @@ def _output_line(settings: dict[str, Any]) -> str:
         f"числовые — {', '.join(_OUTPUT_LABELS[item] for item in numeric)}; "
         f"знаков после запятой: доли {settings.get('percent_decimals', 0)}, "
         f"средние {settings.get('mean_decimals', 1)}"
+        + ("; под долями — число ответивших, N" if settings.get("show_counts") else "")
     )
 
 

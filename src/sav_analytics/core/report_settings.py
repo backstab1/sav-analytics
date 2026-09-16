@@ -28,6 +28,7 @@ DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "percent_decimals": 0,
     "mean_decimals": 1,
     "scale_box": 2,
+    "show_counts": False,
 }
 
 REPORT_SETTING_KEYS = tuple(DEFAULT_REPORT_SETTINGS)

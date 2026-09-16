@@ -167,6 +167,7 @@ def prepare_report_data(
         "percent_decimals": report_settings["percent_decimals"],
         "mean_decimals": report_settings["mean_decimals"],
         "scale_box": report_settings["scale_box"],
+        "show_counts": report_settings["show_counts"],
     }
     return ReportData(
         frame=frame,

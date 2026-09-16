@@ -663,6 +663,33 @@ def _write_metric_row(
             )
         )
     _write_row_cells(context, row, cells, format_family, pairwise_cache, derived=derived)
+    if format_family == "percent" and statistical_settings.get("show_counts"):
+        return _write_count_row(context, row + 1, label, outcome, eligible_mask)
+    return row + 1
+
+
+def _write_count_row(
+    context: _RowContext,
+    row: int,
+    label: str,
+    outcome: pd.Series,
+    eligible_mask: pd.Series,
+) -> int:
+    """Строка «…, N» под долей: сколько человек в колонке дали этот ответ.
+
+    Число невзвешенное, как база в шапке, и считается от той же базы, что доля
+    над ним: вместе они показывают, на скольких людях стоит процент.
+    """
+    selected = outcome.fillna(False).astype(bool) & eligible_mask
+    context.sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
+    context.sheet.write(row, 0, f"{label}, N", context.formats.derived_label())
+    for index, column in enumerate(context.columns, start=1):
+        context.sheet.write_number(
+            row,
+            index,
+            int((selected & column["mask"]).sum()),
+            context.formats.base(separated=context.separated(index), rule=False),
+        )
     return row + 1
 
 def _write_numeric_metric(

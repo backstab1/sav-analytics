@@ -46,6 +46,7 @@ const defaultReportSettings = Object.freeze({
   percent_decimals: 0,
   mean_decimals: 1,
   scale_box: 2,
+  show_counts: false,
 });
 
 const scaleMetricOptions = [
@@ -1668,6 +1669,8 @@ function reportStatisticsColumn(settings) {
           ${statSegment("mean-decimals", ["0", "1", "2", "3"].map(value => ({ value, label: value })), String(settings.mean_decimals))}
         </div>
         <div class="stat-controls stat-row">
+          ${statToggle("counts", "N под долями", settings.show_counts,
+            "Под каждой строкой долей — сколько человек дали этот ответ")}
           ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
             "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
         </div>
@@ -1749,6 +1752,7 @@ function reportSettingsPayload(settings) {
     percent_decimals: settings.percent_decimals,
     mean_decimals: settings.mean_decimals,
     scale_box: settings.scale_box,
+    show_counts: settings.show_counts,
   };
 }
 
@@ -1790,6 +1794,7 @@ function statPatch(name, value) {
   if (name === "percent-decimals") return { percent_decimals: Number(value) };
   if (name === "mean-decimals") return { mean_decimals: Number(value) };
   if (name === "scale-box") return { scale_box: Number(value) };
+  if (name === "counts") return { show_counts: value === "on" };
   if (name.startsWith("scale:") || name.startsWith("numeric:")) {
     const [group, metric] = name.split(":");
     const key = `${group}_metrics`;
