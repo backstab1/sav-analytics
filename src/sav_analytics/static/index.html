@@ -205,7 +205,26 @@
                     <button type="button" class="pill" data-bulk="include">В отчёт</button>
                     <button type="button" class="pill" data-bulk="exclude">Исключить</button>
                     <button type="button" class="pill" data-bulk="confirm" title="Подтвердить предупреждения распознавания у выбранных вопросов">Подтвердить распознавание</button>
+                    <select id="bulk-type" class="bulk-select" aria-label="Назначить тип выбранным вопросам">
+                      <option value="">Тип…</option>
+                      <option value="single_choice">Один ответ</option>
+                      <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
+                      <option value="scale">Шкала</option>
+                      <option value="numeric">Числовой показатель</option>
+                      <option value="matrix">Матрица шкал</option>
+                      <option value="open_text">Открытый текст</option>
+                      <option value="technical">Технический</option>
+                    </select>
+                    <select id="bulk-role" class="bulk-select" aria-label="Назначить роль выбранным вопросам">
+                      <option value="">Роль…</option>
+                      <option value="question">Обычный вопрос</option>
+                      <option value="id">ID</option>
+                      <option value="filter">Фильтрующая / маршрутная</option>
+                      <option value="technical">Техническая</option>
+                    </select>
+                    <select id="bulk-base" class="bulk-select" aria-label="Назначить базу выбранным вопросам"></select>
                     <button type="button" class="text-button" data-bulk="clear">Снять выбор</button>
+                    <button type="button" class="text-button" data-bulk="undo" id="bulk-undo" hidden>Отменить</button>
                   </span>
                   <div class="toolbar-grow"></div>
                   <div class="search-field">

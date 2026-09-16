@@ -2253,4 +2253,5 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .bulk-bar { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 10px; }
 .bulk-bar[hidden] { display: none; }
 .bulk-bar b { color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.bulk-select { height: 28px; max-width: 170px; padding: 0 8px; border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: var(--c-surface, #fff); color: inherit; font: inherit; font-size: var(--t-xs); }
 

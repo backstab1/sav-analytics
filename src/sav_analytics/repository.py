@@ -188,6 +188,11 @@ class ProjectRepository:
         и запись происходит только после проверки всех вопросов.
         """
         project = self.get(project_id)
+        identifier = changes.get("base_filter_id")
+        if identifier and not any(
+            item["id"] == identifier for item in project["configuration"]["filters"]
+        ):
+            raise ProjectNotFoundError(identifier)
         for code in dict.fromkeys(codes):
             question = self._find_question(project, code)
             try:

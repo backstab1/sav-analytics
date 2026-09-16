@@ -48,6 +48,10 @@ class QuestionBulkUpdate(BaseModel):
 
     codes: list[str] = Field(min_length=1, max_length=5000)
     included_in_report: bool | None = None
+    question_type: QuestionType | None = None
+    role: VariableRole | None = None
+    # Пользовательская база. Явный null снимает её, отсутствие поля — не трогает.
+    base_filter_id: UUID | None = None
     confirm_review: bool = False
 
 

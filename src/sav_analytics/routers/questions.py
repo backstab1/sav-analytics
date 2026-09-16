@@ -61,9 +61,15 @@ def update_questions(
     update: QuestionBulkUpdate,
     repository: Annotated[ProjectRepository, Depends(get_repository)],
 ) -> dict:
-    changes = {}
-    if update.included_in_report is not None:
-        changes["included_in_report"] = update.included_in_report
+    changes: dict = {}
+    for field in ("included_in_report", "question_type", "role"):
+        value = getattr(update, field)
+        if value is not None:
+            changes[field] = value
+    if "base_filter_id" in update.model_fields_set:
+        changes["base_filter_id"] = (
+            str(update.base_filter_id) if update.base_filter_id else None
+        )
     if not changes and not update.confirm_review:
         raise HTTPException(status_code=422, detail="Не выбрано, что менять у вопросов.")
     try:

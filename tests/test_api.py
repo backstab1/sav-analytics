@@ -1755,3 +1755,49 @@ def test_second_confidence_level_must_be_below_the_first(tmp_path: Path) -> None
     finally:
         app.dependency_overrides.clear()
 
+
+def test_bulk_question_update_assigns_type_role_and_base(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            url = f"/api/projects/{project['id']}/questions"
+
+            def questions(response) -> dict:
+                return {
+                    item["code"]: item for item in response.json()["configuration"]["questions"]
+                }
+
+            typed = client.patch(
+                url,
+                json={"codes": ["Q1", "Q2"], "question_type": "open_text", "role": "technical"},
+            )
+            assert typed.status_code == 200
+            assert {questions(typed)[code]["question_type"] for code in ("Q1", "Q2")} == {
+                "open_text"
+            }
+            assert {questions(typed)[code]["role"] for code in ("Q1", "Q2")} == {"technical"}
+
+            missing = client.patch(
+                url,
+                json={"codes": ["Q1"], "base_filter_id": "00000000-0000-0000-0000-000000000000"},
+            )
+            assert missing.status_code == 404
+
+            cleared = client.patch(url, json={"codes": ["Q1", "Q2"], "base_filter_id": None})
+            assert cleared.status_code == 200
+            assert questions(cleared)["Q1"].get("base_filter_id") is None
+            # Две волны в одной правке отвергаются целиком.
+            waves = client.patch(url, json={"codes": ["Q1", "Q2"], "role": "wave"})
+            assert waves.status_code == 422
+            current = client.get(f"/api/projects/{project['id']}")
+            assert questions(current)["Q1"]["role"] == "technical"
+    finally:
+        app.dependency_overrides.clear()
+

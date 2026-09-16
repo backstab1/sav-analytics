@@ -788,6 +788,17 @@ def test_several_questions_are_excluded_at_once(
             "Исключён", timeout=UI_TIMEOUT
         )
 
+    page.select_option("#bulk-type", "open_text")
+    for code in ("BRAND", "SEX"):
+        expect(
+            page.locator(f"#table-body tr[data-code='{code}'] .type-icon")
+        ).to_have_attribute("aria-label", "Открытый текст", timeout=UI_TIMEOUT)
+    page.click('#bulk-bar [data-bulk="undo"]')
+    expect(
+        page.locator("#table-body tr[data-code='SEX'] .type-icon")
+    ).not_to_have_attribute("aria-label", "Открытый текст", timeout=UI_TIMEOUT)
+    expect(page.locator("#bulk-undo")).to_be_hidden()
+
     page.check("#select-all-questions")
     expect(page.locator("#bulk-count")).to_have_text("Выбрано: 5")
     page.click('#bulk-bar [data-bulk="clear"]')
