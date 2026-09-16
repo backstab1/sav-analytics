@@ -332,6 +332,20 @@ def test_count_rows_reach_the_table_as_bases(tmp_path: Path) -> None:
     assert all("index" not in cell for cell in counts["cells"])
 
 
+def test_row_percents_reach_the_table_without_index(tmp_path: Path) -> None:
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source, row_percents=True)
+    _, blocks = _layout(project)
+
+    table = build_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
+
+    rows = {row["label"]: row for row in table["questions"][0]["rows"]}
+    shares = rows["Да, % по строке"]
+    assert shares["kind"] == "value"
+    assert shares["cells"][1]["value"] == pytest.approx(42 / 62 * 100)
+    assert all("index" not in cell for cell in shares["cells"])
+
+
 def test_table_separates_letters_of_the_second_confidence_level(tmp_path: Path) -> None:
     from tests.test_report import _secondary_project
 

@@ -803,8 +803,61 @@ def _write_metric_row(
             )
         )
     _write_row_cells(context, row, cells, format_family, pairwise_cache, derived=derived)
-    if format_family == "percent" and statistical_settings.get("show_counts"):
-        return _write_count_row(context, row + 1, label, outcome, eligible_mask)
+    row += 1
+    if format_family != "percent":
+        return row
+    if statistical_settings.get("show_counts"):
+        row = _write_count_row(context, row, label, outcome, eligible_mask)
+    if statistical_settings.get("row_percents"):
+        row = _write_share_row(context, row, label, outcome, eligible_mask, "row")
+    if statistical_settings.get("table_percents"):
+        row = _write_share_row(context, row, label, outcome, eligible_mask, "table")
+    return row
+
+
+SHARE_LABELS = {"row": "% по строке", "table": "% от общего"}
+
+
+def _write_share_row(
+    context: _RowContext,
+    row: int,
+    label: str,
+    outcome: pd.Series,
+    eligible_mask: pd.Series,
+    kind: str,
+) -> int:
+    """Строка «…, % по строке» или «…, % от общего» под долей.
+
+    По строке: какая часть давших этот ответ приходится на колонку, в Total —
+    100. От общего: доля тех, кто дал ответ и попал в колонку, от всей базы
+    вопроса. База и вес те же, что у доли над строкой. Это описательные доли:
+    тестов у них нет, и цветом они не выделяются.
+    """
+    weights = context.settings["weights"]
+    if weights is None:
+        weights = pd.Series(1.0, index=outcome.index)
+    selected = outcome.fillna(False).astype(bool) & eligible_mask
+    total_mask = context.columns[0]["mask"]
+    base_mask = selected if kind == "row" else eligible_mask
+    denominator = float(weights[base_mask & total_mask].sum())
+    context.sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
+    context.sheet.write(
+        row, 0, f"{label}, {SHARE_LABELS[kind]}", context.formats.derived_label()
+    )
+    for index, column in enumerate(context.columns, start=1):
+        separated = context.separated(index)
+        if not denominator:
+            context.sheet.write_string(
+                row, index, "–", context.formats.absent(separated=separated, derived=True)
+            )
+            continue
+        numerator = float(weights[selected & column["mask"]].sum())
+        context.sheet.write_number(
+            row,
+            index,
+            numerator / denominator * 100,
+            context.formats.value("percent", separated=separated, derived=True),
+        )
     return row + 1
 
 

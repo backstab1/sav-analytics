@@ -357,7 +357,9 @@ def _row(recording: _RecordingSheet, row: int, width: int) -> dict[str, Any]:
         _cell(value, fmt, recording.notes.get((row, col)))
         for col, (value, fmt) in enumerate(written, start=1)
     ]
-    if kind == "value":
+    # Доли по строке и от общего с Total не сравниваются: в Total у первой
+    # всегда 100, индекс к нему ничего не говорит.
+    if kind == "value" and not str(label).endswith(SHARE_SUFFIXES):
         _add_index(cells)
     return {
         # Номер строки на листе книги, считая с единицы, — для сверки с Excel.
@@ -367,6 +369,9 @@ def _row(recording: _RecordingSheet, row: int, width: int) -> dict[str, Any]:
         "derived": kind == "value" and "bg_color" in label_format,
         "cells": cells,
     }
+
+
+SHARE_SUFFIXES = (", % по строке", ", % от общего")
 
 
 def _add_index(cells: list[dict[str, Any]]) -> None:

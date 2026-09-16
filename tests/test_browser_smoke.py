@@ -628,6 +628,10 @@ def test_top_bottom_size_renames_the_scale_toggles(
     expect(page.locator('[data-stat="counts"]')).to_have_attribute(
         "aria-pressed", "true", timeout=UI_TIMEOUT
     )
+    page.click('[data-stat="row-percents"]')
+    expect(page.locator('[data-stat="row-percents"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=UI_TIMEOUT
+    )
     page.click('[data-stat="charts"]')
     expect(page.locator('[data-stat="charts"]')).to_have_attribute(
         "aria-pressed", "true", timeout=UI_TIMEOUT

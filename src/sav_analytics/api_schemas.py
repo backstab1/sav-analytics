@@ -179,6 +179,10 @@ class ReportSettingsDefinition(BaseModel):
     scale_box: int = Field(default=2, ge=1, le=3)
     # Строка «…, N» под каждой строкой долей: сколько человек дали этот ответ.
     show_counts: bool = False
+    # «…, % по строке»: какая часть давших ответ приходится на колонку.
+    row_percents: bool = False
+    # «…, % от общего»: доля давших ответ и попавших в колонку от всей базы.
+    table_percents: bool = False
     # Лист «Графики»: распределения вопросов родными графиками Excel.
     show_charts: bool = False
     # Второй, более мягкий уровень доверия: различия на нём отмечаются

@@ -168,6 +168,8 @@ def prepare_report_data(
         "mean_decimals": report_settings["mean_decimals"],
         "scale_box": report_settings["scale_box"],
         "show_counts": report_settings["show_counts"],
+        "row_percents": report_settings["row_percents"],
+        "table_percents": report_settings["table_percents"],
         "show_charts": report_settings["show_charts"],
         "secondary_confidence_level": report_settings["secondary_confidence_level"],
         "overall_tests": report_settings["overall_tests"],

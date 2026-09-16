@@ -60,6 +60,8 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
                 "mean_decimals": 1,
                 "scale_box": 2,
                 "show_counts": False,
+                "row_percents": False,
+                "table_percents": False,
                 "show_charts": False,
                 "secondary_confidence_level": None,
                 "overall_tests": False,

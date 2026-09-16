@@ -1735,11 +1735,35 @@ def test_counts_under_shares_show_how_many_gave_the_answer(tmp_path: Path) -> No
     assert "под долями — число ответивших, N" in build_statistics_txt(source, project)
 
 
+def test_row_and_table_percents_follow_each_share(tmp_path: Path) -> None:
+    source = tmp_path / "shares.sav"
+    project = _significance_project(source, row_percents=True, table_percents=True)
+
+    content = build_topline_xlsx(source, project)
+    labels = _row_labels(content)
+
+    position = labels.index("Да")
+    assert labels[position + 1 : position + 3] == ["Да, % по строке", "Да, % от общего"]
+    # «Да» ответили 62: 42 в первой группе, 20 во второй; всего 100 человек.
+    assert [_cell_value(content, "Да, % по строке", column) for column in "BCD"] == [
+        pytest.approx(100.0),
+        pytest.approx(42 / 62 * 100),
+        pytest.approx(20 / 62 * 100),
+    ]
+    assert [_cell_value(content, "Да, % от общего", column) for column in "BCD"] == [
+        pytest.approx(62.0),
+        pytest.approx(42.0),
+        pytest.approx(20.0),
+    ]
+    assert "; % по строке; % от общего" in build_statistics_txt(source, project)
+
+
 def test_counts_are_off_by_default(tmp_path: Path) -> None:
     source = tmp_path / "counts.sav"
     content = build_topline_xlsx(source, _significance_project(source))
 
     assert "Да, N" not in _row_labels(content)
+    assert "Да, % по строке" not in _row_labels(content)
 
 
 def test_question_output_set_overrides_the_report_set_for_that_question(

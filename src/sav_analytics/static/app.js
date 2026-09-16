@@ -47,6 +47,8 @@ const defaultReportSettings = Object.freeze({
   mean_decimals: 1,
   scale_box: 2,
   show_counts: false,
+  row_percents: false,
+  table_percents: false,
   show_charts: false,
   secondary_confidence_level: null,
   overall_tests: false,
@@ -1887,6 +1889,10 @@ function reportStatisticsColumn(settings) {
             "Лист «Графики»: распределения вопросов родными графиками Excel, связанными с ячейками")}
           ${statToggle("counts", "N под долями", settings.show_counts,
             "Под каждой строкой долей — сколько человек дали этот ответ")}
+          ${statToggle("row-percents", "% по строке", settings.row_percents,
+            "Под долей — какая часть давших ответ приходится на колонку; в Total 100")}
+          ${statToggle("table-percents", "% от общего", settings.table_percents,
+            "Под долей — доля давших ответ и попавших в колонку от всей базы вопроса")}
           ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
             "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
         </div>
@@ -1969,6 +1975,8 @@ function reportSettingsPayload(settings) {
     mean_decimals: settings.mean_decimals,
     scale_box: settings.scale_box,
     show_counts: settings.show_counts,
+    row_percents: settings.row_percents,
+    table_percents: settings.table_percents,
     show_charts: settings.show_charts,
     secondary_confidence_level: settings.secondary_confidence_level ?? null,
     overall_tests: settings.overall_tests,
@@ -2016,6 +2024,8 @@ function statPatch(name, value) {
   if (name === "mean-decimals") return { mean_decimals: Number(value) };
   if (name === "scale-box") return { scale_box: Number(value) };
   if (name === "counts") return { show_counts: value === "on" };
+  if (name === "row-percents") return { row_percents: value === "on" };
+  if (name === "table-percents") return { table_percents: value === "on" };
   if (name === "charts") return { show_charts: value === "on" };
   if (name.startsWith("scale:") || name.startsWith("numeric:")) {
     const [group, metric] = name.split(":");
