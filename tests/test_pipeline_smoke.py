@@ -50,7 +50,15 @@ def _wait_for_report(client: TestClient, project_id: str) -> dict:
 
 
 def _normalize_audit(content: str) -> str:
-    return re.sub(r"^Дата расчёта: .+$", "Дата расчёта: <TIMESTAMP>", content, flags=re.MULTILINE)
+    content = re.sub(
+        r"^Дата расчёта: .+$", "Дата расчёта: <TIMESTAMP>", content, flags=re.MULTILINE
+    )
+    # Фикстура записывается заново при каждом прогоне, и время записи в
+    # заголовке SAV меняет его SHA — как дата расчёта меняет свою строку.
+    return re.sub(
+        r"^SHA-256 исходного SAV: .+$", "SHA-256 исходного SAV: <SHA256>", content,
+        flags=re.MULTILINE,
+    )
 
 
 def test_sav_to_immutable_artifact_matches_full_golden_snapshot(tmp_path: Path) -> None:

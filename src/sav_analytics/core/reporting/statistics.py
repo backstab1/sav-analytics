@@ -9,6 +9,7 @@ from typing import Any, TextIO
 import numpy as np
 import pandas as pd
 
+from ... import __version__
 from ..filtering import FilterError, describe_rule
 from ..statistics import (
     StatisticalTestResult,
@@ -783,6 +784,7 @@ class _StatisticsAuditWriter:
             "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
             f"Проект: {project['name']}",
             f"Исходный SAV: {project.get('original_filename', 'source.sav')}",
+            *_source_lines(project, configuration),
             f"Дата расчёта: {datetime.now().astimezone().isoformat(timespec='seconds')}",
             f"Баннер: {banner.get('name', 'Total')}",
             f"Общий фильтр: {report_filter}",
@@ -835,6 +837,21 @@ _OUTPUT_LABELS = {
 }
 
 
+def _source_lines(project: dict[str, Any], configuration: dict[str, Any]) -> list[str]:
+    """Чем собран файл: исходник, версия настроек и приложения.
+
+    Без этих строк книгу и аудит нельзя воспроизвести без доступа к живому
+    проекту: имя файла не отличает одну выгрузку массива от другой, а
+    настройки меняются после сборки (роадмап, P1.6).
+    """
+    source = project.get("source") or {}
+    return [
+        f"SHA-256 исходного SAV: {source.get('sha256') or 'не записан'}",
+        f"Ревизия конфигурации: {configuration.get('revision', 'не записана')}",
+        f"Версия приложения: {__version__}",
+    ]
+
+
 def _output_line(settings: dict[str, Any]) -> str:
     """Что выведено в книгу: без этой строки аудит не объясняет отсутствующие строки."""
     scale = settings.get("scale_metrics", ("distribution", "mean", "top2", "bottom2"))
@@ -879,6 +896,7 @@ def _render_statistics_txt(
         "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
         f"Проект: {project['name']}",
         f"Исходный SAV: {project.get('original_filename', 'source.sav')}",
+        *_source_lines(project, configuration),
         f"Дата расчёта: {datetime.now().astimezone().isoformat(timespec='seconds')}",
         f"Баннер: {banner.get('name', 'Total')}",
         f"Общий фильтр: {report_filter}",

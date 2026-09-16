@@ -119,7 +119,7 @@ def test_topline_workbook_has_required_sheets_and_numeric_cells(tmp_path: Path) 
             item.attrib["name"]
             for item in workbook_xml.findall("m:sheets/m:sheet", namespace)
         ]
-        assert names == ["topline_main", "topline_filter", "Содержание"]
+        assert names == ["topline_main", "topline_filter", "Содержание", "Параметры"]
         main_xml = archive.read("xl/worksheets/sheet1.xml")
         assert b'<c r="B5" s=' in main_xml
         assert b'<v>4</v>' in main_xml
@@ -1591,3 +1591,58 @@ def test_row_keeps_its_decimals_when_a_significant_difference_is_visible(
 
     assert _cell_font_color(content, "Да", "C") == "FF17724A"
     assert _cell_num_format(content, "Да", "C").endswith(" 0")
+
+
+def test_parameters_sheet_records_what_the_book_was_built_from(tmp_path: Path) -> None:
+    """Книга воспроизводима без живого проекта (роадмап, P1.6)."""
+    from sav_analytics import __version__
+
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    rule = {
+        "kind": "group",
+        "operator": "and",
+        "items": [
+            {
+                "kind": "condition",
+                "source": {"kind": "question", "ref": "Q1"},
+                "operator": "in",
+                "values": [2],
+            }
+        ],
+    }
+    project = {
+        "name": "Параметры",
+        "original_filename": "fixture.sav",
+        "source": {"size": 10, "sha256": "ab" * 32},
+        "inspection": inspection,
+        "configuration": {
+            "revision": 7,
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [{"id": "women", "name": "Женщины", "rule": rule}],
+            "report_filter_id": "women",
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+    with ZipFile(BytesIO(content)) as archive:
+        strings = archive.read("xl/sharedStrings.xml").decode("utf-8")
+    for expected in (
+        "SHA-256 исходного SAV",
+        "ab" * 32,
+        "Ревизия конфигурации",
+        "Версия приложения",
+        __version__,
+        "Женщины — Ваш пол: Женщина",
+        "не используется, только Total",
+    ):
+        assert expected in strings, expected
+
+    audit = build_statistics_txt(source, project)
+    assert f"SHA-256 исходного SAV: {'ab' * 32}" in audit
+    assert "Ревизия конфигурации: 7" in audit
+    assert f"Версия приложения: {__version__}" in audit
+

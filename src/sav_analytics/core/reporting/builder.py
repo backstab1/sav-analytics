@@ -8,8 +8,9 @@ from typing import Any, TextIO
 import xlsxwriter
 
 from .data import prepare_report_data
-from .excel_layout import _write_contents, _write_topline
+from .excel_layout import _write_contents, _write_parameters, _write_topline
 from .models import StatisticalAuditEntry, ToplineArtifacts
+from .parameters import report_parameters
 from .statistics import _StatisticsAuditWriter
 from .styles import _formats
 
@@ -62,6 +63,7 @@ def build_topline_artifacts(
     main = workbook.add_worksheet("topline_main")
     filtered = workbook.add_worksheet("topline_filter")
     contents = workbook.add_worksheet("Содержание")
+    parameters = workbook.add_worksheet("Параметры")
     main_rows = _write_topline(
         main,
         data,
@@ -87,6 +89,7 @@ def build_topline_artifacts(
         advance=advance,
     )
     _write_contents(contents, project, data.questions, main_rows, filter_rows, formats)
+    _write_parameters(parameters, report_parameters(project, data), formats)
     workbook.close()
     advance("Запись Excel")
     audit_writer.finish()

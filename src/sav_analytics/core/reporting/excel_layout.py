@@ -928,6 +928,30 @@ LEGEND = (
 )
 
 
+def _write_parameters(
+    sheet: Any, pairs: list[tuple[str, str]], formats: ReportFormats
+) -> None:
+    """Лист «Параметры»: книга сама говорит, из чего и как собрана.
+
+    Высота строк не задаётся: длинные значения — схема сравнения, правило
+    фильтра — переносятся, и строка растёт под них при открытии файла.
+    """
+    sheet.hide_gridlines(2)
+    sheet.set_column(0, 0, 26)
+    sheet.set_column(1, 1, 100)
+    sheet.set_row(0, 30)
+    sheet.write(0, 0, "Параметры", formats.title())
+    sheet.write(
+        1,
+        0,
+        "Этого достаточно, чтобы воспроизвести расчёт без доступа к проекту.",
+        formats.meta(),
+    )
+    for offset, (label, value) in enumerate(pairs):
+        sheet.write(3 + offset, 0, label, formats.parameter_label())
+        sheet.write_string(3 + offset, 1, value, formats.parameter_value())
+
+
 def _write_contents(
     sheet: Any,
     project: dict[str, Any],

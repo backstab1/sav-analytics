@@ -233,6 +233,14 @@ class ReportFormats:
     def contents_sheet(self) -> Any:
         return self.get(font_size=9, font_color=MUTED, bottom=1, bottom_color=HAIR)
 
+    def parameter_label(self) -> Any:
+        return self.get(
+            font_size=9, bold=True, font_color=MUTED, valign="top", bottom=1, bottom_color=HAIR
+        )
+
+    def parameter_value(self) -> Any:
+        return self.get(font_color=INK, text_wrap=True, valign="top", bottom=1, bottom_color=HAIR)
+
     def legend(self) -> Any:
         return self.get(font_size=9, font_color=MUTED)
 
