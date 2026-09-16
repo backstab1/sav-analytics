@@ -1207,6 +1207,22 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .value-chip.dragging { opacity: .45; }
 .category-zone.drop-target { outline: 2px solid var(--c-brand); outline-offset: -2px; }
 
+/* Logic variable editor */
+.condition-category-list { display: grid; gap: var(--s-2); }
+.condition-category {
+  display: grid; gap: 6px; padding: 8px;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px;
+}
+.condition-category-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.condition-category-number {
+  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--c-brand-tint); color: var(--c-brand); font-size: 11px; font-weight: 700;
+}
+.condition-category-head input { padding: 6px 9px; font-size: var(--t-xs); }
+/* Группа условий категории удаляется вместе с категорией, а не отдельно. */
+.condition-category .filter-group-head [data-remove-filter-group] { display: none; }
+.pill-select select { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+
 /* Banner editor */
 .banner-block-list { display: grid; gap: var(--s-2); }
 .banner-block { display: grid; gap: var(--s-2); padding: var(--s-3) 14px; background: var(--c-surface-soft); border: 0; border-radius: 10px; }

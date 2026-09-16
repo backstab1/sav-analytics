@@ -649,3 +649,34 @@ def test_question_can_keep_its_own_output_set(
     expect(page.locator("#question-output-own")).to_be_checked()
     expect(page.locator("[data-output-metric='distribution']")).not_to_be_checked()
 
+
+def test_logic_variable_is_built_from_rules(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Логическая переменная собирается из правил тем же редактором, что фильтр."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.select_option("#logic-variables", "new")
+    expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#recode-mode")).to_have_value("conditions")
+    expect(page.locator("#recode-source-field")).to_be_hidden()
+    page.fill("#recode-code", "SEXSEG")
+    page.fill("#recode-name", "Пол по правилу")
+
+    categories = page.locator("#condition-category-list .condition-category")
+    expect(categories).to_have_count(2)
+    for index, (label, answer) in enumerate([("Мужчины", "Мужчина"), ("Женщины", "Женщина")]):
+        category = categories.nth(index)
+        category.locator(".condition-category-label").fill(label)
+        category.locator("select.filter-source").select_option("question:SEX")
+        category.locator(".filter-option", has_text=answer).locator("input").check()
+
+    page.click("#save-recoding")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Перекодировка сохранена", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#recode-preview")).to_contain_text("120", timeout=UI_TIMEOUT)
+    expect(page.locator("#logic-variables option", has_text="SEXSEG")).to_have_count(1)
+

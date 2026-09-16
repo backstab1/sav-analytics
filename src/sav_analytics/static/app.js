@@ -225,6 +225,7 @@ document.querySelector("#recode-mode").addEventListener("change", () => {
   fillRecodeSources();
   renderRecodeMode();
   if (document.querySelector("#recode-mode").value === "categories") void renderCategoryEditor(defaultCategoryGroups());
+  if (document.querySelector("#recode-mode").value === "conditions") renderConditionCategories(defaultConditionCategories());
 });
 document.querySelector("#recode-source").addEventListener("change", () => {
   if (document.querySelector("#recode-mode").value === "categories") void renderCategoryEditor(defaultCategoryGroups());
@@ -519,7 +520,13 @@ categoryEditorElement.addEventListener("dragend", () => {
   draggedValueChips = [];
   categoryEditorElement.querySelectorAll(".drop-target").forEach(zone => zone.classList.remove("drop-target"));
 });
-document.querySelector("#filter-condition-list").addEventListener("click", event => {
+// Редактор условий один на фильтр и на категории логической переменной:
+// те же обработчики навешиваются на оба списка.
+const conditionEditorRoots = [
+  document.querySelector("#filter-condition-list"),
+  document.querySelector("#condition-category-list"),
+];
+conditionEditorRoots.forEach(root => root.addEventListener("click", event => {
   const join = event.target.closest("button[data-filter-join]");
   if (join) {
     const group = join.closest(".filter-group");
@@ -550,22 +557,22 @@ document.querySelector("#filter-condition-list").addEventListener("click", event
     addFilterCondition({}, addNested.closest(".filter-group").querySelector(".filter-group-items"));
     scheduleFilterPreview();
   }
-});
-document.querySelector("#filter-condition-list").addEventListener("change", event => {
+}));
+conditionEditorRoots.forEach(root => root.addEventListener("change", event => {
   const condition = event.target.closest(".filter-condition");
   if (event.target.matches(".filter-source")) void loadFilterConditionSource(condition, {});
   if (event.target.matches(".filter-operation")) renderFilterConditionValues(condition, filterConditionDraft(condition));
   if (event.target.matches(".filter-group-operator")) {
     refreshFilterJoins(event.target.closest(".filter-group").querySelector(".filter-group-items"));
   }
-});
-document.querySelector("#filter-condition-list").addEventListener("input", event => {
+}));
+conditionEditorRoots.forEach(root => root.addEventListener("input", event => {
   if (!event.target.matches(".filter-option-search")) return;
   const query = event.target.value.trim().toLowerCase();
   event.target.closest(".filter-values").querySelectorAll(".filter-option").forEach(option => {
     option.hidden = Boolean(query) && !option.dataset.search.includes(query);
   });
-});
+}));
 document.querySelector("#filter-form").addEventListener("input", scheduleFilterPreview);
 document.querySelector("#filter-form").addEventListener("change", scheduleFilterPreview);
 
@@ -971,7 +978,9 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
   let categories;
   const mode = document.querySelector("#recode-mode").value;
   try {
-    categories = mode === "ranges" ? collectRanges() : collectCategoryGroups();
+    categories = mode === "ranges"
+      ? collectRanges()
+      : mode === "conditions" ? collectConditionCategories() : collectCategoryGroups();
   } catch (error) {
     showError(recodeError, error);
     return;
@@ -980,7 +989,7 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
     mode,
     code: document.querySelector("#recode-code").value.trim(),
     name: document.querySelector("#recode-name").value.trim(),
-    source_variable: document.querySelector("#recode-source").value,
+    source_variable: mode === "conditions" ? undefined : document.querySelector("#recode-source").value,
     categories,
   };
   setBusy(saveButton, true, "Сохраняем…");
@@ -1118,6 +1127,7 @@ function renderProject() {
   renderSummary(inspection, questions);
   renderTable();
   publishVariablesToShell(inspection, questions);
+  renderLogicVariablePicker();
 }
 
 /* Раздел «Таблицы» живёт в другом файле, но умеет менять конфигурацию —
@@ -2887,8 +2897,11 @@ function openRecoding(recodingId = null, options = {}) {
   rangeList.innerHTML = "";
   const categoryList = document.querySelector("#category-group-list");
   categoryList.innerHTML = "";
+  document.querySelector("#condition-category-list").innerHTML = "";
   if (document.querySelector("#recode-mode").value === "categories") {
     void renderCategoryEditor(recoding?.categories || defaultCategoryGroups());
+  } else if (document.querySelector("#recode-mode").value === "conditions") {
+    renderConditionCategories(recoding?.categories || defaultConditionCategories());
   } else if (recoding) {
     recoding.categories.forEach(category => addRangeRow(category));
   } else if (document.querySelector("#recode-mode").value === "ranges") {
@@ -2928,10 +2941,85 @@ function fillRecodeSources(selected) {
 }
 
 function renderRecodeMode() {
-  const categorical = document.querySelector("#recode-mode").value === "categories";
-  document.querySelector("#range-editor").hidden = categorical;
-  document.querySelector("#category-editor").hidden = !categorical;
+  const mode = document.querySelector("#recode-mode").value;
+  document.querySelector("#range-editor").hidden = mode !== "ranges";
+  document.querySelector("#category-editor").hidden = mode !== "categories";
+  document.querySelector("#condition-editor").hidden = mode !== "conditions";
+  // У логической переменной нет одной исходной переменной: её категории — правила.
+  document.querySelector("#recode-source-field").hidden = mode === "conditions";
+  document.querySelector("#recode-source").disabled = mode === "conditions";
 }
+
+// Логическая переменная: категория — подпись и группа условий, собранная тем
+// же редактором, что фильтр. Порядок важен: респондент попадает в первую
+// подходящую категорию.
+function defaultConditionCategories() {
+  return [
+    { label: "", rule: { operator: "and", items: [] } },
+    { label: "", rule: { operator: "and", items: [] } },
+  ];
+}
+
+function renderConditionCategories(categories) {
+  document.querySelector("#condition-category-list").innerHTML = "";
+  categories.forEach(category => addConditionCategory(category));
+}
+
+function addConditionCategory(category = { label: "", rule: { operator: "and", items: [] } }) {
+  const element = document.createElement("div");
+  element.className = "condition-category";
+  element.innerHTML = `<div class="condition-category-head">
+      <span class="condition-category-number" aria-hidden="true"></span>
+      <input class="condition-category-label" maxlength="250" placeholder="Название категории" aria-label="Название категории" value="${escapeAttribute(category.label || "")}" />
+      <button type="button" class="icon-button" data-remove-condition-category aria-label="Удалить категорию">×</button>
+    </div>`;
+  document.querySelector("#condition-category-list").append(element);
+  addFilterGroup(category.rule || {}, element);
+  numberConditionCategories();
+}
+
+function numberConditionCategories() {
+  document.querySelectorAll("#condition-category-list .condition-category-number").forEach((node, index) => {
+    node.textContent = String(index + 1);
+  });
+}
+
+function collectConditionCategories() {
+  const elements = [...document.querySelectorAll("#condition-category-list .condition-category")];
+  if (elements.length < 2) throw new Error("Добавьте минимум две категории.");
+  return elements.map(element => {
+    const label = element.querySelector(".condition-category-label").value.trim();
+    if (!label) throw new Error("У каждой категории должно быть название.");
+    return { label, rule: collectFilterItem(element.querySelector(".filter-group")) };
+  });
+}
+
+document.querySelector("#add-condition-category").addEventListener("click", () => addConditionCategory());
+document.querySelector("#condition-category-list").addEventListener("click", event => {
+  const remove = event.target.closest("[data-remove-condition-category]");
+  if (!remove) return;
+  remove.closest(".condition-category").remove();
+  numberConditionCategories();
+});
+
+// Логические переменные не принадлежат одному вопросу, поэтому открываются
+// с панели раздела «Данные», а не из карточки вопроса.
+function renderLogicVariablePicker() {
+  const select = document.querySelector("#logic-variables");
+  const logic = configuredRecodings().filter(item => item.mode === "conditions");
+  select.innerHTML = `<option value="">${logic.length ? `Логические переменные · ${logic.length}` : "Логические переменные"}</option>`
+    + logic.map(item => `<option value="${escapeAttribute(item.id)}">${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`).join("")
+    + '<option value="new">+ Новая логическая переменная</option>';
+  select.value = "";
+}
+
+document.querySelector("#logic-variables").addEventListener("change", event => {
+  const value = event.target.value;
+  event.target.value = "";
+  if (!value) return;
+  if (value === "new") openRecoding(null, { mode: "conditions" });
+  else openRecoding(value);
+});
 
 function addRangeRow(category = {}) {
   const row = document.createElement("div");
@@ -3100,7 +3188,7 @@ async function loadRecodePreview() {
 function renderRecodePreview(preview) {
   const base = `<div class="base-line"><span>Total <strong>${preview.total_base.toLocaleString("ru-RU")}</strong></span><span>Пропуски <strong>${preview.source_missing_count}</strong></span><span>Вне диапазонов <strong>${preview.out_of_range_count}</strong></span></div>`;
   const rows = `<div class="preview-rows">${preview.rows.map(row => `
-    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_total)}</em><em>${escapeHtml(preview.mode === "categories" ? `${row.source_values.length} знач.` : formatRange(row))}</em></div>`).join("")}</div>`;
+    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_total)}</em><em>${escapeHtml(preview.mode === "categories" ? `${row.source_values.length} знач.` : preview.mode === "conditions" ? "по правилу" : formatRange(row))}</em></div>`).join("")}</div>`;
   return base + rows;
 }
 
@@ -3217,7 +3305,7 @@ function renderQuestionRecodings(question) {
     <button type="button" class="recode-row" data-open-recoding="${escapeAttribute(recoding.id)}">
       <span class="recode-row-text">
         <strong>${escapeHtml(recoding.name)}</strong>
-        <small><code>${escapeHtml(recoding.code)}</code> ${recoding.mode === "categories" ? "объединение категорий" : "числовые диапазоны"} · ${plural(recoding.categories.length, "категория", "категории", "категорий")}</small>
+        <small><code>${escapeHtml(recoding.code)}</code> ${recoding.mode === "categories" ? "объединение категорий" : recoding.mode === "conditions" ? "логическая переменная" : "числовые диапазоны"} · ${plural(recoding.categories.length, "категория", "категории", "категорий")}</small>
       </span>
       <span class="recode-row-go" aria-hidden="true">→</span>
     </button>`).join("");

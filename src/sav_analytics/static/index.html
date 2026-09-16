@@ -171,6 +171,7 @@
                     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.2 17 16H3l7-12.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M10 8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="10" cy="13.6" r=".9" fill="currentColor" /></svg>
                     Пропуски по анкете
                   </button>
+                  <label class="pill pill-select"><select id="logic-variables" aria-label="Логические переменные"></select></label>
 
                   <div id="project-actions" class="export-menu">
                     <button id="export-toggle" class="export-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
@@ -302,12 +303,13 @@
                 <div class="insp-body editor-scroll scroll">
                   <div class="form-row">
                     <label class="f">Код переменной<input id="recode-code" required maxlength="64" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="AGE_GROUP" /></label>
-                    <label class="f">Способ<select id="recode-mode"><option value="ranges">Числовые диапазоны</option><option value="categories">Объединение категорий</option></select></label>
+                    <label class="f">Способ<select id="recode-mode"><option value="ranges">Числовые диапазоны</option><option value="categories">Объединение категорий</option><option value="conditions">По условиям</option></select></label>
                   </div>
                   <label class="f">Название<input id="recode-name" required maxlength="500" placeholder="Возрастные группы" /></label>
-                  <label class="f">Исходная переменная<select id="recode-source" required></select></label>
+                  <label id="recode-source-field" class="f">Исходная переменная<select id="recode-source" required></select></label>
                   <section id="range-editor"><div class="range-heading grp-cap"><strong>Категории и диапазоны</strong><small>Пустая граница = открытый край</small></div><div id="range-list" class="range-list"></div><button id="add-range" class="secondary compact-button add-row-button" type="button">+ Добавить категорию</button></section>
                   <section id="category-editor" hidden><div class="range-heading grp-cap"><strong>Новые категории</strong><small>Перетащите ответ в группу или выберите щелчком и нажмите «Сюда»</small></div><div id="category-pool" class="category-pool"></div><div id="category-group-list" class="category-group-list"></div><button id="add-category-group" class="secondary compact-button add-row-button" type="button">+ Добавить группу</button></section>
+                  <section id="condition-editor" hidden><div class="range-heading grp-cap"><strong>Категории по условиям</strong><small>Респондент попадает в первую подходящую категорию, не подошедший ни к одной — пропуск</small></div><div id="condition-category-list" class="condition-category-list"></div><button id="add-condition-category" class="secondary compact-button add-row-button" type="button">+ Добавить категорию</button></section>
                   <section class="preview"><div class="preview-title"><h3>Предпросмотр групп</h3><button id="refresh-recode-preview" class="text-button" type="button">Пересчитать</button></div><div id="recode-preview" class="preview-content"><p class="muted">Сохраните перекодировку для расчёта.</p></div></section>
                   <p id="recode-error" class="error" hidden></p>
                 </div>
