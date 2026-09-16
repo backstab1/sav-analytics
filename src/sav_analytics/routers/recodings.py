@@ -36,7 +36,7 @@ def recoding_source_values(
         )
         if source is None:
             raise RecodingError("Исходная переменная не найдена в SAV.")
-        return recode_source_values(repository.source_path(project_id), source)
+        return recode_source_values(repository.source_path(project_id), source, project)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
     except RecodingError as exc:

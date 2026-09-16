@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyreadstat
 
 from .filtering import (
     FilterError,
@@ -13,6 +12,7 @@ from .filtering import (
     validate_condition_rules,
     value_options,
 )
+from .formulas import read_project_frame
 
 
 class RecodingError(ValueError):
@@ -63,20 +63,16 @@ def validate_recode(
                 )
 
 
-def recode_source_values(path: str | Path, variable: dict[str, Any]) -> dict[str, Any]:
+def recode_source_values(
+    path: str | Path, variable: dict[str, Any], project: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Ответы исходной переменной для раскладки по группам — до сохранения.
 
     Редактор показывает частоту у каждого ответа и сумму у каждой группы,
     поэтому база новой категории видна, пока её собирают, а не после сохранения.
     """
     name = variable["name"]
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=[name],
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, [name])
     series = frame[name]
     return {
         "variable": name,
@@ -95,13 +91,7 @@ def calculate_recode_preview(
             raise RecodingError("Логическую переменную можно посчитать только в проекте.")
         return _conditional_preview(path, definition, project)
     source_variable = definition["source_variable"]
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=[source_variable],
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, [source_variable])
     series = pd.to_numeric(frame[source_variable], errors="coerce")
     if definition.get("mode", "ranges") == "categories":
         return _categorical_preview(frame[source_variable], definition)
@@ -247,13 +237,7 @@ def _conditional_preview(
         columns = sorted(recoding_columns(definition, project))
     except FilterError as exc:
         raise RecodingError(str(exc)) from exc
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=columns,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, columns)
     try:
         series = conditional_series(definition, project, frame)
     except FilterError as exc:

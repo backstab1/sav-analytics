@@ -17,7 +17,14 @@ from .configuration_revision import (
     ConfigurationConflictError,
     current_expected_revision,
 )
-from .core.configuration_integrity import ensure_not_referenced
+from .core.configuration_integrity import ConfigurationIntegrityError, ensure_not_referenced
+from .core.formulas import (
+    FormulaError,
+    formula_question,
+    formula_statistics,
+    formula_variable,
+    validate_formula,
+)
 from .core.not_applicable import NotApplicableConfirmationRequired, assess_not_applicable
 from .core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
@@ -452,6 +459,88 @@ class ProjectRepository:
         self._write_project(project_id, project)
         return project
 
+    def create_formula(self, project_id: UUID, definition: dict) -> dict:
+        """Формула становится производной переменной и числовым вопросом."""
+        project = self.get(project_id)
+        record = {"id": str(uuid4()), **definition}
+        counts = self._formula_counts(project_id, project, record)
+        project["configuration"].setdefault("formulas", []).append(record)
+        project["inspection"]["variables"].append(formula_variable(record, counts))
+        project["configuration"]["questions"].append(formula_question(record, counts))
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_formula(self, project_id: UUID, formula_id: UUID, definition: dict) -> dict:
+        project = self.get(project_id)
+        identifier = str(formula_id)
+        formulas = project["configuration"].get("formulas", [])
+        index = next(
+            (index for index, item in enumerate(formulas) if item["id"] == identifier), None
+        )
+        if index is None:
+            raise ProjectNotFoundError(identifier)
+        if definition["name"] != formulas[index]["name"]:
+            # Имя — код вопроса, на него ссылаются баннеры и фильтры.
+            raise InvalidUploadError("Имя формулы после создания не меняется.")
+        record = {"id": identifier, **definition}
+        counts = self._formula_counts(project_id, project, record)
+        formulas[index] = record
+        for item in project["inspection"]["variables"]:
+            if item.get("formula_id") == identifier:
+                item.update(formula_variable(record, counts))
+        for question in project["configuration"]["questions"]:
+            if question.get("formula_id") == identifier:
+                question.update(
+                    label=record["label"],
+                    valid_count=counts["valid_count"],
+                    missing_count=counts["missing_count"],
+                )
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def delete_formula(self, project_id: UUID, formula_id: UUID) -> dict:
+        project = self.get(project_id)
+        identifier = str(formula_id)
+        configuration = project["configuration"]
+        formula = next(
+            (item for item in configuration.get("formulas", []) if item["id"] == identifier),
+            None,
+        )
+        if formula is None:
+            raise ProjectNotFoundError(identifier)
+        name = formula["name"]
+        ensure_not_referenced(configuration, "question", name, "Формула")
+        if any(item.get("source_variable") == name for item in configuration["recodings"]):
+            raise ConfigurationIntegrityError(
+                "Формула используется в перекодировке. Сначала удалите перекодировку."
+            )
+        if (configuration.get("report_settings") or {}).get("weight_variable") == name:
+            raise ConfigurationIntegrityError(
+                "Формула выбрана весом отчёта. Сначала смените вес в настройках отчёта."
+            )
+        configuration["formulas"] = [
+            item for item in configuration["formulas"] if item["id"] != identifier
+        ]
+        project["inspection"]["variables"] = [
+            item for item in project["inspection"]["variables"]
+            if item.get("formula_id") != identifier
+        ]
+        configuration["questions"] = [
+            item for item in configuration["questions"] if item.get("formula_id") != identifier
+        ]
+        configuration["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def _formula_counts(self, project_id: UUID, project: dict, record: dict) -> dict[str, int]:
+        try:
+            validate_formula(record, project, formula_id=record["id"])
+            return formula_statistics(self.source_path(project_id), record)
+        except FormulaError as exc:
+            raise InvalidUploadError(str(exc)) from exc
+
     def delete_recoding(self, project_id: UUID, recoding_id: UUID) -> dict:
         project = self.get(project_id)
         identifier = str(recoding_id)
@@ -537,6 +626,12 @@ class ProjectRepository:
                         child["included_in_report"] for child in children
                     )
             merged.append(configured)
+        # Формулы не живут в SAV: перераспознавание их не находит, но терять
+        # их нельзя — переносим производные переменные и вопросы как есть.
+        refreshed["variables"].extend(
+            item for item in project["inspection"]["variables"] if item.get("formula_id")
+        )
+        merged.extend(item for item in previous if item.get("formula_id"))
         project["inspection"] = refreshed
         project["configuration"]["questions"] = merged
         project["configuration"]["structure_version"] = STRUCTURE_VERSION

@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyreadstat
 
+from .formulas import read_project_frame
 from .multiple_response import (
     MultipleResponseError,
     answered_mask,
@@ -42,13 +42,7 @@ def calculate_filter_preview(
 ) -> dict[str, Any]:
     validate_filter(definition, project)
     columns = sorted(_required_columns(definition["rule"], project))
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=columns,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, columns)
     mask, steps = _evaluate_group(definition["rule"], project, frame, root=True)
     total = len(frame)
     selected = int(mask.sum())
@@ -90,13 +84,7 @@ def condition_source_options(
             raise FilterError("Для этого условия нужен одиночный вопрос.")
     else:
         columns = sorted(recoding_columns(resolved, project))
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=columns,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, columns)
     total = len(frame)
     variables = _variables(project)
     label = _source_label(source, resolved)

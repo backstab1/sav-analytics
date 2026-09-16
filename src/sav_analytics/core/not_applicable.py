@@ -22,7 +22,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyreadstat
+
+from .formulas import read_project_frame
 
 
 def not_applicable_values(question: dict[str, Any]) -> list[Any]:
@@ -122,13 +123,7 @@ def suggest_not_applicable_codes(
     if not wanted:
         return []
 
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=wanted,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, wanted)
     groups: dict[str, NotApplicableGroup] = {}
     for question in questions:
         for name in question["source_variables"]:
@@ -270,13 +265,7 @@ def assess_not_applicable(
     if not columns:
         return []
     # Как в предпросмотре: объявленные пропуски SPSS уже пустые и в базу не входят.
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=columns,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, columns)
     variables = {item["name"]: item for item in project["inspection"]["variables"]}
     assessments = []
     for question, values in marks:

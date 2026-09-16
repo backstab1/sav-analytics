@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyreadstat
 
 from .filtering import conditional_series, recoding_columns
+from .formulas import read_project_frame
 
 
 class BannerError(ValueError):
@@ -57,13 +57,7 @@ def calculate_banner_preview(
             for variable in _source_columns(source, project):
                 if variable not in required:
                     required.append(variable)
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=required,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, required)
     built = build_banner_columns(frame, definition, project)
     columns = [
         {key: value for key, value in column.items() if key != "mask"}

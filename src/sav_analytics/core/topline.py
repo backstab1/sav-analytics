@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyreadstat
 
+from .formulas import read_project_frame
 from .models import QuestionType
 from .multiple_response import (
     MultipleResponseError,
@@ -24,15 +24,10 @@ def calculate_preview(
     path: str | Path,
     question: dict[str, Any],
     variables: list[dict[str, Any]],
+    project: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_variables = question["source_variables"]
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=source_variables,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, source_variables)
     question_type = QuestionType(question["question_type"])
     base = {
         "code": question["code"],

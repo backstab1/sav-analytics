@@ -134,7 +134,10 @@ def preview_question(
     try:
         project, question = repository.question(project_id, code)
         return calculate_preview(
-            repository.source_path(project_id), question, project["inspection"]["variables"]
+            repository.source_path(project_id),
+            question,
+            project["inspection"]["variables"],
+            project,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc

@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyreadstat
 
 from ..banner import BannerError, build_banner_columns
 from ..configuration_integrity import (
@@ -13,6 +12,7 @@ from ..configuration_integrity import (
     validate_configuration_references,
 )
 from ..filtering import evaluate_filter_frame
+from ..formulas import read_project_frame
 from ..multiple_response import response_definition
 from ..not_applicable import not_applicable_values
 from ..report_settings import resolved_report_settings
@@ -50,13 +50,7 @@ def prepare_report_data(
     а таблице на экране — только вопросы раскладки, разрез, фильтр и вес,
     поэтому список считает вызывающий: он же знает раскладку.
     """
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=columns,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    frame = read_project_frame(path, project, columns)
     configuration = project["configuration"]
     try:
         validate_configuration_references(configuration)

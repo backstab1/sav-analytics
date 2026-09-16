@@ -28,6 +28,7 @@ from .project_models import InvalidStoredProjectError
 from .routers import (
     banners,
     filters,
+    formulas,
     projects,
     questions,
     recodings,
@@ -200,6 +201,7 @@ for router in (
     projects.router,
     questions.router,
     recodings.router,
+    formulas.router,
     banners.router,
     filters.router,
     weights.router,

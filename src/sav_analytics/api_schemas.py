@@ -309,6 +309,12 @@ class ConditionalRecodeDefinition(BaseModel):
     categories: list[ConditionCategory] = Field(min_length=2, max_length=50)
 
 
+class FormulaDefinition(BaseModel):
+    name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=500)
+    expression: str = Field(min_length=1, max_length=2000)
+
+
 RecodeDefinition = (
     NumericRecodeDefinition | CategoricalRecodeDefinition | ConditionalRecodeDefinition
 )
