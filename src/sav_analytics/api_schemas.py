@@ -8,6 +8,10 @@ from pydantic import BaseModel, Field, model_validator
 from .core.models import QuestionType, VariableRole
 
 
+class ProjectRename(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
 class NetDefinition(BaseModel):
     """NET-группа: объединение ответов вопроса отдельной строкой отчёта."""
 

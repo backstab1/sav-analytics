@@ -680,3 +680,37 @@ def test_logic_variable_is_built_from_rules(
     expect(page.locator("#recode-preview")).to_contain_text("120", timeout=UI_TIMEOUT)
     expect(page.locator("#logic-variables option", has_text="SEXSEG")).to_have_count(1)
 
+
+def test_project_library_renames_copies_trashes_and_restores(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    page.click("#new-project")
+    expect(page.locator("#start")).to_be_visible(timeout=UI_TIMEOUT)
+
+    cards = page.locator("#project-list .project-card")
+    expect(cards).to_have_count(1, timeout=UI_TIMEOUT)
+    page.click("[data-project-rename]")
+    page.fill(".project-rename-form input", "Трекер")
+    page.click(".project-rename-form button[type='submit']")
+    expect(cards.first).to_contain_text("Трекер", timeout=UI_TIMEOUT)
+
+    page.click("[data-project-copy]")
+    expect(cards).to_have_count(2, timeout=UI_TIMEOUT)
+    page.fill("#project-search", "копия")
+    expect(cards).to_have_count(1)
+
+    page.click("[data-project-trash]")
+    expect(page.locator("#project-trash-toggle")).to_have_text("Корзина · 1", timeout=UI_TIMEOUT)
+    page.fill("#project-search", "")
+    expect(cards).to_have_count(1)
+
+    page.click("#project-trash-toggle")
+    expect(cards).to_have_count(1)
+    page.click("[data-project-restore]")
+    expect(page.locator("#project-trash-toggle")).to_have_text("Корзина", timeout=UI_TIMEOUT)
+    page.click("#project-trash-toggle")
+    expect(cards).to_have_count(2, timeout=UI_TIMEOUT)
+

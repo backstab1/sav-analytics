@@ -686,6 +686,103 @@ class ProjectRepository:
         self._write_project(project_id, project)
         return project
 
+    def rename(self, project_id: UUID, name: str) -> dict:
+        project = self.get(project_id)
+        cleaned = name.strip()
+        if not cleaned:
+            raise InvalidUploadError("Название проекта не может быть пустым.")
+        project["name"] = cleaned
+        self._write_project(project_id, project)
+        return project
+
+    def duplicate(self, project_id: UUID) -> dict:
+        """Копия проекта: тот же SAV и те же настройки, но своя история.
+
+        Собранные отчёты не копируются — они принадлежат ревизиям исходного
+        проекта, а у копии ревизия начинается заново.
+        """
+        project = self.get(project_id)
+        copy_id = uuid4()
+        temporary = self.root / f".{copy_id}.copying"
+        temporary.mkdir()
+        try:
+            shutil.copy2(
+                self.root / str(project_id) / "source.sav", temporary / "source.sav"
+            )
+            created_at = datetime.now(UTC).isoformat()
+            copied = json.loads(json.dumps(project))
+            copied["id"] = str(copy_id)
+            copied["name"] = f"Копия — {project['name']}"
+            copied["created_at"] = created_at
+            copied["configuration"]["revision"] = 1
+            copied["configuration"]["updated_at"] = created_at
+            validate_stored_project(copied)
+            (temporary / "project.json").write_text(
+                json.dumps(copied, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            os.replace(temporary, self.root / str(copy_id))
+        except Exception:
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
+        return copied
+
+    def trash(self, project_id: UUID) -> None:
+        """Убрать проект в корзину: каталог целиком, вместе с отчётами.
+
+        Безвозвратного удаления здесь нет — проект восстанавливается тем же
+        каталогом, с теми же ревизиями и собранными книгами.
+        """
+        self.get(project_id)
+        trash_root = self.root / ".trash"
+        trash_root.mkdir(exist_ok=True)
+        target = trash_root / str(project_id)
+        with self._project_lock(project_id):
+            try:
+                os.replace(self.root / str(project_id), target)
+            except OSError as exc:
+                raise InvalidUploadError(
+                    "Проект сейчас используется, например собирается отчёт. Повторите позже."
+                ) from exc
+            (target / "trashed.json").write_text(
+                json.dumps({"trashed_at": datetime.now(UTC).isoformat()}), encoding="utf-8"
+            )
+
+    def list_trash(self) -> list[dict]:
+        items = []
+        for metadata_path in (self.root / ".trash").glob("*/project.json"):
+            project = self._read(metadata_path)
+            marker = metadata_path.parent / "trashed.json"
+            trashed_at = (
+                self._read(marker)["trashed_at"] if marker.is_file() else project["created_at"]
+            )
+            items.append(
+                {
+                    **{
+                        key: project[key]
+                        for key in ("id", "name", "created_at", "original_filename")
+                    },
+                    "trashed_at": trashed_at,
+                }
+            )
+        return sorted(items, key=lambda item: item["trashed_at"], reverse=True)
+
+    def restore(self, project_id: UUID) -> dict:
+        source = self.root / ".trash" / str(project_id)
+        if not (source / "project.json").is_file():
+            raise ProjectNotFoundError(str(project_id))
+        target = self.root / str(project_id)
+        if target.exists():
+            raise InvalidUploadError("Проект с тем же идентификатором уже есть в библиотеке.")
+        with self._project_lock(project_id):
+            try:
+                os.replace(source, target)
+            except OSError as exc:
+                raise InvalidUploadError(
+                    "Проект сейчас не удаётся восстановить. Повторите позже."
+                ) from exc
+            (target / "trashed.json").unlink(missing_ok=True)
+        return self.get(project_id)
+
     def source_path(self, project_id: UUID) -> Path:
         self.get(project_id)
         return self.root / str(project_id) / "source.sav"

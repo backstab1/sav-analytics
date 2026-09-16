@@ -98,7 +98,12 @@
             <p id="form-error" class="error" hidden></p>
           </form>
           <section id="project-library" class="project-library" hidden>
-            <div class="section-title"><p class="eyebrow">НЕДАВНИЕ ПРОЕКТЫ</p><button id="refresh-projects" class="text-button" type="button">Обновить</button></div>
+            <div class="section-title"><p class="eyebrow">ПРОЕКТЫ</p><button id="refresh-projects" class="text-button" type="button">Обновить</button></div>
+            <div class="library-tools">
+              <input id="project-search" type="search" placeholder="Найти по названию или файлу" aria-label="Найти проект" autocomplete="off" />
+              <select id="project-sort" aria-label="Порядок проектов"><option value="new">Сначала новые</option><option value="old">Сначала старые</option><option value="name">По названию</option></select>
+              <button id="project-trash-toggle" class="text-button" type="button" aria-pressed="false">Корзина</button>
+            </div>
             <div id="project-list" class="project-list"></div>
           </section>
         </section>

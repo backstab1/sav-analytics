@@ -201,7 +201,7 @@ button, .link-button {
 button:hover { background: var(--c-brand-hover); }
 button:active { transform: scale(.97); }
 button:disabled { cursor: not-allowed; opacity: 0.45; transform: none; }
-button:focus-visible, .link-button:focus-visible, .project-card:focus-visible,
+button:focus-visible, .link-button:focus-visible, .project-open:focus-visible,
 .drop-zone:focus-within, summary:focus-visible {
   outline: 2px solid var(--c-brand); outline-offset: 2px;
 }
@@ -289,6 +289,21 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .project-card:hover { box-shadow: var(--shadow-drawer); transform: translateY(-1px); }
 .project-card span { display: grid; gap: 2px; }
 .project-card small, .project-card time { color: var(--c-ink-3); font-size: var(--t-sm); font-weight: 500; }
+.library-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.library-tools input { flex: 1 1 220px; padding: 7px 10px; font-size: var(--t-sm); }
+.library-tools select { padding: 7px 10px; font-size: var(--t-sm); }
+.project-open {
+  all: unset; box-sizing: border-box; flex: 1 1 auto; min-width: 0; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center; gap: var(--s-4);
+}
+.project-card.trashed { opacity: .85; }
+.project-card.trashed .project-open { cursor: default; }
+.project-actions { display: flex; flex: 0 0 auto; gap: 10px; }
+.project-actions .text-button { font-size: var(--t-xs); }
+.project-actions .danger-text { color: var(--c-danger); }
+.project-rename-form { display: flex; flex: 1 1 auto; gap: 8px; }
+.project-rename-form input { flex: 1 1 auto; padding: 6px 9px; }
+.library-empty { margin: 0; }
 
 /* ================================================================
    WORKSPACE — оболочка «рельс / список / инспектор»

@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
+from ..api_schemas import ProjectRename
 from ..core.sav_reader import SavReadError
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
@@ -33,6 +34,67 @@ def create_project(
         return repository.create(name, file.filename or "upload.sav", file.file)
     except (InvalidUploadError, SavReadError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+# Маршруты корзины стоят раньше «/{project_id}»: иначе слово «trash»
+# проверялось бы как идентификатор проекта и получало отказ валидации.
+@router.get("/trash")
+def list_trash(
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> list[dict]:
+    return repository.list_trash()
+
+
+@router.post("/trash/{project_id}/restore")
+def restore_project(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.restore(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проекта нет в корзине.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.patch("/{project_id}")
+def rename_project(
+    project_id: UUID,
+    update: ProjectRename,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.rename(project_id, update.name)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{project_id}/duplicate", status_code=status.HTTP_201_CREATED)
+def duplicate_project(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.duplicate(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+
+
+@router.delete("/{project_id}")
+def trash_project(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        repository.trash(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"trashed": str(project_id)}
 
 
 @router.get("/{project_id}")
