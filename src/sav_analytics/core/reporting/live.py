@@ -145,7 +145,7 @@ def export_live_table(
     path: str | Path,
     project: dict[str, Any],
     *,
-    questions: list[str],
+    questions: list[str] | None,
     banner_id: str | None = None,
     blocks: list[dict[str, Any]] | None = None,
     filter_id: str | None = None,
@@ -156,6 +156,10 @@ def export_live_table(
     разрез экрана и его фильтр. Настройки вывода, тесты и вес — проектные,
     поэтому выгруженная таблица совпадает с тем же местом полного отчёта.
     Возвращается книга и `statistics.txt` к ней.
+
+    `questions=None` — все вопросы, включённые в отчёт, в порядке структуры:
+    полный отчёт с разрезом и фильтром экрана. Тогда состав не сужается до
+    типов экрана — книга выводит те же вопросы, что вывела бы полная сборка.
     """
     live = _live_project(project, questions, banner_id, blocks, filter_id, show_protocol=False)
     artifacts = build_topline_artifacts(path, live)
@@ -220,7 +224,7 @@ def _needed_columns(live: dict[str, Any]) -> list[str] | None:
 
 def _live_project(
     project: dict[str, Any],
-    questions: list[str],
+    questions: list[str] | None,
     banner_id: str | None,
     blocks: list[dict[str, Any]] | None,
     filter_id: str | None,
@@ -229,25 +233,8 @@ def _live_project(
 ) -> dict[str, Any]:
     live = copy.deepcopy(project)
     configuration = live["configuration"]
-    by_code = {item["code"]: item for item in configuration["questions"]}
-    wanted = list(dict.fromkeys(questions))
-    missing = [code for code in wanted if code not in by_code]
-    if missing:
-        raise ReportError("Вопросы не найдены: " + ", ".join(missing) + ".")
-    unsupported = [
-        code for code in wanted if by_code[code]["question_type"] not in LIVE_QUESTION_TYPES
-    ]
-    if unsupported:
-        raise ReportError(
-            "В таблицу нельзя поставить открытые, технические и пока не поддерживаемые "
-            "вопросы: " + ", ".join(unsupported) + "."
-        )
-    for item in configuration["questions"]:
-        item["included_in_report"] = item["code"] in wanted
-    # Строки идут в порядке раскладки, а не в порядке структуры.
-    configuration["questions"] = [by_code[code] for code in wanted] + [
-        item for item in configuration["questions"] if item["code"] not in wanted
-    ]
+    if questions is not None:
+        _choose_questions(configuration, questions)
 
     banners = configuration.get("banners", [])
     if blocks:
@@ -272,6 +259,28 @@ def _live_project(
         settings["wave_control_value"] = None
     configuration["report_settings"] = settings
     return live
+
+
+def _choose_questions(configuration: dict[str, Any], questions: list[str]) -> None:
+    by_code = {item["code"]: item for item in configuration["questions"]}
+    wanted = list(dict.fromkeys(questions))
+    missing = [code for code in wanted if code not in by_code]
+    if missing:
+        raise ReportError("Вопросы не найдены: " + ", ".join(missing) + ".")
+    unsupported = [
+        code for code in wanted if by_code[code]["question_type"] not in LIVE_QUESTION_TYPES
+    ]
+    if unsupported:
+        raise ReportError(
+            "В таблицу нельзя поставить открытые, технические и пока не поддерживаемые "
+            "вопросы: " + ", ".join(unsupported) + "."
+        )
+    for item in configuration["questions"]:
+        item["included_in_report"] = item["code"] in wanted
+    # Строки идут в порядке раскладки, а не в порядке структуры.
+    configuration["questions"] = [by_code[code] for code in wanted] + [
+        item for item in configuration["questions"] if item["code"] not in wanted
+    ]
 
 
 def _has_wave_column(configuration: dict[str, Any]) -> bool:

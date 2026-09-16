@@ -563,9 +563,18 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     page.keyboard.press("Escape")
 
     # Та же раскладка выгружается книгой Excel.
+    page.click("#bld-export")
     with page.expect_download() as download:
-        page.click("#bld-export")
+        page.click('[data-export-scope="table"]')
     exported = tmp_path / "table.xlsx"
     download.value.save_as(exported)
     assert exported.stat().st_size > 5000
+
+    # Все вопросы отчёта с тем же разрезом — книга шире таблицы.
+    page.click("#bld-export")
+    with page.expect_download() as download:
+        page.click('[data-export-scope="report"]')
+    whole = tmp_path / "report_by_cut.xlsx"
+    download.value.save_as(whole)
+    assert whole.stat().st_size > exported.stat().st_size
 

@@ -467,8 +467,14 @@
                 <span class="bld-param-sep" aria-hidden="true"></span>
                 <button type="button" id="bld-save-cut" class="bld-param bld-toggle" hidden
                         title="Сохранить колонки таблицы баннером отчёта — переименовать можно в «Отчётах»">Разрез в баннер</button>
-                <button type="button" id="bld-export" class="bld-param bld-toggle" hidden
-                        title="Выгрузить эту таблицу книгой Excel тем же сборщиком, что полный отчёт">Excel</button>
+                <span class="bld-export-wrap">
+                  <button type="button" id="bld-export" class="bld-param bld-toggle" hidden aria-haspopup="menu" aria-expanded="false"
+                          title="Выгрузить книгой Excel тем же сборщиком, что полный отчёт">Excel</button>
+                  <span id="bld-export-menu" class="bld-export-menu" role="menu" hidden>
+                    <button type="button" role="menuitem" data-export-scope="table">Эта таблица<small>вопросы строк</small></button>
+                    <button type="button" role="menuitem" data-export-scope="report">Все вопросы отчёта<small>с этим разрезом и фильтром</small></button>
+                  </span>
+                </span>
                 <span id="bld-stage-note" class="bld-note"></span>
               </div>
 

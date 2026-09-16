@@ -114,6 +114,12 @@ class TablePreviewRequest(BaseModel):
         return self
 
 
+class TableExportRequest(TablePreviewRequest):
+    """Выгрузка раскладки: только строки таблицы или все вопросы отчёта."""
+
+    scope: Literal["table", "report"] = "table"
+
+
 class ReportSettingsDefinition(BaseModel):
     compare_to_total: bool = False
     # С кем сравнивается подгруппа: с непересекающимся остатком (по умолчанию)

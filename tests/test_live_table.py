@@ -284,3 +284,36 @@ def test_export_endpoint_returns_a_named_workbook(tmp_path: Path) -> None:
     finally:
         app.dependency_overrides.clear()
 
+
+def test_export_of_the_whole_report_takes_every_included_question(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            url = f"/api/projects/{project['id']}/tables/export"
+            included = [
+                item for item in project["configuration"]["questions"] if item["included_in_report"]
+            ]
+            other = next(item for item in included if item["code"] != "Q1")
+
+            table = client.post(url, json={"questions": ["Q1"], "scope": "table"})
+            report = client.post(url, json={"questions": ["Q1"], "scope": "report"})
+
+            assert table.status_code == report.status_code == 200
+            assert report.headers["content-disposition"].endswith(".xlsx")
+
+            def strings(content: bytes) -> str:
+                with ZipFile(BytesIO(content)) as archive:
+                    return archive.read("xl/sharedStrings.xml").decode("utf-8")
+
+            assert other["label"] not in strings(table.content)
+            assert other["label"] in strings(report.content)
+    finally:
+        app.dependency_overrides.clear()
+

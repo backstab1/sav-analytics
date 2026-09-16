@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..api_dependencies import get_repository
-from ..api_schemas import TablePreviewRequest
+from ..api_schemas import TableExportRequest, TablePreviewRequest
 from ..core.reporting.live import build_live_table, export_live_table
 from ..core.reporting.models import ReportError
 from ..repository import ProjectNotFoundError, ProjectRepository
@@ -45,10 +45,10 @@ def preview_table(
 @router.post("/export")
 def export_table(
     project_id: UUID,
-    request: TablePreviewRequest,
+    request: TableExportRequest,
     repository: Annotated[ProjectRepository, Depends(get_repository)],
 ) -> Response:
-    """Выгрузить таблицу экрана книгой Excel."""
+    """Выгрузить книгой Excel таблицу экрана или все вопросы отчёта с её разрезом."""
     try:
         project = repository.get(project_id)
         source = repository.source_path(project_id)
@@ -58,7 +58,7 @@ def export_table(
         workbook, _ = export_live_table(
             source,
             project,
-            questions=request.questions,
+            questions=request.questions if request.scope == "table" else None,
             banner_id=str(request.banner_id) if request.banner_id else None,
             blocks=[block.model_dump(mode="json") for block in request.blocks]
             if request.blocks
@@ -67,7 +67,8 @@ def export_table(
         )
     except ReportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    name = f"{project['name']}_таблица.xlsx"
+    suffix = "таблица" if request.scope == "table" else "отчёт_по_разрезу"
+    name = f"{project['name']}_{suffix}.xlsx"
     return Response(
         content=workbook,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

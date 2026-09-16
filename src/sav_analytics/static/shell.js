@@ -133,6 +133,7 @@
     const nestToggle = document.querySelector("#bld-nest");
     const saveCutButton = document.querySelector("#bld-save-cut");
     const exportButton = document.querySelector("#bld-export");
+    const exportMenu = document.querySelector("#bld-export-menu");
     const testsSlot = document.querySelector("#bld-tests");
     const log = document.querySelector("#bld-log");
     const form = document.querySelector("#bld-form");
@@ -589,14 +590,22 @@
       }
     }
 
-    async function exportTable() {
+    function closeExportMenu() {
+      exportMenu.hidden = true;
+      exportButton.setAttribute("aria-expanded", "false");
+    }
+
+    // «Эта таблица» — вопросы строк; «Все вопросы отчёта» — полный отчёт с
+    // разрезом и фильтром экрана, как выгрузка всех строк кросстаба у Qualtrics.
+    async function exportTable(scope) {
+      closeExportMenu();
       if (!projectId || !layout.rows.length) return;
       exportButton.disabled = true;
       try {
         const response = await fetch(`/api/projects/${projectId}/tables/export`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(tableRequest()),
+          body: JSON.stringify({ ...tableRequest(), scope }),
         });
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
@@ -605,7 +614,7 @@
         const blob = await response.blob();
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = "table.xlsx";
+        link.download = scope === "report" ? "report_by_cut.xlsx" : "table.xlsx";
         document.body.append(link);
         link.click();
         link.remove();
@@ -618,7 +627,24 @@
     }
 
     saveCutButton.addEventListener("click", () => { void saveCut(); });
-    exportButton.addEventListener("click", () => { void exportTable(); });
+    exportButton.addEventListener("click", event => {
+      event.stopPropagation();
+      const open = exportMenu.hidden;
+      exportMenu.hidden = !open;
+      exportButton.setAttribute("aria-expanded", String(open));
+    });
+    exportMenu.addEventListener("click", event => {
+      const item = event.target.closest("[data-export-scope]");
+      if (!item) return;
+      event.stopPropagation();
+      void exportTable(item.dataset.exportScope);
+    });
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".bld-export-wrap")) closeExportMenu();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") closeExportMenu();
+    });
 
     /* Протокол теста по щелчку на ячейке — тот же текст, что примечание
        ячейки в книге и запись в statistics.txt (PQ.3, «лучше Qualtrics»). */
