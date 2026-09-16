@@ -1547,3 +1547,58 @@ def test_output_metrics_are_stored_in_canonical_order_and_never_empty(
             assert client.put(url, json={"percent_decimals": 3}).status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_question_nets_are_validated_and_stored(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            url = f"/api/projects/{project['id']}/questions"
+            numeric = next(
+                item["code"]
+                for item in project["configuration"]["questions"]
+                if item["question_type"]
+                not in {"single_choice", "scale", "matrix", "multiple_choice_dichotomy"}
+            )
+
+            saved = client.patch(
+                f"{url}/Q1", json={"nets": [{"label": " Мужчины ", "values": [1, 1]}]}
+            )
+            assert saved.status_code == 200
+            question = next(
+                item for item in saved.json()["configuration"]["questions"] if item["code"] == "Q1"
+            )
+            assert question["nets"] == [{"label": "Мужчины", "values": [1]}]
+
+            duplicate = client.patch(
+                f"{url}/Q1",
+                json={"nets": [
+                    {"label": "Группа", "values": [1]},
+                    {"label": "группа", "values": [2]},
+                ]},
+            )
+            assert duplicate.status_code == 422
+            assert "не должны повторяться" in duplicate.json()["detail"]
+
+            wrong_type = client.patch(
+                f"{url}/{numeric}", json={"nets": [{"label": "Много", "values": [1]}]}
+            )
+            assert wrong_type.status_code == 422
+
+            cleared = client.patch(f"{url}/Q1", json={"nets": []})
+            question = next(
+                item
+                for item in cleared.json()["configuration"]["questions"]
+                if item["code"] == "Q1"
+            )
+            assert question["nets"] == []
+    finally:
+        app.dependency_overrides.clear()
+

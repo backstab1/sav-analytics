@@ -248,6 +248,8 @@ class ProjectRepository:
             if not values or not values <= expected:
                 bounds = "0–10" if special_metric == "nps" else "1–5"
                 raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
+        if "nets" in changes:
+            changes["nets"] = _validated_nets(question, final_type, changes["nets"])
         if changes.get("not_applicable_values"):
             self._require_not_applicable_confirmation(
                 project_id,
@@ -802,3 +804,37 @@ class ProjectRepository:
         identifier = str(project_id)
         with self._project_locks_guard:
             return self._project_locks.setdefault(identifier, Lock())
+
+
+NET_QUESTION_TYPES = frozenset({"single_choice", "scale", "matrix", "multiple_choice_dichotomy"})
+
+
+def _validated_nets(question: dict, question_type: str, nets: list[dict]) -> list[dict]:
+    """Проверить NET-группы вопроса до сохранения.
+
+    NET объединяет ответы одного вопроса. Для multiple-response ответы — это
+    его варианты, поэтому чужая переменная в группе означает ошибку, а не
+    расширение: такой NET посчитал бы долю по другому вопросу.
+    """
+    if not nets:
+        return []
+    if question_type not in NET_QUESTION_TYPES:
+        raise InvalidUploadError(
+            "NET-группы задаются для одиночного выбора, шкалы, матрицы и multiple-response."
+        )
+    labels = [item["label"].strip() for item in nets]
+    if not all(labels):
+        raise InvalidUploadError("У каждой NET-группы должно быть название.")
+    if len({label.casefold() for label in labels}) != len(labels):
+        raise InvalidUploadError("Названия NET-групп не должны повторяться.")
+    if question_type == "multiple_choice_dichotomy":
+        own = set(question["source_variables"])
+        if any(str(value) not in own for item in nets for value in item["values"]):
+            raise InvalidUploadError(
+                "В NET-группу multiple-response входят только варианты этого вопроса."
+            )
+    return [
+        {"label": label, "values": list(dict.fromkeys(item["values"]))}
+        for label, item in zip(labels, nets, strict=True)
+    ]
+

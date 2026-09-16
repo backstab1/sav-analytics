@@ -1516,6 +1516,12 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .inline-warnings p { margin: 3px 0; }
 .question-review { margin-top: 0; }
+.net-row { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--c-border); }
+.net-row:first-child { border-top: 0; }
+.net-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.net-head input { padding: 6px 9px; font-size: var(--t-xs); }
+.net-options { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--t-xs); }
+#add-net { margin-top: 6px; }
 .na-assessment .na-base { margin: var(--s-2) 0 0; font-size: var(--t-xs); color: var(--c-ink-2); }
 .na-assessment .na-confirm .checkbox { margin-top: 6px; color: var(--c-ink); }
 .question-review .question-review-title { font-weight: 600; }

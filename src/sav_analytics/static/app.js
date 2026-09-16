@@ -1019,6 +1019,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
           special_metric: document.querySelector("#question-special-metric").value,
           ...collectSpecialAnswers(),
           ...collectNotApplicable(),
+          ...collectNets(),
         }),
       },
     );
@@ -3434,6 +3435,56 @@ function collectNotApplicable() {
   };
 }
 
+// NET-группы: объединение ответов отдельной строкой книги. Варианты берутся
+// из предпросмотра — тех же строк, что аналитик видит над ними; у матрицы —
+// из шкалы первого элемента, она у элементов общая.
+const NET_TYPES = ["single_choice", "scale", "multiple_choice_dichotomy", "matrix"];
+let netOptions = [];
+
+function renderNets(question, preview) {
+  const section = document.querySelector("#question-nets");
+  const list = document.querySelector("#net-list");
+  netOptions = (preview?.items?.[0]?.rows || preview?.rows || [])
+    .map(row => ({ value: row.value, label: row.label }));
+  section.hidden = !question || !NET_TYPES.includes(question.question_type) || !netOptions.length;
+  list.innerHTML = "";
+  if (section.hidden) return;
+  (question.nets || []).forEach(net => addNetRow(net));
+}
+
+function addNetRow(net = { label: "", values: [] }) {
+  const row = document.createElement("div");
+  row.className = "net-row";
+  row.innerHTML = `<div class="net-head">
+      <input class="net-label" maxlength="250" placeholder="Например, Довольны" aria-label="Название NET-группы" value="${escapeAttribute(net.label)}" />
+      <button type="button" class="icon-button" data-remove-net aria-label="Удалить NET-группу">×</button>
+    </div>
+    <div class="net-options">${netOptions.map(option => `<label class="checkbox"><input type="checkbox" data-net-value="${escapeAttribute(JSON.stringify(option.value))}" ${containsComparable(net.values, option.value) ? "checked" : ""} /> ${escapeHtml(option.label)}</label>`).join("")}</div>`;
+  document.querySelector("#net-list").append(row);
+}
+
+function collectNets() {
+  // Панель скрыта — тип вопроса NET не поддерживает, и поле не отправляется,
+  // чтобы не стереть сохранённые группы пустым списком.
+  if (document.querySelector("#question-nets").hidden) return {};
+  const nets = [...document.querySelectorAll("#net-list .net-row")]
+    .map(row => ({
+      label: row.querySelector(".net-label").value.trim(),
+      values: [...row.querySelectorAll("[data-net-value]:checked")].map(input => JSON.parse(input.dataset.netValue)),
+    }))
+    .filter(net => net.label || net.values.length);
+  if (nets.some(net => !net.label || !net.values.length)) {
+    throw new Error("У каждой NET-группы должно быть название и хотя бы один ответ.");
+  }
+  return { nets };
+}
+
+document.querySelector("#add-net").addEventListener("click", () => addNetRow());
+document.querySelector("#net-list").addEventListener("click", event => {
+  const remove = event.target.closest("[data-remove-net]");
+  if (remove) remove.closest(".net-row").remove();
+});
+
 function collectSpecialAnswers() {
   const type = document.querySelector("#question-type").value;
   if (type === "multiple_choice_dichotomy") {
@@ -3493,9 +3544,11 @@ async function loadPreview() {
     const preview = await api(`/api/projects/${currentProject.id}/questions/${encodeURIComponent(currentQuestionCode)}/preview`);
     container.innerHTML = renderPreview(preview);
     renderNotApplicable(findQuestion(currentQuestionCode), preview);
+    renderNets(findQuestion(currentQuestionCode), preview);
   } catch (error) {
     container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
     document.querySelector("#not-applicable").hidden = true;
+    document.querySelector("#question-nets").hidden = true;
   }
 }
 

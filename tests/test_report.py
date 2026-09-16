@@ -1646,3 +1646,62 @@ def test_parameters_sheet_records_what_the_book_was_built_from(tmp_path: Path) -
     assert "Ревизия конфигурации: 7" in audit
     assert f"Версия приложения: {__version__}" in audit
 
+
+def test_net_row_is_the_share_of_its_answers_and_is_tested_like_one(tmp_path: Path) -> None:
+    source = tmp_path / "net.sav"
+    project = _significance_project(source)
+    outcome = next(
+        item for item in project["configuration"]["questions"] if item["code"] == "OUTCOME"
+    )
+    outcome["nets"] = [
+        {"label": "Только да", "values": [1]},
+        {"label": "Любой ответ", "values": [1, 2]},
+    ]
+
+    content = build_topline_xlsx(source, project)
+
+    # NET из одного кода — та же строка «Да»: 70% в первой группе, 50% во второй.
+    assert _cell_value(content, "NET: Только да", "C") == pytest.approx(70.0)
+    assert _cell_value(content, "NET: Только да", "D") == pytest.approx(50.0)
+    assert _cell_font_color(content, "NET: Только да", "C") == _cell_font_color(content, "Да", "C")
+    assert _cell_value(content, "NET: Любой ответ", "B") == pytest.approx(100.0)
+    audit = build_statistics_txt(source, project)
+    assert "Строка: NET: Только да" in audit
+
+
+def test_net_of_multiple_response_counts_who_chose_any_of_its_items(tmp_path: Path) -> None:
+    source = tmp_path / "counted_value.sav"
+    write_counted_value_fixture(source)
+    inspection = inspect_sav(source).to_dict()
+    question = {
+        "code": "MR",
+        "label": "Марки",
+        "question_type": "multiple_choice_dichotomy",
+        "role": "question",
+        "source_variables": ["MR_1", "MR_2"],
+        "valid_count": 3,
+        "missing_count": 1,
+        "included_in_report": True,
+        "special_items": [],
+        "multiple_response": {"encoding": "dichotomy", "counted_value": 2},
+        "nets": [{"label": "Любая марка", "values": ["MR_1", "MR_2"]}],
+    }
+    inspection["questions"] = [question]
+    project = {
+        "name": "NET multiple",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "banners": [],
+            "filters": [],
+            "report_filter_id": None,
+        },
+    }
+
+    content = build_topline_xlsx(source, project)
+
+    # Альфу выбрали 1-й и 3-й, Бету — 2-й и 3-й: хотя бы одну — трое из четырёх.
+    assert _cell_value(content, "NET: Любая марка", "B") == pytest.approx(75.0)
+    assert _cell_value(content, "NET: Любая марка", "B", sheet_index=2) == pytest.approx(100.0)
+

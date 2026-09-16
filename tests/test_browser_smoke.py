@@ -583,3 +583,31 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     download.value.save_as(whole)
     assert whole.stat().st_size > exported.stat().st_size
 
+
+def test_net_group_set_on_a_question_reaches_the_table(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """NET-группа задаётся в карточке вопроса и становится строкой таблицы."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    expect(page.locator("#question-nets")).to_be_visible(timeout=UI_TIMEOUT)
+    page.click("#add-net")
+    net = page.locator("#net-list .net-row").first
+    net.locator(".net-label").fill("Только первая")
+    net.locator("[data-net-value='1']").check()
+    page.click("#save-question")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Настройки вопроса сохранены", timeout=UI_TIMEOUT
+    )
+
+    _open_view(page, "tables")
+    page.click('.bld-param[data-zone="rows"]')
+    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.keyboard.press("Escape")
+    row = page.locator("#bld-grid-wrap table.bld-grid tbody tr", has_text="NET: Только первая")
+    expect(row).to_have_count(1, timeout=UI_TIMEOUT)
+    expect(row.locator("td.bld-val").first).to_have_text("67")
+

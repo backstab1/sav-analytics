@@ -278,6 +278,22 @@ def _write_question_rows(
                 selected,
                 "percent",
             )
+        for net in question.get("nets", []):
+            chosen = [name for name in net["values"] if name in sources]
+            if not chosen:
+                continue
+            union = pd.concat(
+                [selected_mask(frame, question, name) for name in chosen], axis=1
+            ).any(axis=1)
+            row = _write_metric_row(
+                context,
+                row,
+                f"NET: {net['label']}",
+                context.denominator(answered),
+                union,
+                "percent",
+                derived=True,
+            )
         return row
     if question_type == "matrix":
         for name in sources:
@@ -302,9 +318,35 @@ def _write_question_rows(
             # NPS и CSAT — показатели вопроса, а не набора вывода: их строки
             # заданы требованиями целиком и от отметок отчёта не зависят.
             row = _write_distribution(context, row, series, variables[sources[0]], question)
+            row = _write_nets(context, row, series, question)
             return _write_special_scale_rows(context, row, series, special_metric)
         return _write_scale_rows(context, row, series, variables[sources[0]], question)
-    return _write_distribution(context, row, series, variables[sources[0]], question)
+    row = _write_distribution(context, row, series, variables[sources[0]], question)
+    return _write_nets(context, row, series, question)
+
+
+def _write_nets(
+    context: _RowContext, row: int, series: pd.Series, question: dict[str, Any]
+) -> int:
+    """NET-группы вопроса: доля тех, чей ответ — одно из объединённых значений.
+
+    База та же, что у строк распределения над ними, и тест тот же тест долей:
+    NET отличается от строки ответа только тем, что объединяет несколько кодов.
+    """
+    for net in question.get("nets", []):
+        outcome = pd.concat(
+            [_equal_series(series, value) for value in net["values"]], axis=1
+        ).any(axis=1)
+        row = _write_metric_row(
+            context,
+            row,
+            f"NET: {net['label']}",
+            context.denominator(series.notna()),
+            outcome,
+            "percent",
+            derived=True,
+        )
+    return row
 
 
 NUMERIC_METRIC_LABELS = {
@@ -329,6 +371,8 @@ def _write_scale_rows(
     special_values = question.get("special_values", [])
     if "distribution" in chosen:
         row = _write_distribution(context, row, series, variable, question)
+    # NET-группы — свойство вопроса, а не набора вывода: они выводятся всегда.
+    row = _write_nets(context, row, series, question)
     working = _scale_series(series, special_values)
     if "mean" in chosen:
         row = _write_numeric_metric(context, row, "Среднее", working)

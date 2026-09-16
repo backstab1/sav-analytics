@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field, model_validator
 from .core.models import QuestionType, VariableRole
 
 
+class NetDefinition(BaseModel):
+    """NET-группа: объединение ответов вопроса отдельной строкой отчёта."""
+
+    label: str = Field(min_length=1, max_length=250)
+    values: list[str | int | float] = Field(min_length=1, max_length=500)
+
+
 class QuestionUpdate(BaseModel):
     label: str | None = Field(default=None, min_length=1, max_length=5000)
     question_type: QuestionType | None = None
@@ -21,6 +28,7 @@ class QuestionUpdate(BaseModel):
     not_applicable_values: list[str | int | float] | None = Field(
         default=None, max_length=100
     )
+    nets: list[NetDefinition] | None = Field(default=None, max_length=20)
     # Явное «да, это пропуск» для подписанной или частой категории: без него
     # такая пометка отклоняется, см. `core/not_applicable.assess_not_applicable`.
     confirm_substantive: bool | None = None
