@@ -8,6 +8,7 @@ import pandas as pd
 
 from .filtering import conditional_series, recoding_columns
 from .formulas import read_project_frame
+from .multiple_response import response_definition, selected_mask
 
 
 class BannerError(ValueError):
@@ -68,7 +69,30 @@ def calculate_banner_preview(
         "name": definition["name"],
         "total_base": len(frame),
         "columns": columns,
+        "overlaps": _block_overlaps(built),
     }
+
+
+def _block_overlaps(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Сколько респондентов блока попали больше чем в одну колонку.
+
+    Перекрытие видно в редакторе числом, а не обнаруживается по странным
+    буквам в отчёте.
+    """
+    overlaps = []
+    for block_index in sorted(
+        {column["block_index"] for column in columns if column.get("overlapping")}
+    ):
+        members = [column for column in columns if column.get("block_index") == block_index]
+        counts = pd.concat([column["mask"] for column in members], axis=1).sum(axis=1)
+        overlaps.append(
+            {
+                "block_index": block_index,
+                "block": members[0]["block"],
+                "respondents": int((counts > 1).sum()),
+            }
+        )
+    return overlaps
 
 
 def banner_columns(definition: dict[str, Any], project: dict[str, Any]) -> set[str]:
@@ -108,6 +132,7 @@ def build_banner_columns(
         )
     for block_index, block in enumerate(definition["blocks"]):
         resolved = [_source_categories(source, project, frame) for source in block["sources"]]
+        overlapping = any(item.get("overlapping") for item in resolved)
         if len(resolved) == 1:
             combinations = ((category,) for category in resolved[0]["categories"])
         else:
@@ -138,6 +163,9 @@ def build_banner_columns(
                     "compare_to_total": compare_to_total,
                     "compare_target": compare_target,
                     "compare_pairwise": compare_pairwise,
+                    # Колонки блока пересекаются: попарный тест для зависимых
+                    # выборок не реализован, сравнение только с остальными.
+                    "overlapping": overlapping,
                     "wave_value": wave_value,
                     "wave_peer_key": tuple(dimension_keys),
                     "wave_comparison": definition.get("wave_comparison", "none"),
@@ -162,8 +190,17 @@ def _resolve_source(source: dict[str, Any], project: dict[str, Any]) -> dict[str
         )
         if question is None:
             raise BannerError("Вопрос для баннера не найден.")
+        if _is_multiple(question):
+            definition = response_definition(question)
+            if definition.get("encoding") != "dichotomy" or definition.get("counted_value") is None:
+                raise BannerError(
+                    "У multiple-response для баннера должен быть задан код выбранного ответа."
+                )
+            return question
         if question["question_type"] != "single_choice" or len(question["source_variables"]) != 1:
-            raise BannerError("В баннер можно добавить только одиночный single choice.")
+            raise BannerError(
+                "В баннер можно добавить одиночный single choice или multiple-response."
+            )
         return question
     if source["kind"] == "recoding":
         recoding = next(
@@ -174,6 +211,10 @@ def _resolve_source(source: dict[str, Any], project: dict[str, Any]) -> dict[str
             raise BannerError("Перекодировка для баннера не найдена.")
         return recoding
     raise BannerError("Неизвестный вид источника баннера.")
+
+
+def _is_multiple(question: dict[str, Any]) -> bool:
+    return question.get("question_type") == "multiple_choice_dichotomy"
 
 
 def _source_variable(source: dict[str, Any], project: dict[str, Any]) -> str:
@@ -187,6 +228,8 @@ def _source_columns(source: dict[str, Any], project: dict[str, Any]) -> list[str
     resolved = _resolve_source(source, project)
     if source["kind"] == "recoding" and resolved.get("mode") == "conditions":
         return sorted(recoding_columns(resolved, project))
+    if source["kind"] == "question" and _is_multiple(resolved):
+        return list(resolved["source_variables"])
     return [_source_variable(source, project)]
 
 
@@ -207,6 +250,24 @@ def _source_categories(
                     "mask": labels.map(lambda item, expected=category["label"]: item == expected),
                 }
                 for position, category in enumerate(resolved["categories"], start=1)
+            ],
+        }
+    if source["kind"] == "question" and _is_multiple(resolved):
+        # Колонка на вариант: выбравшие его. Один респондент может выбрать
+        # несколько вариантов, поэтому колонки пересекаются.
+        labels = {item["name"]: item["label"] for item in project["inspection"]["variables"]}
+        return {
+            "label": resolved["label"],
+            "overlapping": True,
+            "categories": [
+                {
+                    "key": f"question:{resolved['code']}:{name}",
+                    "label": labels.get(name) or name,
+                    "value": name,
+                    "is_wave": False,
+                    "mask": selected_mask(frame, resolved, name),
+                }
+                for name in resolved["source_variables"]
             ],
         }
     variable_name = _source_variable(source, project)

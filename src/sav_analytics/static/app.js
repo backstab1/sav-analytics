@@ -1359,7 +1359,8 @@ function publishVariablesToShell(inspection, questions) {
         type: question.question_type,
         source: { kind: "question", ref: question.code },
         canRow: TABLE_ROW_TYPES.includes(question.question_type),
-        canCol: question.question_type === "single_choice" && labels.length > 0,
+        canCol: (question.question_type === "single_choice" && labels.length > 0)
+          || question.question_type === "multiple_choice_dichotomy",
       };
     });
   const recodingItems = configuredRecodings().map(recoding => ({
@@ -3200,7 +3201,8 @@ function bannerSourceOptions(selected, allowEmpty) {
   const options = [];
   if (allowEmpty) options.push('<option value="">Без вложения</option>');
   configuredQuestions()
-    .filter(item => item.question_type === "single_choice" && item.source_variables.length === 1)
+    .filter(item => (item.question_type === "single_choice" && item.source_variables.length === 1)
+      || item.question_type === "multiple_choice_dichotomy")
     .forEach(item => options.push(`<option value="question:${escapeAttribute(item.code)}" ${selectedValue === `question:${item.code}` ? "selected" : ""}>${escapeHtml(item.code)} — ${escapeHtml(item.label)}</option>`));
   configuredRecodings().forEach(item => options.push(`<option value="recoding:${item.id}" ${selectedValue === `recoding:${item.id}` ? "selected" : ""}>↳ ${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`));
   return options.join("");
@@ -3247,7 +3249,10 @@ async function loadBannerPreview() {
 function renderBannerPreview(preview) {
   const minimumBase = configuredReportSettings().minimum_base;
   document.querySelector("#banner-preview-count").textContent = `${preview.columns.length} колонок`;
-  return `<div class="col-preview">${preview.columns.map((column, index) => {
+  // Перекрытие multiple в баннере видно числом до отчёта, а не по буквам в нём.
+  const overlaps = (preview.overlaps || []).map(item => `
+    <p class="banner-overlap">«${escapeHtml(item.block)}»: колонки пересекаются у ${item.respondents.toLocaleString("ru-RU")} респондентов — внутри блока сравнение только с остальными, без попарных букв.</p>`).join("");
+  return `${overlaps}<div class="col-preview">${preview.columns.map((column, index) => {
     const label = index === 0 ? "Total" : `${column.block ? `${column.block} · ` : ""}${column.label}`;
     const smallBase = column.base > 0 && column.base < minimumBase;
     return `<div class="col-line ${index === 0 ? "total" : ""} ${smallBase ? "small-base" : ""}"><span title="${escapeAttribute(label)}">${escapeHtml(label)}</span><em>База ${column.base.toLocaleString("ru-RU")}</em></div>`;

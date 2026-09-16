@@ -66,14 +66,14 @@ def test_banner_preview_keeps_total_and_builds_nested_columns(tmp_path: Path) ->
     assert all(item["compare_pairwise"] for item in preview["columns"][1:])
 
 
-def test_banner_rejects_multiple_question_as_source(tmp_path: Path) -> None:
+def test_banner_rejects_open_text_question_as_source(tmp_path: Path) -> None:
     source = tmp_path / "fixture.sav"
     write_fixture(source)
     project = project_fixture(source)
     invalid = {
         "name": "Ошибка",
         "blocks": [
-            {"label": None, "sources": [{"kind": "question", "ref": "Q3"}]}
+            {"label": None, "sources": [{"kind": "question", "ref": "Q4_open"}]}
         ],
     }
 

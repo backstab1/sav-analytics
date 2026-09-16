@@ -223,6 +223,12 @@ def _balance_result(
         minimum_base=settings["minimum_base"],
     )
 
+OVERLAP_REASON = (
+    "Колонки блока пересекаются: один респондент может быть в обеих. Попарный тест "
+    "для зависимых выборок не реализован, колонка сравнивается только с остальными."
+)
+
+
 def _pairwise_note(
     column: dict[str, Any],
     columns: list[dict[str, Any]],
@@ -247,11 +253,15 @@ def _pairwise_note(
         return []
     current_position = _column_position(columns, column)
     entries: list[StatisticalAuditEntry] = []
+    overlapping = bool(column.get("overlapping"))
     for position, other in enumerate(columns):
         if other is column or other.get("block_index") != column.get("block_index"):
             continue
         pair = tuple(sorted((current_position, position)))
-        if pair not in cache:
+        if overlapping:
+            # Инвариант: пересекающиеся колонки сравниваются только с остальными.
+            cache[pair] = None
+        elif pair not in cache:
             cache[pair] = run_pair(*pair)
         result = cache[pair]
         if current_position > position:
@@ -265,7 +275,9 @@ def _pairwise_note(
             group_a=_column_title(current_position, column),
             group_b=_column_title(position, other),
             result=result,
-            reason="Пустая группа." if result is None else None,
+            reason=(OVERLAP_REASON if overlapping else "Пустая группа.")
+            if result is None
+            else None,
         )
         entries.append(entry)
         if current_position < position:
@@ -391,7 +403,7 @@ def _comparison_count(column: dict[str, Any], columns: list[dict[str, Any]]) -> 
     total_comparisons = len(block_columns) if column.get("compare_to_total") else 0
     pairwise_comparisons = (
         len(block_columns) * (len(block_columns) - 1) // 2
-        if column.get("compare_pairwise")
+        if column.get("compare_pairwise") and not column.get("overlapping")
         else 0
     )
     wave_columns = [item for item in block_columns if item.get("wave_value") is not None]
