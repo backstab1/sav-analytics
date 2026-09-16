@@ -250,6 +250,8 @@ class ProjectRepository:
                 raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
         if "nets" in changes:
             changes["nets"] = _validated_nets(question, final_type, changes["nets"])
+        if "output_metrics" in changes:
+            changes["output_metrics"] = _validated_output(final_type, changes["output_metrics"])
         if changes.get("not_applicable_values"):
             self._require_not_applicable_confirmation(
                 project_id,
@@ -837,4 +839,28 @@ def _validated_nets(question: dict, question_type: str, nets: list[dict]) -> lis
         {"label": label, "values": list(dict.fromkeys(item["values"]))}
         for label, item in zip(labels, nets, strict=True)
     ]
+
+
+def _validated_output(question_type: str, metrics: list[str]) -> list[str]:
+    """Свой набор вывода вопроса: только показатели его типа, в порядке отчёта.
+
+    Порядок строк задаёт канонический список, а не порядок отметок, — как у
+    набора отчёта: одинаковый выбор даёт одинаковую книгу и ключ кэша.
+    """
+    if not metrics:
+        return []
+    from .core.report_settings import NUMERIC_METRICS, SCALE_METRICS
+
+    allowed = {
+        "scale": SCALE_METRICS,
+        "matrix": SCALE_METRICS,
+        "numeric": NUMERIC_METRICS,
+    }.get(question_type)
+    if allowed is None:
+        raise InvalidUploadError(
+            "Свой набор вывода задаётся шкале, матрице и числовому вопросу."
+        )
+    if any(metric not in allowed for metric in metrics):
+        raise InvalidUploadError("В наборе вывода есть показатель другого типа вопроса.")
+    return [metric for metric in allowed if metric in set(metrics)]
 

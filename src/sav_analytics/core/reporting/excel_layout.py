@@ -307,7 +307,9 @@ def _write_question_rows(
     series = applicable_series(frame[sources[0]], question)
     row = _write_valid_base_row(context, row, series.notna())
     if question_type == "numeric":
-        chosen = context.settings.get("numeric_metrics", NUMERIC_METRIC_LABELS)
+        chosen = question.get("output_metrics") or context.settings.get(
+            "numeric_metrics", NUMERIC_METRIC_LABELS
+        )
         for metric, label in NUMERIC_METRIC_LABELS.items():
             if metric in chosen:
                 row = _write_numeric_metric(context, row, label, series, metric)
@@ -367,7 +369,10 @@ def _write_scale_rows(
     question: dict[str, Any],
 ) -> int:
     """Шкала или элемент матрицы — теми показателями, что отмечены в отчёте."""
-    chosen = context.settings.get("scale_metrics", ("distribution", "mean", "top2", "bottom2"))
+    # Свой набор вопроса, если задан, иначе набор отчёта.
+    chosen = question.get("output_metrics") or context.settings.get(
+        "scale_metrics", ("distribution", "mean", "top2", "bottom2")
+    )
     special_values = question.get("special_values", [])
     if "distribution" in chosen:
         row = _write_distribution(context, row, series, variable, question)

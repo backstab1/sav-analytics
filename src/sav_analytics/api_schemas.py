@@ -29,6 +29,11 @@ class QuestionUpdate(BaseModel):
         default=None, max_length=100
     )
     nets: list[NetDefinition] | None = Field(default=None, max_length=20)
+    # Свой набор вывода вопроса. Пустой список — «как в отчёте»: так поле
+    # очищается, не требуя отправки None.
+    output_metrics: list[
+        Literal["distribution", "mean", "top2", "bottom2", "median", "min", "max", "std", "stderr"]
+    ] | None = Field(default=None, max_length=12)
     # Явное «да, это пропуск» для подписанной или частой категории: без него
     # такая пометка отклоняется, см. `core/not_applicable.assess_not_applicable`.
     confirm_substantive: bool | None = None

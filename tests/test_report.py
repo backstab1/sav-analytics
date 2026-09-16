@@ -1741,3 +1741,28 @@ def test_counts_are_off_by_default(tmp_path: Path) -> None:
 
     assert "Да, N" not in _row_labels(content)
 
+
+def test_question_output_set_overrides_the_report_set_for_that_question(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "output.sav"
+    project = _output_project(source, _output_frame())
+    for question in project["configuration"]["questions"]:
+        if question["code"] == "SCALE":
+            question["output_metrics"] = ["mean", "top2"]
+        if question["code"] == "AMOUNT":
+            question["output_metrics"] = ["median"]
+
+    content = build_topline_xlsx(source, project)
+    labels = _row_labels(content)
+
+    assert "3" not in labels, "распределение шкалы снято её собственным набором"
+    assert "Bottom-2" not in labels
+    assert "Top-2" in labels
+    assert labels.count("Среднее") == 1, "у числового вопроса осталась только медиана"
+    assert "Медиана" in labels
+    assert _cell_value(content, "Медиана", "B") == pytest.approx(109.5)
+    with ZipFile(BytesIO(content)) as archive:
+        strings = archive.read("xl/sharedStrings.xml").decode("utf-8")
+    assert "Свой набор вывода" in strings
+

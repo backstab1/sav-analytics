@@ -629,3 +629,23 @@ def test_top_bottom_size_renames_the_scale_toggles(
         "aria-pressed", "true", timeout=UI_TIMEOUT
     )
 
+
+def test_question_can_keep_its_own_output_set(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#table-body tr[data-code='SCORE'] .question-cell")
+    expect(page.locator("#question-output")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#question-output-list")).to_be_hidden()
+    page.check("#question-output-own")
+    page.uncheck("[data-output-metric='distribution']")
+    page.click("#save-question")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Настройки вопроса сохранены", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#question-output-own")).to_be_checked()
+    expect(page.locator("[data-output-metric='distribution']")).not_to_be_checked()
+

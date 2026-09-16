@@ -1626,3 +1626,40 @@ def test_report_settings_accept_one_to_three_extreme_codes(tmp_path: Path) -> No
     finally:
         app.dependency_overrides.clear()
 
+
+def test_question_output_set_is_checked_against_the_question_type(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            url = f"/api/projects/{project['id']}/questions"
+
+            def stored(response) -> list:
+                return next(
+                    item
+                    for item in response.json()["configuration"]["questions"]
+                    if item["code"] == "Q2"
+                )["output_metrics"]
+
+            as_scale = client.patch(f"{url}/Q2", json={"question_type": "scale"})
+            assert as_scale.status_code == 200
+            saved = client.patch(f"{url}/Q2", json={"output_metrics": ["top2", "mean"]})
+            assert saved.status_code == 200
+            assert stored(saved) == ["mean", "top2"]
+
+            assert client.patch(
+                f"{url}/Q2", json={"output_metrics": ["median"]}
+            ).status_code == 422
+            assert client.patch(
+                f"{url}/Q1", json={"output_metrics": ["mean"]}
+            ).status_code == 422
+            assert stored(client.patch(f"{url}/Q2", json={"output_metrics": []})) == []
+    finally:
+        app.dependency_overrides.clear()
+

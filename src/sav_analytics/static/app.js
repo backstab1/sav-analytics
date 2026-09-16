@@ -1030,6 +1030,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
           ...collectSpecialAnswers(),
           ...collectNotApplicable(),
           ...collectNets(),
+          ...collectQuestionOutput(),
         }),
       },
     );
@@ -3498,6 +3499,41 @@ function collectNets() {
 }
 
 document.querySelector("#add-net").addEventListener("click", () => addNetRow());
+
+// Свой набор вывода вопроса. Отметки по умолчанию — набор отчёта: снять
+// флажок значит вернуться к нему, а не очистить строки вопроса.
+function questionOutputOptions(type) {
+  if (type === "scale" || type === "matrix") return scaleMetricOptions;
+  if (type === "numeric") return numericMetricOptions;
+  return null;
+}
+
+function renderQuestionOutput(question) {
+  const section = document.querySelector("#question-output");
+  const options = question ? questionOutputOptions(question.question_type) : null;
+  section.hidden = !options;
+  if (!options) return;
+  const settings = configuredReportSettings();
+  const own = (question.output_metrics || []).length > 0;
+  const reportSet = question.question_type === "numeric" ? settings.numeric_metrics : settings.scale_metrics;
+  const chosen = own ? question.output_metrics : reportSet;
+  document.querySelector("#question-output-own").checked = own;
+  const list = document.querySelector("#question-output-list");
+  list.hidden = !own;
+  list.innerHTML = options.map(option => `<label class="checkbox"><input type="checkbox" data-output-metric="${option.value}" ${chosen.includes(option.value) ? "checked" : ""} /> ${escapeHtml(scaleMetricLabel(option, settings.scale_box))}</label>`).join("");
+}
+
+document.querySelector("#question-output-own").addEventListener("change", event => {
+  document.querySelector("#question-output-list").hidden = !event.target.checked;
+});
+
+function collectQuestionOutput() {
+  if (document.querySelector("#question-output").hidden) return {};
+  if (!document.querySelector("#question-output-own").checked) return { output_metrics: [] };
+  const metrics = [...document.querySelectorAll("[data-output-metric]:checked")].map(input => input.dataset.outputMetric);
+  if (!metrics.length) throw new Error("Оставьте в своём наборе вывода хотя бы один показатель.");
+  return { output_metrics: metrics };
+}
 document.querySelector("#net-list").addEventListener("click", event => {
   const remove = event.target.closest("[data-remove-net]");
   if (remove) remove.closest(".net-row").remove();
@@ -3556,6 +3592,7 @@ async function refreshStructure() {
 
 async function loadPreview() {
   if (!currentProject || !currentQuestionCode) return;
+  renderQuestionOutput(findQuestion(currentQuestionCode));
   const container = document.querySelector("#preview-content");
   container.innerHTML = '<p class="muted">Считаем…</p>';
   try {

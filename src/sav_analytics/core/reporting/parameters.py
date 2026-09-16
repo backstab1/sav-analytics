@@ -63,6 +63,11 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
         ("Схема сравнения", _comparison_scheme_line(banner).split(": ", 1)[1]),
         ("Сравнение волн", wave_text),
         ("Вывод", _output_line(settings).split(": ", 1)[1]),
+        (
+            "Свой набор вывода",
+            ", ".join(item["code"] for item in data.questions if item.get("output_metrics"))
+            or "нет",
+        ),
         ("p-value в примечаниях", "включён" if settings["show_p_values"] else "выключен"),
     ]
 
