@@ -58,6 +58,12 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
         ("Общий фильтр", _report_filter_line(project, configuration)),
         ("Вес", settings["weight_label"] or "не используется"),
         ("Уровень доверия", f"{_number(settings['confidence_level'] * 100)}%"),
+        (
+            "Второй уровень доверия",
+            f"{settings['secondary_confidence_level'] * 100:g}%, строчные буквы"
+            if settings.get("secondary_confidence_level")
+            else "не используется",
+        ),
         ("Bonferroni", "включена" if settings["bonferroni"] else "выключена"),
         ("Порог малой базы", f"N < {settings['minimum_base']}"),
         ("Схема сравнения", _comparison_scheme_line(banner).split(": ", 1)[1]),

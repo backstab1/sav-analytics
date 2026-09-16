@@ -48,6 +48,7 @@ const defaultReportSettings = Object.freeze({
   scale_box: 2,
   show_counts: false,
   show_charts: false,
+  secondary_confidence_level: null,
 });
 
 const scaleMetricOptions = [
@@ -1829,6 +1830,12 @@ function reportStatisticsColumn(settings) {
             { value: "0.95", label: "95%" },
             { value: "0.99", label: "99%" },
           ], String(settings.confidence_level))}
+          <span class="stat-label-inline">второй</span>
+          ${statSegment("secondary", [
+            { value: "", label: "нет" },
+            { value: "0.9", label: "90%" },
+            { value: "0.8", label: "80%" },
+          ], String(settings.secondary_confidence_level ?? ""))}
           ${statToggle("bonferroni", "Поправка Bonferroni", settings.bonferroni,
             "Корректирует alpha на число сравнений внутри блока")}
           <label class="stat-number">Малая база &lt;
@@ -1960,6 +1967,7 @@ function reportSettingsPayload(settings) {
     scale_box: settings.scale_box,
     show_counts: settings.show_counts,
     show_charts: settings.show_charts,
+    secondary_confidence_level: settings.secondary_confidence_level ?? null,
   };
 }
 
@@ -1994,6 +2002,7 @@ function statPatch(name, value) {
       : { compare_to_total: true, compare_target: value };
   }
   if (name === "confidence") return { confidence_level: Number(value) };
+  if (name === "secondary") return { secondary_confidence_level: value ? Number(value) : null };
   if (name === "pairwise") return { compare_pairwise: value === "on" };
   if (name === "bonferroni") return { bonferroni: value === "on" };
   if (name === "pvalues") return { show_p_values: value === "on" };

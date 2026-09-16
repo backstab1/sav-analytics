@@ -61,6 +61,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
                 "scale_box": 2,
                 "show_counts": False,
                 "show_charts": False,
+                "secondary_confidence_level": None,
             }
             not_prepared = client.get(
                 f"/api/projects/{project['id']}/reports/topline.xlsx"
@@ -1722,6 +1723,32 @@ def test_bulk_question_update_is_one_revision_and_all_or_nothing(tmp_path: Path)
                     for item in confirmed.json()["configuration"]["questions"]
                     if item["code"] in pending
                 )
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_second_confidence_level_must_be_below_the_first(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            url = f"/api/projects/{project['id']}/report-settings"
+            same = client.put(
+                url, json={"confidence_level": 0.95, "secondary_confidence_level": 0.95}
+            )
+            assert same.status_code == 422
+            lower = client.put(
+                url, json={"confidence_level": 0.95, "secondary_confidence_level": 0.9}
+            )
+            assert lower.status_code == 200
+            settings = lower.json()["configuration"]["report_settings"]
+            assert settings["secondary_confidence_level"] == 0.9
     finally:
         app.dependency_overrides.clear()
 

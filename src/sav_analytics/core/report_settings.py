@@ -30,6 +30,7 @@ DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "scale_box": 2,
     "show_counts": False,
     "show_charts": False,
+    "secondary_confidence_level": None,
 }
 
 REPORT_SETTING_KEYS = tuple(DEFAULT_REPORT_SETTINGS)

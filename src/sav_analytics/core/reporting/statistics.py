@@ -651,8 +651,51 @@ def _pairwise_mean_entries(
         column, columns, audit_entries, audit_context, row_label, cache, run_pair
     )
 
-def _format_pairwise_note(entries: list[StatisticalAuditEntry]) -> str | None:
-    """Короткая сводка попарных сравнений: с кем ячейка расходится значимо."""
+def secondary_significant(
+    result: StatisticalTestResult | None, settings: dict[str, Any]
+) -> bool:
+    """Значимо ли различие на втором уровне доверия, но не на основном.
+
+    Второй тест не выполняется. Порог выводится из скорректированного alpha
+    основного: множитель (1 − второй уровень) / (1 − основной) сохраняет
+    поправку Bonferroni внутри того же семейства сравнений.
+    """
+    secondary = settings.get("secondary_confidence_level")
+    if (
+        not secondary
+        or result is None
+        or not result.performed
+        or result.significant
+        or result.p_value is None
+    ):
+        return False
+    alpha = result.alpha * (1 - secondary) / (1 - settings["confidence_level"])
+    return result.p_value < alpha
+
+
+def _result_side(result: StatisticalTestResult) -> str | None:
+    if result.direction in {"higher", "lower"}:
+        return result.direction
+    if result.difference > 0:
+        return "higher"
+    if result.difference < 0:
+        return "lower"
+    return None
+
+
+def _lower_letter(group: str) -> str:
+    letter, separator, label = group.partition(" — ")
+    return f"{letter.lower()}{separator}{label}"
+
+
+def _format_pairwise_note(
+    entries: list[StatisticalAuditEntry], settings: dict[str, Any] | None = None
+) -> str | None:
+    """Короткая сводка попарных сравнений: с кем ячейка расходится значимо.
+
+    На втором уровне доверия буква колонки строчная — как у Qualtrics и в
+    SPSS Custom Tables: заглавная значит основной уровень, строчная — мягкий.
+    """
     lines = []
     for direction, caption in (("higher", "Значимо выше"), ("lower", "Значимо ниже")):
         labels = [
@@ -664,6 +707,19 @@ def _format_pairwise_note(entries: list[StatisticalAuditEntry]) -> str | None:
         ]
         if labels:
             lines.append(f"{caption}: " + ", ".join(labels))
+    secondary = (settings or {}).get("secondary_confidence_level")
+    if secondary:
+        level = f"{secondary * 100:g}"
+        for direction, caption in (("higher", "Значимо выше"), ("lower", "Значимо ниже")):
+            weak = [
+                _lower_letter(entry.group_b)
+                for entry in entries
+                if entry.result is not None
+                and secondary_significant(entry.result, settings or {})
+                and _result_side(entry.result) == direction
+            ]
+            if weak:
+                lines.append(f"{caption} при {level}%: " + ", ".join(weak))
     return "\n".join(lines) or None
 
 
@@ -679,7 +735,7 @@ def cell_note(
     только сводка, иначе примечание встанет почти на каждую посчитанную ячейку
     и утяжелит книгу.
     """
-    blocks = [note for note in (_format_pairwise_note(pairwise),) if note]
+    blocks = [note for note in (_format_pairwise_note(pairwise, settings),) if note]
     if settings["show_p_values"]:
         blocks.extend(
             "\n".join(line.strip() for line in _render_audit_entry(entry))
@@ -790,6 +846,7 @@ class _StatisticsAuditWriter:
             f"Общий фильтр: {report_filter}",
             f"Вес: {settings['weight_label'] or 'не используется'}",
             f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
+            *_secondary_level_lines(settings),
             f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
             f"Порог малой базы: N < {settings['minimum_base']}",
             _output_line(settings),
@@ -835,6 +892,16 @@ _OUTPUT_LABELS = {
     "std": "стандартное отклонение",
     "stderr": "стандартная ошибка",
 }
+
+
+def _secondary_level_lines(settings: dict[str, Any]) -> list[str]:
+    secondary = settings.get("secondary_confidence_level")
+    if not secondary:
+        return []
+    return [
+        f"Второй уровень доверия: {secondary * 100:g}% — различия только на нём "
+        "отмечены в примечаниях строчной буквой"
+    ]
 
 
 def _source_lines(project: dict[str, Any], configuration: dict[str, Any]) -> list[str]:
@@ -910,6 +977,7 @@ def _render_statistics_txt(
         f"Общий фильтр: {report_filter}",
         f"Вес: {settings['weight_label'] or 'не используется'}",
         f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
+        *_secondary_level_lines(settings),
         f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
         f"Порог малой базы: N < {settings['minimum_base']}",
         _output_line(settings),

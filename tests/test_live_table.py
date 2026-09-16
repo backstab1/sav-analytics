@@ -331,3 +331,18 @@ def test_count_rows_reach_the_table_as_bases(tmp_path: Path) -> None:
     assert [cell["value"] for cell in counts["cells"]] == [62, 42, 20]
     assert all("index" not in cell for cell in counts["cells"])
 
+
+def test_table_separates_letters_of_the_second_confidence_level(tmp_path: Path) -> None:
+    from tests.test_report import _secondary_project
+
+    source = tmp_path / "secondary.sav"
+    project = _secondary_project(source, secondary_confidence_level=0.9)
+    blocks = project["configuration"]["banners"][0]["blocks"]
+
+    table = build_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
+
+    yes = next(row for row in table["questions"][0]["rows"] if row["label"] == "Да")
+    assert yes["cells"][1]["higher_than"] == []
+    assert yes["cells"][1]["higher_than_secondary"] == ["c"]
+    assert table["settings"]["secondary_confidence_level"] == 0.9
+

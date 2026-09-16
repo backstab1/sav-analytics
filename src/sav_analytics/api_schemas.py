@@ -181,6 +181,9 @@ class ReportSettingsDefinition(BaseModel):
     show_counts: bool = False
     # Лист «Графики»: распределения вопросов родными графиками Excel.
     show_charts: bool = False
+    # Второй, более мягкий уровень доверия: различия на нём отмечаются
+    # строчными буквами. Отдельного теста нет — порог выводится из основного.
+    secondary_confidence_level: float | None = Field(default=None, gt=0, lt=1)
 
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:
@@ -199,6 +202,11 @@ class ReportSettingsDefinition(BaseModel):
             raise ValueError("Выберите готовый или рассчитанный вес, но не оба сразу.")
         if self.wave_comparison == "control" and self.wave_control_value is None:
             raise ValueError("Для контрольного сравнения выберите контрольную волну.")
+        if (
+            self.secondary_confidence_level is not None
+            and self.secondary_confidence_level >= self.confidence_level
+        ):
+            raise ValueError("Второй уровень доверия должен быть ниже основного.")
         return self
 
 

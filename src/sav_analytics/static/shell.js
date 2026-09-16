@@ -486,7 +486,10 @@
       // Индекс — та же ячейка, поделённая на Total: показатель переключается
       // без нового запроса, потому что оба числа уже пришли.
       const asIndex = measureSelect.value === "index" && cell.index != null;
-      const text = `${wave}${formatNumber(asIndex ? cell.index : cell.value, asIndex ? 0 : cell.decimals)}${letters}`;
+      const weak = cell.higher_than_secondary?.length
+        ? `<span class="bld-sig bld-sig-weak" title="Выше на втором уровне доверия: ${cell.higher_than_secondary.join(", ")}">${cell.higher_than_secondary.join("")}</span>`
+        : "";
+      const text = `${wave}${formatNumber(asIndex ? cell.index : cell.value, asIndex ? 0 : cell.decimals)}${letters}${weak}`;
       if (!cell.protocol) return `<td class="${classes.join(" ")}">${text}</td>`;
       return `<td class="${classes.join(" ")}"><button type="button" class="bld-cell-button" data-protocol="${sheetRow}:${index}" aria-label="Протокол теста для ячейки">${text}</button></td>`;
     }
@@ -548,6 +551,7 @@
       if (settings.compare_pairwise) schemes.push("попарные");
       testsSlot.textContent = schemes.length
         ? `${schemes.join(" + ")}, ${Math.round(settings.confidence_level * 100)}%`
+          + (settings.secondary_confidence_level ? ` / ${Math.round(settings.secondary_confidence_level * 100)}%` : "")
         : "не считаются";
 
       const parts = [`${columns.length} ${plural(columns.length, "колонка", "колонки", "колонок")}`];

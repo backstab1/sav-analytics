@@ -2120,6 +2120,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .bld-grid td.bld-val.bld-up { color: #17724a; font-weight: 700; }
 .bld-grid td.bld-val.bld-down { color: #ae382b; font-weight: 700; }
 .bld-grid td.bld-val.bld-absent { color: var(--c-ink-4); }
+.bld-grid td.bld-val .bld-sig.bld-sig-weak { color: var(--c-ink-3); font-weight: 600; }
 .bld-grid td.bld-val .bld-wave { margin-right: 3px; color: var(--c-ink-3); font-size: 10px; }
 .bld-grid tr.bld-derived td { background: var(--c-surface-soft); }
 .bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-brand); font-weight: 600; }

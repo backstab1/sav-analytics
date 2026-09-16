@@ -36,7 +36,7 @@ LIVE_QUESTION_TYPES = frozenset(
 )
 
 _BASE_FORMAT = "#,##0"
-_LETTER = re.compile(r"(?:^|, )([A-Z]+) — ")
+_LETTER = re.compile(r"(?:^|, )([A-Za-z]+) — ")
 
 
 class _Workbook:
@@ -127,6 +127,7 @@ def build_live_table(
             "compare_to_total": settings["compare_to_total"],
             "compare_target": settings["compare_target"],
             "compare_pairwise": settings["compare_pairwise"],
+            "secondary_confidence_level": settings.get("secondary_confidence_level"),
             "weight": data.statistical_settings["weight_label"],
         },
         "columns": _columns(recording, data, header_rows),
@@ -391,12 +392,20 @@ def _cell(value: Any, fmt: dict[str, Any], note: str | None) -> dict[str, Any]:
     color = fmt.get("font_color")
     higher: list[str] = []
     lower: list[str] = []
+    higher_weak: list[str] = []
+    lower_weak: list[str] = []
     protocol: list[str] = []
     for block in (note or "").split("\n\n"):
-        if block.startswith("Значимо выше: ") or block.startswith("Значимо ниже: "):
+        if block.startswith("Значимо "):
             for line in block.splitlines():
-                target = higher if line.startswith("Значимо выше: ") else lower
-                target.extend(_LETTER.findall(line.split(": ", 1)[1]))
+                caption, _, groups = line.partition(": ")
+                # «Значимо выше при 90%» — второй уровень доверия, буквы строчные.
+                weak = " при " in caption
+                if caption.startswith("Значимо выше"):
+                    target = higher_weak if weak else higher
+                else:
+                    target = lower_weak if weak else lower
+                target.extend(_LETTER.findall(groups))
         elif block.strip():
             protocol.append(block)
     return {
@@ -409,6 +418,8 @@ def _cell(value: Any, fmt: dict[str, Any], note: str | None) -> dict[str, Any]:
         "small": color == FAINT,
         "higher_than": higher,
         "lower_than": lower,
+        "higher_than_secondary": higher_weak,
+        "lower_than_secondary": lower_weak,
         "protocol": "\n\n".join(protocol) or None,
     }
 

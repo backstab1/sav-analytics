@@ -1792,3 +1792,73 @@ def test_charts_are_off_by_default(tmp_path: Path) -> None:
     with ZipFile(BytesIO(content)) as archive:
         assert not any(name.startswith("xl/charts/") for name in archive.namelist())
 
+
+def _secondary_project(source: Path, **settings: object) -> dict:
+    """57% против 45% по сто человек: z ≈ 1,70, p ≈ 0,09 — значимо при 90%, но не при 95%."""
+    frame = pd.DataFrame(
+        {
+            "GROUP": [1] * 100 + [2] * 100,
+            "OUTCOME": [1] * 57 + [2] * 43 + [1] * 45 + [2] * 55,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={"GROUP": "Группа", "OUTCOME": "Результат"},
+        variable_value_labels={
+            "GROUP": {1: "Первая", 2: "Вторая"},
+            "OUTCOME": {1: "Да", 2: "Нет"},
+        },
+        variable_measure={"GROUP": "nominal", "OUTCOME": "nominal"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    return {
+        "name": "Второй уровень",
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"],
+            "recodings": [],
+            "filters": [],
+            "report_filter_id": None,
+            "banners": [
+                {
+                    "name": "Основной",
+                    "blocks": [
+                        {"label": "Группа", "sources": [{"kind": "question", "ref": "GROUP"}]}
+                    ],
+                }
+            ],
+            "report_settings": {
+                "confidence_level": 0.95,
+                "minimum_base": 30,
+                "compare_to_total": False,
+                "compare_pairwise": True,
+                **settings,
+            },
+        },
+    }
+
+
+def test_second_confidence_level_marks_weaker_differences_with_lowercase_letters(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "secondary.sav"
+    project = _secondary_project(source, secondary_confidence_level=0.9)
+
+    content = build_topline_xlsx(source, project)
+    comment = _cell_comment(content, "Да", "C") or ""
+
+    assert "Значимо выше при 90%: c — Вторая" in comment
+    assert "Значимо выше: C" not in comment
+    assert "Второй уровень доверия: 90%" in build_statistics_txt(source, project)
+
+
+def test_without_a_second_level_the_weaker_difference_is_not_marked(tmp_path: Path) -> None:
+    source = tmp_path / "secondary.sav"
+    project = _secondary_project(source)
+
+    content = build_topline_xlsx(source, project)
+
+    assert "при 90%" not in (_cell_comment(content, "Да", "C") or "")
+    assert "Второй уровень доверия" not in build_statistics_txt(source, project)
+
