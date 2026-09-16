@@ -1927,6 +1927,12 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   font-size: var(--t-xs); font-weight: 600;
 }
 .bld-param-sep { width: 1px; height: 18px; background: var(--c-border); margin: 0 3px; }
+.bld-toggle { cursor: pointer; font-weight: 600; }
+.bld-toggle[aria-pressed="true"] { border-color: transparent; background: var(--c-brand-tint); color: var(--c-brand); }
+.bld-list-caption {
+  margin: 6px 0 2px; padding: 0 4px; color: var(--c-ink-4);
+  font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+}
 .bld-note { margin-left: auto; color: var(--c-ink-3); font-size: var(--t-xs); }
 
 /* Поповер переменных — бывшая колонка «Переменные» целиком: поиск,

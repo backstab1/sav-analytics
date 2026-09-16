@@ -1141,6 +1141,7 @@ function publishVariablesToShell(inspection, questions) {
   window.Shell.setProjectVariables([...questionItems, ...recodingItems], {
     projectId: currentProject?.id || null,
     filters: configuredFilters().map(item => ({ id: item.id, name: item.name })),
+    banners: configuredBanners().map(item => ({ id: item.id, name: item.name })),
   });
 }
 

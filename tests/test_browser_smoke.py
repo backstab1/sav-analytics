@@ -538,3 +538,20 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     expect(first.first).to_have_text("67")
     expect(page.locator("#bld-tests")).to_have_text("не считаются")
 
+    # Индекс к Total — та же ячейка, поделённая на Total: 100 у самого Total.
+    page.select_option("#bld-measure", "index")
+    expect(first.first).to_have_text("100")
+    page.select_option("#bld-measure", "value")
+
+    # Вложенный разрез: пол × марка даёт полное пересечение категорий.
+    page.click('.bld-param[data-zone="cols"]')
+    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.keyboard.press("Escape")
+    nest = page.locator("#bld-nest")
+    expect(nest).to_be_visible()
+    nest.click()
+    expect(table.locator("thead tr.bld-base").first.locator("th.bld-basecell")).to_have_count(
+        5, timeout=UI_TIMEOUT
+    )
+    expect(table).to_contain_text("Ваш пол × Какой маркой пользуетесь")
+
