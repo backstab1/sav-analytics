@@ -173,6 +173,7 @@ form.addEventListener("submit", async event => {
 });
 
 document.querySelector("#new-project").addEventListener("click", () => {
+  if (!confirmDiscard(openInspectorPanel())) return;
   currentProject = null;
   currentQuestionCode = null;
   currentRecodingId = null;
@@ -200,7 +201,9 @@ document.querySelectorAll("#download-report, #download-statistics, #launch-repor
     link.dataset.defaultLabel = link.textContent;
     link.addEventListener("click", downloadPreparedReport);
   });
-document.querySelector("#close-editor").addEventListener("click", closeQuestionEditor);
+document.querySelector("#close-editor").addEventListener("click", () => {
+  if (confirmDiscard(editor)) closeQuestionEditor();
+});
 document.querySelector("#refresh-preview").addEventListener("click", loadPreview);
 document.querySelector("#refresh-structure").addEventListener("click", refreshStructure);
 document.querySelector("#question-type").addEventListener("change", () => {
@@ -214,7 +217,9 @@ document.querySelector("#question-type").addEventListener("change", () => {
     question_type: document.querySelector("#question-type").value,
   });
 });
-document.querySelector("#close-recode-editor").addEventListener("click", closeRecoding);
+document.querySelector("#close-recode-editor").addEventListener("click", () => {
+  if (confirmDiscard(recodeEditor)) closeRecoding();
+});
 document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
 document.querySelector("#add-category-group").addEventListener("click", () => {
   const count = document.querySelectorAll("#category-group-list .category-group").length;
@@ -239,14 +244,18 @@ document.querySelector("#add-banner-block").addEventListener("click", () => {
 });
 document.querySelector("#delete-banner").addEventListener("click", deleteBanner);
 document.querySelector("#refresh-banner-preview").addEventListener("click", loadBannerPreview);
-document.querySelector("#close-filter-editor").addEventListener("click", closeFilter);
+document.querySelector("#close-filter-editor").addEventListener("click", () => {
+  if (confirmDiscard(filterEditor)) closeFilter();
+});
 document.querySelector("#add-filter-condition").addEventListener("click", () => {
   addFilterCondition();
   scheduleFilterPreview();
 });
 document.querySelector("#delete-filter").addEventListener("click", deleteFilter);
 document.querySelector("#copy-filter").addEventListener("click", copyFilter);
-document.querySelector("#close-weight-editor").addEventListener("click", closeWeight);
+document.querySelector("#close-weight-editor").addEventListener("click", () => {
+  if (confirmDiscard(weightEditor)) closeWeight();
+});
 document.querySelector("#add-weight-dimension").addEventListener("click", () => addWeightDimension());
 document.querySelector("#delete-weight").addEventListener("click", deleteWeight);
 document.querySelector("#refresh-weight-preview").addEventListener("click", loadWeightPreview);
@@ -408,6 +417,7 @@ function slideOverOpen() {
 }
 
 function closeSlideOver() {
+  if (!confirmDiscard(openInspectorPanel())) return;
   if (!slideOverOpen()) return;
   openEditors().forEach(([, close]) => close());
 }
@@ -587,9 +597,59 @@ document.querySelector("#filter-form").addEventListener("change", scheduleFilter
    ================================================================ */
 // Колонка редактора в панели одна, поэтому и открытый инспектор один:
 // показать любой — значит закрыть остальные.
+/* Несохранённое в редакторах. Ввод в форме отмечает её изменённой;
+   открытие и успешное сохранение снимают отметку. Перед тем как изменённый
+   редактор закроется — крестиком, Escape, открытием другого, сменой раздела,
+   переходом к новому проекту или уходом со страницы — аналитика спрашивают.
+   У баннера своя отметка с видимым предупреждением, её читают так же. */
+const INSPECTORS = [editor, recodeEditor, bannerEditor, filterEditor, weightEditor];
+const dirtyInspectors = new Set();
+
+function openInspectorPanel() {
+  return INSPECTORS.find(panel => !panel.hidden) || null;
+}
+
+function markInspectorDirty(panel) {
+  dirtyInspectors.add(panel);
+}
+
+function markInspectorClean(panel) {
+  dirtyInspectors.delete(panel);
+  if (panel === bannerEditor) setBannerFormDirty(false);
+}
+
+function inspectorIsDirty(panel) {
+  return panel === bannerEditor ? bannerFormDirty : dirtyInspectors.has(panel);
+}
+
+// true — можно продолжать: редактор чистый или аналитик согласился потерять ввод.
+function confirmDiscard(panel) {
+  if (!panel || panel.hidden || !inspectorIsDirty(panel)) return true;
+  if (!confirm("Есть несохранённые изменения. Закрыть редактор без сохранения?")) return false;
+  markInspectorClean(panel);
+  return true;
+}
+
+[[editor, "#question-form"], [recodeEditor, "#recode-form"], [filterEditor, "#filter-form"], [weightEditor, "#weight-form"]]
+  .forEach(([panel, selector]) => {
+    const form = document.querySelector(selector);
+    // Только ввод аналитика: значения, которые подставляет сам экран, событий не шлют.
+    ["input", "change"].forEach(type => form.addEventListener(type, event => {
+      if (event.isTrusted) markInspectorDirty(panel);
+    }));
+  });
+
+window.addEventListener("beforeunload", event => {
+  const panel = openInspectorPanel();
+  if (panel && inspectorIsDirty(panel)) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
+
 function showInspector(panel) {
-  [editor, recodeEditor, bannerEditor, filterEditor, weightEditor]
-    .forEach(item => { item.hidden = item !== panel; });
+  INSPECTORS.forEach(item => { item.hidden = item !== panel; });
+  if (panel) markInspectorClean(panel);
 }
 
 function closeAllInspectors() {
@@ -622,6 +682,11 @@ const CANVAS_VIEWS = ["data", "reports"];
 
 function setView(view) {
   if (!SECTION_VIEWS.includes(view)) view = "data";
+  if (!confirmDiscard(openInspectorPanel())) {
+    // Адрес мог уже смениться кнопкой браузера — возвращаем тот, где остались.
+    history.replaceState(null, "", currentRoute());
+    return;
+  }
   currentView = view;
   closePicker();
   closeAllInspectors();
@@ -854,6 +919,7 @@ document.querySelector("#banner-form").addEventListener("submit", async event =>
     if (!currentBannerId) {
       currentBannerId = configuredBanners().at(-1)?.id;
     }
+    markInspectorClean(bannerEditor);
     renderProject();
     openBanner(currentBannerId);
     await loadBannerPreview();
@@ -922,6 +988,7 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
     if (!currentWeightId) {
       currentWeightId = configuredWeights().find(item => item.name === payload.name)?.id;
     }
+    markInspectorClean(weightEditor);
     renderProject();
     openWeight(currentWeightId);
     await loadWeightPreview();
@@ -959,6 +1026,7 @@ document.querySelector("#filter-form").addEventListener("submit", async event =>
     if (!currentFilterId) {
       currentFilterId = configuredFilters().find(item => item.name === payload.name)?.id;
     }
+    markInspectorClean(filterEditor);
     renderProject();
     openFilter(currentFilterId);
     await loadFilterPreview();
@@ -1007,6 +1075,7 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
       currentRecodingId = configuredRecodings().find(item => item.code === payload.code)?.id;
     }
     recodePreviewCache.delete(recodePreviewKey(currentRecodingId));
+    markInspectorClean(recodeEditor);
     renderProject();
     openRecoding(currentRecodingId);
     await loadRecodePreview();
@@ -1056,6 +1125,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
     renderProject();
     fillEditor(findQuestion(currentQuestionCode));
     await loadPreview();
+    markInspectorClean(editor);
     showToast("Настройки вопроса сохранены");
   } catch (error) {
     showError(editorError, error);
@@ -1210,6 +1280,7 @@ document.querySelector("#project-trash-toggle").addEventListener("click", () => 
 });
 
 function showProject(project, view = "data") {
+  if (!confirmDiscard(openInspectorPanel())) return;
   currentProject = project;
   currentQuestionCode = null;
   currentRecodingId = null;
@@ -2372,6 +2443,7 @@ function logicalOwnerButton(variableName) {
 }
 
 function openFilter(filterId = null) {
+  if (!confirmDiscard(openInspectorPanel())) return;
   currentFilterId = filterId;
   currentQuestionCode = null;
   currentRecodingId = null;
@@ -2660,6 +2732,7 @@ async function copyFilter() {
       body: JSON.stringify(payload),
     });
     currentFilterId = configuredFilters().at(-1)?.id;
+    markInspectorClean(filterEditor);
     renderProject();
     openFilter(currentFilterId);
     showToast("Копия правила создана");
@@ -2716,6 +2789,7 @@ async function assignReportFilter(filterId, button) {
 }
 
 function openWeight(weightId = null) {
+  if (!confirmDiscard(openInspectorPanel())) return;
   currentWeightId = weightId;
   currentQuestionCode = null;
   currentRecodingId = null;
@@ -2876,6 +2950,7 @@ async function deleteWeight() {
 }
 
 function openBanner(bannerId = null) {
+  if (!confirmDiscard(openInspectorPanel())) return;
   currentBannerId = bannerId;
   currentQuestionCode = null;
   currentRecodingId = null;
@@ -3001,6 +3076,7 @@ async function deleteBanner() {
 let recodeReturnTo = null;
 
 function openRecoding(recodingId = null, options = {}) {
+  if (!confirmDiscard(openInspectorPanel())) return;
   if ("returnTo" in options) recodeReturnTo = options.returnTo || null;
   currentRecodingId = recodingId;
   currentQuestionCode = null;
@@ -3346,6 +3422,7 @@ async function moveQuestionTo(code, targetCode, placeAfter) {
 }
 
 function openQuestion(code) {
+  if (!confirmDiscard(openInspectorPanel())) return;
   currentQuestionCode = code;
   fillEditor(findQuestion(code));
   showInspector(editor);

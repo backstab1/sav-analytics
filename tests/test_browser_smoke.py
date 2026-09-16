@@ -714,3 +714,40 @@ def test_project_library_renames_copies_trashes_and_restores(
     page.click("#project-trash-toggle")
     expect(cards).to_have_count(2, timeout=UI_TIMEOUT)
 
+
+def test_unsaved_question_edits_are_not_lost_silently(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Правка в редакторе не теряется молча: закрытие и переход спрашивают (P2)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#question-label", "Подпись, которую не сохранили")
+
+    # Отказ оставляет редактор открытым и ввод на месте.
+    page.once("dialog", lambda dialog: dialog.dismiss())
+    page.click("#close-editor")
+    expect(page.locator("#question-editor")).to_be_visible()
+    expect(page.locator("#question-label")).to_have_value("Подпись, которую не сохранили")
+
+    # Переход к другому вопросу спрашивает так же.
+    page.once("dialog", lambda dialog: dialog.dismiss())
+    page.click("#table-body tr[data-code='SEX'] .question-cell")
+    expect(page.locator("#question-label")).to_have_value("Подпись, которую не сохранили")
+
+    # Согласие закрывает без сохранения.
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.click("#close-editor")
+    expect(page.locator("#question-editor")).to_be_hidden(timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body tr[data-code='BRAND']")).not_to_contain_text(
+        "Подпись, которую не сохранили"
+    )
+
+    # Открытый без правок редактор закрывается без вопроса.
+    page.click("#table-body tr[data-code='SEX'] .question-cell")
+    page.click("#close-editor")
+    expect(page.locator("#question-editor")).to_be_hidden(timeout=UI_TIMEOUT)
+
