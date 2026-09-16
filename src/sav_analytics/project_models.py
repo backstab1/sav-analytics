@@ -73,6 +73,8 @@ class StoredReportSettings(_StoredModel):
     scale_box: int = Field(default=2, ge=1, le=3)
     # Строка «…, N» под каждой строкой долей: сколько человек дали этот ответ.
     show_counts: bool = False
+    # Лист «Графики»: распределения вопросов родными графиками Excel.
+    show_charts: bool = False
 
 
 class StoredConfiguration(_StoredModel):

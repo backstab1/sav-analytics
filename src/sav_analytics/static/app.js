@@ -47,6 +47,7 @@ const defaultReportSettings = Object.freeze({
   mean_decimals: 1,
   scale_box: 2,
   show_counts: false,
+  show_charts: false,
 });
 
 const scaleMetricOptions = [
@@ -1872,6 +1873,8 @@ function reportStatisticsColumn(settings) {
           ${statSegment("mean-decimals", ["0", "1", "2", "3"].map(value => ({ value, label: value })), String(settings.mean_decimals))}
         </div>
         <div class="stat-controls stat-row">
+          ${statToggle("charts", "Графики в книге", settings.show_charts,
+            "Лист «Графики»: распределения вопросов родными графиками Excel, связанными с ячейками")}
           ${statToggle("counts", "N под долями", settings.show_counts,
             "Под каждой строкой долей — сколько человек дали этот ответ")}
           ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
@@ -1956,6 +1959,7 @@ function reportSettingsPayload(settings) {
     mean_decimals: settings.mean_decimals,
     scale_box: settings.scale_box,
     show_counts: settings.show_counts,
+    show_charts: settings.show_charts,
   };
 }
 
@@ -1998,6 +2002,7 @@ function statPatch(name, value) {
   if (name === "mean-decimals") return { mean_decimals: Number(value) };
   if (name === "scale-box") return { scale_box: Number(value) };
   if (name === "counts") return { show_counts: value === "on" };
+  if (name === "charts") return { show_charts: value === "on" };
   if (name.startsWith("scale:") || name.startsWith("numeric:")) {
     const [group, metric] = name.split(":");
     const key = `${group}_metrics`;

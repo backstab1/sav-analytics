@@ -69,6 +69,7 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
             or "нет",
         ),
         ("p-value в примечаниях", "включён" if settings["show_p_values"] else "выключен"),
+        ("Графики", "лист «Графики»" if settings.get("show_charts") else "не выводятся"),
     ]
 
 

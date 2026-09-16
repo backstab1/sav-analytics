@@ -92,6 +92,7 @@ def _write_topline(
     valid_denominator: bool,
     audit_writer: _StatisticsAuditWriter | None = None,
     advance: Callable[[str], None] | None = None,
+    charts: list[tuple[dict[str, Any], list[int]]] | None = None,
 ) -> dict[str, int]:
     frame = data.frame
     variables = data.variables
@@ -187,6 +188,8 @@ def _write_topline(
         )
         row = _write_question_rows(context, row, frame, question, variables)
         _write_bars(sheet, context.bars)
+        if charts is not None and context.bars:
+            charts.append((question, list(context.bars)))
         if audit_writer is not None:
             audit_writer.write_entries(audit_entries[audit_start:])
             del audit_entries[audit_start:]
@@ -1006,6 +1009,59 @@ LEGEND = (
     "округлилось бы до одинаковых чисел.",
     "Бледное тире — значения нет.",
 )
+
+
+#: Больше рядов на графике не читается: баннер шире выводится первыми колонками.
+CHART_SERIES_LIMIT = 12
+CHART_HEIGHT_ROWS = 16
+
+
+def _write_charts(
+    workbook: Any,
+    sheet: Any,
+    charts: list[tuple[dict[str, Any], list[int]]],
+    columns: list[dict[str, Any]],
+    formats: ReportFormats,
+    source_sheet: str = "topline_main",
+) -> None:
+    """Лист «Графики»: распределение каждого вопроса родным графиком Excel.
+
+    График не хранит своих чисел — ряды ссылаются на ячейки листа
+    `topline_main`, поэтому число на графике и в таблице одно и то же число
+    книги. Ряд — колонка баннера, категория — строка распределения. У матрицы
+    распределений несколько, и график строится на каждое.
+    """
+    sheet.hide_gridlines(2)
+    sheet.set_row(0, 30)
+    sheet.write(0, 0, "Графики", formats.title())
+    note = f"Доли по колонкам листа {source_sheet}; графики ссылаются на его ячейки."
+    if len(columns) > CHART_SERIES_LIMIT:
+        note += f" Показаны первые {CHART_SERIES_LIMIT} колонок из {len(columns)}."
+    sheet.write(1, 0, note, formats.meta())
+    position = 0
+    for question, rows in charts:
+        runs = _runs(rows)
+        for part, (first, last) in enumerate(runs, start=1):
+            chart = workbook.add_chart({"type": "bar"})
+            for index in range(1, min(len(columns), CHART_SERIES_LIMIT) + 1):
+                chart.add_series(
+                    {
+                        "name": [source_sheet, 2, index],
+                        "categories": [source_sheet, first, 0, last, 0],
+                        "values": [source_sheet, first, index, last, index],
+                        "gap": 60,
+                    }
+                )
+            title = f"{question['code']}  {question['label']}"
+            if len(runs) > 1:
+                title += f" · часть {part}"
+            chart.set_title({"name": title[:250], "name_font": {"size": 10, "bold": True}})
+            chart.set_x_axis({"min": 0, "max": 100, "num_format": "0"})
+            chart.set_y_axis({"reverse": True})
+            chart.set_legend({"position": "bottom"} if len(columns) > 1 else {"none": True})
+            chart.set_size({"width": 720, "height": 300})
+            sheet.insert_chart(3 + position * CHART_HEIGHT_ROWS, 0, chart)
+            position += 1
 
 
 def _write_parameters(

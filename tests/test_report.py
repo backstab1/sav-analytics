@@ -1766,3 +1766,29 @@ def test_question_output_set_overrides_the_report_set_for_that_question(
         strings = archive.read("xl/sharedStrings.xml").decode("utf-8")
     assert "Свой набор вывода" in strings
 
+
+def test_charts_sheet_draws_distributions_from_the_workbook_cells(tmp_path: Path) -> None:
+    source = tmp_path / "charts.sav"
+    content = build_topline_xlsx(source, _significance_project(source, show_charts=True))
+
+    with ZipFile(BytesIO(content)) as archive:
+        names = archive.namelist()
+        workbook_xml = archive.read("xl/workbook.xml").decode("utf-8")
+        charts = [name for name in names if name.startswith("xl/charts/chart")]
+        chart_xml = archive.read(charts[0]).decode("utf-8")
+
+    assert "Графики" in workbook_xml
+    # По графику на вопрос с распределением: GROUP и OUTCOME.
+    assert len(charts) == 2
+    # Ряды ссылаются на ячейки листа, а не хранят свои числа.
+    assert "topline_main!$B$" in chart_xml
+    assert "topline_main!$A$" in chart_xml
+
+
+def test_charts_are_off_by_default(tmp_path: Path) -> None:
+    source = tmp_path / "charts.sav"
+    content = build_topline_xlsx(source, _significance_project(source))
+
+    with ZipFile(BytesIO(content)) as archive:
+        assert not any(name.startswith("xl/charts/") for name in archive.namelist())
+

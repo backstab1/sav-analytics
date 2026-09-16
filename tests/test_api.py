@@ -60,6 +60,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
                 "mean_decimals": 1,
                 "scale_box": 2,
                 "show_counts": False,
+                "show_charts": False,
             }
             not_prepared = client.get(
                 f"/api/projects/{project['id']}/reports/topline.xlsx"
