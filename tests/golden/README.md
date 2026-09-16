@@ -59,3 +59,12 @@ NPS и CSAT balance, взвешенный balance с эффективными б
 Восьмой кейс (`small_expected_frequency`) расходится намеренно — R считает
 z-тест, а проект отказывается при ожидаемой частоте меньше 5, см. раздел 4.2
 `docs/spss-conformance.md`.
+
+## Общие тесты блока
+
+Хи-квадрат Пирсона и Welch ANOVA сверяются в `tests/test_overall_tests.py` не с
+этим JSON, а с SciPy: `scipy.stats.chi2_contingency(correction=False)` и
+`scipy.stats.f_oneway(equal_var=False)`. Это независимая от приложения
+реализация, но не R: при появлении R эталон стоит продублировать через
+`chisq.test(correct = FALSE)` и `oneway.test(var.equal = FALSE)`.
+

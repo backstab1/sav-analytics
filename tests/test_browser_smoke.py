@@ -632,6 +632,10 @@ def test_top_bottom_size_renames_the_scale_toggles(
     expect(page.locator('[data-stat="charts"]')).to_have_attribute(
         "aria-pressed", "true", timeout=UI_TIMEOUT
     )
+    page.click('[data-stat="overall"]')
+    expect(page.locator('[data-stat="overall"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=UI_TIMEOUT
+    )
     page.click('[data-stat="secondary"][data-value="0.9"]')
     expect(page.locator('[data-stat="secondary"][data-value="0.9"]')).to_have_attribute(
         "aria-checked", "true", timeout=UI_TIMEOUT

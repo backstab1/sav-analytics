@@ -76,6 +76,7 @@ class StoredReportSettings(_StoredModel):
     # Лист «Графики»: распределения вопросов родными графиками Excel.
     show_charts: bool = False
     secondary_confidence_level: float | None = Field(default=None, gt=0, lt=1)
+    overall_tests: bool = False
 
 
 class StoredConfiguration(_StoredModel):

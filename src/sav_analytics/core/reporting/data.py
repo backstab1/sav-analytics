@@ -170,6 +170,7 @@ def prepare_report_data(
         "show_counts": report_settings["show_counts"],
         "show_charts": report_settings["show_charts"],
         "secondary_confidence_level": report_settings["secondary_confidence_level"],
+        "overall_tests": report_settings["overall_tests"],
     }
     return ReportData(
         frame=frame,

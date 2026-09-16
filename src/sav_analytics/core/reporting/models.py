@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..statistics import StatisticalTestResult
+from ..statistics import OverallTestResult, StatisticalTestResult
 
 
 class ReportError(ValueError):
@@ -35,3 +35,5 @@ class StatisticalAuditEntry:
     group_b: str
     result: StatisticalTestResult | None
     reason: str | None = None
+    #: Общий тест блока; тогда `result` пуст, а протокол свой.
+    overall: OverallTestResult | None = None

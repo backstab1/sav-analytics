@@ -213,6 +213,18 @@ class ReportFormats:
             properties["bold"] = direction in {"higher", "lower"}
         return self.get(**properties)
 
+    def overall_value(self, *, significant: bool, separated: bool = False) -> Any:
+        """p-value общего теста: три знака, значимое — полужирным."""
+        return self.get(
+            num_format="0.000",
+            font_color=INK,
+            bold=significant,
+            **self._frame(separated=separated, derived=True),
+        )
+
+    def overall_blank(self, *, separated: bool = False) -> Any:
+        return self.get(**self._frame(separated=separated, derived=True))
+
     def absent(self, *, separated: bool = False, derived: bool = False) -> Any:
         """Нет значения: бледное тире вместо пустоты, чтобы строка не рвалась."""
         return self.get(

@@ -76,6 +76,12 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
         ),
         ("p-value в примечаниях", "включён" if settings["show_p_values"] else "выключен"),
         ("Графики", "лист «Графики»" if settings.get("show_charts") else "не выводятся"),
+        (
+            "Общие тесты",
+            "хи-квадрат и Welch ANOVA, без взвешивания"
+            if settings.get("overall_tests")
+            else "не выполняются",
+        ),
     ]
 
 

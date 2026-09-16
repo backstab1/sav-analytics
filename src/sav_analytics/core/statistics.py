@@ -7,6 +7,8 @@ from statistics import NormalDist
 from typing import Literal
 
 import numpy as np
+from scipy.stats import chi2
+from scipy.stats import f as fisher_f
 from scipy.stats import t as student_t
 
 Direction = Literal["higher", "lower", "none"]
@@ -677,3 +679,159 @@ def _skipped_result(
         effective_bases=effective_bases,
         approximate=approximate,
     )
+
+
+@dataclass(frozen=True)
+class OverallTestResult:
+    """Общий тест блока баннера: связан ли показатель с колонками целиком.
+
+    В отличие от попарного теста здесь нет двух групп, разницы и интервала —
+    только статистика, степени свободы и p-value по всем колонкам блока.
+    """
+
+    method: str
+    performed: bool
+    significant: bool | None
+    alpha: float
+    statistic: float | None
+    degrees_of_freedom: tuple[float, ...] | None
+    p_value: float | None
+    bases: tuple[int, ...]
+    reason: str | None = None
+    min_expected: float | None = None
+
+
+CHI_SQUARE = "Хи-квадрат Пирсона"
+WELCH_ANOVA = "Welch ANOVA"
+
+
+def skipped_overall(
+    method: str,
+    confidence_level: float,
+    bases: tuple[int, ...],
+    reason: str,
+    *,
+    min_expected: float | None = None,
+) -> OverallTestResult:
+    return OverallTestResult(
+        method=method,
+        performed=False,
+        significant=None,
+        alpha=1 - confidence_level,
+        statistic=None,
+        degrees_of_freedom=None,
+        p_value=None,
+        bases=bases,
+        reason=reason,
+        min_expected=min_expected,
+    )
+
+
+def chi_square_test(
+    counts: Iterable[Iterable[float]],
+    *,
+    confidence_level: float,
+    minimum_base: int,
+) -> OverallTestResult:
+    """Хи-квадрат Пирсона без поправки на непрерывность.
+
+    Строки таблицы — ответы, столбцы — колонки блока. Тест не выполняется,
+    если база колонки ниже порога или ожидаемые частоты малы: хотя бы одна
+    меньше 1 или больше 20% ячеек меньше 5 (правило Кокрена). Только для
+    невзвешенных данных: взвешенному нужен Rao–Scott.
+    """
+    table = np.asarray([list(row) for row in counts], dtype=float)
+    bases = tuple(int(value) for value in table.sum(axis=0)) if table.size else ()
+    small = [base for base in bases if base < minimum_base]
+    if small:
+        return skipped_overall(
+            CHI_SQUARE, confidence_level, bases, f"База колонки меньше {minimum_base}."
+        )
+    table = table[table.sum(axis=1) > 0]
+    if table.size:
+        table = table[:, table.sum(axis=0) > 0]
+    if table.ndim != 2 or table.shape[0] < 2 or table.shape[1] < 2:
+        return skipped_overall(
+            CHI_SQUARE,
+            confidence_level,
+            bases,
+            "Нужны хотя бы два ответа и две колонки с респондентами.",
+        )
+    total = table.sum()
+    expected = np.outer(table.sum(axis=1), table.sum(axis=0)) / total
+    min_expected = float(expected.min())
+    if min_expected < 1 or float((expected < 5).mean()) > 0.2:
+        return skipped_overall(
+            CHI_SQUARE,
+            confidence_level,
+            bases,
+            "Ожидаемые частоты малы: есть меньше 1 или больше 20% ячеек меньше 5.",
+            min_expected=min_expected,
+        )
+    statistic = float(((table - expected) ** 2 / expected).sum())
+    degrees = float((table.shape[0] - 1) * (table.shape[1] - 1))
+    p_value = float(chi2.sf(statistic, degrees))
+    alpha = 1 - confidence_level
+    return OverallTestResult(
+        method=CHI_SQUARE,
+        performed=True,
+        significant=p_value < alpha,
+        alpha=alpha,
+        statistic=statistic,
+        degrees_of_freedom=(degrees,),
+        p_value=p_value,
+        bases=bases,
+        min_expected=min_expected,
+    )
+
+
+def welch_anova(
+    groups: Iterable[Iterable[float]],
+    *,
+    confidence_level: float,
+    minimum_base: int,
+) -> OverallTestResult:
+    """Welch ANOVA: различаются ли средние колонок, без равенства дисперсий.
+
+    Тот же отказ от равных дисперсий, что у Welch t-test (инвариант 3).
+    """
+    samples = [_finite_sample(group) for group in groups]
+    bases = tuple(len(sample) for sample in samples)
+    if any(base < minimum_base for base in bases):
+        return skipped_overall(
+            WELCH_ANOVA, confidence_level, bases, f"База колонки меньше {minimum_base}."
+        )
+    if len(samples) < 2 or any(base < 2 for base in bases):
+        return skipped_overall(
+            WELCH_ANOVA, confidence_level, bases, "Нужны хотя бы две колонки по два значения."
+        )
+    variances = np.array([sample.var(ddof=1) for sample in samples])
+    if np.any(variances <= 0):
+        return skipped_overall(
+            WELCH_ANOVA, confidence_level, bases, "В колонке нет разброса значений."
+        )
+    counts = np.array(bases, dtype=float)
+    means = np.array([sample.mean() for sample in samples])
+    groups_count = len(samples)
+    weights = counts / variances
+    weight_sum = weights.sum()
+    weighted_mean = float((weights * means).sum() / weight_sum)
+    between = float((weights * (means - weighted_mean) ** 2).sum() / (groups_count - 1))
+    lam = float(((1 - weights / weight_sum) ** 2 / (counts - 1)).sum())
+    correction = 1 + 2 * (groups_count - 2) / (groups_count**2 - 1) * lam
+    statistic = between / correction
+    df1 = float(groups_count - 1)
+    df2 = float((groups_count**2 - 1) / (3 * lam))
+    p_value = float(fisher_f.sf(statistic, df1, df2))
+    alpha = 1 - confidence_level
+    return OverallTestResult(
+        method=WELCH_ANOVA,
+        performed=True,
+        significant=p_value < alpha,
+        alpha=alpha,
+        statistic=statistic,
+        degrees_of_freedom=(df1, df2),
+        p_value=p_value,
+        bases=bases,
+    )
+

@@ -184,6 +184,8 @@ class ReportSettingsDefinition(BaseModel):
     # Второй, более мягкий уровень доверия: различия на нём отмечаются
     # строчными буквами. Отдельного теста нет — порог выводится из основного.
     secondary_confidence_level: float | None = Field(default=None, gt=0, lt=1)
+    # Хи-квадрат и Welch ANOVA по блокам баннера.
+    overall_tests: bool = False
 
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:

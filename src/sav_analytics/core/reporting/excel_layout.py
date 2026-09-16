@@ -12,7 +12,16 @@ import pandas as pd
 from ..filtering import evaluate_filter_frame
 from ..multiple_response import answered_mask, selected_mask
 from ..not_applicable import applicable_series, excludes
-from ..statistics import StatisticalTestResult, effective_sample_size
+from ..statistics import (
+    CHI_SQUARE,
+    WELCH_ANOVA,
+    OverallTestResult,
+    StatisticalTestResult,
+    chi_square_test,
+    effective_sample_size,
+    skipped_overall,
+    welch_anova,
+)
 from .data import ReportData
 from .models import ReportError, StatisticalAuditEntry
 from .statistics import (
@@ -25,6 +34,7 @@ from .statistics import (
     _proportion_test,
     _record_total_comparison,
     _record_wave_comparison,
+    _render_audit_entry,
     _StatisticsAuditWriter,
     _unweighted_mean_context,
     _unweighted_mean_test,
@@ -582,7 +592,129 @@ def _write_distribution(
             _equal_series(series, value),
             "percent",
         )
-    return row
+    return _write_overall_row(
+        context, row, "Хи-квадрат, p", _chi_square_runner(context, series, values)
+    )
+
+
+WEIGHTED_OVERALL_REASON = (
+    "Данные взвешены: хи-квадрату нужна поправка Rao–Scott, а Welch ANOVA — учёт "
+    "весов; они ещё не реализованы, поэтому тест не выполняется."
+)
+
+
+def _chi_square_runner(
+    context: _RowContext, series: pd.Series, values: list[Any]
+) -> Callable[[list[dict[str, Any]]], OverallTestResult]:
+    eligible = context.base_mask & series.notna()
+
+    def run(members: list[dict[str, Any]]) -> OverallTestResult:
+        settings = context.settings
+        if settings["weights"] is not None:
+            bases = tuple(int((column["mask"] & eligible).sum()) for column in members)
+            return skipped_overall(
+                CHI_SQUARE, settings["confidence_level"], bases, WEIGHTED_OVERALL_REASON
+            )
+        table = [
+            [
+                int((_equal_series(series, value) & eligible & column["mask"]).sum())
+                for column in members
+            ]
+            for value in values
+        ]
+        return chi_square_test(
+            table,
+            confidence_level=settings["confidence_level"],
+            minimum_base=settings["minimum_base"],
+        )
+
+    return run
+
+
+def _welch_runner(
+    context: _RowContext, series: pd.Series
+) -> Callable[[list[dict[str, Any]]], OverallTestResult]:
+    numeric = pd.to_numeric(series, errors="coerce")
+
+    def run(members: list[dict[str, Any]]) -> OverallTestResult:
+        settings = context.settings
+        groups = [numeric[column["mask"] & context.base_mask].dropna() for column in members]
+        if settings["weights"] is not None:
+            return skipped_overall(
+                WELCH_ANOVA,
+                settings["confidence_level"],
+                tuple(len(group) for group in groups),
+                WEIGHTED_OVERALL_REASON,
+            )
+        return welch_anova(
+            [group.to_numpy() for group in groups],
+            confidence_level=settings["confidence_level"],
+            minimum_base=settings["minimum_base"],
+        )
+
+    return run
+
+
+def _write_overall_row(
+    context: _RowContext,
+    row: int,
+    label: str,
+    run_test: Callable[[list[dict[str, Any]]], OverallTestResult],
+) -> int:
+    """Строка общего теста: p-value в первой колонке каждого блока баннера.
+
+    Общий тест отвечает, связан ли показатель с блоком целиком, поэтому число
+    одно на блок. Полный протокол — в примечании той же ячейки и в
+    `statistics.txt`. Выводится только по настройке отчёта.
+    """
+    if not context.settings.get("overall_tests"):
+        return row
+    blocks = [
+        (start, end, label_text)
+        for start, end, label_text in _banner_blocks(context.columns)
+        if start > 1
+    ]
+    if not blocks:
+        return row
+    sheet = context.sheet
+    formats = context.formats
+    sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
+    sheet.write(row, 0, label, formats.derived_label())
+    for index in range(1, len(context.columns) + 1):
+        blank = formats.overall_blank(separated=context.separated(index))
+        sheet.write_blank(row, index, None, blank)
+    for start, end, block_label in blocks:
+        members = context.columns[start - 1 : end]
+        result = run_test(members)
+        entry = StatisticalAuditEntry(
+            sheet=context.audit_context[0],
+            question_code=context.audit_context[1],
+            question_label=context.audit_context[2],
+            row_label=label,
+            comparison="Общий тест",
+            group_a=f"блок «{block_label}»" if block_label else f"колонки {start}–{end}",
+            group_b="",
+            result=None,
+            overall=result,
+        )
+        context.audit_entries.append(entry)
+        separated = context.separated(start)
+        if result.performed and result.p_value is not None:
+            sheet.write_number(
+                row,
+                start,
+                result.p_value,
+                formats.overall_value(significant=bool(result.significant), separated=separated),
+            )
+        else:
+            sheet.write_string(row, start, "–", formats.absent(separated=separated, derived=True))
+        sheet.write_comment(
+            row,
+            start,
+            "\n".join(line.strip() for line in _render_audit_entry(entry)),
+            COMMENT_BOX_DETAILED,
+        )
+    return row + 1
 
 def _write_metric_row(
     context: _RowContext,
@@ -818,6 +950,10 @@ def _write_numeric_metric(
             _write_cell_note(
                 context, row, index, [total_entry, wave_entry], pairwise
             )
+    if metric == "mean":
+        return _write_overall_row(
+            context, row + 1, "Welch ANOVA, p", _welch_runner(context, series)
+        )
     return row + 1
 
 def _write_balance_metric_row(

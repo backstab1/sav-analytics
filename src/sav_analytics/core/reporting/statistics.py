@@ -846,7 +846,7 @@ class _StatisticsAuditWriter:
             f"Общий фильтр: {report_filter}",
             f"Вес: {settings['weight_label'] or 'не используется'}",
             f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
-            *_secondary_level_lines(settings),
+            *_secondary_level_lines(settings), *_overall_test_lines(settings),
             f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
             f"Порог малой базы: N < {settings['minimum_base']}",
             _output_line(settings),
@@ -892,6 +892,34 @@ _OUTPUT_LABELS = {
     "std": "стандартное отклонение",
     "stderr": "стандартная ошибка",
 }
+
+
+def _render_overall(result: Any) -> list[str]:
+    lines = [
+        f"      Метод: {result.method}",
+        "      Базы колонок: " + "; ".join(str(base) for base in result.bases),
+    ]
+    if result.min_expected is not None:
+        lines.append(f"      Наименьшая ожидаемая частота: {_number(result.min_expected)}")
+    if not result.performed:
+        lines.append(f"      Статус: пропущен. Причина: {result.reason}")
+        return lines
+    statistic = "χ²" if result.method.startswith("Хи") else "F"
+    lines.append(f"      {statistic}={_number(result.statistic)}")
+    lines.append("      df=" + "; ".join(_number(value) for value in result.degrees_of_freedom))
+    lines.append(f"      p-value={_p_value(result.p_value)}")
+    lines.append(f"      alpha: {_number(result.alpha)}")
+    lines.append(f"      Решение: {'значимо' if result.significant else 'незначимо'}")
+    return lines
+
+
+def _overall_test_lines(settings: dict[str, Any]) -> list[str]:
+    if not settings.get("overall_tests"):
+        return []
+    return [
+        "Общие тесты: хи-квадрат Пирсона для распределений, Welch ANOVA для средних; "
+        "на взвешенных данных не выполняются"
+    ]
 
 
 def _secondary_level_lines(settings: dict[str, Any]) -> list[str]:
@@ -977,7 +1005,7 @@ def _render_statistics_txt(
         f"Общий фильтр: {report_filter}",
         f"Вес: {settings['weight_label'] or 'не используется'}",
         f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
-        *_secondary_level_lines(settings),
+        *_secondary_level_lines(settings), *_overall_test_lines(settings),
         f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
         f"Порог малой базы: N < {settings['minimum_base']}",
         _output_line(settings),
@@ -1011,6 +1039,8 @@ def _render_statistics_txt(
     return "\n".join(lines) + "\n"
 
 def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
+    if entry.overall is not None:
+        return [f"    {entry.comparison}: {entry.group_a}", *_render_overall(entry.overall)]
     lines = [
         f"    {entry.comparison}: {entry.group_a} vs {entry.group_b}",
     ]
