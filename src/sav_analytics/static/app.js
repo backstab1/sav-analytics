@@ -2457,6 +2457,15 @@ function updateBulkBar() {
   const base = document.querySelector("#bulk-base");
   base.innerHTML = '<option value="">База…</option><option value="standard">Стандартная база</option>'
     + configuredFilters().map(filter => `<option value="${escapeAttribute(filter.id)}">${escapeHtml(filter.name)}</option>`).join("");
+  // Источник копирования — вопрос того же типа, что все выбранные.
+  const selectedTypes = new Set(configuredQuestions()
+    .filter(question => selectedQuestionCodes.has(question.code))
+    .map(question => question.question_type));
+  const copySources = selectedTypes.size === 1
+    ? configuredQuestions().filter(question => selectedTypes.has(question.question_type))
+    : [];
+  document.querySelector("#bulk-copy").innerHTML = '<option value="">Настройки из…</option>'
+    + copySources.map(question => `<option value="${escapeAttribute(question.code)}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</option>`).join("");
   document.querySelectorAll("#bulk-bar button:not([data-bulk=undo]):not([data-bulk=clear]), #bulk-bar select")
     .forEach(control => { control.disabled = selectedQuestionCodes.size === 0; });
 }
@@ -2578,6 +2587,29 @@ async function runBulk(body, caption) {
 document.querySelector("#bulk-bar").addEventListener("change", async event => {
   const select = event.target.closest(".bulk-select");
   if (!select || !select.value || !currentProject) return;
+  if (select.id === "bulk-copy") {
+    const sourceCode = select.value;
+    select.value = "";
+    const codes = [...selectedQuestionCodes].filter(code => code !== sourceCode);
+    if (!codes.length) return;
+    if (!confirm(`Перенести из ${sourceCode} набор вывода, NET-группы, исключённые ответы, спецпоказатель и базу в ${plural(codes.length, "вопрос", "вопроса", "вопросов")}? Их нынешние настройки заменятся.`)) return;
+    try {
+      currentProject = await api(`/api/projects/${currentProject.id}/questions/copy-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceCode, codes }),
+      });
+      // Отмена хранит только поля массовой полосы, настройки вопроса она не вернёт.
+      lastBulkUndo = null;
+      renderProject();
+      showToast(`Настройки ${sourceCode} перенесены: ${plural(codes.length, "вопрос", "вопроса", "вопросов")}`);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      updateBulkBar();
+    }
+    return;
+  }
   const body = { codes: [...selectedQuestionCodes] };
   let caption;
   if (select.id === "bulk-type") {

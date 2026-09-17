@@ -55,6 +55,25 @@ class QuestionBulkUpdate(BaseModel):
     confirm_review: bool = False
 
 
+COPYABLE_QUESTION_SETTINGS = (
+    "output_metrics",
+    "nets",
+    "special_values",
+    "special_metric",
+    "base_filter_id",
+)
+
+
+class QuestionSettingsCopy(BaseModel):
+    """Перенести настройки одного вопроса на выбранные вопросы того же типа."""
+
+    source: str = Field(min_length=1, max_length=64)
+    codes: list[str] = Field(min_length=1, max_length=5000)
+    fields: list[
+        Literal["output_metrics", "nets", "special_values", "special_metric", "base_filter_id"]
+    ] = Field(default_factory=lambda: list(COPYABLE_QUESTION_SETTINGS), min_length=1)
+
+
 class QuestionOrder(BaseModel):
     codes: list[str]
 

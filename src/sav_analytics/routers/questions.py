@@ -13,6 +13,7 @@ from ..api_schemas import (
     QuestionBaseUpdate,
     QuestionBulkUpdate,
     QuestionOrder,
+    QuestionSettingsCopy,
     QuestionUpdate,
 )
 from ..core.not_applicable import suggest_not_applicable_codes
@@ -75,6 +76,22 @@ def update_questions(
     try:
         return repository.update_questions(
             project_id, update.codes, changes, confirm_recognition=update.confirm_review
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/copy-settings")
+def copy_question_settings(
+    project_id: UUID,
+    request: QuestionSettingsCopy,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.copy_question_settings(
+            project_id, request.source, request.codes, list(request.fields)
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc

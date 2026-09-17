@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -210,6 +211,49 @@ class ProjectRepository:
                     question,
                     dict(changes),
                     confirm_recognition=confirm_recognition,
+                )
+            except InvalidUploadError as exc:
+                raise InvalidUploadError(f"Вопрос {code}: {exc}") from exc
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def copy_question_settings(
+        self, project_id: UUID, source_code: str, codes: list[str], fields: list[str]
+    ) -> dict:
+        """Настройки одного вопроса — на выбранные того же типа, одной ревизией.
+
+        Каждый вопрос проходит обычную проверку правки: NPS примерится к его
+        шкале, NET-группы — к его типу. Ошибка в любом отменяет всё.
+        """
+        project = self.get(project_id)
+        source = self._find_question(project, source_code)
+        defaults = {
+            "output_metrics": [],
+            "nets": [],
+            "special_values": [],
+            "special_metric": "none",
+            "base_filter_id": None,
+        }
+        for code in dict.fromkeys(codes):
+            if code == source_code:
+                continue
+            target = self._find_question(project, code)
+            if target["question_type"] != source["question_type"]:
+                raise InvalidUploadError(
+                    f"Вопрос {code} другого типа, чем {source_code}: настройки не переносятся."
+                )
+            changes = {
+                field: copy.deepcopy(source.get(field, defaults[field])) for field in fields
+            }
+            if changes.get("nets") and source["question_type"] == "multiple_choice_dichotomy":
+                # NET multiple собран из вариантов своего вопроса — у другого их нет.
+                raise InvalidUploadError(
+                    "NET-группы multiple-response состоят из его вариантов и не переносятся."
+                )
+            try:
+                self._apply_question_changes(
+                    project_id, project, target, changes, confirm_recognition=False
                 )
             except InvalidUploadError as exc:
                 raise InvalidUploadError(f"Вопрос {code}: {exc}") from exc

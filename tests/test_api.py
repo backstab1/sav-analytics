@@ -1801,3 +1801,61 @@ def test_bulk_question_update_assigns_type_role_and_base(tmp_path: Path) -> None
     finally:
         app.dependency_overrides.clear()
 
+
+
+def test_question_settings_are_copied_to_questions_of_the_same_type(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "scales.sav"
+    labels = {1: "Плохо", 2: "Скорее плохо", 3: "Средне", 4: "Скорее хорошо", 5: "Хорошо"}
+    pyreadstat.write_sav(
+        pd.DataFrame(
+            {
+                "SPEED": [1, 2, 3, 4, 5, 5, 4, 3],
+                "PRICE": [5, 4, 3, 2, 1, 2, 3, 4],
+                "SEX": [1, 2, 1, 2, 1, 2, 1, 2],
+            }
+        ),
+        source,
+        column_labels={"SPEED": "Скорость", "PRICE": "Цена", "SEX": "Пол"},
+        variable_value_labels={"SPEED": labels, "PRICE": labels, "SEX": {1: "М", 2: "Ж"}},
+        variable_measure={"SPEED": "ordinal", "PRICE": "ordinal", "SEX": "nominal"},
+    )
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("scales.sav", stream, "application/octet-stream")},
+            ).json()
+            base = f"/api/projects/{project['id']}/questions"
+            assert client.patch(
+                base, json={"codes": ["SPEED", "PRICE"], "question_type": "scale"}
+            ).status_code == 200
+            assert client.patch(
+                f"{base}/SPEED",
+                json={
+                    "output_metrics": ["mean", "top2"],
+                    "nets": [{"label": "Хорошо", "values": [4, 5]}],
+                    "special_values": [3],
+                },
+            ).status_code == 200
+
+            copied = client.post(
+                f"{base}/copy-settings", json={"source": "SPEED", "codes": ["SPEED", "PRICE"]}
+            )
+            assert copied.status_code == 200
+            price = next(
+                item for item in copied.json()["configuration"]["questions"]
+                if item["code"] == "PRICE"
+            )
+            assert price["output_metrics"] == ["mean", "top2"]
+            assert price["nets"] == [{"label": "Хорошо", "values": [4, 5]}]
+            assert price["special_values"] == [3]
+
+            refused = client.post(
+                f"{base}/copy-settings", json={"source": "SPEED", "codes": ["SEX"]}
+            )
+            assert refused.status_code == 422
+            assert "другого типа" in refused.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()

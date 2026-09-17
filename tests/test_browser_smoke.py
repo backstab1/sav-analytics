@@ -903,3 +903,20 @@ def test_ranges_are_suggested_from_the_data(
     expect(page.locator("#range-list .range-row")).to_have_count(3, timeout=UI_TIMEOUT)
     expect(page.locator("#range-suggest-note")).to_contain_text("Респондентов в группах")
 
+
+
+def test_question_settings_are_copied_from_the_bulk_bar(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.check("#table-body tr[data-code='SEX'] .select-question")
+    page.check("#table-body tr[data-code='BRAND'] .select-question")
+    expect(page.locator("#bulk-copy option[value='SEX']")).to_have_count(1, timeout=UI_TIMEOUT)
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.select_option("#bulk-copy", "SEX")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Настройки SEX перенесены", timeout=UI_TIMEOUT
+    )
