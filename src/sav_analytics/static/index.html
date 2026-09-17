@@ -139,7 +139,7 @@
                 </button>
                 <button class="rail-item" data-view="text" type="button">
                   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 4.5h12v8H9l-3.5 3v-3H4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M7 7.5h6M7 10h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
-                  <span>Открытые ответы</span><small class="rail-soon">скоро</small>
+                  <span>Открытые ответы</span>
                 </button>
                 <button class="rail-item" data-view="reports" type="button">
                   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="4" width="14" height="10" rx="1.8" stroke="currentColor" stroke-width="1.5" /><path d="M10 14v3M7 17h6M6.5 11V9M9.5 11V7M12.5 11V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
@@ -591,6 +591,41 @@
                 </form>
                 <p id="analysis-error" class="error" hidden></p>
                 <div id="analysis-cards" class="analysis-cards" aria-live="polite"></div>
+              </div>
+            </section>
+
+            <!-- Открытые ответы: кодификатор и ответы. Совпадения по запросам
+                 и отметки считает ядро (core/open_text.py). -->
+            <section id="section-text" class="soon coding" hidden>
+              <div class="coding-wrap">
+                <p class="eyebrow">Открытые ответы</p>
+                <h1>Кодификатор</h1>
+                <p class="lead">Тема ищет ответы запросами со всеми формами слов. Слова строки должны встретиться вместе, строки темы — любая; «цен*» — буквальный префикс, «-курьер» — исключение. Отметка человека перекрывает запрос. Темы становятся вопросом с несколькими ответами и работают в таблицах, фильтрах и баннере.</p>
+                <div class="coding-bar">
+                  <label>Открытый вопрос<select id="text-question"></select></label>
+                  <button id="create-codeframe" type="button" hidden>Создать кодификатор</button>
+                </div>
+                <p id="text-error" class="error" hidden></p>
+                <p id="text-empty" class="analysis-note" hidden></p>
+                <div id="coding-body" class="coding-body" hidden>
+                  <section class="coding-themes">
+                    <div class="coding-head"><strong>Темы</strong><span id="coding-stats" class="analysis-note"></span></div>
+                    <div id="theme-list" class="theme-list"></div>
+                    <div class="coding-actions">
+                      <button id="add-theme" class="secondary compact-button" type="button">+ Тема</button>
+                      <button id="save-themes" type="button">Сохранить темы</button>
+                    </div>
+                  </section>
+                  <section class="coding-answers">
+                    <div class="coding-filter">
+                      <select id="answer-filter" aria-label="Какие ответы показать"></select>
+                      <input id="answer-search" type="search" placeholder="Найти в ответах" aria-label="Поиск по ответам" />
+                    </div>
+                    <p id="answer-count" class="analysis-note"></p>
+                    <div id="answer-list" class="answer-list"></div>
+                    <button id="more-answers" class="secondary compact-button" type="button" hidden>Показать ещё</button>
+                  </section>
+                </div>
               </div>
             </section>
 

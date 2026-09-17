@@ -318,9 +318,10 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     expect(page.locator("#section-analysis")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#section-soon")).to_be_hidden()
     expect(page.locator("#section-tables")).to_be_hidden()
-    # Непостроенный раздел говорит, что в нём будет, и не показывает чисел.
+    # «Открытые ответы» — кодификатор; заглушек у разделов больше нет.
     _open_view(page, "text")
-    expect(page.locator("#section-soon")).to_contain_text("Раздел строится", timeout=UI_TIMEOUT)
+    expect(page.locator("#section-text")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#section-soon")).to_be_hidden()
     expect(page.locator("#section-analysis")).to_be_hidden()
 
     page.click("#screen-nav button[data-screen='home']")
@@ -984,4 +985,50 @@ def test_analysis_card_shows_the_test_chosen_by_types(
 
     card.locator("[data-delete-card]").click()
     expect(page.locator("#analysis-cards")).to_contain_text("Карточек пока нет", timeout=UI_TIMEOUT)
+
+
+def test_open_answers_are_coded_by_query_and_by_hand(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "open.sav"
+    # Номер в конце делает ответы разными: иначе столбец похож на закрытый вопрос.
+    answers = [
+        f"{text} (анкета {index})"
+        for index, text in enumerate(
+            [
+                "Очень доволен доставкой",
+                "Доставку привезли быстро",
+                "Дорого, но качественно",
+                "Цены высокие",
+                "Ничего не понравилось",
+            ]
+            * 8
+        )
+    ]
+    pyreadstat.write_sav(
+        pd.DataFrame({"ID": list(range(1, len(answers) + 1)), "WHY": answers}),
+        source,
+        column_labels={"ID": "Номер", "WHY": "Почему вы так оценили?"},
+    )
+    _open_project(page, live_server, source)
+    _open_view(page, "text")
+    expect(page.locator("#section-text")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#text-question option[value='WHY']")).to_have_count(1, timeout=UI_TIMEOUT)
+
+    page.click("#create-codeframe")
+    expect(page.locator("#coding-body")).to_be_visible(timeout=UI_TIMEOUT)
+    page.click("#add-theme")
+    row = page.locator("#theme-list .theme-row").last
+    row.locator(".theme-name").fill("Доставка")
+    row.locator(".theme-queries").fill("доставка")
+    page.click("#save-themes")
+    expect(page.locator("#coding-stats")).to_contain_text("без темы 24", timeout=UI_TIMEOUT)
+    expect(page.locator("#theme-list .theme-count").first).to_have_text("16", timeout=UI_TIMEOUT)
+
+    page.select_option("#answer-filter", "uncoded")
+    expect(page.locator("#answer-count")).to_contain_text("из 24", timeout=UI_TIMEOUT)
+    first = page.locator("#answer-list .answer-row").first
+    first.locator(".answer-add").select_option(label="Доставка")
+    expect(page.locator("#coding-stats")).to_contain_text("без темы 23", timeout=UI_TIMEOUT)
+    expect(page.locator("#theme-list .theme-count").first).to_contain_text("вручную 1")
 
