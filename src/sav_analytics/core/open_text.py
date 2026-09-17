@@ -266,3 +266,27 @@ def answer_rows(
             for position in page
         ],
     }
+
+
+_WORD = re.compile(r"[a-zа-яё]{2,}", re.IGNORECASE)
+WORDY_SHARE = 0.3
+
+
+def text_profile(texts: pd.Series) -> dict[str, Any]:
+    """Похож ли столбец на ответы респондентов, а не на служебное поле.
+
+    Служебные поля — логин, телефон, дата, идентификатор — формально тоже
+    текст. Отличает их содержимое: в ответе обычно хотя бы два слова.
+    """
+    answered = texts[answered_mask(texts)].astype(str)
+    if answered.empty:
+        return {"answered": 0, "wordy_share": 0.0, "example": ""}
+    wordy = answered.map(lambda value: len(_WORD.findall(value)) >= 2)
+    examples = answered[wordy] if wordy.any() else answered
+    example = max(examples.head(200), key=len)
+    return {
+        "answered": int(answered.size),
+        "wordy_share": float(wordy.mean()),
+        "example": example[:120],
+    }
+

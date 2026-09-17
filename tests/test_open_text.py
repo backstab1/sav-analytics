@@ -141,3 +141,15 @@ def test_codeframe_becomes_a_multiple_response_question(tmp_path: Path) -> None:
             )
     finally:
         app.dependency_overrides.clear()
+
+
+def test_text_profile_separates_answers_from_service_fields() -> None:
+    from sav_analytics.core.open_text import text_profile
+
+    answers = text_profile(pd.Series(ANSWERS))
+    logins = text_profile(pd.Series(["ivanov", "petrov", "2026-09-01 10:22", "", "+79001234567"]))
+
+    assert answers["wordy_share"] > 0.8
+    assert logins["wordy_share"] == 0
+    assert answers["answered"] == 7
+

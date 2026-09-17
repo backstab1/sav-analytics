@@ -11,10 +11,12 @@ from ..api_schemas import CodeframeCreate, CodeframeMark, CodeframeUpdate
 from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.formulas import read_project_frame
 from ..core.open_text import (
+    WORDY_SHARE,
     CodeframeError,
     answer_rows,
     codeframe_summary,
     codeframe_text_variable,
+    text_profile,
 )
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
@@ -29,6 +31,39 @@ def _texts(repository: ProjectRepository, project_id: UUID, codeframe_id: UUID):
     variable = codeframe_text_variable(codeframe, project)
     frame = read_project_frame(repository.source_path(project_id), project, [variable])
     return frame[variable], codeframe
+
+
+@router.get("/candidates")
+def candidates(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Открытые вопросы проекта: сначала похожие на ответы, потом служебные поля."""
+    try:
+        project = repository.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    questions = [
+        item
+        for item in project["configuration"]["questions"]
+        if item["question_type"] == "open_text" and len(item.get("source_variables") or []) == 1
+    ]
+    if not questions:
+        return {"questions": []}
+    columns = [item["source_variables"][0] for item in questions]
+    frame = read_project_frame(repository.source_path(project_id), project, columns)
+    framed = {item["question_code"] for item in project["configuration"].get("codeframes", [])}
+    result = [
+        {
+            "code": item["code"],
+            "label": item["label"],
+            "has_codeframe": item["code"] in framed,
+            **text_profile(frame[item["source_variables"][0]]),
+        }
+        for item in questions
+    ]
+    result.sort(key=lambda item: (not item["has_codeframe"], -item["wordy_share"]))
+    return {"questions": result, "wordy_share": WORDY_SHARE}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

@@ -747,7 +747,7 @@ function setView(view) {
   } else if (view === "analysis") {
     renderAnalysisSection();
   } else if (view === "text") {
-    renderTextSection();
+    void renderTextSection();
   } else {
     renderSoonSection(view);
   }
@@ -5001,12 +5001,33 @@ function currentCodeframe() {
   return (currentProject.configuration.codeframes || []).find(item => item.question_code === code) || null;
 }
 
-function renderTextSection() {
+let textCandidates = null;
+
+async function renderTextSection() {
   if (!currentProject) return;
   const select = document.querySelector("#text-question");
   const previous = select.value;
   const questions = openTextQuestions();
-  select.innerHTML = questions.map(question => `<option value="${escapeAttribute(question.code)}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</option>`).join("");
+  // Порядок и группы — по содержимому: служебные поля (логин, дата, телефон)
+  // тоже текст, но в них нет ответов из нескольких слов.
+  if (!textCandidates || textCandidates.project !== currentProject.id) {
+    try {
+      const result = await api(`/api/projects/${currentProject.id}/codeframes/candidates`);
+      textCandidates = { project: currentProject.id, ...result };
+    } catch {
+      textCandidates = { project: currentProject.id, questions: [], wordy_share: 0 };
+    }
+  }
+  const profiles = new Map(textCandidates.questions.map(item => [item.code, item]));
+  const ordered = [...questions].sort((left, right) => (profiles.get(right.code)?.wordy_share || 0) - (profiles.get(left.code)?.wordy_share || 0));
+  const option = question => {
+    const profile = profiles.get(question.code);
+    const hint = profile ? ` · ${profile.answered} отв.` : "";
+    return `<option value="${escapeAttribute(question.code)}" title="${escapeAttribute(profile?.example || "")}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}${hint}</option>`;
+  };
+  const answers = ordered.filter(question => (profiles.get(question.code)?.wordy_share ?? 1) >= textCandidates.wordy_share);
+  const service = ordered.filter(question => !answers.includes(question));
+  select.innerHTML = `${answers.length ? `<optgroup label="Ответы респондентов">${answers.map(option).join("")}</optgroup>` : ""}${service.length ? `<optgroup label="Служебные и короткие поля">${service.map(option).join("")}</optgroup>` : ""}`;
   if (previous && questions.some(question => question.code === previous)) select.value = previous;
   const empty = document.querySelector("#text-empty");
   empty.hidden = questions.length > 0;
@@ -5064,7 +5085,7 @@ document.querySelector("#theme-list").addEventListener("click", event => {
   renderThemeRows(themes);
 });
 
-document.querySelector("#text-question").addEventListener("change", renderTextSection);
+document.querySelector("#text-question").addEventListener("change", () => void renderTextSection());
 
 document.querySelector("#create-codeframe").addEventListener("click", async () => {
   const errorBox = document.querySelector("#text-error");
@@ -5076,7 +5097,8 @@ document.querySelector("#create-codeframe").addEventListener("click", async () =
       body: JSON.stringify({ question_code: document.querySelector("#text-question").value }),
     });
     renderProject();
-    renderTextSection();
+    textCandidates = null;
+    await renderTextSection();
   } catch (error) {
     showError(errorBox, error);
   }
@@ -5096,7 +5118,7 @@ document.querySelector("#save-themes").addEventListener("click", async () => {
       body: JSON.stringify({ label: codeframe.label, themes: collectThemes() }),
     });
     renderProject();
-    renderTextSection();
+    await renderTextSection();
     showToast("Темы сохранены");
   } catch (error) {
     showError(errorBox, error);
