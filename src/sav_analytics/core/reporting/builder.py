@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any, TextIO
@@ -67,6 +68,8 @@ def build_topline_artifacts(
     parameters = workbook.add_worksheet("Параметры")
     show_charts = bool(data.statistical_settings.get("show_charts"))
     chart_sheet = workbook.add_worksheet("Графики") if show_charts else None
+    show_counts_sheet = bool(data.statistical_settings.get("counts_sheet"))
+    counts_sheet = workbook.add_worksheet("Счётчики") if show_counts_sheet else None
     show_correlations = bool(data.statistical_settings.get("correlations"))
     correlation_sheet = workbook.add_worksheet("Correlations") if show_correlations else None
     chart_rows: list[tuple[dict[str, Any], list[int]]] = []
@@ -95,6 +98,33 @@ def build_topline_artifacts(
         audit_writer=audit_writer,
         advance=advance,
     )
+    if counts_sheet is not None:
+        # Тот же топлайн числами: колонки без сравнений, строки долей — счётчиками.
+        counts_data = replace(
+            data,
+            columns=[
+                {**column, "compare_to_total": False, "compare_pairwise": False}
+                for column in data.columns
+            ],
+            statistical_settings={
+                **data.statistical_settings,
+                "counts_only": True,
+                "show_counts": False,
+                "row_percents": False,
+                "table_percents": False,
+                "overall_tests": False,
+            },
+        )
+        _write_topline(
+            counts_sheet,
+            counts_data,
+            project,
+            data.questions,
+            _formats(workbook, counts_data.statistical_settings),
+            [],
+            "Счётчики",
+            valid_denominator=False,
+        )
     _write_contents(contents, project, data.questions, main_rows, filter_rows, formats)
     _write_parameters(parameters, report_parameters(project, data), formats)
     if chart_sheet is not None:

@@ -1889,3 +1889,21 @@ def test_without_a_second_level_the_weaker_difference_is_not_marked(tmp_path: Pa
     assert "при 90%" not in (_cell_comment(content, "Да", "C") or "")
     assert "Второй уровень доверия" not in build_statistics_txt(source, project)
 
+
+
+def test_counts_sheet_repeats_the_topline_in_people(tmp_path: Path) -> None:
+    """Лист «Счётчики»: те же строки числом ответивших, без долей и тестов."""
+    source = tmp_path / "counts.sav"
+    project = _significance_project(source, counts_sheet=True)
+
+    content = build_topline_xlsx(source, project)
+
+    with ZipFile(BytesIO(content)) as archive:
+        workbook = archive.read("xl/workbook.xml").decode("utf-8")
+    assert "Счётчики" in workbook
+    # Листы книги по порядку: topline_main, topline_filter, Содержание,
+    # Параметры, Счётчики.
+    assert _cell_value(content, "Да", "C", sheet_index=5) == 42
+    assert _cell_value(content, "Нет", "D", sheet_index=5) == 20
+    # На главном листе те же строки остались долями.
+    assert _cell_value(content, "Да", "C") == pytest.approx(70.0)

@@ -80,6 +80,7 @@ class StoredReportSettings(_StoredModel):
     secondary_confidence_level: float | None = Field(default=None, gt=0, lt=1)
     overall_tests: bool = False
     correlations: bool = False
+    counts_sheet: bool = False
 
 
 class StoredConfiguration(_StoredModel):

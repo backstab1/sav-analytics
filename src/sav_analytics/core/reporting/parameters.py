@@ -85,6 +85,10 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
             else "не выполняются",
         ),
         (
+            "Лист «Счётчики»",
+            "тот же топлайн числами" if settings.get("counts_sheet") else "не выводится",
+        ),
+        (
             "Лист Correlations",
             "связи числовых вопросов, без веса"
             if settings.get("correlations")

@@ -168,6 +168,7 @@ def prepare_report_data(
         "secondary_confidence_level": report_settings["secondary_confidence_level"],
         "overall_tests": report_settings["overall_tests"],
         "correlations": report_settings["correlations"],
+        "counts_sheet": report_settings["counts_sheet"],
     }
     return ReportData(
         frame=frame,

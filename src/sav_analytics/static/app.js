@@ -55,6 +55,7 @@ const defaultReportSettings = Object.freeze({
   secondary_confidence_level: null,
   overall_tests: false,
   correlations: false,
+  counts_sheet: false,
 });
 
 const scaleMetricOptions = [

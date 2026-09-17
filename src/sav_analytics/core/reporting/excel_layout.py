@@ -732,13 +732,16 @@ def _write_metric_row(
     statistical_settings = context.settings
     audit_entries = context.audit_entries
     audit_context = context.audit_context
+    eligible_mask = (
+        context.base_mask if valid_mask is None else context.base_mask & valid_mask
+    )
+    if format_family == "percent" and statistical_settings.get("counts_only"):
+        # Лист «Счётчики»: та же строка числом ответивших, без тестов и долей.
+        return _write_count_row(context, row, label, outcome, eligible_mask, suffix=False)
     sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
     sheet.write(row, 0, label, formats.derived_label() if derived else formats.row_label())
     if format_family == "percent" and not derived:
         context.bars.append(row)
-    eligible_mask = (
-        context.base_mask if valid_mask is None else context.base_mask & valid_mask
-    )
     total_mask = columns[0]["mask"]
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     weights = statistical_settings["weights"]
@@ -867,6 +870,8 @@ def _write_count_row(
     label: str,
     outcome: pd.Series,
     eligible_mask: pd.Series,
+    *,
+    suffix: bool = True,
 ) -> int:
     """Строка «…, N» под долей: сколько человек в колонке дали этот ответ.
 
@@ -875,7 +880,9 @@ def _write_count_row(
     """
     selected = outcome.fillna(False).astype(bool) & eligible_mask
     context.sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
-    context.sheet.write(row, 0, f"{label}, N", context.formats.derived_label())
+    context.sheet.write(
+        row, 0, f"{label}, N" if suffix else label, context.formats.derived_label()
+    )
     for index, column in enumerate(context.columns, start=1):
         context.sheet.write_number(
             row,

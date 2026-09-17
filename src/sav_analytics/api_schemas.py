@@ -283,6 +283,8 @@ class ReportSettingsDefinition(BaseModel):
     overall_tests: bool = False
     # Лист Correlations: связи числовых вопросов между собой.
     correlations: bool = False
+    # Лист «Счётчики»: тот же топлайн числами ответивших.
+    counts_sheet: bool = False
 
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:

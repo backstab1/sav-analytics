@@ -35,6 +35,7 @@ DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "secondary_confidence_level": None,
     "overall_tests": False,
     "correlations": False,
+    "counts_sheet": False,
 }
 
 REPORT_SETTING_KEYS = tuple(DEFAULT_REPORT_SETTINGS)
