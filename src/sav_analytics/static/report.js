@@ -329,6 +329,7 @@ function renderReportBlocks() {
     </section>
     ${reportStatisticsColumn(settings)}
   </div>
+  <details id="header-preview" class="header-preview"><summary>Превью шапки книги</summary><div id="header-preview-body"><p class="analysis-note">Раскройте — посчитаем колонки и базы до сборки.</p></div></details>
   <section class="runs">
     <div class="col-head"><h3>История запусков</h3><span class="col-note">каждая сборка хранится неизменной и скачивается снова</span></div>
     <div id="report-runs" class="runs-list"><p class="runs-empty">Загружаем…</p></div>
@@ -495,3 +496,36 @@ document.querySelector("#entity-list").addEventListener("change", event => {
   const wave = event.target.closest("#stat-wave-control");
   if (wave) void applyStatSetting({ wave_control_value: JSON.parse(wave.value) });
 });
+
+/* Превью шапки книги: какие колонки и базы получит Excel — до сборки.
+   Колонки считает тот же расчёт баннера, что и книга. */
+document.querySelector("#entity-list").addEventListener("toggle", event => {
+  if (event.target?.id === "header-preview" && event.target.open) void loadHeaderPreview();
+}, true);
+
+async function loadHeaderPreview() {
+  const body = document.querySelector("#header-preview-body");
+  const bannerId = selectedReportBannerId();
+  if (!bannerId) {
+    const rows = currentProject.inspection.row_count;
+    body.innerHTML = `<p class="analysis-note">Баннер не выбран: в книге будет только колонка Total, N ${rows.toLocaleString("ru-RU")}.</p>`;
+    return;
+  }
+  body.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  try {
+    const preview = await api(`/api/projects/${currentProject.id}/banners/${bannerId}/preview`);
+    const minimumBase = configuredReportSettings().minimum_base;
+    const wide = preview.columns.length >= 50
+      ? `<p class="analysis-note">Колонок ${preview.columns.length}: книга станет неудобной для чтения.</p>` : "";
+    const overlaps = (preview.overlaps || []).map(item =>
+      `<p class="analysis-note">«${escapeHtml(item.block)}»: колонки пересекаются у ${item.respondents.toLocaleString("ru-RU")} респондентов.</p>`).join("");
+    body.innerHTML = `${wide}${overlaps}<div class="header-preview-rows">${preview.columns.map((column, index) => {
+      const small = column.base > 0 && column.base < minimumBase;
+      const block = index === 0 ? "" : `${escapeHtml(column.block || "")} · `;
+      return `<div class="header-preview-row ${small ? "small-base" : ""}"><span title="${escapeAttribute(column.label)}">${block}${escapeHtml(column.label)}</span><em>${column.base.toLocaleString("ru-RU")}${small ? " · малая база" : ""}</em></div>`;
+    }).join("")}</div>`;
+  } catch (error) {
+    body.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+}
+

@@ -379,6 +379,13 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .analysis-form label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }
 .analysis-form select { padding: 7px 9px; min-width: 0; }
 .analysis-cards { display: grid; gap: 10px; }
+.header-preview { margin-top: 10px; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
+.header-preview summary { cursor: pointer; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.header-preview-rows { display: grid; gap: 3px; margin-top: 8px; }
+.header-preview-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; font-size: var(--t-xs); }
+.header-preview-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-preview-row em { font-style: normal; color: var(--c-ink-3); }
+.header-preview-row.small-base em { color: var(--c-danger, #b3261e); }
 .variable-card { padding: 12px 14px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); display: grid; gap: 10px; }
 .variable-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
 .variable-bar label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }

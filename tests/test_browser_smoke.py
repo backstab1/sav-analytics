@@ -1053,3 +1053,30 @@ def test_open_answers_are_coded_by_query_and_by_hand(
     page.click("#save-themes")
     expect(page.locator("#coding-stats")).to_contain_text("без темы 15", timeout=UI_TIMEOUT)
 
+
+
+def test_header_preview_shows_columns_and_bases_before_building(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+
+    # Без баннера превью честно говорит, что в книге будет только Total.
+    page.click("#header-preview summary")
+    expect(page.locator("#header-preview-body")).to_contain_text(
+        "только колонка Total", timeout=UI_TIMEOUT
+    )
+
+    page.click('[data-block="banner"] [data-new="banner"]')
+    page.fill("#banner-name", "Пол")
+    page.locator("#banner-block-list select").first.select_option("question:SEX")
+    page.click("#save-banner")
+    expect(page.locator("#banner-preview")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
+    page.click("#close-banner-editor")
+
+    page.click("#header-preview summary")
+    page.click("#header-preview summary")
+    expect(page.locator("#header-preview-body")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
+    expect(page.locator(".header-preview-row").first).to_contain_text("Total")
