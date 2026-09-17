@@ -16,6 +16,7 @@ from ..core.open_text import (
     answer_rows,
     codeframe_summary,
     codeframe_text_variable,
+    looks_like_service_field,
     text_profile,
 )
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -58,11 +59,22 @@ def candidates(
             "code": item["code"],
             "label": item["label"],
             "has_codeframe": item["code"] in framed,
+            "service": looks_like_service_field(item["code"], item["label"]),
             **text_profile(frame[item["source_variables"][0]]),
         }
         for item in questions
     ]
-    result.sort(key=lambda item: (not item["has_codeframe"], -item["wordy_share"]))
+    for item in result:
+        item["respondent_answers"] = (
+            not item["service"] and item["wordy_share"] >= WORDY_SHARE and item["answered"] > 0
+        )
+    result.sort(
+        key=lambda item: (
+            not item["has_codeframe"],
+            not item["respondent_answers"],
+            -item["average_words"],
+        )
+    )
     return {"questions": result, "wordy_share": WORDY_SHARE}
 
 

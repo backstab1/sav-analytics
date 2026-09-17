@@ -153,3 +153,13 @@ def test_text_profile_separates_answers_from_service_fields() -> None:
     assert logins["wordy_share"] == 0
     assert answers["answered"] == 7
 
+
+def test_service_fields_are_recognised_by_code_and_label() -> None:
+    from sav_analytics.core.open_text import looks_like_service_field
+
+    assert looks_like_service_field("UserName", "Имя пользователя")
+    assert looks_like_service_field("ContactID", "ID контакта")
+    assert looks_like_service_field("IVDate1", "Дата и время начала интервью")
+    assert not looks_like_service_field("Q13", "Почему Вы поставили именно такую оценку?")
+    assert not looks_like_service_field("Q20_2T", "Нет (уточните, почему не оформляет)")
+

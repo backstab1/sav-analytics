@@ -5019,13 +5019,14 @@ async function renderTextSection() {
     }
   }
   const profiles = new Map(textCandidates.questions.map(item => [item.code, item]));
-  const ordered = [...questions].sort((left, right) => (profiles.get(right.code)?.wordy_share || 0) - (profiles.get(left.code)?.wordy_share || 0));
+  const rank = new Map(textCandidates.questions.map((item, index) => [item.code, index]));
+  const ordered = [...questions].sort((left, right) => (rank.get(left.code) ?? 1e9) - (rank.get(right.code) ?? 1e9));
   const option = question => {
     const profile = profiles.get(question.code);
     const hint = profile ? ` · ${profile.answered} отв.` : "";
     return `<option value="${escapeAttribute(question.code)}" title="${escapeAttribute(profile?.example || "")}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}${hint}</option>`;
   };
-  const answers = ordered.filter(question => (profiles.get(question.code)?.wordy_share ?? 1) >= textCandidates.wordy_share);
+  const answers = ordered.filter(question => profiles.get(question.code)?.respondent_answers ?? true);
   const service = ordered.filter(question => !answers.includes(question));
   select.innerHTML = `${answers.length ? `<optgroup label="Ответы респондентов">${answers.map(option).join("")}</optgroup>` : ""}${service.length ? `<optgroup label="Служебные и короткие поля">${service.map(option).join("")}</optgroup>` : ""}`;
   if (previous && questions.some(question => question.code === previous)) select.value = previous;

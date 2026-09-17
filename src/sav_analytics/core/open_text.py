@@ -280,13 +280,27 @@ def text_profile(texts: pd.Series) -> dict[str, Any]:
     """
     answered = texts[answered_mask(texts)].astype(str)
     if answered.empty:
-        return {"answered": 0, "wordy_share": 0.0, "example": ""}
-    wordy = answered.map(lambda value: len(_WORD.findall(value)) >= 2)
+        return {"answered": 0, "wordy_share": 0.0, "average_words": 0.0, "example": ""}
+    counts = answered.map(lambda value: len(_WORD.findall(value)))
+    wordy = counts >= 2
     examples = answered[wordy] if wordy.any() else answered
     example = max(examples.head(200), key=len)
     return {
         "answered": int(answered.size),
         "wordy_share": float(wordy.mean()),
+        "average_words": float(counts.mean()),
         "example": example[:120],
     }
+
+
+_SERVICE = re.compile(
+    r"(^|[^a-zа-яё])(id|uid|guid|имя|фамили|логин|login|user|телефон|phone|e-?mail|почт|дата|"
+    r"date|время|time|адрес|address|ip|contact|контакт)",
+    re.IGNORECASE,
+)
+
+
+def looks_like_service_field(code: str, label: str) -> bool:
+    """Код или подпись говорят о служебном поле: идентификатор, имя, контакт, дата."""
+    return bool(_SERVICE.search(code) or _SERVICE.search(label))
 
