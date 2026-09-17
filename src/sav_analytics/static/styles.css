@@ -379,6 +379,13 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .analysis-form label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }
 .analysis-form select { padding: 7px 9px; min-width: 0; }
 .analysis-cards { display: grid; gap: 10px; }
+.bld-net-panel { display: grid; gap: 8px; padding: 10px; }
+.bld-net-row { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-xs); }
+.bld-net-row button { background: transparent; border: 0; color: var(--c-danger, #b3261e); cursor: pointer; }
+.bld-net-label { display: grid; gap: 4px; font-size: var(--t-xs); font-weight: 600; }
+.bld-net-label input { padding: 5px 8px; font: inherit; }
+.bld-net-values { display: grid; gap: 4px; max-height: 240px; overflow: auto; font-size: var(--t-xs); }
+.bld-net-add { padding: 6px 10px; border-radius: 8px; border: 0; background: var(--c-brand, #2eae68); color: #fff; cursor: pointer; font: inherit; font-size: var(--t-xs); }
 .bld-chart { margin: 10px 0 0; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
 .bld-chart[hidden] { display: none; }
 .bld-chart figcaption { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: var(--t-xs); font-weight: 600; color: var(--c-ink-2); }

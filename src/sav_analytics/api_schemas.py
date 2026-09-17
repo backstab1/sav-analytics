@@ -200,6 +200,13 @@ class BannerBlock(BaseModel):
     sources: list[BannerSource] = Field(min_length=1, max_length=2)
 
 
+class TableQuestionOverride(BaseModel):
+    """Разовые настройки вопроса на экране «Таблицы»: в проект не сохраняются."""
+
+    nets: list[NetDefinition] | None = Field(default=None, max_length=20)
+    scale_box: int | None = Field(default=None, ge=1, le=3)
+
+
 class TablePreviewRequest(BaseModel):
     """Раскладка экрана «Таблицы»: строки, разрез и фильтр.
 
@@ -212,6 +219,8 @@ class TablePreviewRequest(BaseModel):
     blocks: list[BannerBlock] | None = Field(default=None, max_length=20)
     filter_id: UUID | None = None
     sheet: Literal["main", "filter"] = "main"
+    # NET-группы и размер Top/Bottom «на лету»: считаются, но не сохраняются.
+    overrides: dict[str, TableQuestionOverride] | None = Field(default=None, max_length=50)
 
     @model_validator(mode="after")
     def validate_single_cut(self) -> Self:

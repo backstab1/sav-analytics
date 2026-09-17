@@ -360,3 +360,26 @@ def test_table_separates_letters_of_the_second_confidence_level(tmp_path: Path) 
     assert yes["cells"][1]["higher_than_secondary"] == ["c"]
     assert table["settings"]["secondary_confidence_level"] == 0.9
 
+
+
+def test_live_nets_and_top_size_apply_without_saving(tmp_path: Path) -> None:
+    """NET и Top/Bottom «на лету»: считаются, но в проект не сохраняются."""
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source)
+    _, blocks = _layout(project)
+    overrides = {"OUTCOME": {"nets": [{"label": "Любой ответ", "values": ["Да", "Нет"]}]}}
+
+    table = build_live_table(
+        source, project, questions=["OUTCOME"], blocks=blocks, overrides=overrides
+    )
+
+    rows = {row["label"]: row for row in table["questions"][0]["rows"]}
+    assert rows["NET: Любой ответ"]["cells"][0]["value"] == pytest.approx(100.0)
+    # Проект не тронут: NET-групп у вопроса как не было, так и нет.
+    outcome = next(
+        item for item in project["configuration"]["questions"] if item["code"] == "OUTCOME"
+    )
+    assert not outcome.get("nets")
+
+    plain = build_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
+    assert all(not row["label"].startswith("NET") for row in plain["questions"][0]["rows"])

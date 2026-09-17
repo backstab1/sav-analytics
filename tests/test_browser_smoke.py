@@ -1104,3 +1104,32 @@ def test_table_row_draws_a_chart_of_the_same_numbers(
     )
     page.click("#bld-chart-close")
     expect(chart).to_be_hidden()
+
+
+def test_net_group_is_built_on_the_table_screen_without_saving(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "tables")
+
+    page.click('.bld-param[data-zone="rows"]')
+    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.keyboard.press("Escape")
+    expect(page.locator("#bld-grid-wrap table.bld-grid")).to_be_visible(timeout=UI_TIMEOUT)
+
+    page.click("#bld-net")
+    expect(page.locator("#bld-net-add")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#bld-net-label", "Любая марка")
+    page.locator(".bld-net-values input").first.check()
+    page.locator(".bld-net-values input").nth(1).check()
+    page.click("#bld-net-add")
+    expect(page.locator("#bld-grid-wrap")).to_contain_text("NET: Любая марка", timeout=UI_TIMEOUT)
+    expect(page.locator("#bld-net")).to_have_text("NET · 1")
+
+    # Вопрос в структуре не изменился: группа живёт только на экране.
+    _open_view(page, "data")
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#net-list")).not_to_contain_text("Любая марка")

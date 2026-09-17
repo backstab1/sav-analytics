@@ -94,13 +94,16 @@ def build_live_table(
     blocks: list[dict[str, Any]] | None = None,
     filter_id: str | None = None,
     sheet: str = "main",
+    overrides: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Посчитать таблицу для экрана.
 
     `sheet="main"` — доли от полной базы, как `topline_main`; `"filter"` —
-    от валидной базы вопроса, как `topline_filter`.
+    от валидной базы вопроса, как `topline_filter`. `overrides` — разовые
+    настройки вопроса на этом экране (NET-группы и размер Top/Bottom): они
+    не сохраняются в проект, но считаются тем же кодом, что книга.
     """
-    live = _live_project(project, questions, banner_id, blocks, filter_id)
+    live = _live_project(project, questions, banner_id, blocks, filter_id, overrides=overrides)
     data = prepare_report_data(path, live, columns=_needed_columns(live))
     recording = _RecordingSheet()
     valid = sheet == "filter"
@@ -150,6 +153,7 @@ def export_live_table(
     banner_id: str | None = None,
     blocks: list[dict[str, Any]] | None = None,
     filter_id: str | None = None,
+    overrides: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[bytes, str]:
     """Книга по раскладке экрана — тем же сборщиком и в том же стиле.
 
@@ -162,7 +166,9 @@ def export_live_table(
     полный отчёт с разрезом и фильтром экрана. Тогда состав не сужается до
     типов экрана — книга выводит те же вопросы, что вывела бы полная сборка.
     """
-    live = _live_project(project, questions, banner_id, blocks, filter_id, show_protocol=False)
+    live = _live_project(
+        project, questions, banner_id, blocks, filter_id, show_protocol=False, overrides=overrides
+    )
     artifacts = build_topline_artifacts(path, live)
     return artifacts.xlsx, artifacts.statistics_txt
 
@@ -231,11 +237,13 @@ def _live_project(
     filter_id: str | None,
     *,
     show_protocol: bool = True,
+    overrides: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     live = copy.deepcopy(project)
     configuration = live["configuration"]
     if questions is not None:
         _choose_questions(configuration, questions)
+    _apply_overrides(live, overrides or {})
 
     banners = configuration.get("banners", [])
     if blocks:
@@ -260,6 +268,52 @@ def _live_project(
         settings["wave_control_value"] = None
     configuration["report_settings"] = settings
     return live
+
+
+def _apply_overrides(live: dict[str, Any], overrides: dict[str, dict[str, Any]]) -> None:
+    """Разовые NET-группы и размер Top/Bottom экрана — поверх настроек вопроса.
+
+    Правится копия проекта, поэтому вопрос в проекте не меняется: экран
+    показывает «что было бы», не сохраняя этого. Значения NET экран знает
+    подписями строк таблицы, поэтому подпись здесь переводится в код ответа.
+    """
+    if not overrides:
+        return
+    configuration = live["configuration"]
+    by_code = {item["code"]: item for item in configuration["questions"]}
+    scale_box = None
+    for code, override in overrides.items():
+        question = by_code.get(code)
+        if question is None:
+            raise ReportError(f"Вопрос {code} не найден.")
+        if override.get("nets") is not None:
+            question["nets"] = [
+                {**net, "values": _net_values(question, live, net["values"])}
+                for net in override["nets"]
+            ]
+        if override.get("scale_box") is not None:
+            scale_box = int(override["scale_box"])
+    if scale_box is not None:
+        # Размер Top/Bottom — настройка отчёта, а не вопроса: на экране он
+        # общий для всех шкал таблицы.
+        settings = dict(configuration.get("report_settings") or {})
+        settings["scale_box"] = scale_box
+        configuration["report_settings"] = settings
+
+
+def _net_values(question: dict[str, Any], live: dict[str, Any], values: list[Any]) -> list[Any]:
+    """Коды ответов по подписям строк: экран знает строки подписями."""
+    variables = {item["name"]: item for item in live["inspection"]["variables"]}
+    sources = question.get("source_variables") or []
+    if question["question_type"] == "multiple_choice_dichotomy":
+        by_label = {variables[name]["label"]: name for name in sources if name in variables}
+    elif len(sources) == 1 and sources[0] in variables:
+        by_label = {
+            item["label"]: item["value"] for item in variables[sources[0]].get("value_labels", [])
+        }
+    else:
+        by_label = {}
+    return [by_label.get(value, value) for value in values]
 
 
 def _choose_questions(configuration: dict[str, Any], questions: list[str]) -> None:

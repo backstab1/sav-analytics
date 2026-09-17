@@ -130,6 +130,8 @@
     const note = document.querySelector("#bld-stage-note");
     const sheetSelect = document.querySelector("#bld-sheet");
     const measureSelect = document.querySelector("#bld-measure");
+    const boxSelect = document.querySelector("#bld-box");
+    const netButton = document.querySelector("#bld-net");
     const nestToggle = document.querySelector("#bld-nest");
     const saveCutButton = document.querySelector("#bld-save-cut");
     const exportButton = document.querySelector("#bld-export");
@@ -438,6 +440,86 @@
 
     // Раскладка для сервера: её же выгружает кнопка «Excel», поэтому книга
     // собирается по тому, что стоит на экране, а не по чему-то похожему.
+    /* NET и Top/Bottom «на лету»: считаются сервером как настройки вопроса,
+       но в проект не сохраняются — экран показывает «что было бы».
+       Набор NET хранится по коду вопроса, пока открыт раздел. */
+    const liveNets = new Map();
+    let netTarget = null;
+
+    function overridesPayload() {
+      const payload = {};
+      liveNets.forEach((nets, code) => {
+        if (nets.length) payload[code] = { nets };
+      });
+      if (boxSelect.value) {
+        const code = layout.rows[0];
+        if (code) payload[code] = { ...(payload[code] || {}), scale_box: Number(boxSelect.value) };
+      }
+      return Object.keys(payload).length ? payload : undefined;
+    }
+
+    function netableQuestions() {
+      if (!lastTable) return [];
+      return lastTable.questions.filter(question =>
+        question.rows.some(row => row.kind === "value" && !row.derived));
+    }
+
+    function renderNetControl() {
+      netButton.hidden = !lastTable || !netableQuestions().length;
+      const total = [...liveNets.values()].reduce((sum, nets) => sum + nets.length, 0);
+      netButton.textContent = total ? `NET · ${total}` : "NET";
+      netButton.setAttribute("aria-pressed", total ? "true" : "false");
+    }
+
+    function openNetPicker() {
+      const questions = netableQuestions();
+      if (!questions.length) return;
+      const question = questions[0];
+      netTarget = question.code;
+      const rows = question.rows.filter(row => row.kind === "value" && !row.derived);
+      const existing = liveNets.get(question.code) || [];
+      const chosen = existing.map(net => `<div class="bld-net-row"><span>NET: ${escapeHtml(net.label)}</span><button type="button" data-drop-net="${escapeHtml(net.label)}">×</button></div>`).join("");
+      pickerTitle.textContent = `NET для «${question.code}» — только на этом экране`;
+      list.innerHTML = `<div class="bld-net-panel">
+        ${chosen}
+        <label class="bld-net-label">Название<input id="bld-net-label" value="Топ" maxlength="60" /></label>
+        <div class="bld-net-values">${rows.map(row => `<label><input type="checkbox" value="${escapeHtml(row.label)}" /> ${escapeHtml(row.label)}</label>`).join("")}</div>
+        <button type="button" id="bld-net-add" class="bld-net-add">Добавить группу</button>
+      </div>`;
+      picker.hidden = false;
+      picker.dataset.mode = "net";
+    }
+
+    list.addEventListener("click", event => {
+      if (picker.dataset.mode !== "net") return;
+      const drop = event.target.closest("[data-drop-net]");
+      if (drop) {
+        const nets = (liveNets.get(netTarget) || []).filter(net => net.label !== drop.dataset.dropNet);
+        liveNets.set(netTarget, nets);
+        openNetPicker();
+        renderNetControl();
+        void renderGrid();
+        return;
+      }
+      if (!event.target.closest("#bld-net-add")) return;
+      const label = document.querySelector("#bld-net-label").value.trim();
+      const values = [...document.querySelectorAll(".bld-net-values input:checked")].map(input => input.value);
+      if (!label || !values.length) return;
+      const question = lastTable.questions.find(item => item.code === netTarget);
+      const codes = new Map(question.rows.filter(row => row.kind === "value" && !row.derived)
+        .map(row => [row.label, row.label]));
+      const nets = [...(liveNets.get(netTarget) || []).filter(net => net.label !== label),
+        { label, values: values.map(value => codes.get(value) ?? value) }];
+      liveNets.set(netTarget, nets);
+      picker.hidden = true;
+      delete picker.dataset.mode;
+      renderNetControl();
+      void renderGrid();
+    });
+
+    netButton.addEventListener("click", openNetPicker);
+    boxSelect.addEventListener("change", () => { void renderGrid(); });
+
     function tableRequest() {
       const request = { questions: layout.rows, sheet: sheetSelect.value };
       if (bannerId) {
@@ -446,6 +528,8 @@
         request.blocks = blocksOfLayout();
       }
       if (layout.filter.length) request.filter_id = layout.filter[0];
+      const overrides = overridesPayload();
+      if (overrides) request.overrides = overrides;
       return request;
     }
 
@@ -609,6 +693,7 @@
       lastTable = table;
       stackStickyHeader(wrap.querySelector("table.bld-grid"));
       renderChart();
+      renderNetControl();
 
       const settings = table.settings;
       const schemes = [];

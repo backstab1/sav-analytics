@@ -39,6 +39,7 @@ def preview_table(
             else None,
             filter_id=str(request.filter_id) if request.filter_id else None,
             sheet=request.sheet,
+            overrides=_overrides(request),
         )
     except ReportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -66,6 +67,7 @@ def export_table(
             if request.blocks
             else None,
             filter_id=str(request.filter_id) if request.filter_id else None,
+            overrides=_overrides(request),
         )
     except ReportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -90,6 +92,15 @@ def export_table(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"},
     )
+
+
+def _overrides(request: TablePreviewRequest) -> dict[str, dict] | None:
+    if not request.overrides:
+        return None
+    return {
+        code: override.model_dump(mode="json", exclude_none=True)
+        for code, override in request.overrides.items()
+    }
 
 
 def _cut_label(project: dict, request: TableExportRequest) -> str | None:
