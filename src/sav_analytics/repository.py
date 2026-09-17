@@ -46,6 +46,7 @@ from .core.report_settings import (
 from .core.review import CONFIRMED_RECOGNITIONS
 from .core.sav_reader import SavReadError, inspect_sav, spss_missing_mask
 from .core.tabular_import import TabularImportError, convert_to_sav, is_tabular
+from .core.wave_import import WaveDiff, compare_structures
 from .project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
 
 STRUCTURE_VERSION = 6
@@ -138,6 +139,93 @@ class ProjectRepository:
         except Exception:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
+
+    def inspect_new_wave(
+        self, project_id: UUID, original_filename: str, source: BinaryIO
+    ) -> tuple[WaveDiff, Path, str, int]:
+        """Разобрать новый файл для проекта: расхождения структуры и сам файл.
+
+        Файл остаётся во временной папке проекта: если аналитик подтвердит
+        замену, он станет источником, если нет — будет удалён.
+        """
+        project = self.get(project_id)
+        tabular = is_tabular(original_filename)
+        if not original_filename.lower().endswith(".sav") and not tabular:
+            raise InvalidUploadError("Допускаются файлы SAV, CSV, TSV и XLSX.")
+        staging = self.root / str(project_id) / f".wave-{uuid4()}"
+        staging.mkdir(parents=True)
+        source_path = staging / "source.sav"
+        suffix = Path(original_filename).suffix.lower()
+        upload_path = staging / f"original{suffix}" if tabular else source_path
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with upload_path.open("xb") as output:
+                while chunk := source.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > self.max_upload_bytes:
+                        raise InvalidUploadError("Размер файла превышает допустимый лимит.")
+                    digest.update(chunk)
+                    output.write(chunk)
+            if size == 0:
+                raise InvalidUploadError("Загружен пустой файл.")
+            if tabular:
+                try:
+                    convert_to_sav(upload_path, source_path)
+                except TabularImportError as exc:
+                    raise InvalidUploadError(str(exc)) from exc
+            inspection = inspect_sav(source_path).to_dict()
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+        return compare_structures(project, inspection), staging, digest.hexdigest(), size
+
+    def replace_source(
+        self, project_id: UUID, original_filename: str, source: BinaryIO
+    ) -> tuple[dict, WaveDiff]:
+        """Заменить исходный файл проекта новой волной, сохранив настройки.
+
+        Настройки вопросов, перекодировки, фильтры, баннеры, формулы и
+        кодификаторы остаются; структура перечитывается из нового файла тем же
+        слиянием, что «Перераспознать структуру». Замена отклоняется, если
+        новый файл разрывает связи конфигурации.
+        """
+        diff, staging, digest, size = self.inspect_new_wave(
+            project_id, original_filename, source
+        )
+        project_dir = self.root / str(project_id)
+        try:
+            if diff.blocking:
+                raise InvalidUploadError(
+                    "Новый файл разрывает связи проекта: " + " ".join(diff.blocking)
+                )
+            project = self.get(project_id)
+            for original in project_dir.glob("original.*"):
+                original.unlink()
+            for item in staging.iterdir():
+                os.replace(item, project_dir / item.name)
+            project["source"] = {"size": size, "sha256": digest}
+            project["original_filename"] = Path(original_filename).name
+            # Проект пишется один раз за запрос: при If-Match вторая запись
+            # увидела бы уже другую ревизию и отказала конфликтом.
+            project = self._merged_structure(project_id, project)
+            for formula in project["configuration"].get("formulas", []):
+                counts = self._formula_counts(project_id, project, formula)
+                for variable in project["inspection"]["variables"]:
+                    if variable.get("formula_id") == formula["id"]:
+                        variable.update(formula_variable(formula, counts))
+                for question in project["configuration"]["questions"]:
+                    if question.get("formula_id") == formula["id"]:
+                        question.update(
+                            valid_count=counts["valid_count"],
+                            missing_count=counts["missing_count"],
+                        )
+            for codeframe in project["configuration"].get("codeframes", []):
+                self._sync_codeframe(project_id, project, codeframe)
+            self._write_project(project_id, project)
+            return project, diff
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
 
     def list(self) -> list[dict]:
         projects = []
@@ -894,6 +982,13 @@ class ProjectRepository:
         return self._refresh_structure_data(project_id, project)
 
     def _refresh_structure_data(self, project_id: UUID, project: dict) -> dict:
+        """Перечитать структуру из SAV и записать проект."""
+        project = self._merged_structure(project_id, project)
+        self._write_project(project_id, project)
+        return project
+
+    def _merged_structure(self, project_id: UUID, project: dict) -> dict:
+        """То же слияние без записи: чтобы за запрос проект писался один раз."""
         source_path = self.root / str(project_id) / "source.sav"
         refreshed = inspect_sav(source_path).to_dict()
         previous = project["configuration"]["questions"]
@@ -961,7 +1056,6 @@ class ProjectRepository:
         project["configuration"]["questions"] = merged
         project["configuration"]["structure_version"] = STRUCTURE_VERSION
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
-        self._write_project(project_id, project)
         return project
 
     def create_banner(self, project_id: UUID, definition: dict) -> dict:

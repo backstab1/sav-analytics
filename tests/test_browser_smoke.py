@@ -1133,3 +1133,51 @@ def test_net_group_is_built_on_the_table_screen_without_saving(
     page.click("#table-body tr[data-code='BRAND'] .question-cell")
     expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#net-list")).not_to_contain_text("Любая марка")
+
+
+def test_new_wave_shows_the_diff_and_replaces_data(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    second = tmp_path / "wave2.sav"
+    size = 120
+    pyreadstat.write_sav(
+        pd.DataFrame(
+            {
+                "ID": range(1, size + 1),
+                "SEX": [1 if index % 2 else 2 for index in range(size)],
+                "AGE": [18 + (index * 5) % 50 for index in range(size)],
+                "BRAND": [1 if index % 3 else 2 for index in range(size)],
+                "SCORE": [index % 11 for index in range(size)],
+                "CITY": [1 for _ in range(size)],
+            }
+        ),
+        second,
+        column_labels={
+            "ID": "Номер интервью",
+            "SEX": "Ваш пол",
+            "AGE": "Возраст, полных лет",
+            "BRAND": "Какой маркой пользуетесь",
+            "SCORE": "Готовность рекомендовать",
+            "CITY": "Город",
+        },
+        variable_value_labels={
+            "SEX": {1: "Мужчина", 2: "Женщина"},
+            "BRAND": {1: "Первая", 2: "Вторая"},
+        },
+    )
+
+    page.click("#export-toggle")
+    page.set_input_files("#wave-file", str(second))
+    expect(page.locator("#wave-sheet")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#wave-body")).to_contain_text("CITY", timeout=UI_TIMEOUT)
+    expect(page.locator("#wave-body")).to_contain_text("станет 120")
+
+    page.click("#wave-apply")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Данные проекта заменены", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#table-body tr[data-code='CITY']")).to_be_visible(timeout=UI_TIMEOUT)

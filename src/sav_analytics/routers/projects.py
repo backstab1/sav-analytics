@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Annotated, Literal
@@ -123,6 +124,48 @@ def refresh_structure(
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
     except SavReadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{project_id}/source/diff")
+def inspect_wave(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+    file: Annotated[UploadFile, File()],
+) -> dict:
+    """Что изменится в структуре, если заменить данные проекта этим файлом."""
+    try:
+        diff, staging, _, _ = repository.inspect_new_wave(
+            project_id, file.filename or "wave.sav", file.file
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SavReadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # Файл нужен был только для разбора: замену аналитик подтверждает отдельно.
+    shutil.rmtree(staging, ignore_errors=True)
+    return diff.to_dict()
+
+
+@router.put("/{project_id}/source")
+def replace_source(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+    file: Annotated[UploadFile, File()],
+) -> dict:
+    """Заменить данные проекта новой волной, сохранив настройки."""
+    try:
+        project, diff = repository.replace_source(
+            project_id, file.filename or "wave.sav", file.file
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SavReadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"project": project, "diff": diff.to_dict()}
 
 
 @router.get("/{project_id}/source")
