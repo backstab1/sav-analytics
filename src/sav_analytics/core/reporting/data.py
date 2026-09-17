@@ -167,6 +167,7 @@ def prepare_report_data(
         "show_charts": report_settings["show_charts"],
         "secondary_confidence_level": report_settings["secondary_confidence_level"],
         "overall_tests": report_settings["overall_tests"],
+        "correlations": report_settings["correlations"],
     }
     return ReportData(
         frame=frame,

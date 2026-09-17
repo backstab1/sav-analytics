@@ -225,6 +225,10 @@ class ReportFormats:
     def overall_blank(self, *, separated: bool = False) -> Any:
         return self.get(**self._frame(separated=separated, derived=True))
 
+    def correlation(self, *, significant: bool) -> Any:
+        """Ячейка листа Correlations: два знака, значимое — полужирным."""
+        return self.get(num_format="0.00", font_color=INK, bold=significant, border=1)
+
     def absent(self, *, separated: bool = False, derived: bool = False) -> Any:
         """Нет значения: бледное тире вместо пустоты, чтобы строка не рвалась."""
         return self.get(

@@ -246,6 +246,8 @@ function reportStatisticsColumn(settings) {
             { value: "0.9", label: "90%" },
             { value: "0.8", label: "80%" },
           ], String(settings.secondary_confidence_level ?? ""))}
+          ${statToggle("correlations", "Лист Correlations", settings.correlations,
+            "Отдельный лист книги: связи числовых вопросов между собой, с поправкой на множественность")}
           ${statToggle("overall", "Общие тесты", settings.overall_tests,
             "Хи-квадрат для распределений и Welch ANOVA для средних по каждому блоку баннера")}
           ${statToggle("bonferroni", "Поправка Bonferroni", settings.bonferroni,
@@ -387,6 +389,7 @@ function reportSettingsPayload(settings) {
     show_charts: settings.show_charts,
     secondary_confidence_level: settings.secondary_confidence_level ?? null,
     overall_tests: settings.overall_tests,
+    correlations: settings.correlations,
   };
 }
 
@@ -423,6 +426,7 @@ function statPatch(name, value) {
   if (name === "confidence") return { confidence_level: Number(value) };
   if (name === "secondary") return { secondary_confidence_level: value ? Number(value) : null };
   if (name === "overall") return { overall_tests: value === "on" };
+  if (name === "correlations") return { correlations: value === "on" };
   if (name === "pairwise") return { compare_pairwise: value === "on" };
   if (name === "bonferroni") return { bonferroni: value === "on" };
   if (name === "pvalues") return { show_p_values: value === "on" };

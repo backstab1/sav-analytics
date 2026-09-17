@@ -79,6 +79,7 @@ class StoredReportSettings(_StoredModel):
     show_charts: bool = False
     secondary_confidence_level: float | None = Field(default=None, gt=0, lt=1)
     overall_tests: bool = False
+    correlations: bool = False
 
 
 class StoredConfiguration(_StoredModel):

@@ -202,7 +202,7 @@ def analyse_cards(
             results.append(analyse_pair(card, project, frame, mask, weighted=weighted))
         except AssociationError as exc:
             results.append(_failed(card, str(exc)))
-    _benjamini_hochberg(results)
+    adjust_benjamini_hochberg(results)
     for result in results:
         result["conclusion"] = _conclusion(result)
     return results
@@ -242,7 +242,7 @@ def analyse_pair(
     if first.kind == "categorical" and second.kind == "categorical":
         return {**base, **_categorical_pair(first, second, rows)}
     if first.kind == "numeric" and second.kind == "numeric":
-        return {**base, **_numeric_pair(first, second, rows)}
+        return {**base, **numeric_correlation(first, second, rows)}
     categorical, numeric = (first, second) if first.kind == "categorical" else (second, first)
     return {**base, **_means_pair(categorical, numeric, rows)}
 
@@ -368,7 +368,8 @@ def _means_pair(categorical: Variable, numeric: Variable, rows: pd.Series) -> di
     }
 
 
-def _numeric_pair(first: Variable, second: Variable, rows: pd.Series) -> dict[str, Any]:
+def numeric_correlation(first: Variable, second: Variable, rows: pd.Series) -> dict[str, Any]:
+    """Связь двух числовых переменных: Пирсон, при выбросах — Спирмен."""
     both = pd.concat([first.series[rows], second.series[rows]], axis=1).dropna()
     n = len(both)
     if n < 3 or both.iloc[:, 0].nunique() < 2 or both.iloc[:, 1].nunique() < 2:
@@ -410,7 +411,8 @@ def _skipped(effect_kind: str, n: int, reason: str) -> dict[str, Any]:
     return {"performed": False, "effect_kind": effect_kind, "n": n, "reason": reason}
 
 
-def _benjamini_hochberg(results: list[dict[str, Any]]) -> None:
+def adjust_benjamini_hochberg(results: list[dict[str, Any]]) -> None:
+    """Поправка на множественность по всем выполненным тестам набора."""
     performed = [result for result in results if result.get("performed")]
     count = len(performed)
     ordered = sorted(performed, key=lambda result: result["p_value"])

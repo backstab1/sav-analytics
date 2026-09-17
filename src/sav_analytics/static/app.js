@@ -54,6 +54,7 @@ const defaultReportSettings = Object.freeze({
   show_charts: false,
   secondary_confidence_level: null,
   overall_tests: false,
+  correlations: false,
 });
 
 const scaleMetricOptions = [

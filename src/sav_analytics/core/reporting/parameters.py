@@ -84,6 +84,12 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
             if settings.get("overall_tests")
             else "не выполняются",
         ),
+        (
+            "Лист Correlations",
+            "связи числовых вопросов, без веса"
+            if settings.get("correlations")
+            else "не выводится",
+        ),
         ("Замечания проверки", _findings_line(project, data)),
     ]
 

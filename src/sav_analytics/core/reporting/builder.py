@@ -7,6 +7,7 @@ from typing import Any, TextIO
 
 import xlsxwriter
 
+from .correlations import correlation_matrix, write_correlations
 from .data import prepare_report_data
 from .excel_layout import _write_charts, _write_contents, _write_parameters, _write_topline
 from .models import StatisticalAuditEntry, ToplineArtifacts
@@ -66,6 +67,8 @@ def build_topline_artifacts(
     parameters = workbook.add_worksheet("Параметры")
     show_charts = bool(data.statistical_settings.get("show_charts"))
     chart_sheet = workbook.add_worksheet("Графики") if show_charts else None
+    show_correlations = bool(data.statistical_settings.get("correlations"))
+    correlation_sheet = workbook.add_worksheet("Correlations") if show_correlations else None
     chart_rows: list[tuple[dict[str, Any], list[int]]] = []
     main_rows = _write_topline(
         main,
@@ -96,6 +99,8 @@ def build_topline_artifacts(
     _write_parameters(parameters, report_parameters(project, data), formats)
     if chart_sheet is not None:
         _write_charts(workbook, chart_sheet, chart_rows, data.columns, formats)
+    if correlation_sheet is not None:
+        write_correlations(correlation_sheet, correlation_matrix(data, project), formats)
     workbook.close()
     advance("Запись Excel")
     audit_writer.finish()

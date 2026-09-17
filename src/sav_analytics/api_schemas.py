@@ -272,6 +272,8 @@ class ReportSettingsDefinition(BaseModel):
     secondary_confidence_level: float | None = Field(default=None, gt=0, lt=1)
     # Хи-квадрат и Welch ANOVA по блокам баннера.
     overall_tests: bool = False
+    # Лист Correlations: связи числовых вопросов между собой.
+    correlations: bool = False
 
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:
