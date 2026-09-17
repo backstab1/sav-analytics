@@ -319,3 +319,46 @@ def test_history_endpoint_answers_for_a_project_without_runs(tmp_path: Path) -> 
     finally:
         app.dependency_overrides.clear()
 
+
+def test_table_export_is_kept_and_listed_in_history(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from sav_analytics.api import app, get_repository
+
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project = client.post(
+                "/api/projects",
+                files={"file": ("research.sav", stream, "application/octet-stream")},
+            ).json()
+            base = f"/api/projects/{project['id']}"
+            export = client.post(
+                f"{base}/tables/export",
+                json={"questions": ["Q1"], "scope": "table"},
+            )
+            assert export.status_code == 200, export.text
+
+            runs = client.get(f"{base}/reports/history").json()["runs"]
+            assert [run["kind"] for run in runs] == ["table"]
+            run = runs[0]
+            assert run["summary"]["scope"] == "table"
+            assert run["summary"]["questions"] == 1
+
+            saved = client.get(run["downloads"]["table"])
+            assert saved.status_code == 200
+            assert saved.content == export.content
+
+            # Повреждённая выгрузка не отдаётся, как и сборка отчёта.
+            stored = next(
+                (repository.report_cache_dir(project["id"]) / "tables").glob("*/table.xlsx")
+            )
+            stored.write_bytes(b"broken")
+            assert client.get(run["downloads"]["table"]).status_code == 404
+            assert client.get(f"{base}/reports/history").json()["runs"] == []
+    finally:
+        app.dependency_overrides.clear()
+

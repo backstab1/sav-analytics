@@ -54,19 +54,24 @@ function renderRunHistory(runs) {
     const when = new Date(run.created_at).toLocaleString("ru-RU", {
       day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
     });
+    const table = run.kind === "table";
     const parts = [`ревизия <b>${escapeHtml(run.configuration_revision)}</b>`];
     const summary = run.summary;
     if (summary) {
+      if (table) parts.unshift(summary.scope === "table" ? "выгрузка таблицы" : "отчёт по разрезу «Таблиц»");
       parts.push(escapeHtml(plural(summary.questions, "вопрос", "вопроса", "вопросов")));
-      parts.push(summary.banner ? `баннер «${escapeHtml(summary.banner)}»` : "только Total");
+      parts.push(summary.banner ? `разрез «${escapeHtml(summary.banner)}»` : "только Total");
       if (summary.filter) parts.push(`фильтр «${escapeHtml(summary.filter)}»`);
       if (summary.weight) parts.push(`вес ${escapeHtml(summary.weight)}`);
     }
     const current = run.current ? '<span class="run-current">текущие настройки</span>' : "";
+    const links = table
+      ? `<a href="${escapeAttribute(run.downloads.table)}">Excel</a>`
+      : `<a href="${escapeAttribute(run.downloads.topline)}">Excel</a><a href="${escapeAttribute(run.downloads.statistics)}">statistics.txt</a>`;
     return `<div class="run">
       <time datetime="${escapeAttribute(run.created_at)}">${escapeHtml(when)}${current}</time>
       <span class="run-meta">${parts.join(" · ")}</span>
-      <span class="run-links"><a href="${escapeAttribute(run.downloads.topline)}">Excel</a><a href="${escapeAttribute(run.downloads.statistics)}">statistics.txt</a></span>
+      <span class="run-links">${links}</span>
     </div>`;
   }).join("");
 }

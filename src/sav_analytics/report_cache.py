@@ -149,11 +149,10 @@ def list_report_runs(
     повреждённая сборка в историю не попадает и скачать её оттуда нельзя.
     """
     root = repository.report_cache_dir(project_id) / "artifacts"
-    if not root.is_dir():
-        return []
     current = report_cache_key(project)
     runs = []
-    for directory in root.iterdir():
+    # Выгрузки «Таблиц» бывают и до первой сборки отчёта.
+    for directory in root.iterdir() if root.is_dir() else []:
         if not directory.is_dir() or not _ARTIFACT_ID.fullmatch(directory.name):
             continue
         prepared = _cached_report(repository, project_id, directory.name)
@@ -179,6 +178,7 @@ def list_report_runs(
                     for name, meta in (manifest.get("files") or {}).items()
                     if isinstance(meta, dict)
                 },
+                "kind": "report",
                 "current": directory.name == current,
                 "downloads": {
                     "topline": f"{base}/topline.xlsx",
@@ -186,7 +186,8 @@ def list_report_runs(
                 },
             }
         )
-    return sorted(runs, key=lambda run: run["created_at"], reverse=True)
+    runs.extend(list_table_exports(repository, project_id))
+    return sorted(runs, key=lambda run: run["created_at"] or "", reverse=True)
 
 
 def report_cache_key(project: dict[str, Any]) -> str:
@@ -318,3 +319,95 @@ def _configuration_revision(project: dict[str, Any]) -> int:
 def _file_metadata(path: Path) -> dict[str, Any]:
     content = path.read_bytes()
     return {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
+
+
+TABLE_EXPORTS = "tables"
+
+
+def store_table_export(
+    repository: ProjectRepository,
+    project_id: UUID,
+    project: dict[str, Any],
+    content: bytes,
+    summary: dict[str, Any],
+) -> str:
+    """Сохранить разовую выгрузку «Таблиц» рядом со сборками отчёта.
+
+    Такая книга — не сборка отчёта: у неё свой разрез и подмножество вопросов,
+    и `statistics.txt` у неё нет. Но она уходит клиенту, поэтому остаётся в
+    проекте неизменной и попадает в историю: видно, что именно выгружали.
+    """
+    root = repository.report_cache_dir(project_id) / TABLE_EXPORTS
+    root.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(content).hexdigest()
+    artifact_dir = root / digest[:_ARTIFACT_ID_LENGTH]
+    artifact_dir.mkdir(exist_ok=True)
+    (artifact_dir / "table.xlsx").write_bytes(content)
+    manifest = {
+        "kind": "table",
+        "created_at": _now(),
+        "configuration_revision": int(project["configuration"]["revision"]),
+        "source_sha256": project.get("source", {}).get("sha256"),
+        "summary": summary,
+        "files": {"table.xlsx": {"size": len(content), "sha256": digest}},
+    }
+    (artifact_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return artifact_dir.name
+
+
+def table_export_path(
+    repository: ProjectRepository, project_id: UUID, artifact_id: str
+) -> Path | None:
+    """Файл выгрузки, если он на месте и не изменился после записи."""
+    if not _ARTIFACT_ID.fullmatch(artifact_id):
+        return None
+    artifact_dir = repository.report_cache_dir(project_id) / TABLE_EXPORTS / artifact_id
+    path = artifact_dir / "table.xlsx"
+    manifest_path = artifact_dir / "manifest.json"
+    if not path.is_file() or not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        expected = manifest["files"]["table.xlsx"]
+    except (OSError, ValueError, KeyError):
+        return None
+    content = path.read_bytes()
+    if len(content) != expected.get("size"):
+        return None
+    if hashlib.sha256(content).hexdigest() != expected.get("sha256"):
+        return None
+    return path
+
+
+def list_table_exports(
+    repository: ProjectRepository, project_id: UUID
+) -> list[dict[str, Any]]:
+    root = repository.report_cache_dir(project_id) / TABLE_EXPORTS
+    if not root.is_dir():
+        return []
+    runs = []
+    for directory in sorted(root.iterdir()):
+        if not directory.is_dir():
+            continue
+        if table_export_path(repository, project_id, directory.name) is None:
+            continue
+        manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+        runs.append(
+            {
+                "artifact_id": directory.name,
+                "kind": "table",
+                "created_at": manifest.get("created_at"),
+                "configuration_revision": manifest.get("configuration_revision"),
+                "source_sha256": manifest.get("source_sha256"),
+                "summary": manifest.get("summary"),
+                "sizes": {"table.xlsx": manifest["files"]["table.xlsx"]["size"]},
+                "current": False,
+                "downloads": {
+                    "table": f"/api/projects/{project_id}/tables/exports/{directory.name}"
+                },
+            }
+        )
+    return runs
+
