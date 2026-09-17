@@ -872,3 +872,16 @@ def test_banner_category_can_be_hidden_and_renamed(
     expect(page.locator("#banner-preview")).not_to_contain_text("Мужчина")
     expect(page.locator("#banner-preview-count")).to_have_text("2 колонок")
 
+
+
+def test_derived_sav_downloads_from_the_export_menu(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    target = _download_artifact(page, "#download-derived-sav", tmp_path / "derived.sav")
+
+    _, meta = pyreadstat.read_sav(target, metadataonly=True)
+    assert meta.column_names == ["ID", "SEX", "AGE", "BRAND", "SCORE"]
