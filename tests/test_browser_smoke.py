@@ -920,3 +920,41 @@ def test_question_settings_are_copied_from_the_bulk_bar(
     expect(page.locator("#toast-container")).to_contain_text(
         "Настройки SEX перенесены", timeout=UI_TIMEOUT
     )
+
+
+def test_selected_questions_move_as_a_block_and_the_move_can_be_undone(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    rows = page.locator("#table-body tr[data-code]")
+    expect(rows).to_have_count(5, timeout=UI_TIMEOUT)
+    original = [rows.nth(index).get_attribute("data-code") for index in range(5)]
+
+    page.check("#table-body tr[data-code='BRAND'] .select-question")
+    page.check("#table-body tr[data-code='SCORE'] .select-question")
+    page.click('#bulk-bar [data-bulk="move-up"]')
+    moved = [code for code in original if code not in {"BRAND", "SCORE"}]
+    expected = original.copy()
+    for code in ("BRAND", "SCORE"):
+        index = expected.index(code)
+        if index and expected[index - 1] not in {"BRAND", "SCORE"}:
+            expected[index - 1], expected[index] = expected[index], expected[index - 1]
+    expect(rows.nth(0)).to_have_attribute("data-code", expected[0], timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body tr[data-code]")).to_have_count(5)
+    for index, code in enumerate(expected):
+        expect(rows.nth(index)).to_have_attribute("data-code", code, timeout=UI_TIMEOUT)
+    assert moved
+
+    page.click('#bulk-bar [data-bulk="undo"]')
+    for index, code in enumerate(original):
+        expect(rows.nth(index)).to_have_attribute("data-code", code, timeout=UI_TIMEOUT)
+
+    # «Собрать вместе» ставит выбранные подряд с места первого из них.
+    assert page.evaluate(
+        "shiftedQuestionOrder(['A', 'B', 'C', 'D', 'E'], new Set(['B', 'D']), 'gather')"
+    ) == ["A", "B", "D", "C", "E"]
+    assert page.evaluate(
+        "shiftedQuestionOrder(['A', 'B', 'C'], new Set(['A']), 'move-up')"
+    ) == ["A", "B", "C"]

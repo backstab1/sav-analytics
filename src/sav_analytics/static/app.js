@@ -2489,7 +2489,46 @@ function bulkSnapshot(codes, changed) {
   });
 }
 
+/* Групповая перестановка: выбранные вопросы двигаются блоком, сохраняя свой
+   взаимный порядок. Функция чистая — возвращает новый порядок кодов. */
+function shiftedQuestionOrder(codes, selected, action) {
+  const order = [...codes];
+  if (action === "move-up") {
+    for (let index = 1; index < order.length; index += 1) {
+      if (selected.has(order[index]) && !selected.has(order[index - 1])) {
+        [order[index - 1], order[index]] = [order[index], order[index - 1]];
+      }
+    }
+  } else if (action === "move-down") {
+    for (let index = order.length - 2; index >= 0; index -= 1) {
+      if (selected.has(order[index]) && !selected.has(order[index + 1])) {
+        [order[index], order[index + 1]] = [order[index + 1], order[index]];
+      }
+    }
+  } else if (action === "gather") {
+    const first = order.findIndex(code => selected.has(code));
+    const picked = order.filter(code => selected.has(code));
+    const rest = order.filter(code => !selected.has(code));
+    const before = order.slice(0, first).filter(code => !selected.has(code)).length;
+    rest.splice(before, 0, ...picked);
+    return rest;
+  }
+  return order;
+}
+
+async function saveQuestionOrder(codes) {
+  currentProject = await api(`/api/projects/${currentProject.id}/questions/order`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ codes }),
+  });
+}
+
 async function undoBulk(snapshot) {
+  if (snapshot.order) {
+    await saveQuestionOrder(snapshot.order);
+    return;
+  }
   // Возвращаем поле за полем, группируя вопросы с одинаковым прежним значением:
   // сначала роль и тип, потом база и включение, которое роль могла сбросить.
   for (const field of BULK_FIELDS) {
@@ -2552,6 +2591,23 @@ document.querySelector("#bulk-bar").addEventListener("click", async event => {
     } finally {
       button.disabled = false;
       renderProject();
+      updateBulkBar();
+    }
+    return;
+  }
+  if (["move-up", "move-down", "gather"].includes(action)) {
+    const before = configuredQuestions().map(question => question.code);
+    const after = shiftedQuestionOrder(before, selectedQuestionCodes, action);
+    if (after.join("\n") === before.join("\n")) return;
+    button.disabled = true;
+    try {
+      await saveQuestionOrder(after);
+      lastBulkUndo = { order: before };
+      renderProject();
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      button.disabled = false;
       updateBulkBar();
     }
     return;
