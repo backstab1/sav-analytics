@@ -885,3 +885,21 @@ def test_derived_sav_downloads_from_the_export_menu(
 
     _, meta = pyreadstat.read_sav(target, metadataonly=True)
     assert meta.column_names == ["ID", "SEX", "AGE", "BRAND", "SCORE"]
+
+
+def test_ranges_are_suggested_from_the_data(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#table-body tr[data-code='AGE'] .question-cell")
+    page.locator("#question-recodings [data-new-recoding]").click()
+    expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.select_option("#range-method", "quantiles")
+    page.fill("#range-groups", "3")
+    page.click("#suggest-ranges")
+    expect(page.locator("#range-list .range-row")).to_have_count(3, timeout=UI_TIMEOUT)
+    expect(page.locator("#range-suggest-note")).to_contain_text("Респондентов в группах")
+

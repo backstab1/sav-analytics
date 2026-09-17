@@ -97,6 +97,12 @@ class NumericRecodeDefinition(BaseModel):
     categories: list[RangeCategory] = Field(min_length=2, max_length=100)
 
 
+class RangeSuggestionRequest(BaseModel):
+    variable: str = Field(min_length=1, max_length=64)
+    method: Literal["quantiles", "equal"] = "quantiles"
+    groups: int = Field(default=4, ge=2, le=20)
+
+
 class CategoryGroup(BaseModel):
     label: str = Field(min_length=1, max_length=250)
     values: list[str | int | float] = Field(min_length=1, max_length=500)

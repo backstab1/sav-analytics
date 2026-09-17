@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from .filtering import (
@@ -268,4 +269,92 @@ def _conditional_preview(
         "out_of_range_count": unassigned,
         "rows": rows,
     }
+
+
+def suggest_ranges(
+    path: str | Path,
+    variable: dict[str, Any],
+    method: str,
+    groups: int,
+    project: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Диапазоны числовой переменной: равные по численности группы или интервалы.
+
+    Границы диапазона включаются с обеих сторон, а пересекаться диапазоны не
+    могут, поэтому следующая группа начинается на шаг сетки выше предыдущей.
+    Шаг — точность самих данных (до трёх знаков): значение с такой точностью
+    не может попасть между группами. Совпадающие границы квантилей
+    схлопываются, и групп становится меньше — это видно в ответе.
+    """
+    if variable.get("storage_type") != "numeric":
+        raise RecodingError("Разбить на диапазоны можно только числовую переменную.")
+    if method not in {"quantiles", "equal"}:
+        raise RecodingError("Неизвестный способ разбиения.")
+    if not 2 <= groups <= 20:
+        raise RecodingError("Групп должно быть от 2 до 20.")
+    name = variable["name"]
+    frame = read_project_frame(path, project, [name])
+    values = pd.to_numeric(frame[name], errors="coerce").dropna()
+    if values.nunique() < 2:
+        raise RecodingError("У переменной меньше двух различных значений.")
+    decimals = _decimals(values)
+    step = 10.0 ** -decimals
+    low, high = float(values.min()), float(values.max())
+    if method == "quantiles":
+        raw_cuts = [float(values.quantile(index / groups)) for index in range(1, groups)]
+    else:
+        width = (high - low) / groups
+        raw_cuts = [low + width * index for index in range(1, groups)]
+    cuts: list[float] = []
+    for cut in raw_cuts:
+        # Верхняя граница группы — на сетке данных, не выше квантиля.
+        snapped = round(np.floor(cut / step + 1e-9) * step, decimals)
+        if low <= snapped < high and (not cuts or snapped > cuts[-1]):
+            cuts.append(snapped)
+    if not cuts:
+        raise RecodingError("Значения слишком сосредоточены: разбить на группы не удалось.")
+    categories = []
+    for index in range(len(cuts) + 1):
+        lower = None if index == 0 else round(cuts[index - 1] + step, decimals)
+        upper = None if index == len(cuts) else cuts[index]
+        mask = pd.Series(True, index=values.index)
+        if lower is not None:
+            mask &= values >= lower
+        if upper is not None:
+            mask &= values <= upper
+        categories.append(
+            {
+                "label": _range_label(lower, upper, decimals),
+                "lower": lower,
+                "upper": upper,
+                "count": int(mask.sum()),
+            }
+        )
+    return {
+        "variable": name,
+        "method": method,
+        "requested": groups,
+        "decimals": decimals,
+        "valid": int(values.size),
+        "categories": categories,
+    }
+
+
+def _decimals(values: pd.Series) -> int:
+    for decimals in range(4):
+        scaled = values * 10**decimals
+        if bool(np.all(np.abs(scaled - np.round(scaled)) < 1e-6)):
+            return decimals
+    return 3
+
+
+def _range_label(lower: float | None, upper: float | None, decimals: int) -> str:
+    def number(value: float) -> str:
+        return f"{value:.{decimals}f}".replace(".", ",")
+
+    if lower is None:
+        return f"до {number(upper)}"
+    if upper is None:
+        return f"{number(lower)} и больше"
+    return f"{number(lower)}–{number(upper)}"
 

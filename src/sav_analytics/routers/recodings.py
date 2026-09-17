@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
-from ..api_schemas import RecodeDefinition
+from ..api_schemas import RangeSuggestionRequest, RecodeDefinition
 from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.recoding import (
     RecodingError,
     calculate_recode_preview,
     recode_source_values,
+    suggest_ranges,
     validate_recode,
 )
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -37,6 +38,34 @@ def recoding_source_values(
         if source is None:
             raise RecodingError("Исходная переменная не найдена в SAV.")
         return recode_source_values(repository.source_path(project_id), source, project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except RecodingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/suggest-ranges")
+def suggest_recoding_ranges(
+    project_id: UUID,
+    request: RangeSuggestionRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Диапазоны по квантилям или равным интервалам — заготовка для редактора."""
+    try:
+        project = repository.get(project_id)
+        source = next(
+            (
+                item
+                for item in project["inspection"]["variables"]
+                if item["name"] == request.variable
+            ),
+            None,
+        )
+        if source is None:
+            raise RecodingError("Исходная переменная не найдена в SAV.")
+        return suggest_ranges(
+            repository.source_path(project_id), source, request.method, request.groups, project
+        )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
     except RecodingError as exc:

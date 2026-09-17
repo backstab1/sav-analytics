@@ -228,6 +228,39 @@ document.querySelector("#close-recode-editor").addEventListener("click", () => {
   if (confirmDiscard(recodeEditor)) closeRecoding();
 });
 document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
+// Заготовка диапазонов по данным: равные по численности группы или интервалы.
+document.querySelector("#suggest-ranges").addEventListener("click", async () => {
+  const note = document.querySelector("#range-suggest-note");
+  const variable = document.querySelector("#recode-source").value;
+  note.hidden = false;
+  if (!variable) {
+    note.textContent = "Сначала выберите исходную переменную.";
+    return;
+  }
+  note.textContent = "Считаем…";
+  try {
+    const suggestion = await api(`/api/projects/${currentProject.id}/recodings/suggest-ranges`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        variable,
+        method: document.querySelector("#range-method").value,
+        groups: Number(document.querySelector("#range-groups").value),
+      }),
+    });
+    const list = document.querySelector("#range-list");
+    list.innerHTML = "";
+    suggestion.categories.forEach(category => addRangeRow(category));
+    const counts = suggestion.categories.map(category => category.count.toLocaleString("ru-RU")).join(" · ");
+    const fewer = suggestion.categories.length < suggestion.requested
+      ? ` Групп ${suggestion.categories.length} вместо ${suggestion.requested}: у многих одинаковые значения.`
+      : "";
+    note.textContent = `Респондентов в группах: ${counts}.${fewer}`;
+    markInspectorDirty(recodeEditor);
+  } catch (error) {
+    note.textContent = error.message;
+  }
+});
 document.querySelector("#add-category-group").addEventListener("click", () => {
   const count = document.querySelectorAll("#category-group-list .category-group").length;
   addCategoryGroup(`Группа ${count + 1}`);
