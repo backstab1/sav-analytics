@@ -167,7 +167,8 @@ def export_sav(
     except SavExportError as exc:
         target.unlink(missing_ok=True)
         # Заголовок говорит экрану, что выгрузка без длинных текстов поможет.
-        headers = {"X-Long-Text": ",".join(exc.long_text)} if exc.long_text else None
+        # Только флаг: имена переменных бывают кириллическими, а заголовок — нет.
+        headers = {"X-Long-Text": "omit"} if exc.long_text else None
         raise HTTPException(status_code=422, detail=str(exc), headers=headers) from exc
     except Exception:
         target.unlink(missing_ok=True)
