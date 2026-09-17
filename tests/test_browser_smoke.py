@@ -313,10 +313,15 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     page.keyboard.press("Escape")
     expect(page.locator("#bld-picker")).to_be_hidden(timeout=UI_TIMEOUT)
 
-    # Непостроенный раздел говорит, что в нём будет, и не показывает чисел.
+    # «Анализ» — свой раздел с карточками связи.
     _open_view(page, "analysis")
-    expect(page.locator("#section-soon")).to_contain_text("Раздел строится", timeout=UI_TIMEOUT)
+    expect(page.locator("#section-analysis")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#section-soon")).to_be_hidden()
     expect(page.locator("#section-tables")).to_be_hidden()
+    # Непостроенный раздел говорит, что в нём будет, и не показывает чисел.
+    _open_view(page, "text")
+    expect(page.locator("#section-soon")).to_contain_text("Раздел строится", timeout=UI_TIMEOUT)
+    expect(page.locator("#section-analysis")).to_be_hidden()
 
     page.click("#screen-nav button[data-screen='home']")
     expect(page.locator("#screen-home")).to_be_visible(timeout=UI_TIMEOUT)
@@ -958,3 +963,25 @@ def test_selected_questions_move_as_a_block_and_the_move_can_be_undone(
     assert page.evaluate(
         "shiftedQuestionOrder(['A', 'B', 'C'], new Set(['A']), 'move-up')"
     ) == ["A", "B", "C"]
+
+
+def test_analysis_card_shows_the_test_chosen_by_types(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click(".tabs button[data-view='analysis']")
+    expect(page.locator("#section-analysis")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#analysis-cards")).to_contain_text("Карточек пока нет")
+    page.select_option("#analysis-a", "question:SEX")
+    page.select_option("#analysis-b", "question:BRAND")
+    page.click("#add-analysis-card")
+    card = page.locator("#analysis-cards .analysis-card").first
+    expect(card).to_contain_text("Хи-квадрат Пирсона", timeout=UI_TIMEOUT)
+    expect(card).to_contain_text("p с поправкой BH")
+
+    card.locator("[data-delete-card]").click()
+    expect(page.locator("#analysis-cards")).to_contain_text("Карточек пока нет", timeout=UI_TIMEOUT)
+
