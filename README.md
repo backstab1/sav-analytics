@@ -265,7 +265,8 @@ src/sav_analytics/
 ├── api_dependencies.py # зависимости HTTP-слоя
 ├── api_schemas.py     # Pydantic-модели запросов
 ├── project_models.py  # версионированный контракт сохраняемого проекта
-├── routers/           # projects, questions, recodings, banners, filters, weights, reports, report_settings
+├── routers/           # projects, questions, recodings, formulas, banners, filters, weights,
+│                      # reports, report_settings, tables, analysis, codeframes
 ├── repository.py      # локальное хранилище проектов и конфигураций
 ├── report_cache.py    # immutable-артефакты отчёта по cache key
 ├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту
@@ -281,6 +282,12 @@ src/sav_analytics/
 │   ├── weight_validation.py # пригодность готового веса: роль и распределение
 │   ├── not_applicable.py  # коды пропуска по ветке анкеты и поиск кандидатов
 │   ├── filtering.py   # базы и фильтры
+│   ├── formulas.py    # формулы и read_project_frame — чтение SAV с производными столбцами
+│   ├── association.py # карточки связи двух переменных: тест по типам, эффект, BH
+│   ├── open_text.py   # кодификатор открытых ответов: запросы, отметки, темы как столбцы
+│   ├── russian_stemmer.py # стеммер Snowball для запросов тем
+│   ├── sav_export.py  # выгрузка SAV с формулами, перекодировками и весами
+│   ├── sav_writing.py # проверка записанного SAV на поломку длинных строк readstat
 │   ├── report.py      # совместимый публичный фасад отчётов
 │   └── reporting/
 │       ├── data.py         # чтение и подготовка данных отчёта
@@ -292,6 +299,10 @@ src/sav_analytics/
     ├── index.html     # разметка экранов и разделов проекта
     ├── shell.js       # переключение экранов, меню выгрузки, таблица раздела «Таблицы»
     ├── app.js         # работа с проектом: структура, редакторы, отчёт
+    ├── formulas.js    # редактор формул
+    ├── analysis.js    # раздел «Анализ»
+    ├── coding.js      # раздел «Открытые ответы»
+    ├── boot.js        # запуск: грузится последним, после функций всех разделов
     ├── styles.css     # оформление
     └── prototypes/    # макеты раскладки, вне приложения
 ```
