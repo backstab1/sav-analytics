@@ -93,9 +93,9 @@ def test_empty_table_and_unknown_format_are_refused(tmp_path: Path) -> None:
             empty = _upload(client, header_only, "empty.csv")
             assert empty.status_code == 422
             assert "нет строк" in empty.json()["detail"]
-            unknown = _upload(client, workbook, "data.xlsx")
-            assert unknown.status_code == 422
-            assert "CSV" in unknown.json()["detail"]
+            broken = _upload(client, workbook, "data.xlsx")
+            assert broken.status_code == 422
+            assert "XLSX" in broken.json()["detail"]
     finally:
         app.dependency_overrides.clear()
 
@@ -112,4 +112,46 @@ def test_long_texts_breaking_the_sav_writer_are_reported(tmp_path: Path) -> None
 
     with pytest.raises(TabularImportError, match="длиннее 255 байт"):
         convert_to_sav(source, tmp_path / "source.sav")
+
+
+def test_xlsx_first_sheet_becomes_a_project(tmp_path: Path) -> None:
+    import xlsxwriter
+
+    workbook_path = tmp_path / "survey.xlsx"
+    workbook = xlsxwriter.Workbook(str(workbook_path))
+    sheet = workbook.add_worksheet("Ответы")
+    rows = [
+        ["Пол", "Возраст", "Оценка", "Комментарий"],
+        ["Мужчина", 25, 4.5, "Всё понравилось"],
+        ["Женщина", 31, None, "Долго ждал"],
+        [None, None, None, None],
+        ["Женщина", 44, 3, ""],
+    ]
+    for row_index, row in enumerate(rows):
+        for column_index, value in enumerate(row):
+            if value is not None:
+                sheet.write(row_index, column_index, value)
+    workbook.add_worksheet("Черновик").write(0, 0, "не читается")
+    workbook.close()
+
+    _with_client(tmp_path)
+    try:
+        with TestClient(app) as client:
+            response = _upload(client, workbook_path, "survey.xlsx")
+            assert response.status_code == 201, response.text
+            project = response.json()
+            variables = {item["label"]: item for item in project["inspection"]["variables"]}
+            assert set(variables) == {"Пол", "Возраст", "Оценка", "Комментарий"}
+            assert variables["Возраст"]["storage_type"] == "numeric"
+            assert [item["label"] for item in variables["Пол"]["value_labels"]] == [
+                "Мужчина",
+                "Женщина",
+            ]
+            assert project["inspection"]["row_count"] == 3
+
+            original = client.get(f"/api/projects/{project['id']}/source")
+            assert original.status_code == 200
+            assert original.content == workbook_path.read_bytes()
+    finally:
+        app.dependency_overrides.clear()
 

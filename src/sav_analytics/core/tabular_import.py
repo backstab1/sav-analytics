@@ -1,4 +1,4 @@
-"""Импорт CSV и TSV: таблица превращается в SAV, дальше всё как с SAV.
+"""Импорт CSV, TSV и XLSX: таблица превращается в SAV, дальше всё как с SAV.
 
 Опросные сервисы, включая Qualtrics, выгружают CSV. Отдельного пути расчёта
 для них нет: файл один раз преобразуется в SAV при загрузке, а оригинал
@@ -15,20 +15,31 @@
   подписями в порядке первого появления — так ответы «Мужчина» и «Женщина»
   распознаются одиночным выбором и годятся для баннера;
 - остальные текстовые столбцы остаются строками.
+
+XLSX читается без сторонних библиотек: это zip с XML, и первого листа
+достаточно — значения, общие и встроенные строки. Даты Excel хранит числами
+и приходят числами: формат ячейки не читается.
 """
 
 from __future__ import annotations
 
 import csv
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from xml.etree import ElementTree
+from zipfile import BadZipFile, ZipFile
 
 import pandas as pd
 import pyreadstat
 
 from .sav_writing import SavWriteMismatchError, long_text_columns, verify_written_sav
 
-TABULAR_EXTENSIONS = frozenset({".csv", ".tsv"})
+TABULAR_EXTENSIONS = frozenset({".csv", ".tsv", ".xlsx"})
+#: Распакованный лист больше этого — вероятнее zip-бомба, чем анкета.
+MAX_SHEET_BYTES = 512 * 1024 * 1024
+_SHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+_PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 #: Больше различных значений у текстового столбца — это уже не варианты
 #: ответа, а открытый текст.
 MAX_CATEGORIES = 30
@@ -95,6 +106,8 @@ def convert_to_sav(source: Path, target: Path) -> None:
 
 
 def _read_table(source: Path) -> pd.DataFrame:
+    if source.suffix.lower() == ".xlsx":
+        return _read_xlsx(source)
     separator = "\t" if source.suffix.lower() == ".tsv" else None
     for encoding in _ENCODINGS:
         try:
@@ -119,6 +132,103 @@ def _read_table(source: Path) -> pd.DataFrame:
         except (pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
             raise TabularImportError("Файл не удалось прочитать как таблицу CSV.") from exc
     raise TabularImportError("Кодировка файла не распознана: сохраните его в UTF-8.")
+
+
+def _read_xlsx(source: Path) -> pd.DataFrame:
+    """Первый лист книги как таблица строк: первая непустая строка — заголовок."""
+    try:
+        archive = ZipFile(source)
+    except BadZipFile as exc:
+        raise TabularImportError("Файл XLSX повреждён или это не книга Excel.") from exc
+    with archive:
+        names = set(archive.namelist())
+        sheet_path = _first_sheet_path(archive, names)
+        if sheet_path not in names:
+            raise TabularImportError("В книге XLSX не найден лист с данными.")
+        if archive.getinfo(sheet_path).file_size > MAX_SHEET_BYTES:
+            raise TabularImportError("Лист XLSX слишком большой для загрузки.")
+        shared = _shared_strings(archive, names)
+        try:
+            root = ElementTree.fromstring(archive.read(sheet_path))
+        except ElementTree.ParseError as exc:
+            raise TabularImportError("Лист XLSX не удалось прочитать.") from exc
+    rows: list[list[str]] = []
+    for row in root.iter(f"{{{_SHEET_NS}}}row"):
+        values: dict[int, str] = {}
+        for cell in row.iter(f"{{{_SHEET_NS}}}c"):
+            column = _column_index(cell.get("r", ""), len(values))
+            values[column] = _cell_text(cell, shared)
+        width = max(values) + 1 if values else 0
+        rows.append([values.get(index, "") for index in range(width)])
+    rows = [row for row in rows if any(value.strip() for value in row)]
+    if not rows:
+        raise TabularImportError("В таблице нет строк с данными.")
+    header, *body = rows
+    width = max(len(row) for row in rows)
+    header = header + [""] * (width - len(header))
+    body = [row + [""] * (width - len(row)) for row in body]
+    return pd.DataFrame(body, columns=header, dtype=str)
+
+
+def _first_sheet_path(archive: ZipFile, names: set[str]) -> str:
+    """Путь первого листа по workbook.xml и его связям; иначе — sheet1.xml."""
+    default = "xl/worksheets/sheet1.xml"
+    if "xl/workbook.xml" not in names or "xl/_rels/workbook.xml.rels" not in names:
+        return default
+    try:
+        workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+        relations = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    except ElementTree.ParseError:
+        return default
+    sheet = workbook.find(f"{{{_SHEET_NS}}}sheets/{{{_SHEET_NS}}}sheet")
+    if sheet is None:
+        return default
+    relation_id = sheet.get(f"{{{_REL_NS}}}id")
+    for relation in relations.iter(f"{{{_PACKAGE_REL_NS}}}Relationship"):
+        if relation.get("Id") == relation_id:
+            target = relation.get("Target", "")
+            path = PurePosixPath(target.lstrip("/")) if target.startswith("/") else (
+                PurePosixPath("xl") / target
+            )
+            return str(path)
+    return default
+
+
+def _shared_strings(archive: ZipFile, names: set[str]) -> list[str]:
+    if "xl/sharedStrings.xml" not in names:
+        return []
+    root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+    return [
+        "".join(text.text or "" for text in item.iter(f"{{{_SHEET_NS}}}t"))
+        for item in root.iter(f"{{{_SHEET_NS}}}si")
+    ]
+
+
+def _column_index(reference: str, fallback: int) -> int:
+    letters = re.match(r"[A-Z]+", reference)
+    if not letters:
+        return fallback
+    index = 0
+    for letter in letters.group(0):
+        index = index * 26 + (ord(letter) - ord("A") + 1)
+    return index - 1
+
+
+def _cell_text(cell: ElementTree.Element, shared: list[str]) -> str:
+    kind = cell.get("t", "n")
+    if kind == "inlineStr":
+        return "".join(text.text or "" for text in cell.iter(f"{{{_SHEET_NS}}}t"))
+    value = cell.find(f"{{{_SHEET_NS}}}v")
+    raw = "" if value is None or value.text is None else value.text
+    if kind == "s":
+        return shared[int(raw)] if raw.isdigit() and int(raw) < len(shared) else ""
+    if kind in {"str", "e", "b"}:
+        return raw
+    if not raw:
+        return ""
+    number = float(raw)
+    # 1.0 из Excel — это 1: иначе код «1» и «1.0» станут разными категориями.
+    return str(int(number)) if number.is_integer() else repr(number)
 
 
 def _variable_names(headers: list[object]) -> tuple[list[str], list[str]]:

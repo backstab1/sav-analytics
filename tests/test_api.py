@@ -123,8 +123,8 @@ def test_rejects_unsupported_extension(tmp_path: Path) -> None:
             response = client.post(
                 "/api/projects",
                 headers={"X-Request-ID": "upload-test-1"},
-                # CSV и TSV принимаются с импортом таблицы; XLSX — пока нет.
-                files={"file": ("data.xlsx", b"PK\x03\x04", "application/octet-stream")},
+                # SAV, CSV, TSV и XLSX принимаются; документ Word — нет.
+                files={"file": ("data.docx", b"PK\x03\x04", "application/octet-stream")},
             )
         assert response.status_code == 422
         assert response.json()["error_code"] == "UNPROCESSABLE_ENTITY"

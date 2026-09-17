@@ -195,7 +195,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   writeRoute();
   window.scrollTo(0, 0);
   form.reset();
-  fileTitle.textContent = "Перетащите SAV или CSV сюда";
+  fileTitle.textContent = "Перетащите SAV, CSV или XLSX сюда";
   fileCaption.textContent = "или нажмите, чтобы выбрать файл";
   loadProjects();
 });

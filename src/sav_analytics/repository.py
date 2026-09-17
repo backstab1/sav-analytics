@@ -72,7 +72,7 @@ class ProjectRepository:
     def create(self, name: str, original_filename: str, source: BinaryIO) -> dict:
         tabular = is_tabular(original_filename)
         if not original_filename.lower().endswith(".sav") and not tabular:
-            raise InvalidUploadError("Допускаются файлы SAV, CSV и TSV.")
+            raise InvalidUploadError("Допускаются файлы SAV, CSV, TSV и XLSX.")
         project_id = uuid4()
         temporary = self.root / f".{project_id}.uploading"
         destination = self.root / str(project_id)

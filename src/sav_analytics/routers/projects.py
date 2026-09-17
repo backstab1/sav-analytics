@@ -138,7 +138,10 @@ def download_source(
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
     if original is not None:
         # Исходник — то, что загрузили: CSV, а не SAV, собранный из него.
-        media_type = "text/tab-separated-values" if original.suffix == ".tsv" else "text/csv"
+        media_type = {
+            ".tsv": "text/tab-separated-values",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }.get(original.suffix, "text/csv")
         return FileResponse(original, media_type=media_type, filename=project["original_filename"])
     return FileResponse(
         path,
