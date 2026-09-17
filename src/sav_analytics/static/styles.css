@@ -379,6 +379,16 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .analysis-form label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }
 .analysis-form select { padding: 7px 9px; min-width: 0; }
 .analysis-cards { display: grid; gap: 10px; }
+.variable-card { padding: 12px 14px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); display: grid; gap: 10px; }
+.variable-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.variable-bar label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }
+.variable-bar select { padding: 7px 9px; min-width: 0; }
+.variable-rows { display: grid; gap: 4px; }
+.variable-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 56px; gap: 8px; align-items: center; font-size: var(--t-xs); }
+.variable-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.variable-row em { font-style: normal; color: var(--c-ink-3); text-align: right; }
+.variable-bar-fill { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--c-brand-tint, #e8f5ee); }
+.variable-bar-fill i { display: block; height: 100%; border-radius: 2px; background: var(--c-brand, #2eae68); }
 .analysis-card { padding: 14px 16px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); box-shadow: var(--shadow-card); display: grid; gap: 8px; }
 .analysis-card header { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: var(--t-sm); }
 .analysis-card header button { background: transparent; color: var(--c-ink-3); padding: 2px 6px; }

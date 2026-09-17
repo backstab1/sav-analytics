@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260917-modules-4" />
+    <link rel="stylesheet" href="/styles.css?v=20260917-modules-5" />
   </head>
   <body>
     <!-- ================================================================
@@ -589,6 +589,13 @@
                   <label>Вторая переменная<select id="analysis-b" required></select></label>
                   <button id="add-analysis-card" type="submit">Добавить карточку</button>
                 </form>
+                <div id="variable-card" class="variable-card">
+                  <div class="variable-bar">
+                    <label>Карточка переменной<select id="variable-source"></select></label>
+                    <button id="describe-variable" class="secondary compact-button" type="button">Показать</button>
+                  </div>
+                  <div id="variable-body"></div>
+                </div>
                 <p id="analysis-error" class="error" hidden></p>
                 <div id="analysis-cards" class="analysis-cards" aria-live="polite"></div>
               </div>
@@ -711,21 +718,21 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260917-modules-4" defer></script>
-    <script src="/app.js?v=20260917-modules-4" defer></script>
-    <script src="/library.js?v=20260917-modules-4" defer></script>
-    <script src="/bulk.js?v=20260917-modules-4" defer></script>
-    <script src="/question.js?v=20260917-modules-4" defer></script>
-    <script src="/recode.js?v=20260917-modules-4" defer></script>
-    <script src="/weight.js?v=20260917-modules-4" defer></script>
-    <script src="/filter.js?v=20260917-modules-4" defer></script>
-    <script src="/report.js?v=20260917-modules-4" defer></script>
-    <script src="/launch.js?v=20260917-modules-4" defer></script>
-    <script src="/picker.js?v=20260917-modules-4" defer></script>
-    <script src="/banner.js?v=20260917-modules-4" defer></script>
-    <script src="/formulas.js?v=20260917-modules-4" defer></script>
-    <script src="/analysis.js?v=20260917-modules-4" defer></script>
-    <script src="/coding.js?v=20260917-modules-4" defer></script>
-    <script src="/boot.js?v=20260917-modules-4" defer></script>
+    <script src="/shell.js?v=20260917-modules-5" defer></script>
+    <script src="/app.js?v=20260917-modules-5" defer></script>
+    <script src="/library.js?v=20260917-modules-5" defer></script>
+    <script src="/bulk.js?v=20260917-modules-5" defer></script>
+    <script src="/question.js?v=20260917-modules-5" defer></script>
+    <script src="/recode.js?v=20260917-modules-5" defer></script>
+    <script src="/weight.js?v=20260917-modules-5" defer></script>
+    <script src="/filter.js?v=20260917-modules-5" defer></script>
+    <script src="/report.js?v=20260917-modules-5" defer></script>
+    <script src="/launch.js?v=20260917-modules-5" defer></script>
+    <script src="/picker.js?v=20260917-modules-5" defer></script>
+    <script src="/banner.js?v=20260917-modules-5" defer></script>
+    <script src="/formulas.js?v=20260917-modules-5" defer></script>
+    <script src="/analysis.js?v=20260917-modules-5" defer></script>
+    <script src="/coding.js?v=20260917-modules-5" defer></script>
+    <script src="/boot.js?v=20260917-modules-5" defer></script>
   </body>
 </html>

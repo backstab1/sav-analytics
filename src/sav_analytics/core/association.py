@@ -487,3 +487,73 @@ def _conclusion(result: dict[str, Any]) -> str:
             f"ниже всего у «{low['label']}» ({_number(low['mean'])})."
         )
     return text
+
+
+def variable_profile(
+    path: str | Path, project: dict[str, Any], source: dict[str, Any]
+) -> dict[str, Any]:
+    """Карточка переменной: распределение или среднее с разбросом и пропуски.
+
+    Считается по той же подготовке, что карточки связи: учитывается общий
+    фильтр отчёта и исключённые ответы шкалы.
+    """
+    columns = association_columns([source], project)
+    configuration = project["configuration"]
+    definition = None
+    report_filter_id = configuration.get("report_filter_id")
+    if report_filter_id:
+        definition = next(
+            (item for item in configuration.get("filters", []) if item["id"] == report_filter_id),
+            None,
+        )
+        if definition is not None:
+            from .filtering import filter_columns
+
+            columns = list(dict.fromkeys([*columns, *filter_columns(definition, project)]))
+    frame = read_project_frame(path, project, columns)
+    rows = pd.Series(True, index=frame.index)
+    if definition is not None:
+        rows = evaluate_filter_frame(definition, project, frame).fillna(False)
+    variable = resolve_variable(source, project, frame)
+    total = int(rows.sum())
+    profile = {
+        "label": variable.label,
+        "kind": variable.kind,
+        "total": total,
+        "filtered": definition is not None,
+    }
+    if variable.kind == "categorical":
+        counts = [
+            {
+                "label": label,
+                "count": int((rows & mask).sum()),
+            }
+            for label, mask in variable.categories
+        ]
+        answered = sum(item["count"] for item in counts)
+        for item in counts:
+            item["share"] = item["count"] / answered if answered else None
+        return {
+            **profile,
+            "answered": answered,
+            "missing": total - answered,
+            "categories": sorted(counts, key=lambda item: -item["count"]),
+        }
+    values = variable.series[rows].dropna()
+    if values.empty:
+        return {**profile, "answered": 0, "missing": total, "statistics": None}
+    return {
+        **profile,
+        "answered": int(values.size),
+        "missing": total - int(values.size),
+        "statistics": {
+            "mean": float(values.mean()),
+            "median": float(values.median()),
+            "std": float(values.std(ddof=1)) if values.size > 1 else None,
+            "min": float(values.min()),
+            "max": float(values.max()),
+            "q1": float(values.quantile(0.25)),
+            "q3": float(values.quantile(0.75)),
+        },
+    }
+

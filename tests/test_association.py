@@ -199,3 +199,25 @@ def test_cards_are_stored_and_block_deleting_what_they_use(tmp_path: Path) -> No
             assert client.delete(f"{base}/formulas/{formula['id']}").status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+def test_variable_profile_describes_categories_and_numbers(tmp_path: Path) -> None:
+    from sav_analytics.core.association import variable_profile
+
+    source = tmp_path / "survey.sav"
+    project, frame = _project(source)
+
+    region = variable_profile(source, project, {"kind": "question", "ref": "REGION"})
+    assert region["kind"] == "categorical"
+    assert region["answered"] == 240
+    assert region["missing"] == 0
+    assert [item["label"] for item in region["categories"]] == ["Север", "Центр", "Юг"]
+    assert region["categories"][0]["share"] == pytest.approx(1 / 3)
+
+    score = variable_profile(source, project, {"kind": "question", "ref": "SCORE"})
+    assert score["kind"] == "numeric"
+    assert score["statistics"]["mean"] == pytest.approx(frame["SCORE"].mean())
+    assert score["statistics"]["median"] == pytest.approx(frame["SCORE"].median())
+    assert score["statistics"]["std"] == pytest.approx(frame["SCORE"].std(ddof=1))
+    assert score["statistics"]["q3"] == pytest.approx(frame["SCORE"].quantile(0.75))
+

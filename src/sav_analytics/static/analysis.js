@@ -19,6 +19,11 @@ function analysisSources() {
 
 function renderAnalysisSection() {
   if (!currentProject) return;
+  const variableSelect = document.querySelector("#variable-source");
+  const previousVariable = variableSelect.value;
+  variableSelect.innerHTML = analysisSources()
+    .map(item => `<option value="${escapeAttribute(item.value)}">${escapeHtml(item.label)}</option>`).join("");
+  if (previousVariable) variableSelect.value = previousVariable;
   const options = analysisSources()
     .map(item => `<option value="${escapeAttribute(item.value)}">${escapeHtml(item.label)}</option>`).join("");
   ["#analysis-a", "#analysis-b"].forEach((selector, index) => {
@@ -110,3 +115,39 @@ document.querySelector("#analysis-cards").addEventListener("click", async event 
     alert(error.message);
   }
 });
+
+// Карточка переменной: что в ней есть, прежде чем искать связи.
+document.querySelector("#describe-variable").addEventListener("click", async () => {
+  const body = document.querySelector("#variable-body");
+  const value = document.querySelector("#variable-source").value;
+  if (!value) return;
+  const source = parseBannerSource(value);
+  body.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  try {
+    const profile = await api(`/api/projects/${currentProject.id}/analysis/variable?kind=${encodeURIComponent(source.kind)}&ref=${encodeURIComponent(source.ref)}`);
+    body.innerHTML = renderVariableProfile(profile);
+  } catch (error) {
+    body.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+});
+
+function renderVariableProfile(profile) {
+  const head = `<p class="analysis-facts"><span>Ответили <b>${profile.answered.toLocaleString("ru-RU")}</b> из ${profile.total.toLocaleString("ru-RU")}</span><span>Пропуски <b>${profile.missing.toLocaleString("ru-RU")}</b>${profile.total ? ` · ${analysisNumber(profile.missing / profile.total * 100, 1)}%` : ""}</span>${profile.filtered ? "<span>Учтён общий фильтр отчёта</span>" : ""}</p>`;
+  if (profile.kind === "categorical") {
+    const top = profile.categories.slice(0, 12);
+    const rows = top.map(item => `
+      <div class="variable-row">
+        <span title="${escapeAttribute(item.label)}">${escapeHtml(item.label)}</span>
+        <em>${item.count.toLocaleString("ru-RU")}</em>
+        <em>${item.share == null ? "—" : `${analysisNumber(item.share * 100, 1)}%`}</em>
+        <div class="variable-bar-fill"><i style="width: ${Math.round((item.share || 0) * 100)}%"></i></div>
+      </div>`).join("");
+    const rest = profile.categories.length - top.length;
+    return `${head}<div class="variable-rows">${rows}</div>${rest > 0 ? `<p class="analysis-note">Ещё категорий: ${rest}</p>` : ""}`;
+  }
+  const stats = profile.statistics;
+  if (!stats) return `${head}<p class="analysis-note">Нет заполненных значений.</p>`;
+  const cell = (label, value) => `<span>${label} <b>${analysisNumber(value)}</b></span>`;
+  return `${head}<p class="analysis-facts">${cell("Среднее", stats.mean)}${cell("Медиана", stats.median)}${stats.std == null ? "" : cell("Ст. отклонение", stats.std)}${cell("Мин.", stats.min)}${cell("Q1", stats.q1)}${cell("Q3", stats.q3)}${cell("Макс.", stats.max)}</p>`;
+}
+

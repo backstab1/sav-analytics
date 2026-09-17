@@ -986,6 +986,14 @@ def test_analysis_card_shows_the_test_chosen_by_types(
     card.locator("[data-delete-card]").click()
     expect(page.locator("#analysis-cards")).to_contain_text("Карточек пока нет", timeout=UI_TIMEOUT)
 
+    # Карточка переменной: что в переменной есть до поиска связей.
+    page.select_option("#variable-source", "question:AGE")
+    page.click("#describe-variable")
+    expect(page.locator("#variable-body")).to_contain_text("Медиана", timeout=UI_TIMEOUT)
+    page.select_option("#variable-source", "question:SEX")
+    page.click("#describe-variable")
+    expect(page.locator("#variable-body")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
+
 
 def test_open_answers_are_coded_by_query_and_by_hand(
     page: Page, live_server: str, tmp_path: Path
