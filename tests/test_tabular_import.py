@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
@@ -97,3 +98,18 @@ def test_empty_table_and_unknown_format_are_refused(tmp_path: Path) -> None:
             assert "CSV" in unknown.json()["detail"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_long_texts_breaking_the_sav_writer_are_reported(tmp_path: Path) -> None:
+    from sav_analytics.core.tabular_import import TabularImportError, convert_to_sav
+
+    source = tmp_path / "long.csv"
+    rows = ["ID,Q17_10,Q17_11,Q17_12"]
+    rows += [
+        f"{index},{'я' * 200}{index},{'ю' * 200}{index},{'ы' * 200}{index}" for index in range(40)
+    ]
+    source.write_text("\n".join(rows), encoding="utf-8")
+
+    with pytest.raises(TabularImportError, match="длиннее 255 байт"):
+        convert_to_sav(source, tmp_path / "source.sav")
+

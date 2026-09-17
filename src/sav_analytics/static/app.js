@@ -4718,3 +4718,35 @@ document.querySelector("#close-formula-editor").addEventListener("click", () => 
   renderTable();
 });
 
+/* SAV с производными скачивается через fetch: если длинные тексты ломают
+   запись, сервер отказывает с объяснением, и экран предлагает выгрузку без них
+   вместо страницы с JSON ошибки. */
+document.querySelector("#download-derived-sav").addEventListener("click", async event => {
+  event.preventDefault();
+  if (!currentProject) return;
+  const url = `/api/projects/${currentProject.id}/export.sav`;
+  const stem = (currentProject.original_filename || "project").replace(/\.[^.]+$/, "");
+  showToast("Готовим SAV…");
+  try {
+    let response = await fetch(url);
+    if (response.status === 422 && response.headers.get("X-Long-Text")) {
+      const { detail } = await response.json();
+      if (!confirm(`${detail}\n\nВыгрузить без этих переменных?`)) return;
+      response = await fetch(`${url}?long_text=omit`);
+    }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || `Ошибка сервера ${response.status}`);
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = `${stem}_производные.sav`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
+  } catch (error) {
+    alert(error.message);
+  }
+});
+

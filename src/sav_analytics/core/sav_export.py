@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -19,11 +20,15 @@ import pyreadstat
 
 from .banner import BannerError, _source_categories
 from .formulas import read_project_frame
+from .sav_writing import SavWriteMismatchError, long_text_columns, verify_written_sav
 from .weighting import WeightingError, calculate_raking
 
 
 class SavExportError(ValueError):
-    pass
+    def __init__(self, message: str, *, long_text: list[str] | None = None) -> None:
+        super().__init__(message)
+        #: Длинные тексты, из-за которых запись сломалась; их можно не выгружать.
+        self.long_text = long_text or []
 
 
 @dataclass
@@ -31,10 +36,15 @@ class SavExportSummary:
     formulas: list[str] = field(default_factory=list)
     recodings: list[str] = field(default_factory=list)
     weights: list[str] = field(default_factory=list)
+    omitted: list[str] = field(default_factory=list)
 
 
 def export_project_sav(
-    path: str | Path, project: dict[str, Any], destination: str | Path
+    path: str | Path,
+    project: dict[str, Any],
+    destination: str | Path,
+    *,
+    omit_long_text: bool = False,
 ) -> SavExportSummary:
     raw, meta = pyreadstat.read_sav(
         path,
@@ -104,6 +114,15 @@ def export_project_sav(
         formats[name] = "F16.6"
         summary.weights.append(name)
 
+    long_text = long_text_columns(raw)
+    note = None
+    if omit_long_text and long_text:
+        raw = raw.drop(columns=long_text)
+        summary.omitted = long_text
+        # Строка заметки SAV — не длиннее 80 байт, кириллица занимает по два.
+        note = textwrap.wrap(
+            "Не выгружены длинные тексты (больше 255 байт): " + ", ".join(long_text), 38
+        )
     missing = {
         name: [
             item if not isinstance(item, dict) or item.get("lo") != item.get("hi") else item["lo"]
@@ -116,11 +135,31 @@ def export_project_sav(
         raw,
         destination,
         column_labels={name: labels.get(name) for name in raw.columns},
-        variable_value_labels=value_labels,
+        variable_value_labels={
+            name: value for name, value in value_labels.items() if name in raw.columns
+        },
         missing_ranges=missing,
-        variable_measure=measures,
-        variable_format=formats or None,
+        variable_measure={
+            name: value for name, value in measures.items() if name in raw.columns
+        },
+        variable_format={name: value for name, value in formats.items() if name in raw.columns}
+        or None,
+        note=note,
     )
+    try:
+        verify_written_sav(destination, list(raw.columns))
+    except SavWriteMismatchError as exc:
+        if long_text and not omit_long_text:
+            raise SavExportError(
+                "Текстовые переменные " + ", ".join(long_text[:12])
+                + (" и другие" if len(long_text) > 12 else "")
+                + " длиннее 255 байт. Библиотека записи SAV делит такие строки на части "
+                "и называет части так же, как соседние переменные, поэтому файл выходит "
+                "испорченным. Выгрузите SAV без длинных текстов — они остаются в "
+                "исходном файле проекта.",
+                long_text=long_text,
+            ) from exc
+        raise SavExportError(f"SAV записан с ошибкой: {exc}") from exc
     return summary
 
 

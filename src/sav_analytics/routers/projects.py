@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -151,6 +151,7 @@ def download_source(
 def export_sav(
     project_id: UUID,
     repository: Annotated[ProjectRepository, Depends(get_repository)],
+    long_text: Literal["keep", "omit"] = "keep",
 ) -> FileResponse:
     """SAV с производными переменными: формулы, перекодировки, рассчитанные веса."""
     try:
@@ -162,10 +163,12 @@ def export_sav(
     handle.close()
     target = Path(handle.name)
     try:
-        export_project_sav(source, project, target)
+        export_project_sav(source, project, target, omit_long_text=long_text == "omit")
     except SavExportError as exc:
         target.unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # Заголовок говорит экрану, что выгрузка без длинных текстов поможет.
+        headers = {"X-Long-Text": ",".join(exc.long_text)} if exc.long_text else None
+        raise HTTPException(status_code=422, detail=str(exc), headers=headers) from exc
     except Exception:
         target.unlink(missing_ok=True)
         raise

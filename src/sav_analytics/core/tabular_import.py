@@ -26,6 +26,8 @@ from pathlib import Path
 import pandas as pd
 import pyreadstat
 
+from .sav_writing import SavWriteMismatchError, long_text_columns, verify_written_sav
+
 TABULAR_EXTENSIONS = frozenset({".csv", ".tsv"})
 #: Больше различных значений у текстового столбца — это уже не варианты
 #: ответа, а открытый текст.
@@ -80,6 +82,16 @@ def convert_to_sav(source: Path, target: Path) -> None:
         )
     except Exception as exc:  # pyreadstat сообщает об ошибках записи разными типами
         raise TabularImportError("Таблицу не удалось преобразовать в SAV.") from exc
+    try:
+        verify_written_sav(target, list(frame.columns))
+    except SavWriteMismatchError as exc:
+        long_text = long_text_columns(frame)
+        raise TabularImportError(
+            "Таблицу не удалось преобразовать в SAV без потерь: текстовые столбцы "
+            + ", ".join(long_text[:12])
+            + " длиннее 255 байт, и при записи их части получают имена соседних "
+            "столбцов. Переименуйте эти столбцы или сократите тексты."
+        ) from exc
 
 
 def _read_table(source: Path) -> pd.DataFrame:

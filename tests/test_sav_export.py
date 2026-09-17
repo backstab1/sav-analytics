@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pyreadstat
+import pytest
 from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
@@ -94,3 +95,51 @@ def test_export_of_missing_project_is_404(tmp_path: Path) -> None:
     finally:
         app.dependency_overrides.clear()
 
+
+def test_written_sav_is_checked_against_the_writer_bug(tmp_path: Path) -> None:
+    """readstat называет части длинной строки Q17.10 именем Q17.11 — файл портится."""
+    from sav_analytics.core.sav_writing import SavWriteMismatchError, verify_written_sav
+
+    target = tmp_path / "broken.sav"
+    names = ["Q17.10", "Q17.11", "Q17.12"]
+    pyreadstat.write_sav(pd.DataFrame({name: ["я" * 200] for name in names}), target)
+
+    with pytest.raises(SavWriteMismatchError):
+        verify_written_sav(target, names)
+
+
+def test_export_refuses_a_broken_file_and_can_omit_long_texts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sav_analytics.core import sav_export
+    from sav_analytics.core.sav_reader import inspect_sav
+    from sav_analytics.core.sav_writing import SavWriteMismatchError
+
+    source = tmp_path / "long.sav"
+    pyreadstat.write_sav(
+        pd.DataFrame({"ID": [1.0, 2.0], "COMMENT": ["я" * 200, "коротко"]}), source
+    )
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "inspection": inspection,
+        "configuration": {"questions": inspection["questions"], "recodings": []},
+    }
+    real_verify = sav_export.verify_written_sav
+
+    def broken(path, expected):
+        # Как на реальном массиве: с длинным текстом файл выходит испорченным.
+        if "COMMENT" in expected:
+            raise SavWriteMismatchError("лишняя переменная")
+        real_verify(path, expected)
+
+    monkeypatch.setattr(sav_export, "verify_written_sav", broken)
+    target = tmp_path / "out.sav"
+    with pytest.raises(sav_export.SavExportError, match="без длинных текстов") as caught:
+        sav_export.export_project_sav(source, project, target)
+    assert caught.value.long_text == ["COMMENT"]
+
+    summary = sav_export.export_project_sav(source, project, target, omit_long_text=True)
+    assert summary.omitted == ["COMMENT"]
+    _, meta = pyreadstat.read_sav(target, metadataonly=True)
+    assert meta.column_names == ["ID"]
+    assert "COMMENT" in " ".join(meta.notes)
