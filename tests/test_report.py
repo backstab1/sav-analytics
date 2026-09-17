@@ -1638,6 +1638,9 @@ def test_parameters_sheet_records_what_the_book_was_built_from(tmp_path: Path) -
         __version__,
         "Женщины — Ваш пол: Женщина",
         "не используется, только Total",
+        "Диагностика веса",
+        "не применяется",
+        "Замечания проверки",
     ):
         assert expected in strings, expected
 

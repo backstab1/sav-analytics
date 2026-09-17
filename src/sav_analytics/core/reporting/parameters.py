@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from ..weight_validation import weight_diagnostics
 from .data import ReportData
 from .statistics import (
     _comparison_scheme_line,
@@ -57,6 +58,7 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
         ("Колонки без респондентов", ", ".join(data.empty_columns) or "нет"),
         ("Общий фильтр", _report_filter_line(project, configuration)),
         ("Вес", settings["weight_label"] or "не используется"),
+        ("Диагностика веса", _weight_line(data)),
         ("Уровень доверия", f"{_number(settings['confidence_level'] * 100)}%"),
         (
             "Второй уровень доверия",
@@ -82,7 +84,35 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
             if settings.get("overall_tests")
             else "не выполняются",
         ),
+        ("Замечания проверки", _findings_line(project, data)),
     ]
+
+
+def _weight_line(data: ReportData) -> str:
+    """Числа веса, по которым видно, насколько он сжимает выборку."""
+    weights = data.statistical_settings["weights"]
+    if weights is None:
+        return "не применяется"
+    within = weights[data.columns[0]["mask"]]
+    if within.empty:
+        return "нет респондентов"
+    diagnostics = weight_diagnostics(within)
+    return (
+        f"N {diagnostics.count}; вес от {_number(diagnostics.minimum)} до "
+        f"{_number(diagnostics.maximum)}; эффективная база "
+        f"{_number(diagnostics.effective_base)}; design effect "
+        f"{_number(diagnostics.design_effect)}; эффективность "
+        f"{_number(diagnostics.efficiency_percent)}%; крайних весов "
+        f"{diagnostics.extreme_count}"
+    )
+
+
+def _findings_line(project: dict[str, Any], data: ReportData) -> str:
+    # Импорт здесь: проверка сама строится на подготовке данных отчёта.
+    from ..preflight import preflight_warnings
+
+    findings = preflight_warnings(data, project)
+    return " | ".join(finding.message for finding in findings) or "нет"
 
 
 __all__ = ["report_parameters"]

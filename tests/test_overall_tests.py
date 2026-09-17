@@ -156,3 +156,18 @@ def test_overall_tests_are_off_by_default(tmp_path: Path) -> None:
     content = build_topline_xlsx(source, _project(source, overall_tests=False))
 
     assert "Хи-квадрат, p" not in _row_labels(content)
+
+
+def test_parameters_sheet_shows_weight_diagnostics(tmp_path: Path) -> None:
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    source = tmp_path / "weighted.sav"
+    content = build_topline_xlsx(source, _project(source, weighted=True))
+    with ZipFile(BytesIO(content)) as archive:
+        strings = archive.read("xl/sharedStrings.xml").decode("utf-8")
+
+    assert "Диагностика веса" in strings
+    assert "design effect" in strings
+    assert "эффективная база" in strings
+

@@ -93,9 +93,17 @@ def run_preflight(path: str | Path, project: dict[str, Any]) -> PreflightReport:
         )
 
     errors.extend(_empty_question_bases(data, project))
-    warnings.extend(_review_warnings(project))
-    warnings.extend(_banner_warnings(data))
+    warnings.extend(preflight_warnings(data, project))
     return PreflightReport(errors=errors, warnings=warnings)
+
+
+def preflight_warnings(data: ReportData, project: dict[str, Any]) -> list[PreflightFinding]:
+    """Предупреждения проверки по уже подготовленным данным.
+
+    Отдельной функцией, чтобы лист «Параметры» записал в книгу те же
+    замечания, что аналитик видел перед запуском, не читая SAV второй раз.
+    """
+    return [*_review_warnings(project), *_banner_warnings(data)]
 
 
 def _empty_question_bases(
