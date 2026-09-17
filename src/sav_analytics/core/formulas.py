@@ -32,6 +32,8 @@ import numpy as np
 import pandas as pd
 import pyreadstat
 
+from .open_text import codeframe_columns, codeframe_text_variable, theme_owners
+
 
 class FormulaError(ValueError):
     pass
@@ -416,27 +418,44 @@ def formula_statistics(
 def read_project_frame(
     path: str | Path, project: dict[str, Any] | None, columns: Iterable[str] | None = None
 ) -> pd.DataFrame:
-    """Прочитать SAV и досчитать формулы проекта, которые просят колонки.
+    """Прочитать SAV и досчитать производные столбцы, которые просят колонки.
 
-    Без `columns` читается весь файл и считаются все формулы, как для книги.
+    Производные — формулы и темы открытых ответов. Без `columns` читается весь
+    файл и считаются все производные, как для книги. Темы считаются раньше
+    формул: формула может опираться на тему.
     """
     formulas = {
         item["name"]: item
         for item in ((project or {}).get("configuration") or {}).get("formulas", [])
     }
+    owners = theme_owners(project)
     if columns is None:
         wanted = formula_order(formulas, formulas)
+        themes = list(owners)
         usecols = None
     else:
         requested = list(dict.fromkeys(columns))
         wanted = formula_order(formulas, [name for name in requested if name in formulas])
+        needed = [name for name in requested if name not in formulas] + base_columns(
+            formulas, wanted
+        )
+        themes = [name for name in dict.fromkeys(needed) if name in owners]
+        texts = [
+            codeframe_text_variable(owners[name], project) for name in themes  # type: ignore[arg-type]
+        ]
         usecols = list(
-            dict.fromkeys(
-                [name for name in requested if name not in formulas]
-                + base_columns(formulas, wanted)
-            )
+            dict.fromkeys([name for name in needed if name not in owners] + texts)
         )
     frame = _read_sav(path, usecols)
+    computed: set[str] = set()
+    for name in themes:
+        codeframe = owners[name]
+        if codeframe["id"] in computed:
+            continue
+        computed.add(codeframe["id"])
+        text_variable = codeframe_text_variable(codeframe, project)  # type: ignore[arg-type]
+        for column, values in codeframe_columns(frame[text_variable], codeframe).items():
+            frame[column] = values
     for name in wanted:
         frame[name] = evaluate_formula(formulas[name]["expression"], frame)
     return frame

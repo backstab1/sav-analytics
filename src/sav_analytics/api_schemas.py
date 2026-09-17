@@ -92,6 +92,30 @@ class AnalysisCardCreate(BaseModel):
         return self
 
 
+class CodeframeCreate(BaseModel):
+    question_code: str = Field(min_length=1, max_length=64)
+
+
+class CodeframeTheme(BaseModel):
+    # Новая тема приходит с временным id экрана — сервер выдаст постоянный.
+    id: str | None = Field(default=None, max_length=64)
+    name: str = Field(min_length=1, max_length=250)
+    parent_id: str | None = Field(default=None, max_length=64)
+    queries: list[str] = Field(default_factory=list, max_length=50)
+
+
+class CodeframeUpdate(BaseModel):
+    label: str = Field(min_length=1, max_length=500)
+    themes: list[CodeframeTheme] = Field(default_factory=list, max_length=200)
+
+
+class CodeframeMark(BaseModel):
+    theme_id: str = Field(min_length=1, max_length=64)
+    row: int = Field(ge=0)
+    # true/false — отметка человека; null снимает её и возвращает решение запросу.
+    value: bool | None
+
+
 class QuestionOrder(BaseModel):
     codes: list[str]
 

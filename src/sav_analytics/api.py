@@ -28,6 +28,7 @@ from .project_models import InvalidStoredProjectError
 from .routers import (
     analysis,
     banners,
+    codeframes,
     filters,
     formulas,
     projects,
@@ -201,6 +202,7 @@ def health() -> dict[str, str]:
 for router in (
     projects.router,
     analysis.router,
+    codeframes.router,
     questions.router,
     recodings.router,
     formulas.router,

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,9 +26,18 @@ from .core.formulas import (
     formula_statistics,
     formula_variable,
     formula_variables,
+    read_project_frame,
     validate_formula,
 )
 from .core.not_applicable import NotApplicableConfirmationRequired, assess_not_applicable
+from .core.open_text import (
+    CodeframeError,
+    answered_mask,
+    codeframe_columns,
+    codeframe_text_variable,
+    theme_variable,
+    validate_codeframe,
+)
 from .core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
     REPORT_SETTING_KEYS,
@@ -545,6 +555,221 @@ class ProjectRepository:
         self._write_project(project_id, project)
         return project
 
+    def create_codeframe(self, project_id: UUID, question_code: str) -> dict:
+        project = self.get(project_id)
+        configuration = project["configuration"]
+        question = self._find_question(project, question_code)
+        if question["question_type"] != "open_text" or len(question["source_variables"]) != 1:
+            raise InvalidUploadError("Кодификатор строится для открытого вопроса.")
+        codeframes = configuration.setdefault("codeframes", [])
+        if any(item["question_code"] == question_code for item in codeframes):
+            raise InvalidUploadError("У этого вопроса уже есть кодификатор.")
+        taken = {item["name"].lower() for item in project["inspection"]["variables"]} | {
+            item["code"].lower() for item in configuration["questions"]
+        }
+        base = re.sub(r"[^A-Za-z0-9_]", "_", question_code)
+        if not re.match(r"^[A-Za-z]", base):
+            base = f"T_{base}"
+        code = f"{base}_T"
+        index = 2
+        while code.lower() in taken or any(
+            name.lower().startswith(f"{code.lower()}_") for name in taken
+        ):
+            code = f"{base}_T{index}"
+            index += 1
+        codeframes.append(
+            {
+                "id": str(uuid4()),
+                "question_code": question_code,
+                "code": code,
+                "label": f"Темы: {question['label']}",
+                "themes": [],
+                "next_number": 1,
+            }
+        )
+        configuration["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def update_codeframe(
+        self, project_id: UUID, codeframe_id: UUID, label: str, themes: list[dict]
+    ) -> dict:
+        project = self.get(project_id)
+        codeframe = self._find_codeframe(project, codeframe_id)
+        existing = {theme["id"]: theme for theme in codeframe["themes"]}
+        identifiers = {}
+        for theme in themes:
+            if theme.get("id") in existing:
+                identifiers[theme["id"]] = theme["id"]
+            else:
+                identifiers[theme.get("id") or str(uuid4())] = str(uuid4())
+        rebuilt = []
+        next_number = codeframe.get("next_number", 1)
+        for theme in themes:
+            identifier = identifiers[theme.get("id")] if theme.get("id") in identifiers else None
+            if identifier is None:
+                identifier = str(uuid4())
+            previous = existing.get(identifier)
+            if previous is None:
+                number = next_number
+                next_number += 1
+            else:
+                number = previous["number"]
+            parent = theme.get("parent_id")
+            rebuilt.append(
+                {
+                    "id": identifier,
+                    "number": number,
+                    "name": theme["name"].strip(),
+                    "parent_id": identifiers.get(parent) if parent else None,
+                    "queries": [line.strip() for line in theme.get("queries", []) if line.strip()],
+                    "manual": previous.get("manual", {}) if previous else {},
+                }
+            )
+        candidate = {**codeframe, "label": label, "themes": rebuilt, "next_number": next_number}
+        try:
+            validate_codeframe(candidate)
+        except CodeframeError as exc:
+            raise InvalidUploadError(str(exc)) from exc
+        codeframe.update(candidate)
+        self._sync_codeframe(project_id, project, codeframe)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def mark_codeframe_answer(
+        self, project_id: UUID, codeframe_id: UUID, theme_id: str, row: int, value: bool | None
+    ) -> dict:
+        project = self.get(project_id)
+        codeframe = self._find_codeframe(project, codeframe_id)
+        theme = next((item for item in codeframe["themes"] if item["id"] == theme_id), None)
+        if theme is None:
+            raise ProjectNotFoundError(theme_id)
+        manual = theme.setdefault("manual", {})
+        if value is None:
+            manual.pop(str(row), None)
+        else:
+            manual[str(row)] = 1 if value else 0
+        self._sync_codeframe(project_id, project, codeframe)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def delete_codeframe(self, project_id: UUID, codeframe_id: UUID) -> dict:
+        project = self.get(project_id)
+        codeframe = self._find_codeframe(project, codeframe_id)
+        configuration = project["configuration"]
+        ensure_not_referenced(configuration, "question", codeframe["code"], "Кодификатор")
+        configuration["codeframes"] = [
+            item for item in configuration["codeframes"] if item["id"] != codeframe["id"]
+        ]
+        project["inspection"]["variables"] = [
+            item for item in project["inspection"]["variables"]
+            if item.get("codeframe_id") != codeframe["id"]
+        ]
+        configuration["questions"] = [
+            item for item in configuration["questions"]
+            if item.get("codeframe_id") != codeframe["id"]
+        ]
+        configuration["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    @staticmethod
+    def _find_codeframe(project: dict, codeframe_id: UUID | str) -> dict:
+        codeframe = next(
+            (
+                item
+                for item in project["configuration"].get("codeframes", [])
+                if item["id"] == str(codeframe_id)
+            ),
+            None,
+        )
+        if codeframe is None:
+            raise ProjectNotFoundError(str(codeframe_id))
+        return codeframe
+
+    def _sync_codeframe(self, project_id: UUID, project: dict, codeframe: dict) -> None:
+        """Производные переменные тем и вопрос multiple-response — по кодификатору."""
+        configuration = project["configuration"]
+        identifier = codeframe["id"]
+        variables = [
+            item for item in project["inspection"]["variables"]
+            if item.get("codeframe_id") != identifier
+        ]
+        question = next(
+            (item for item in configuration["questions"] if item.get("codeframe_id") == identifier),
+            None,
+        )
+        if not codeframe["themes"]:
+            project["inspection"]["variables"] = variables
+            if question is not None:
+                ensure_not_referenced(configuration, "question", question["code"], "Кодификатор")
+                configuration["questions"].remove(question)
+            return
+        text_variable = codeframe_text_variable(codeframe, project)
+        texts = read_project_frame(self.source_path(project_id), project, [text_variable])[
+            text_variable
+        ]
+        columns = codeframe_columns(texts, codeframe)
+        names = []
+        for theme in codeframe["themes"]:
+            name = theme_variable(codeframe, theme)
+            values = columns[name]
+            names.append(name)
+            variables.append(
+                {
+                    "name": name,
+                    "label": theme["name"],
+                    "storage_type": "numeric",
+                    "original_format": None,
+                    "measurement_level": "nominal",
+                    "question_type": "multiple_choice_dichotomy",
+                    "role": "question",
+                    "valid_count": int(values.notna().sum()),
+                    "missing_count": int(values.isna().sum()),
+                    "unique_count": int(values.dropna().nunique()),
+                    "value_labels": [],
+                    "warnings": [],
+                    "codeframe_id": identifier,
+                }
+            )
+        project["inspection"]["variables"] = variables
+        answered = int(answered_mask(texts).sum())
+        if question is None:
+            configuration["questions"].append(
+                {
+                    "code": codeframe["code"],
+                    "label": codeframe["label"],
+                    "question_type": "multiple_choice_dichotomy",
+                    "role": "question",
+                    "source_variables": names,
+                    "valid_count": answered,
+                    "missing_count": len(texts) - answered,
+                    "included_in_report": True,
+                    "recognition": "manual",
+                    "warnings": [],
+                    "items": [],
+                    "special_values": [],
+                    "special_items": [],
+                    "multiple_response": {"encoding": "dichotomy", "counted_value": 1},
+                    "codeframe_id": identifier,
+                }
+            )
+        else:
+            question.update(
+                label=codeframe["label"],
+                source_variables=names,
+                valid_count=answered,
+                missing_count=len(texts) - answered,
+            )
+            if question.get("nets"):
+                question["nets"] = [
+                    {**net, "values": [value for value in net["values"] if value in names]}
+                    for net in question["nets"]
+                    if any(value in names for value in net["values"])
+                ]
+
     def create_formula(self, project_id: UUID, definition: dict) -> dict:
         """Формула становится производной переменной и числовым вопросом."""
         project = self.get(project_id)
@@ -725,9 +950,13 @@ class ProjectRepository:
         # Формулы не живут в SAV: перераспознавание их не находит, но терять
         # их нельзя — переносим производные переменные и вопросы как есть.
         refreshed["variables"].extend(
-            item for item in project["inspection"]["variables"] if item.get("formula_id")
+            item
+            for item in project["inspection"]["variables"]
+            if item.get("formula_id") or item.get("codeframe_id")
         )
-        merged.extend(item for item in previous if item.get("formula_id"))
+        merged.extend(
+            item for item in previous if item.get("formula_id") or item.get("codeframe_id")
+        )
         project["inspection"] = refreshed
         project["configuration"]["questions"] = merged
         project["configuration"]["structure_version"] = STRUCTURE_VERSION
