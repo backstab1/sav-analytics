@@ -5038,6 +5038,9 @@ async function renderTextSection() {
   document.querySelector("#coding-body").hidden = !codeframe;
   if (!codeframe) return;
   renderThemeRows(codeframe.themes);
+  const exportLink = document.querySelector("#export-codeframe");
+  exportLink.href = `/api/projects/${currentProject.id}/codeframes/${codeframe.id}/export`;
+  exportLink.download = `кодификатор_${codeframe.question_code}.json`;
   answerPage.offset = 0;
   void refreshCoding();
 }
@@ -5209,4 +5212,36 @@ document.querySelector("#answer-search").addEventListener("input", () => {
   answerSearchTimer = window.setTimeout(() => loadAnswers(false), 300);
 });
 document.querySelector("#more-answers").addEventListener("click", () => loadAnswers(true));
+
+// Кодификатор из другого проекта или волны: темы и запросы подставляются в
+// список как новые — сохранить их аналитик решает сам, после просмотра.
+document.querySelector("#import-codeframe").addEventListener("change", async event => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  const errorBox = document.querySelector("#text-error");
+  errorBox.hidden = true;
+  if (!file) return;
+  try {
+    const definition = JSON.parse(await file.text());
+    if (definition.format !== "sav-analytics/codeframe" || !Array.isArray(definition.themes)) {
+      throw new Error("Это не файл кодификатора sav-analytics.");
+    }
+    const existing = collectThemes();
+    const taken = new Set(existing.map(theme => theme.name.trim().toLowerCase()));
+    const ids = new Map();
+    const imported = [];
+    definition.themes.forEach(theme => {
+      if (taken.has(String(theme.name).trim().toLowerCase())) return;
+      newThemeCounter += 1;
+      ids.set(theme.id, `new-${newThemeCounter}`);
+      imported.push({ ...theme, id: `new-${newThemeCounter}` });
+    });
+    imported.forEach(theme => { theme.parent_id = theme.parent_id ? ids.get(theme.parent_id) || null : null; });
+    renderThemeRows([...existing, ...imported]);
+    const skipped = definition.themes.length - imported.length;
+    showToast(`Добавлено тем: ${imported.length}${skipped ? `, пропущено совпадающих: ${skipped}` : ""}. Сохраните темы.`);
+  } catch (error) {
+    showError(errorBox, error);
+  }
+});
 

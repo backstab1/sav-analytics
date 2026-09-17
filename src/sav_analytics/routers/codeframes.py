@@ -112,6 +112,38 @@ def update_codeframe(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.get("/{codeframe_id}/export")
+def export_codeframe(
+    project_id: UUID,
+    codeframe_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Кодификатор для другого проекта или волны: темы и запросы.
+
+    Ручные отметки не переносятся — они привязаны к строкам этого массива.
+    Тот же кодификатор на новых данных даёт воспроизводимый результат запросов.
+    """
+    try:
+        project = repository.get(project_id)
+        codeframe = repository._find_codeframe(project, codeframe_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Кодификатор не найден.") from exc
+    return {
+        "format": "sav-analytics/codeframe",
+        "version": 1,
+        "label": codeframe["label"],
+        "themes": [
+            {
+                "id": theme["id"],
+                "name": theme["name"],
+                "parent_id": theme.get("parent_id"),
+                "queries": theme.get("queries", []),
+            }
+            for theme in codeframe["themes"]
+        ],
+    }
+
+
 @router.put("/{codeframe_id}/marks")
 def mark_answer(
     project_id: UUID,

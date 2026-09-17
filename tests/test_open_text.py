@@ -127,6 +127,13 @@ def test_codeframe_becomes_a_multiple_response_question(tmp_path: Path) -> None:
             # от полной базы — 8 респондентов, включая не ответившего.
             assert _cell_value(content, "Доставка", "B") == pytest.approx(3 / 8 * 100)
 
+            exported = client.get(f"{url}/export").json()
+            assert exported["format"] == "sav-analytics/codeframe"
+            assert [theme["name"] for theme in exported["themes"]] == ["Доставка", "Цена", "Курьер"]
+            assert "manual" not in exported["themes"][1]
+            courier = exported["themes"][2]
+            assert courier["parent_id"] == exported["themes"][0]["id"]
+
             refreshed = client.post(f"{base}/structure/refresh").json()
             assert any(
                 item["code"] == codeframe["code"]

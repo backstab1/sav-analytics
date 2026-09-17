@@ -359,7 +359,8 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .theme-row textarea { resize: vertical; min-height: 44px; font-family: var(--f-mono, ui-monospace, monospace); }
 .theme-count { font-size: var(--t-xs); color: var(--c-ink-2); white-space: nowrap; }
 .theme-row .del { background: transparent; color: var(--c-danger); padding: 2px; }
-.coding-actions { display: flex; justify-content: space-between; gap: 8px; }
+.coding-actions { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.coding-import { cursor: pointer; }
 .coding-filter { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 8px; }
 .coding-filter select, .coding-filter input { padding: 6px 8px; min-width: 0; }
 .answer-list { display: grid; gap: 6px; }

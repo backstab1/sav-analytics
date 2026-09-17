@@ -1032,3 +1032,16 @@ def test_open_answers_are_coded_by_query_and_by_hand(
     expect(page.locator("#coding-stats")).to_contain_text("без темы 23", timeout=UI_TIMEOUT)
     expect(page.locator("#theme-list .theme-count").first).to_contain_text("вручную 1")
 
+    # Кодификатор другой волны: новые темы добавляются, совпадающие пропускаются.
+    codeframe = tmp_path / "codeframe.json"
+    codeframe.write_text(
+        '{"format": "sav-analytics/codeframe", "version": 1, "label": "x", "themes": ['
+        '{"id": "a", "name": "Доставка", "parent_id": null, "queries": ["доставка"]},'
+        '{"id": "b", "name": "Цена", "parent_id": null, "queries": ["цен*"]}]}',
+        encoding="utf-8",
+    )
+    page.set_input_files("#import-codeframe", str(codeframe))
+    expect(page.locator("#theme-list .theme-row")).to_have_count(2, timeout=UI_TIMEOUT)
+    page.click("#save-themes")
+    expect(page.locator("#coding-stats")).to_contain_text("без темы 15", timeout=UI_TIMEOUT)
+
