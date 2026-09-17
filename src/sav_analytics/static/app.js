@@ -4640,9 +4640,10 @@ function suggestFormulaName() {
 
 // Подсказка полей: числовые переменные массива, щелчок вставляет имя в курсор.
 function renderFormulaVariables() {
+  // Формулы тоже годятся источником, кроме самой редактируемой.
   const numeric = currentProject.inspection.variables
-    .filter(item => item.storage_type === "numeric" && !item.formula_id)
-    .slice(0, 60);
+    .filter(item => item.storage_type === "numeric" && (!item.formula_id || item.formula_id !== currentFormulaId))
+    .slice(0, 80);
   document.querySelector("#formula-variables").innerHTML = numeric.map(item => `
     <button type="button" data-insert-variable="${escapeAttribute(item.name)}" title="${escapeAttribute(item.label || item.name)}">${escapeHtml(item.name)}</button>`).join("");
 }

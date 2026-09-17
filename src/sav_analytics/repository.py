@@ -23,6 +23,7 @@ from .core.formulas import (
     formula_question,
     formula_statistics,
     formula_variable,
+    formula_variables,
     validate_formula,
 )
 from .core.not_applicable import NotApplicableConfirmationRequired, assess_not_applicable
@@ -512,6 +513,16 @@ class ProjectRepository:
             raise ProjectNotFoundError(identifier)
         name = formula["name"]
         ensure_not_referenced(configuration, "question", name, "Формула")
+        dependants = [
+            item["name"]
+            for item in configuration.get("formulas", [])
+            if item["id"] != identifier and name in formula_variables(item["expression"])
+        ]
+        if dependants:
+            raise ConfigurationIntegrityError(
+                f"На формулу ссылаются другие формулы: {', '.join(dependants)}. "
+                "Сначала измените их."
+            )
         if any(item.get("source_variable") == name for item in configuration["recodings"]):
             raise ConfigurationIntegrityError(
                 "Формула используется в перекодировке. Сначала удалите перекодировку."
@@ -537,7 +548,7 @@ class ProjectRepository:
     def _formula_counts(self, project_id: UUID, project: dict, record: dict) -> dict[str, int]:
         try:
             validate_formula(record, project, formula_id=record["id"])
-            return formula_statistics(self.source_path(project_id), record)
+            return formula_statistics(self.source_path(project_id), record, project)
         except FormulaError as exc:
             raise InvalidUploadError(str(exc)) from exc
 

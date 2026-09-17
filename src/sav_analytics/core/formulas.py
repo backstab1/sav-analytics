@@ -282,19 +282,73 @@ def validate_formula(
         for item in project["inspection"]["variables"]
         if not item.get("formula_id")
     }
+    others = {
+        item["name"]: item
+        for item in formulas
+        if formula_id is None or item["id"] != formula_id
+    }
     sources = formula_variables(definition["expression"])
     if not sources:
         raise FormulaError("Формула должна опираться хотя бы на одну переменную массива.")
     for source in sources:
+        if source == name:
+            raise FormulaError("Формула не может ссылаться на саму себя.")
+        if source in others:
+            continue
         if source not in variables:
-            if any(item["name"] == source for item in formulas):
-                raise FormulaError(
-                    f"{source} — формула. Формула пока строится только на переменных массива."
-                )
             raise FormulaError(f"Переменной {source} нет в массиве.")
         if variables[source].get("storage_type") != "numeric":
             raise FormulaError(f"{source} — текстовая переменная, в формуле нужны числовые.")
+    # Цикл: формула, на которую мы ссылаемся, сама (через цепочку) ссылается на нас.
+    candidate = {**others, name: {**definition, "name": name}}
+    _check_cycles(candidate)
     return sources
+
+
+def _check_cycles(formulas: dict[str, dict[str, Any]]) -> None:
+    state: dict[str, str] = {}
+
+    def visit(name: str, chain: list[str]) -> None:
+        if state.get(name) == "done":
+            return
+        if state.get(name) == "active":
+            loop = " → ".join([*chain[chain.index(name):], name])
+            raise FormulaError(f"Формулы ссылаются друг на друга по кругу: {loop}.")
+        state[name] = "active"
+        for source in formula_variables(formulas[name]["expression"]):
+            if source in formulas:
+                visit(source, [*chain, name])
+        state[name] = "done"
+
+    for name in formulas:
+        visit(name, [])
+
+
+def formula_order(formulas: dict[str, dict[str, Any]], wanted: Iterable[str]) -> list[str]:
+    """Формулы в порядке вычисления: зависимости раньше зависящих."""
+    order: list[str] = []
+
+    def visit(name: str) -> None:
+        if name in order:
+            return
+        for source in formula_variables(formulas[name]["expression"]):
+            if source in formulas:
+                visit(source)
+        order.append(name)
+
+    for name in wanted:
+        visit(name)
+    return order
+
+
+def base_columns(formulas: dict[str, dict[str, Any]], names: Iterable[str]) -> list[str]:
+    """Столбцы SAV, из которых считаются формулы, со всей цепочкой."""
+    columns: list[str] = []
+    for name in formula_order(formulas, names):
+        for source in formula_variables(formulas[name]["expression"]):
+            if source not in formulas and source not in columns:
+                columns.append(source)
+    return columns
 
 
 def formula_preview(
@@ -306,7 +360,7 @@ def formula_preview(
     не заполнено: так видно, какое поле «съедает» базу.
     """
     sources = validate_formula(definition, project, formula_id=definition.get("id"))
-    frame = _read_sav(path, sources)
+    frame = read_project_frame(path, _without_formula(project, definition.get("id")), sources)
     series = evaluate_formula(definition["expression"], frame)
     empty = series.isna()
     labels = {item["name"]: item.get("label") for item in project["inspection"]["variables"]}
@@ -329,10 +383,29 @@ def formula_preview(
     }
 
 
-def formula_statistics(path: str | Path, definition: dict[str, Any]) -> dict[str, int]:
+def _without_formula(project: dict[str, Any], formula_id: str | None) -> dict[str, Any]:
+    """Проект без правимой формулы: её старая версия не должна считаться источником."""
+    if formula_id is None or "configuration" not in project:
+        return project
+    configuration = project["configuration"]
+    return {
+        **project,
+        "configuration": {
+            **configuration,
+            "formulas": [
+                item for item in configuration.get("formulas", []) if item["id"] != formula_id
+            ],
+        },
+    }
+
+
+def formula_statistics(
+    path: str | Path, definition: dict[str, Any], project: dict[str, Any] | None = None
+) -> dict[str, int]:
     """Счётчики производной переменной для структуры проекта."""
     sources = formula_variables(definition["expression"])
-    series = evaluate_formula(definition["expression"], _read_sav(path, sources))
+    frame = read_project_frame(path, _without_formula(project or {}, definition.get("id")), sources)
+    series = evaluate_formula(definition["expression"], frame)
     return {
         "valid_count": int(series.notna().sum()),
         "missing_count": int(series.isna().sum()),
@@ -352,19 +425,15 @@ def read_project_frame(
         for item in ((project or {}).get("configuration") or {}).get("formulas", [])
     }
     if columns is None:
-        wanted = list(formulas)
+        wanted = formula_order(formulas, formulas)
         usecols = None
     else:
         requested = list(dict.fromkeys(columns))
-        wanted = [name for name in requested if name in formulas]
+        wanted = formula_order(formulas, [name for name in requested if name in formulas])
         usecols = list(
             dict.fromkeys(
                 [name for name in requested if name not in formulas]
-                + [
-                    source
-                    for name in wanted
-                    for source in formula_variables(formulas[name]["expression"])
-                ]
+                + base_columns(formulas, wanted)
             )
         )
     frame = _read_sav(path, usecols)
