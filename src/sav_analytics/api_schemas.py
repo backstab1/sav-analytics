@@ -74,6 +74,24 @@ class QuestionSettingsCopy(BaseModel):
     ] = Field(default_factory=lambda: list(COPYABLE_QUESTION_SETTINGS), min_length=1)
 
 
+class AnalysisSource(BaseModel):
+    kind: Literal["question", "recoding"]
+    ref: str = Field(min_length=1, max_length=64)
+
+
+class AnalysisCardCreate(BaseModel):
+    """Карточка связи двух переменных в рабочей области «Анализа»."""
+
+    a: AnalysisSource
+    b: AnalysisSource
+
+    @model_validator(mode="after")
+    def validate_distinct(self) -> Self:
+        if self.a == self.b:
+            raise ValueError("Выберите две разные переменные.")
+        return self
+
+
 class QuestionOrder(BaseModel):
     codes: list[str]
 

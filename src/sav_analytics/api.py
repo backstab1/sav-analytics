@@ -26,6 +26,7 @@ from .core.preflight import PreflightBlockedError
 from .core.weight_validation import WeightNotUsableError
 from .project_models import InvalidStoredProjectError
 from .routers import (
+    analysis,
     banners,
     filters,
     formulas,
@@ -199,6 +200,7 @@ def health() -> dict[str, str]:
 
 for router in (
     projects.router,
+    analysis.router,
     questions.router,
     recodings.router,
     formulas.router,

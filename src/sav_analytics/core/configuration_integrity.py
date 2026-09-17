@@ -52,6 +52,15 @@ def find_references(
                     )
                 )
 
+        for card in configuration.get("analysis_cards", []):
+            if any(
+                source.get("kind") == target_kind and str(source.get("ref")) == identifier
+                for source in (card.get("a", {}), card.get("b", {}))
+            ):
+                references.append(
+                    ConfigurationReference(target_kind, identifier, "карточка «Анализа»")
+                )
+
         for definition in configuration.get("filters", []):
             if any(
                 source.get("kind") == target_kind
