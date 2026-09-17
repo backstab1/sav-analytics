@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260917-modules-9" />
+    <link rel="stylesheet" href="/styles.css?v=20260918-tables-1" />
   </head>
   <body>
     <!-- ================================================================
@@ -483,44 +483,25 @@
 
             <!-- ================= Раздел «Таблицы» ===========================
 
-                 Бывший экран «Конструктор · демо», теперь раздел рабочей
-                 области. Скрывается и показывается из app.js (setView), числа
-                 считает POST /api/projects/{id}/tables/preview.
+                 Живой кросстаб. Числа считает POST
+                 /api/projects/{id}/tables/preview тем же ядром, что пишет
+                 книгу Excel.
 
-                 Называется демонстрацией, пока числа не считаются по данным
-                 проекта (roadmap, P1.0 и PQ.3). Ассистент — regex-заглушка.
-
-                 Главный объект экрана — сама таблица, а не настройки вокруг
-                 неё: раскладка «палитра / стол / чат» отдавала кросстабу
-                 треть ширины и делила внимание натрое. Полки «строки,
-                 колонки, фильтр» вместе с показателем и тестами свёрнуты
-                 в полосу параметров под таблицей, список переменных
-                 открывается из неё поповером, ассистент стоит внизу полосой.
-
-                 Порядок ярусов: шапка — таблица — параметры — ассистент.
+                 Ярусов два: полоса параметров и таблица под ней. Полоса
+                 стоит сверху, потому что поповер должен раскрываться вниз,
+                 и держится в одну строку: раскладка (строки, колонки,
+                 фильтр), показатель, меню «Вид» с остальным и действия
+                 справа. Подпись под таблицей — состояние расчёта, а не
+                 орган управления. Ассистент свёрнут в строку.
                  ============================================================ -->
             <section id="section-tables" class="bld" hidden>
+              <h1 class="bld-h1">Кросстаб</h1>
 
-              <div class="bld-head">
-                <div class="bld-head-text">
-                  <p class="eyebrow">Кросстаб</p>
-                  <h1>Таблица</h1>
-                </div>
-                <p class="bld-lead">Числа считает то же ядро, что книгу Excel: число в таблице равно числу в выгрузке. Щелчок по числу с тестом открывает его протокол.</p>
-              </div>
-
-              <div class="bld-table">
-                <div id="bld-grid-wrap" class="bld-grid-wrap"></div>
-                <figure id="bld-chart" class="bld-chart" hidden>
-                  <figcaption><span id="bld-chart-title"></span><button id="bld-chart-close" class="text-button" type="button">Скрыть график</button></figcaption>
-                  <div id="bld-chart-body"></div>
-                </figure>
-              </div>
-
-              <!-- Полоса параметров. Каждая пилюля — и значение, и кнопка
-                   выбора: список переменных открывается из неё же. Пилюли
-                   остаются зонами приёма, поэтому перетаскивание из поповера
-                   работает по-прежнему. -->
+              <!-- Полоса параметров. Пилюля — и значение, и кнопка выбора:
+                   список переменных открывается из неё же. Пилюли остаются
+                   зонами приёма, поэтому перетаскивание работает по-прежнему.
+                   Значение в пилюле короткое («первое +2»), полный список —
+                   в подсказке: иначе пилюля растягивается на пол-полосы. -->
               <div class="bld-params">
                 <button type="button" class="bld-param bld-zone" data-zone="rows" aria-haspopup="dialog" aria-expanded="false">
                   <em>Строки</em><b data-slot="rows">не выбраны</b><span class="bld-caret" aria-hidden="true"></span>
@@ -534,40 +515,72 @@
                   <em>Фильтр</em><b data-slot="filter">вся выборка</b><span class="bld-caret" aria-hidden="true"></span>
                 </button>
                 <span class="bld-param-sep" aria-hidden="true"></span>
-                <label class="bld-param bld-param-field"><em>Показатель</em><select id="bld-measure"><option value="value">доли и средние</option><option value="index">индекс к Total</option></select></label>
-                <label class="bld-param bld-param-field" title="Сколько крайних кодов шкалы входит в Top и Bottom на этом экране; в проект не сохраняется"><em>Top/Bottom</em><select id="bld-box"><option value="">как в отчёте</option><option value="2">2</option><option value="3">3</option></select></label>
-                <button type="button" id="bld-net" class="bld-param bld-toggle" hidden title="Собрать NET-группу из строк таблицы — только на этом экране">NET</button>
-                <label class="bld-param bld-param-field"><em>Доли</em><select id="bld-sheet"><option value="main">от всех респондентов</option><option value="filter">от ответивших на вопрос</option></select></label>
-                <span class="bld-param bld-param-field" title="Схема сравнения, уровень доверия и вес задаются в разделе «Отчёты» и действуют и здесь, и в книге"><em>Тесты</em><b id="bld-tests">—</b></span>
-                <span class="bld-param-sep" aria-hidden="true"></span>
+                <label class="bld-param bld-param-field" title="Что показывают ячейки">
+                  <select id="bld-measure" aria-label="Показатель"><option value="value">доли и средние</option><option value="index">индекс к Total</option></select>
+                </label>
+                <button type="button" id="bld-view" class="bld-param bld-toggle" aria-haspopup="dialog" aria-expanded="false"
+                        title="Доли, Top/Bottom и NET — настройки этого экрана">Вид<span class="bld-caret" aria-hidden="true"></span></button>
+                <span class="bld-params-grow" aria-hidden="true"></span>
                 <button type="button" id="bld-save-cut" class="bld-param bld-toggle" hidden
-                        title="Сохранить колонки таблицы баннером отчёта — переименовать можно в «Отчётах»">Разрез в баннер</button>
+                        title="Сохранить колонки таблицы баннером отчёта — переименовать можно в «Отчётах»">В баннер</button>
                 <span class="bld-export-wrap">
                   <button type="button" id="bld-export" class="bld-param bld-toggle" hidden aria-haspopup="menu" aria-expanded="false"
-                          title="Выгрузить книгой Excel тем же сборщиком, что полный отчёт">Excel</button>
+                          title="Выгрузить книгой Excel тем же сборщиком, что полный отчёт">Excel<span class="bld-caret" aria-hidden="true"></span></button>
                   <span id="bld-export-menu" class="bld-export-menu" role="menu" hidden>
                     <button type="button" role="menuitem" data-export-scope="table">Эта таблица<small>вопросы строк</small></button>
                     <button type="button" role="menuitem" data-export-scope="report">Все вопросы отчёта<small>с этим разрезом и фильтром</small></button>
                   </span>
                 </span>
-                <span id="bld-stage-note" class="bld-note"></span>
+              </div>
+
+              <div class="bld-table">
+                <div id="bld-grid-wrap" class="bld-grid-wrap"></div>
+                <figure id="bld-chart" class="bld-chart" hidden>
+                  <figcaption><span id="bld-chart-title"></span><button id="bld-chart-close" class="text-button" type="button">Скрыть график</button></figcaption>
+                  <div id="bld-chart-body"></div>
+                </figure>
+                <!-- Строка состояния: что посчитано и по какой схеме тестов.
+                     Схема задаётся в «Отчётах» и действует и здесь, и в книге. -->
+                <div class="bld-status">
+                  <span id="bld-stage-note" class="bld-note"></span>
+                  <span class="bld-status-tests" title="Схема сравнения, уровень доверия и вес задаются в разделе «Отчёты»">Тесты <b id="bld-tests">—</b></span>
+                </div>
               </div>
 
               <!-- Ассистент. По решению 002 он тонкий слой над расчётом, а не
-                   сам продукт, поэтому и места занимает полосу: лог раскрыт,
-                   только когда в нём что-то есть. -->
+                   сам продукт, и пока это заглушка — свёрнут в строку. -->
               <div class="bld-assistant">
-                <div id="bld-log" class="bld-log"></div>
-                <div class="bld-ask">
-                  <div id="bld-suggest" class="bld-suggest"></div>
-                  <form id="bld-form" class="bld-form">
-                    <textarea id="bld-input" rows="1" placeholder="Например: разбей по возрасту" aria-label="Запрос к ассистенту"></textarea>
-                    <button type="submit" aria-label="Отправить">
-                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                    </button>
-                  </form>
+                <button type="button" id="bld-assistant-toggle" class="bld-assistant-toggle"
+                        aria-expanded="false" aria-controls="bld-assistant-body">
+                  <span class="bld-assistant-mark" aria-hidden="true">✦</span>Ассистент<em>заглушка: меняет раскладку, числа считает ядро</em><span class="bld-caret" aria-hidden="true"></span>
+                </button>
+                <div id="bld-assistant-body" class="bld-assistant-body" hidden>
+                  <div id="bld-log" class="bld-log"></div>
+                  <div class="bld-ask">
+                    <div id="bld-suggest" class="bld-suggest"></div>
+                    <form id="bld-form" class="bld-form">
+                      <textarea id="bld-input" rows="1" placeholder="Например: разбей по возрасту" aria-label="Запрос к ассистенту"></textarea>
+                      <button type="submit" aria-label="Отправить">
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                      </button>
+                    </form>
+                  </div>
                 </div>
-                <p class="bld-disclaimer">Ассистент не подключён: ответы заранее записаны. Таблицу считает расчётное ядро.</p>
+              </div>
+
+              <!-- Меню «Вид»: то, что меняет вид уже выбранной раскладки и
+                   в проект не сохраняется. -->
+              <div id="bld-view-menu" class="bld-menu" role="dialog" aria-label="Вид таблицы" hidden>
+                <label class="bld-menu-row"><span>Доли</span>
+                  <select id="bld-sheet"><option value="main">от всех респондентов</option><option value="filter">от ответивших на вопрос</option></select>
+                </label>
+                <label class="bld-menu-row" title="Сколько крайних кодов шкалы входит в Top и Bottom"><span>Top/Bottom</span>
+                  <select id="bld-box"><option value="">как в отчёте</option><option value="2">2</option><option value="3">3</option></select>
+                </label>
+                <div class="bld-menu-row" id="bld-net-row" hidden><span>Группы строк</span>
+                  <button type="button" id="bld-net" class="bld-menu-button" title="Собрать NET-группу из строк таблицы">NET</button>
+                </div>
+                <p class="bld-menu-note">Настройки этого экрана: в проект не сохраняются.</p>
               </div>
 
               <!-- Бывшая колонка «Переменные»: тот же список и поиск, но
@@ -740,21 +753,21 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
-    <script src="/shell.js?v=20260917-modules-9" defer></script>
-    <script src="/app.js?v=20260917-modules-9" defer></script>
-    <script src="/library.js?v=20260917-modules-9" defer></script>
-    <script src="/bulk.js?v=20260917-modules-9" defer></script>
-    <script src="/question.js?v=20260917-modules-9" defer></script>
-    <script src="/recode.js?v=20260917-modules-9" defer></script>
-    <script src="/weight.js?v=20260917-modules-9" defer></script>
-    <script src="/filter.js?v=20260917-modules-9" defer></script>
-    <script src="/report.js?v=20260917-modules-9" defer></script>
-    <script src="/launch.js?v=20260917-modules-9" defer></script>
-    <script src="/picker.js?v=20260917-modules-9" defer></script>
-    <script src="/banner.js?v=20260917-modules-9" defer></script>
-    <script src="/formulas.js?v=20260917-modules-9" defer></script>
-    <script src="/analysis.js?v=20260917-modules-9" defer></script>
-    <script src="/coding.js?v=20260917-modules-9" defer></script>
-    <script src="/boot.js?v=20260917-modules-9" defer></script>
+    <script src="/shell.js?v=20260918-tables-1" defer></script>
+    <script src="/app.js?v=20260918-tables-1" defer></script>
+    <script src="/library.js?v=20260918-tables-1" defer></script>
+    <script src="/bulk.js?v=20260918-tables-1" defer></script>
+    <script src="/question.js?v=20260918-tables-1" defer></script>
+    <script src="/recode.js?v=20260918-tables-1" defer></script>
+    <script src="/weight.js?v=20260918-tables-1" defer></script>
+    <script src="/filter.js?v=20260918-tables-1" defer></script>
+    <script src="/report.js?v=20260918-tables-1" defer></script>
+    <script src="/launch.js?v=20260918-tables-1" defer></script>
+    <script src="/picker.js?v=20260918-tables-1" defer></script>
+    <script src="/banner.js?v=20260918-tables-1" defer></script>
+    <script src="/formulas.js?v=20260918-tables-1" defer></script>
+    <script src="/analysis.js?v=20260918-tables-1" defer></script>
+    <script src="/coding.js?v=20260918-tables-1" defer></script>
+    <script src="/boot.js?v=20260918-tables-1" defer></script>
   </body>
 </html>

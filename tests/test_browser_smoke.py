@@ -312,6 +312,14 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     expect(page.locator("#bld-picker")).to_be_visible(timeout=UI_TIMEOUT)
     page.keyboard.press("Escape")
     expect(page.locator("#bld-picker")).to_be_hidden(timeout=UI_TIMEOUT)
+    # Поповер раскрывается вниз от пилюли и целиком помещается в окно:
+    # прежняя версия цеплялась за верх пилюли и уезжала за нижний край,
+    # когда раздел не помещался в высоту.
+    page.click('.bld-param[data-zone="rows"]')
+    picker = page.locator("#bld-picker").bounding_box()
+    viewport = page.viewport_size
+    assert picker["y"] >= 0 and picker["y"] + picker["height"] <= viewport["height"] + 1, picker
+    page.keyboard.press("Escape")
 
     # «Анализ» — свой раздел с карточками связи.
     _open_view(page, "analysis")
@@ -1119,6 +1127,10 @@ def test_net_group_is_built_on_the_table_screen_without_saving(
     page.keyboard.press("Escape")
     expect(page.locator("#bld-grid-wrap table.bld-grid")).to_be_visible(timeout=UI_TIMEOUT)
 
+    # Доли, Top/Bottom и NET живут в меню «Вид»: полоса параметров держится
+    # в одну строку, а эти три настройки меняют вид уже посчитанного.
+    page.click("#bld-view")
+    expect(page.locator("#bld-net-row")).to_be_visible(timeout=UI_TIMEOUT)
     page.click("#bld-net")
     expect(page.locator("#bld-net-add")).to_be_visible(timeout=UI_TIMEOUT)
     page.fill("#bld-net-label", "Любая марка")
@@ -1126,7 +1138,9 @@ def test_net_group_is_built_on_the_table_screen_without_saving(
     page.locator(".bld-net-values input").nth(1).check()
     page.click("#bld-net-add")
     expect(page.locator("#bld-grid-wrap")).to_contain_text("NET: Любая марка", timeout=UI_TIMEOUT)
+    page.click("#bld-view")
     expect(page.locator("#bld-net")).to_have_text("NET · 1")
+    page.keyboard.press("Escape")
 
     # Вопрос в структуре не изменился: группа живёт только на экране.
     _open_view(page, "data")

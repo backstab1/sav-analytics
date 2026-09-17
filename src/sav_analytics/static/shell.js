@@ -137,6 +137,11 @@
     const exportButton = document.querySelector("#bld-export");
     const exportMenu = document.querySelector("#bld-export-menu");
     const testsSlot = document.querySelector("#bld-tests");
+    const viewButton = document.querySelector("#bld-view");
+    const viewMenu = document.querySelector("#bld-view-menu");
+    const netRow = document.querySelector("#bld-net-row");
+    const assistantToggle = document.querySelector("#bld-assistant-toggle");
+    const assistantBody = document.querySelector("#bld-assistant-body");
     const log = document.querySelector("#bld-log");
     const form = document.querySelector("#bld-form");
     const input = document.querySelector("#bld-input");
@@ -206,35 +211,68 @@
        «строки / колонки / фильтр» стали полосой параметров под ней.
        Поповер знает свою зону, поэтому строка списка — переключатель:
        щелчок кладёт переменную в зону, повторный забирает. */
+    /* Поповер знает две вещи: из какой пилюли открыт (`pickerZone`) и
+       что в нём сейчас — список переменных или сборка NET (`pickerMode`).
+       Раньше режим NET не отмечался нигде, кроме data-атрибута, и
+       Escape с щелчком мимо его не закрывали: `closePicker` выходил по
+       пустой зоне, а панель оставалась висеть поверх таблицы. */
     let pickerZone = null;
+    let pickerMode = null;
+
+    /* Место поповера считается по месту на экране, а не по одной
+       выбранной стороне. Прежняя версия цеплялась `bottom` за верх
+       пилюли, и когда раздел не помещался в высоту окна, поповер
+       уезжал под нижний край — пилюля нажималась, а список «не
+       открывался». */
+    function placePopover(element, anchor) {
+      const margin = 10;
+      const gap = 6;
+      element.style.maxHeight = "";
+      element.style.bottom = "auto";
+      const box = anchor.getBoundingClientRect();
+      const below = window.innerHeight - box.bottom - margin - gap;
+      const above = box.top - margin - gap;
+      const natural = element.offsetHeight;
+      const up = natural > below && above > below;
+      const room = Math.min(520, Math.max(180, up ? above : below));
+      element.style.maxHeight = `${Math.round(room)}px`;
+      const height = Math.min(natural, room);
+      const top = up ? box.top - gap - height : box.bottom + gap;
+      const width = element.offsetWidth;
+      element.style.left = `${Math.round(Math.max(margin, Math.min(box.left, window.innerWidth - width - margin)))}px`;
+      element.style.top = `${Math.round(Math.max(margin, Math.min(top, window.innerHeight - height - margin)))}px`;
+    }
 
     function openPicker(zone, anchor) {
-      if (pickerZone === zone) {
+      if (pickerMode === "zone" && pickerZone === zone) {
         closePicker();
         return;
       }
+      closeViewMenu();
+      pickerMode = "zone";
       pickerZone = zone;
+      delete picker.dataset.mode;
       pickerTitle.textContent = ZONE_TITLE[zone];
       search.value = "";
       picker.hidden = false;
       renderPalette();
-      // Поповер раскрывается вверх: полоса параметров стоит внизу экрана.
-      const box = anchor.getBoundingClientRect();
-      const width = picker.offsetWidth;
-      picker.style.left = `${Math.round(Math.max(12, Math.min(box.left, window.innerWidth - width - 12)))}px`;
-      picker.style.bottom = `${Math.round(window.innerHeight - box.top + 8)}px`;
+      placePopover(picker, anchor);
       params.forEach(item => item.setAttribute("aria-expanded", String(item.dataset.zone === zone)));
       search.focus();
     }
 
     function closePicker() {
-      if (!pickerZone) return;
+      if (!pickerMode) return;
+      pickerMode = null;
       pickerZone = null;
       picker.hidden = true;
+      delete picker.dataset.mode;
       params.forEach(item => item.setAttribute("aria-expanded", "false"));
     }
 
     function renderPalette() {
+      // Пока в поповере собирают NET, список переменных его не затирает.
+      if (pickerMode === "net") return;
       const zone = pickerZone || "rows";
       const query = search.value.trim().toLowerCase();
       list.innerHTML = "";
@@ -242,7 +280,6 @@
         renderFilterPalette(query);
         return;
       }
-      if (zone === "cols") renderBannerOptions(query);
       const matched = variables.filter(item =>
         !query || (item.display || item.code).toLowerCase().includes(query) || item.label.toLowerCase().includes(query));
       count.textContent = variables.length ? `${matched.length} из ${variables.length}` : "";
@@ -291,9 +328,13 @@
         chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
         list.append(chip);
       });
+      if (zone === "cols") renderBannerOptions(query);
     }
 
-    // Сохранённый баннер отчёта годится и таблице: колонки те же, что в книге.
+    /* Сохранённый баннер отчёта годится и таблице: колонки те же, что в
+       книге. Идёт после переменных: баннеров в проекте накапливается
+       больше, чем помещается в поповер, и раньше они закрывали собой
+       весь список, ради которого поповер открывают. */
     function renderBannerOptions(query) {
       const matched = banners.filter(item => !query || item.name.toLowerCase().includes(query));
       if (!matched.length) return;
@@ -314,15 +355,11 @@
           event.stopPropagation();
           bannerId = chosen ? null : item.id;
           if (bannerId) layout.cols = [];
+          closePicker();
           render();
-          renderPalette();
         });
         list.append(chip);
       });
-      const caption2 = document.createElement("p");
-      caption2.className = "bld-list-caption";
-      caption2.textContent = "Переменные";
-      list.append(caption2);
     }
 
     // Фильтр таблицы — сохранённое правило проекта: условие собирается в
@@ -342,9 +379,9 @@
         chip.querySelector(".bld-var-name").textContent = item.name;
         chip.addEventListener("click", event => {
           event.stopPropagation();
+          closePicker();
           if (item.id) addToZone(item.id, "filter");
           else { layout.filter = []; render(); }
-          renderPalette();
         });
         list.append(chip);
       });
@@ -356,25 +393,41 @@
       }
     }
 
-    // Полоса параметров: пилюля несёт имя свойства и его значение —
-    // ровно как строки свойств книги в разделе «Отчёты».
+    /* Полоса параметров: пилюля несёт имя свойства и его значение —
+       ровно как строки свойств книги в разделе «Отчёты». Значение
+       короткое: подписи вопросов длинные, и пилюля со всеми сразу
+       растягивалась на пол-полосы и ломала её на два яруса. Полный
+       список остаётся подсказкой пилюли. */
+    function shorten(labels, joiner) {
+      if (!labels.length) return "";
+      // Обрезает сам код, а не многоточие CSS: иначе «+2» уезжает
+      // за край пилюли вместе с хвостом длинной подписи.
+      const clip = text => (text.length > 24 ? `${text.slice(0, 23)}…` : text);
+      if (joiner === " × ") return labels.map(clip).join(" × ");
+      if (labels.length === 1) return clip(labels[0]);
+      return `${clip(labels[0])} +${labels.length - 1}`;
+    }
+
     function renderParams() {
-      const slots = {
-        rows: layout.rows.map(code => byCode.get(code)?.label).filter(Boolean).join(", "),
+      const values = {
+        rows: layout.rows.map(code => byCode.get(code)?.label).filter(Boolean),
         cols: bannerId
-          ? banners.find(item => item.id === bannerId)?.name || ""
-          : layout.cols.map(code => byCode.get(code)?.label).filter(Boolean).join(nested ? " × " : ", "),
-        filter: layout.filter.map(id => filters.find(item => item.id === id)?.name).filter(Boolean).join(", "),
+          ? [banners.find(item => item.id === bannerId)?.name].filter(Boolean)
+          : layout.cols.map(code => byCode.get(code)?.label).filter(Boolean),
+        filter: layout.filter.map(id => filters.find(item => item.id === id)?.name).filter(Boolean),
       };
       saveCutButton.hidden = Boolean(bannerId) || !layout.cols.length;
       exportButton.hidden = !layout.rows.length;
       nestToggle.hidden = Boolean(bannerId) || layout.cols.length < 2;
       nestToggle.setAttribute("aria-pressed", String(nested));
-      Object.entries(slots).forEach(([zone, text]) => {
+      Object.entries(values).forEach(([zone, labels]) => {
         const slot = document.querySelector(`[data-slot="${zone}"]`);
         if (!slot) return;
-        slot.textContent = text || ZONE_EMPTY[zone];
-        slot.closest(".bld-param").classList.toggle("off", !text);
+        const joiner = zone === "cols" && nested ? " × " : ", ";
+        slot.textContent = shorten(labels, joiner) || ZONE_EMPTY[zone];
+        const pill = slot.closest(".bld-param");
+        pill.classList.toggle("off", !labels.length);
+        pill.title = labels.length ? `${ZONE_TITLE[zone]}: ${labels.join(joiner)}` : ZONE_TITLE[zone];
       });
     }
 
@@ -465,7 +518,7 @@
     }
 
     function renderNetControl() {
-      netButton.hidden = !lastTable || !netableQuestions().length;
+      netRow.hidden = !lastTable || !netableQuestions().length;
       const total = [...liveNets.values()].reduce((sum, nets) => sum + nets.length, 0);
       netButton.textContent = total ? `NET · ${total}` : "NET";
       netButton.setAttribute("aria-pressed", total ? "true" : "false");
@@ -488,6 +541,10 @@
       </div>`;
       picker.hidden = false;
       picker.dataset.mode = "net";
+      pickerMode = "net";
+      pickerZone = null;
+      params.forEach(item => item.setAttribute("aria-expanded", "false"));
+      placePopover(picker, viewButton);
     }
 
     list.addEventListener("click", event => {
@@ -511,13 +568,16 @@
       const nets = [...(liveNets.get(netTarget) || []).filter(net => net.label !== label),
         { label, values: values.map(value => codes.get(value) ?? value) }];
       liveNets.set(netTarget, nets);
-      picker.hidden = true;
-      delete picker.dataset.mode;
+      closePicker();
       renderNetControl();
       void renderGrid();
     });
 
-    netButton.addEventListener("click", openNetPicker);
+    netButton.addEventListener("click", event => {
+      event.stopPropagation();
+      closeViewMenu();
+      openNetPicker();
+    });
     boxSelect.addEventListener("change", () => { void renderGrid(); });
 
     function tableRequest() {
@@ -749,6 +809,28 @@
       exportButton.setAttribute("aria-expanded", "false");
     }
 
+    /* Меню «Вид» — то, что меняет вид уже посчитанного: доли, размер
+       Top/Bottom и NET. В полосе они стояли отдельными пилюлями, и
+       полоса из-за них не держалась в одну строку. */
+    function closeViewMenu() {
+      viewMenu.hidden = true;
+      viewButton.setAttribute("aria-expanded", "false");
+    }
+
+    viewButton.addEventListener("click", event => {
+      event.stopPropagation();
+      if (!viewMenu.hidden) {
+        closeViewMenu();
+        return;
+      }
+      closePicker();
+      closeExportMenu();
+      viewMenu.hidden = false;
+      viewButton.setAttribute("aria-expanded", "true");
+      placePopover(viewMenu, viewButton);
+    });
+    viewMenu.addEventListener("click", event => event.stopPropagation());
+
     // «Эта таблица» — вопросы строк; «Все вопросы отчёта» — полный отчёт с
     // разрезом и фильтром экрана, как выгрузка всех строк кросстаба у Qualtrics.
     async function exportTable(scope) {
@@ -795,9 +877,12 @@
     });
     document.addEventListener("click", event => {
       if (!event.target.closest(".bld-export-wrap")) closeExportMenu();
+      if (!event.target.closest("#bld-view-menu") && !event.target.closest("#bld-view")) closeViewMenu();
     });
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape") closeExportMenu();
+      if (event.key !== "Escape") return;
+      closeExportMenu();
+      closeViewMenu();
     });
 
     /* Протокол теста по щелчку на ячейке — тот же текст, что примечание
@@ -976,8 +1061,21 @@
       },
     ];
 
+    /* Ассистент открывается по требованию: пока это заглушка, полоса
+       под ним забирала седьмую часть высоты экрана у таблицы. */
+    function setAssistantOpen(open) {
+      assistantBody.hidden = !open;
+      assistantToggle.setAttribute("aria-expanded", String(open));
+    }
+
+    assistantToggle.addEventListener("click", () => {
+      setAssistantOpen(assistantBody.hidden);
+      if (!assistantBody.hidden) input.focus();
+    });
+
     function ask(text) {
       if (!text.trim()) return;
+      setAssistantOpen(true);
       pushMessage("user", escapeHtml(text), null);
       const scenario = SCENARIOS.find(item => item.match.test(text));
       window.setTimeout(() => {

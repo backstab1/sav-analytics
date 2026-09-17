@@ -384,24 +384,6 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .wave-group ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: var(--t-xs); color: var(--c-ink-2); }
 .wave-blocking { padding: 8px 10px; border-radius: 8px; background: var(--c-danger-tint, #fdecea); color: var(--c-ink); font-size: var(--t-xs); }
 .wave-rows { font-size: var(--t-xs); color: var(--c-ink-3); }
-.bld-net-panel { display: grid; gap: 8px; padding: 10px; }
-.bld-net-row { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-xs); }
-.bld-net-row button { background: transparent; border: 0; color: var(--c-danger, #b3261e); cursor: pointer; }
-.bld-net-label { display: grid; gap: 4px; font-size: var(--t-xs); font-weight: 600; }
-.bld-net-label input { padding: 5px 8px; font: inherit; }
-.bld-net-values { display: grid; gap: 4px; max-height: 240px; overflow: auto; font-size: var(--t-xs); }
-.bld-net-add { padding: 6px 10px; border-radius: 8px; border: 0; background: var(--c-brand, #2eae68); color: #fff; cursor: pointer; font: inherit; font-size: var(--t-xs); }
-.bld-chart { margin: 10px 0 0; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
-.bld-chart[hidden] { display: none; }
-.bld-chart figcaption { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: var(--t-xs); font-weight: 600; color: var(--c-ink-2); }
-.bld-chart svg { width: 100%; height: auto; margin-top: 8px; }
-.bld-chart-label, .bld-chart-value { font-size: 11px; fill: var(--c-ink-2, #4a544f); }
-.bld-chart-bar { fill: var(--c-brand, #2eae68); opacity: .85; }
-.bld-chart-up { fill: var(--c-positive, #2eae68); }
-.bld-chart-down { fill: var(--c-negative, #b3261e); }
-.bld-chart-faint { fill: var(--c-ink-4, #9aa5a0); }
-.bld-rowchart { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-.bld-rowchart:hover { text-decoration: underline; }
 .header-preview { margin-top: 10px; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
 .header-preview summary { cursor: pointer; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
 .header-preview-rows { display: grid; gap: 3px; margin-top: 8px; }
@@ -2022,176 +2004,150 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .lp-card p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1.55; }
 
-/* ---------- Экран «AI-конструктор» ----------
+/* ---------- Раздел «Таблицы»: живой кросстаб ----------
 
-   Главный объект экрана — таблица. Прежняя раскладка «палитра / стол /
-   чат» отдавала кросстабу треть ширины и делила внимание натрое, хотя
-   по решению 002 живой кросстаб — сам продукт, а ассистент над ним
-   тонкий слой. Поэтому ярусы идут сверху вниз: шапка, таблица,
-   полоса параметров, полоса ассистента. Список переменных открывается
-   из пилюли поповером — как выбор баннера в разделе «Отчёт».
+   Главный объект экрана — таблица, поэтому хрома ровно два яруса:
+   полоса параметров над сеткой и строка состояния под ней. Полоса
+   перешла наверх вместе с поповерами: снизу список раскрывался вверх
+   и уезжал за край окна, когда раздел не помещался в высоту.
+
+   Полоса держится в одну строку. Значение пилюли обрезается по ширине,
+   полный список живёт в подсказке: подписи вопросов длинные, и пилюля
+   «Строки» раньше растягивалась на пол-полосы, ломая её на два яруса.
+   Всё, что меняет только вид уже посчитанного (доли, Top/Bottom, NET),
+   собрано в меню «Вид»; ассистент свёрнут в строку — по решению 002 он
+   тонкий слой над расчётом, а пока ещё и заглушка.
    ------------------------------------------------------------------ */
 .bld {
   height: calc(100dvh - var(--bars));
-  min-height: 560px;
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: 10px; padding: 12px var(--canvas-pad) var(--canvas-pad);
+  min-height: 320px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px; padding: 10px var(--canvas-pad) 12px;
   background: var(--c-bg);
+}
+/* Заголовок раздела виден в рельсе, на экране он занял бы ярус ради
+   повторения слова «Таблица». Остаётся только для озвучивания. */
+.bld-h1 {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 .bld-dim { color: var(--c-ink-3); font-size: var(--t-xs); }
 
-.bld-head { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
-.bld-head-text { min-width: 0; }
-.bld-head h1 { margin: 0; font-size: var(--t-2xl); font-weight: 800; letter-spacing: -0.035em; }
-.bld-warning {
-  flex: 1 1 320px; min-width: 0; margin: 0 0 3px;
-  padding: 7px 12px; border-radius: var(--r-2);
-  background: var(--c-warn-tint); color: var(--c-warn-ink);
-  font-size: var(--t-xs); line-height: 1.45;
-}
-
-/* Таблица занимает всю оставшуюся высоту и прокручивается внутри себя:
-   полоса параметров и ассистент не должны уезжать за нижний край. */
-.bld-table {
-  min-height: 0; display: flex; overflow: hidden;
-  background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: var(--r-3); box-shadow: var(--shadow-card);
-}
-
-/* Полоса параметров. Пилюля несёт имя свойства и его значение — тот же
-   приём, что и в строках свойств книги: значение и есть кнопка выбора. */
-.bld-params {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
-  padding: 9px 12px; background: var(--c-surface);
-  border: 1px solid var(--c-border); border-radius: var(--r-3);
-  box-shadow: var(--shadow-card);
-}
+/* ---- Полоса параметров ---- */
+.bld-params { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+.bld-params-grow { flex: 1 1 auto; min-width: 0; }
 .bld-param {
-  display: inline-flex; align-items: center; gap: 7px;
-  height: 30px; padding: 0 11px; border-radius: var(--r-pill);
-  border: 1px solid var(--c-border); background: var(--c-surface);
-  font-size: var(--t-xs); color: var(--c-ink); white-space: nowrap; max-width: 100%;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; max-width: 250px; padding: 0 8px;
+  border: 1px solid var(--c-border); border-radius: var(--r-1);
+  background: var(--c-surface); color: var(--c-ink);
+  font-size: var(--t-xs); white-space: nowrap;
 }
-.bld-param:hover { border-color: var(--c-border-strong); }
-.bld-param em { font-style: normal; color: var(--c-ink-4); }
-.bld-param b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.bld-param:hover { background: var(--c-surface-soft); border-color: var(--c-border-strong); transform: none; }
+.bld-param em { font-style: normal; color: var(--c-ink-3); }
+.bld-param b { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .bld-param.off b { font-weight: 500; color: var(--c-ink-3); }
-.bld-param[aria-expanded="true"] { border-color: transparent; background: var(--c-brand-tint); color: var(--c-brand); }
+.bld-param[aria-expanded="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
 .bld-param[aria-expanded="true"] em { color: var(--c-brand); }
 .bld-param.over { border-color: var(--c-brand); background: var(--c-brand-tint); }
 .bld-caret {
-  width: 0; height: 0; margin-top: 3px;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
-  border-top: 4px solid currentColor; opacity: .5;
+  flex: 0 0 auto; width: 0; height: 0; margin-left: 1px;
+  border-left: 3.5px solid transparent; border-right: 3.5px solid transparent;
+  border-top: 4px solid currentColor; opacity: .45;
 }
-.bld-param-field { gap: 6px; cursor: default; }
+.bld-param-field { padding: 0 4px 0 7px; cursor: default; }
 .bld-param-field select {
-  height: 22px; padding: 0 4px; border: 0; border-radius: var(--r-1);
-  background: var(--c-surface-soft); color: var(--c-ink);
-  font-size: var(--t-xs); font-weight: 600;
+  height: 22px; padding: 0 2px; border: 0; background: transparent;
+  color: inherit; font-size: var(--t-xs); font-weight: 600; cursor: pointer;
 }
-.bld-param-sep { width: 1px; height: 18px; background: var(--c-border); margin: 0 3px; }
+.bld-param-sep { width: 1px; height: 16px; background: var(--c-border); margin: 0 2px; }
 .bld-toggle { cursor: pointer; font-weight: 600; }
+.bld-toggle[aria-pressed="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
+
+/* Меню выгрузки раскрывается вниз: полоса стоит над таблицей. */
 .bld-export-wrap { position: relative; display: inline-flex; }
 .bld-export-menu {
-  position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 40; display: grid; min-width: 230px;
-  padding: 4px; background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: var(--r-2); box-shadow: 0 14px 36px rgba(15, 23, 20, .16);
+  position: absolute; right: 0; top: calc(100% + 5px); z-index: 40;
+  display: grid; min-width: 220px; padding: 4px;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-2); box-shadow: var(--shadow-drawer);
 }
 .bld-export-menu[hidden] { display: none; }
 .bld-export-menu button {
-  display: grid; gap: 1px; padding: 7px 10px; background: transparent; color: var(--c-ink);
+  display: grid; gap: 1px; padding: 6px 9px; background: transparent; color: var(--c-ink);
   border-radius: 7px; font-size: var(--t-xs); font-weight: 600; text-align: left;
 }
-.bld-export-menu button:hover { background: var(--c-surface-soft); color: var(--c-ink); }
+.bld-export-menu button:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
 .bld-export-menu small { color: var(--c-ink-3); font-weight: 400; }
-.bld-toggle[aria-pressed="true"] { border-color: transparent; background: var(--c-brand-tint); color: var(--c-brand); }
-.bld-list-caption {
-  margin: 6px 0 2px; padding: 0 4px; color: var(--c-ink-4);
-  font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
-}
-.bld-note { margin-left: auto; color: var(--c-ink-3); font-size: var(--t-xs); }
 
-/* Поповер переменных — бывшая колонка «Переменные» целиком: поиск,
-   список, счётчик. Раскрывается вверх, потому что полоса внизу. */
-.bld-picker {
-  position: fixed; z-index: 120; width: min(420px, calc(100vw - 24px));
-  max-height: min(60vh, 520px); display: flex; flex-direction: column;
+/* ---- Меню «Вид»: то, что меняет вид уже посчитанного ---- */
+.bld-menu {
+  position: fixed; z-index: 120; width: 264px; display: grid; gap: 7px;
+  padding: 10px; background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-2); box-shadow: var(--shadow-drawer);
+}
+.bld-menu[hidden] { display: none !important; }
+.bld-menu-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  color: var(--c-ink-2); font-size: var(--t-xs);
+}
+.bld-menu-row select {
+  max-width: 156px; height: 24px; padding: 0 4px;
+  border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-surface);
+  font-size: var(--t-xs); font-weight: 600;
+}
+.bld-menu-button {
+  height: 24px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: 6px;
+  background: var(--c-surface); color: var(--c-ink); font-size: var(--t-xs); font-weight: 600;
+}
+.bld-menu-button:hover { background: var(--c-surface-soft); transform: none; }
+.bld-menu-button[aria-pressed="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
+.bld-menu-note { margin: 1px 0 0; color: var(--c-ink-3); font-size: var(--t-micro); line-height: 1.45; }
+
+/* ---- Карточка таблицы ---- */
+.bld-table {
+  min-height: 0; display: flex; flex-direction: column; overflow: hidden;
   background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: var(--r-3); box-shadow: var(--shadow-pop);
-  overflow: hidden; animation: drawer-rise 160ms var(--ease);
+  border-radius: var(--r-2); box-shadow: var(--shadow-card);
 }
-.bld-picker[hidden] { display: none !important; }
-.bld-picker-head {
-  display: flex; align-items: baseline; gap: 9px;
-  padding: 10px 14px 6px;
-}
-.bld-picker-head strong { font-size: var(--t-sm); }
-.bld-search { padding: 0 12px 8px; }
-.bld-search input {
-  width: 100%; height: 30px; padding: 0 10px;
-  border: 1px solid var(--c-border); border-radius: var(--r-2);
-  background: var(--c-surface-soft); font-size: var(--t-sm);
-}
-.bld-search input:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
-.bld-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 10px; }
-.bld-list-empty { padding: var(--s-4) var(--s-2); line-height: 1.5; }
+.bld-grid-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--c-surface); }
+.bld-grid-wrap.loading { opacity: .55; transition: opacity .15s; }
 
-/* Строка списка — переключатель: поповер знает свою зону, поэтому
-   щелчок кладёт переменную туда, а повторный забирает. */
-.bld-var {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 6px 8px; border: 0; border-radius: var(--r-2);
-  background: transparent; text-align: left; cursor: grab;
+/* Строка состояния: что посчитано, а не чем управлять. */
+.bld-status {
+  display: flex; align-items: center; gap: 12px; min-height: 22px;
+  padding: 3px 10px; border-top: 1px solid var(--c-border);
+  background: var(--c-surface-soft); color: var(--c-ink-3); font-size: var(--t-micro);
 }
-.bld-var:hover { background: var(--c-surface-soft); transform: none; }
-.bld-var.dragging { opacity: .4; }
-.bld-var-mark {
-  width: 14px; height: 14px; flex: 0 0 auto; border-radius: 4px;
-  border: 1.5px solid var(--c-ink-4); background: var(--c-surface);
-}
-.bld-var.chosen .bld-var-mark {
-  border-color: var(--c-brand); background: var(--c-brand);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6.4 4.8 8.7 9.5 3.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-size: 11px 11px; background-position: center; background-repeat: no-repeat;
-}
-.bld-var.chosen { background: var(--c-brand-tint); }
-.bld-var-flat { cursor: default; color: var(--c-ink-4); }
-.bld-var-flat:hover { background: transparent; }
-.bld-var-flat .bld-var-code { background: var(--c-surface-soft); color: var(--c-ink-4); }
-.bld-var-flat .bld-var-name { color: var(--c-ink-4); }
-.bld-var-code {
-  flex-shrink: 0; padding: 1px 6px; border-radius: 5px;
-  background: var(--c-brand-tint); color: var(--c-brand);
-  font: 600 10.5px/1.5 "SF Mono", Menlo, Consolas, monospace;
-}
-.bld-var-name { flex: 1; min-width: 0; font-size: var(--t-sm); color: var(--c-ink-2);
-                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bld-var-kind { flex-shrink: 0; color: var(--c-ink-4); font-size: 11px; font-weight: 600; }
-.bld-placeholder { padding: 0 var(--s-2); color: var(--c-ink-4); font-size: var(--t-sm); }
+.bld-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-status-tests { margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+.bld-status-tests b { color: var(--c-ink-2); font-weight: 600; }
 
-.bld-grid-wrap { flex: 1; overflow: auto; background: var(--c-surface); }
-.bld-grid { border-collapse: separate; border-spacing: 0; font-size: var(--t-sm); }
+/* ---- Сетка ----
+   Таблица шириной по содержимому: общее правило `table { width: 100% }`
+   растягивало три колонки на всю ширину окна, и число уезжало от своей
+   шапки на пол-экрана. */
+.bld-grid { width: auto; border-collapse: separate; border-spacing: 0; font-size: var(--t-sm); }
+/* Общие правила таблиц этого файла заданы под справочный список вопросов:
+   они держат строку в 33px и набирают шапку капителью. Кросстабу не
+   годится ни то, ни другое — подписи категорий в верхнем регистре шире
+   и читаются хуже, а высота строки здесь и есть плотность экрана. */
 .bld-grid th, .bld-grid td {
+  height: auto; padding: 3px 9px;
   border-right: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border);
-  padding: 6px 10px; text-align: right; white-space: nowrap; background: var(--c-surface);
+  text-align: right; white-space: nowrap; background: var(--c-surface);
+  text-transform: none; letter-spacing: normal; backdrop-filter: none;
 }
-.bld-grid .bld-ref { background: var(--c-surface-soft); color: var(--c-ink-3);
-                     font: 600 10px/1.4 "SF Mono", Menlo, Consolas, monospace; text-align: center; }
+.bld-grid tbody tr:last-child td { border-bottom: 1px solid var(--c-border); }
 .bld-grid thead th { position: sticky; top: 0; z-index: 3; }
-.bld-grid .bld-corner, .bld-grid .bld-rowhead {
+.bld-grid .bld-rowhead {
   position: sticky; left: 0; z-index: 4; text-align: left;
+  min-width: 180px; max-width: 280px; white-space: normal;
+  color: var(--c-ink-2); vertical-align: top;
   border-right: 1px solid var(--c-border-strong);
 }
-.bld-grid .bld-corner { z-index: 6; background: var(--c-surface-soft); }
-.bld-grid .bld-rownum {
-  position: sticky; left: 0; z-index: 4; width: 34px; min-width: 34px;
-  background: var(--c-surface-soft); color: var(--c-ink-3);
-  font: 600 10px/1.4 "SF Mono", Menlo, Consolas, monospace; text-align: center;
-}
-.bld-grid .bld-rowhead { left: 34px; min-width: 210px; max-width: 300px;
-                         white-space: normal; color: var(--c-ink-2); vertical-align: top; }
 .bld-grid .bld-grouphead {
+  max-width: 340px; white-space: normal; line-height: 1.3;
   color: var(--c-ink); font-family: var(--font-display); font-weight: 700;
   font-size: var(--t-xs); text-align: center; background: var(--c-surface-soft);
 }
@@ -2200,40 +2156,50 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .bld-grid .bld-cathead {
   color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600;
   text-align: center; vertical-align: bottom;
-  min-width: 76px; max-width: 148px;
-  white-space: normal; line-height: 1.35; hyphens: auto;
+  min-width: 70px; max-width: 140px;
+  white-space: normal; line-height: 1.3; hyphens: auto;
 }
-.bld-grid .bld-grouphead { max-width: 340px; white-space: normal; line-height: 1.35; }
-.bld-grid .bld-cathead .bld-letter { display: block; color: var(--c-ink-4);
-                                     font: 700 9px/1.6 "SF Mono", Menlo, Consolas, monospace; }
+.bld-grid .bld-cathead .bld-letter {
+  display: block; color: var(--c-ink-4);
+  font: 700 9px/1.5 "SF Mono", Menlo, Consolas, monospace;
+}
+.bld-grid th.bld-basecell {
+  background: var(--c-surface); color: var(--c-ink-3);
+  font-size: var(--t-xs); font-weight: 500; text-align: center;
+}
+.bld-grid th.bld-basecell.bld-lowbase { color: var(--c-ink-4); }
 .bld-grid tr.bld-base td, .bld-grid tr.bld-base .bld-rowhead { color: var(--c-ink-3); font-size: var(--t-xs); }
 .bld-grid tr.bld-qrow td, .bld-grid tr.bld-qrow .bld-rowhead {
-  background: var(--c-surface-soft); font-weight: 600; color: var(--c-ink);
+  padding: 5px 9px; background: var(--c-surface-soft); font-weight: 600;
+  font-size: var(--t-xs); color: var(--c-ink);
   font-family: var(--font-display); text-align: left;
 }
-.bld-grid td.bld-val { font-variant-numeric: tabular-nums; color: var(--c-ink); }
-.bld-grid td.bld-val.bld-lowbase { color: var(--c-ink-4); }
-.bld-grid td.bld-val.bld-total { background: #fcfcfd; font-weight: 600; }
-.bld-grid td.bld-val .bld-sig { margin-left: 3px; color: var(--c-brand);
-                                font: 700 9px/1 "SF Mono", Menlo, Consolas, monospace; vertical-align: super; }
+.bld-grid tr.bld-derived td { background: var(--c-surface-soft); }
+.bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-brand); font-weight: 600; }
 .bld-grid tbody tr:hover td { background: #f7fbf9; }
 
 /* Живая таблица: цвет, стрелка и знаки приходят с сервера из формата книги. */
-.bld-lead { margin: 0; max-width: 560px; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
-.bld-grid.bld-live .bld-rowhead { left: 0; }
-.bld-grid-wrap.loading { opacity: .55; transition: opacity .15s; }
-.bld-grid th.bld-basecell { background: var(--c-surface); color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500; text-align: center; }
-.bld-grid th.bld-basecell.bld-lowbase { color: var(--c-ink-4); }
+.bld-grid td.bld-val { font-variant-numeric: tabular-nums; color: var(--c-ink); }
+.bld-grid td.bld-val.bld-lowbase { color: var(--c-ink-4); }
+.bld-grid td.bld-val.bld-total { background: #fcfcfd; font-weight: 600; }
 .bld-grid td.bld-val.bld-up { color: #17724a; font-weight: 700; }
 .bld-grid td.bld-val.bld-down { color: #ae382b; font-weight: 700; }
 .bld-grid td.bld-val.bld-absent { color: var(--c-ink-4); }
+.bld-grid td.bld-val .bld-sig {
+  margin-left: 3px; color: var(--c-brand);
+  font: 700 9px/1 "SF Mono", Menlo, Consolas, monospace; vertical-align: super;
+}
 .bld-grid td.bld-val .bld-sig.bld-sig-weak { color: var(--c-ink-3); font-weight: 600; }
 .bld-grid td.bld-val .bld-wave { margin-right: 3px; color: var(--c-ink-3); font-size: 10px; }
-.bld-grid tr.bld-derived td { background: var(--c-surface-soft); }
-.bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-brand); font-weight: 600; }
+
+/* Название строки — кнопка графика, но подчёркивание появляется только
+   под курсором: иначе подчёркнут весь первый столбец. */
+.bld-rowchart { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.bld-rowchart:hover { text-decoration: underline; }
+
 /* У каждого посчитанного числа есть протокол, поэтому пунктир появляется
-   только под числом, над которым курсор, — иначе подчёркнута вся таблица.
-   Общие стили кнопок заливают фон при наведении и фокусе; ячейке это не нужно. */
+   только под числом, над которым курсор. Общие стили кнопок заливают фон
+   при наведении и фокусе; ячейке это не нужно. */
 .bld-grid .bld-cell-button,
 .bld-grid .bld-cell-button:hover,
 .bld-grid .bld-cell-button:focus,
@@ -2243,71 +2209,166 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .bld-grid td:hover .bld-cell-button { border-bottom-color: currentColor; }
 .bld-grid .bld-cell-button:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 2px; }
+
+.bld-empty {
+  height: 100%; display: grid; place-content: center; justify-items: center;
+  gap: var(--s-3); padding: var(--s-6); text-align: center;
+}
+.bld-empty p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); max-width: 320px; line-height: 1.55; }
+
+/* ---- График строки: ярус внутри карточки таблицы ---- */
+.bld-chart { flex: 0 0 auto; margin: 0; padding: 8px 10px; border-top: 1px solid var(--c-border); background: var(--c-surface); }
+.bld-chart[hidden] { display: none; }
+.bld-chart figcaption { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: var(--t-xs); font-weight: 600; color: var(--c-ink-2); }
+.bld-chart svg { width: 100%; height: auto; margin-top: 6px; max-height: 220px; }
+.bld-chart-label, .bld-chart-value { font-size: 11px; fill: var(--c-ink-2, #4a544f); }
+.bld-chart-bar { fill: var(--c-brand, #2eae68); opacity: .85; }
+.bld-chart-up { fill: var(--c-positive, #2eae68); }
+.bld-chart-down { fill: var(--c-negative, #b3261e); }
+.bld-chart-faint { fill: var(--c-ink-4, #9aa5a0); }
+
+/* ---- Протокол теста ---- */
 .bld-protocol {
   position: fixed; z-index: 60; width: min(440px, calc(100vw - 24px)); max-height: 60vh; overflow: auto;
   padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: var(--r-2); box-shadow: 0 14px 36px rgba(15, 23, 20, .16);
+  border-radius: var(--r-2); box-shadow: var(--shadow-drawer);
 }
 .bld-protocol-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: var(--t-xs); }
 .bld-protocol-close { padding: 0 6px; background: transparent; color: var(--c-ink-3); font-size: 16px; }
 .bld-protocol pre { margin: 0 0 6px; white-space: pre-wrap; color: var(--c-ink-2); font: 11px/1.5 "SF Mono", Menlo, Consolas, monospace; }
-.bld-empty { height: 100%; display: grid; place-content: center; justify-items: center;
-             gap: var(--s-3); padding: var(--s-6); text-align: center; }
-.bld-empty p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); max-width: 320px; line-height: 1.55; }
 
-/* Ассистент — полоса, а не колонка: по решению 002 он тонкий слой над
-   расчётом, и пока это заглушка, забирать треть экрана ему тем более
-   не за что. Лог занимает место, только когда в нём что-то есть. */
+/* ---- Поповер переменных ----
+   Бывшая колонка «Переменные» целиком: поиск, список, счётчик.
+   Место и высоту считает shell.js по месту на экране. */
+.bld-picker {
+  position: fixed; z-index: 120; width: min(400px, calc(100vw - 24px));
+  max-height: min(60vh, 520px); display: flex; flex-direction: column;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-2); box-shadow: var(--shadow-drawer);
+  overflow: hidden; animation: drawer-rise 140ms var(--ease);
+}
+.bld-picker[hidden] { display: none !important; }
+.bld-picker-head { display: flex; align-items: baseline; gap: 8px; padding: 9px 12px 5px; }
+.bld-picker-head strong { font-size: var(--t-xs); }
+.bld-search { padding: 0 10px 7px; }
+.bld-search input {
+  width: 100%; height: 28px; padding: 0 9px;
+  border: 1px solid var(--c-border); border-radius: var(--r-1);
+  background: var(--c-surface-soft); font-size: var(--t-sm);
+}
+.bld-search input:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
+.bld-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 7px 9px; }
+.bld-list-empty { padding: var(--s-4) var(--s-2); line-height: 1.5; }
+.bld-list-caption {
+  margin: 7px 0 2px; padding: 0 4px; color: var(--c-ink-4);
+  font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+}
+
+/* Строка списка — переключатель: поповер знает свою зону, поэтому
+   щелчок кладёт переменную туда, а повторный забирает. */
+.bld-var {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 4px 7px; border: 0; border-radius: var(--r-1);
+  background: transparent; text-align: left; cursor: grab;
+}
+.bld-var:hover { background: var(--c-surface-soft); transform: none; }
+.bld-var.dragging { opacity: .4; }
+.bld-var-mark {
+  width: 13px; height: 13px; flex: 0 0 auto; border-radius: 4px;
+  border: 1.5px solid var(--c-ink-4); background: var(--c-surface);
+}
+.bld-var.chosen .bld-var-mark {
+  border-color: var(--c-brand); background: var(--c-brand);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6.4 4.8 8.7 9.5 3.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-size: 10px 10px; background-position: center; background-repeat: no-repeat;
+}
+.bld-var.chosen { background: var(--c-brand-tint); }
+.bld-var-flat { cursor: default; color: var(--c-ink-4); }
+.bld-var-flat:hover { background: transparent; }
+.bld-var-flat .bld-var-code { background: var(--c-surface-soft); color: var(--c-ink-4); }
+.bld-var-flat .bld-var-name { color: var(--c-ink-4); }
+.bld-var-code {
+  flex-shrink: 0; padding: 1px 5px; border-radius: 5px;
+  background: var(--c-brand-tint); color: var(--c-brand);
+  font: 600 10px/1.5 "SF Mono", Menlo, Consolas, monospace;
+}
+.bld-var-name { flex: 1; min-width: 0; font-size: var(--t-xs); color: var(--c-ink-2);
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-var-kind { flex-shrink: 0; color: var(--c-ink-4); font-size: 10px; font-weight: 600; }
+.bld-placeholder { padding: 0 var(--s-2); color: var(--c-ink-4); font-size: var(--t-sm); }
+
+/* NET-группы собираются в том же поповере: это тот же выбор строк. */
+.bld-net-panel { display: grid; gap: 8px; padding: 8px 4px; }
+.bld-net-row { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-xs); }
+.bld-net-row button { background: transparent; border: 0; color: var(--c-danger, #b3261e); cursor: pointer; }
+.bld-net-label { display: grid; gap: 4px; font-size: var(--t-xs); font-weight: 600; }
+.bld-net-label input { padding: 5px 8px; font: inherit; }
+.bld-net-values { display: grid; gap: 4px; max-height: 240px; overflow: auto; font-size: var(--t-xs); }
+.bld-net-add { padding: 6px 10px; border-radius: 8px; border: 0; background: var(--c-brand, #2eae68); color: #fff; cursor: pointer; font: inherit; font-size: var(--t-xs); }
+
+/* ---- Ассистент ----
+   Решение 002: тонкий слой над расчётом, а не сам продукт. Пока это
+   заглушка, полоса свёрнута в строку — честная подпись стоит прямо
+   в ней, а место забирает только раскрытый ассистент. */
 .bld-assistant {
   background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: var(--r-3); box-shadow: var(--shadow-card); overflow: hidden;
+  border-radius: var(--r-2); overflow: hidden;
 }
+.bld-assistant-toggle {
+  display: flex; align-items: center; gap: 7px; width: 100%; height: 28px;
+  padding: 0 10px; border: 0; border-radius: 0; background: transparent;
+  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600;
+  text-align: left; cursor: pointer;
+}
+.bld-assistant-toggle:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
+.bld-assistant-mark { flex: 0 0 auto; color: var(--c-brand); }
+.bld-assistant-toggle em {
+  flex: 1; min-width: 0; font-style: normal; font-weight: 400; color: var(--c-ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bld-assistant-toggle .bld-caret { opacity: .5; transition: transform .15s var(--ease); }
+.bld-assistant-toggle[aria-expanded="true"] .bld-caret { transform: rotate(180deg); }
+.bld-assistant-body { border-top: 1px solid var(--c-border); }
 .bld-log {
-  display: none; max-height: 168px; overflow-y: auto;
-  padding: 11px 14px; gap: var(--s-3); align-content: start;
+  display: none; max-height: 150px; overflow-y: auto;
+  padding: 10px 12px; gap: var(--s-3); align-content: start;
   border-bottom: 1px solid var(--c-border);
 }
 .bld-log.has-messages { display: grid; }
-.bld-msg { display: grid; gap: 5px; }
+.bld-msg { display: grid; gap: 4px; }
 .bld-who { color: var(--c-ink-4); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.bld-bubble { padding: 8px 12px; border-radius: var(--r-2); font-size: var(--t-sm); line-height: 1.55; }
+.bld-bubble { padding: 7px 11px; border-radius: var(--r-1); font-size: var(--t-xs); line-height: 1.55; }
 .bld-msg.user { justify-items: end; }
-.bld-msg.user .bld-bubble { background: var(--c-brand); color: #fff; border-bottom-right-radius: 5px; }
-.bld-msg.ai .bld-bubble { background: var(--c-surface-soft); color: var(--c-ink-2); border-bottom-left-radius: 5px; }
+.bld-msg.user .bld-bubble { background: var(--c-brand); color: #fff; border-bottom-right-radius: 4px; }
+.bld-msg.ai .bld-bubble { background: var(--c-surface-soft); color: var(--c-ink-2); border-bottom-left-radius: 4px; }
 .bld-did {
-  margin-top: 3px; padding: 6px 11px; border-left: 2px solid var(--c-brand);
+  margin-top: 3px; padding: 5px 10px; border-left: 2px solid var(--c-brand);
   background: var(--c-brand-tint); border-radius: 0 6px 6px 0;
-  color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.5;
+  color: var(--c-ink-2); font-size: var(--t-micro); line-height: 1.5;
 }
-
-/* Подсказки и строка ввода стоят в один ряд: это одна полоса, а не
-   два яруса — экран уже отдан таблице. */
-.bld-ask { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
-.bld-suggest { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.bld-ask { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.bld-suggest { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .bld-suggest button {
-  padding: 5px 10px; border: 1px solid var(--c-border); border-radius: var(--r-pill);
-  background: var(--c-surface); color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
+  padding: 4px 9px; border: 1px solid var(--c-border); border-radius: var(--r-1);
+  background: var(--c-surface); color: var(--c-ink-2); font-size: var(--t-micro); font-weight: 500;
 }
-.bld-suggest button:hover { border-color: var(--c-brand); color: var(--c-brand); background: var(--c-surface); }
-.bld-form { flex: 1 1 260px; min-width: 200px; display: flex; gap: 8px; align-items: center; }
+.bld-suggest button:hover { border-color: var(--c-brand); color: var(--c-brand); background: var(--c-surface); transform: none; }
+.bld-form { flex: 1 1 240px; min-width: 180px; display: flex; gap: 7px; align-items: center; }
 .bld-form textarea {
-  flex: 1; min-height: 32px; max-height: 88px; padding: 6px 11px; resize: none;
-  border: 1px solid var(--c-border-strong); border-radius: var(--r-pill);
-  background: var(--c-surface-soft); font-size: var(--t-sm); line-height: 1.45;
+  flex: 1; min-height: 28px; max-height: 80px; padding: 5px 10px; resize: none;
+  border: 1px solid var(--c-border-strong); border-radius: var(--r-1);
+  background: var(--c-surface-soft); font-size: var(--t-xs); line-height: 1.45;
 }
 .bld-form textarea:focus { outline: 0; border-color: var(--c-brand); box-shadow: var(--focus-ring); }
-.bld-form button { flex-shrink: 0; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
-.bld-form button svg { width: 16px; height: 16px; }
-.bld-disclaimer {
-  margin: 0; padding: 6px 14px; background: var(--c-surface-soft);
-  color: var(--c-ink-3); font-size: 11px; line-height: 1.5; text-align: center;
-}
+.bld-form button { flex-shrink: 0; width: 28px; height: 28px; padding: 0; border-radius: 50%; }
+.bld-form button svg { width: 15px; height: 15px; }
 
 @media (max-width: 900px) {
   .screens button { padding: 6px 9px; font-size: var(--t-xs); }
-  /* Ярусы конструктора те же, просто теснее: колонок, которые нужно
+  /* Ярусы таблицы те же, просто теснее: колонок, которые нужно
      было бы прятать, здесь больше нет. */
-  .bld { padding: 10px; gap: 8px; }
+  .bld { padding: 8px; gap: 6px; }
+  .bld-param { max-width: 190px; }
   .bld-ask { flex-wrap: wrap; }
 }
 
