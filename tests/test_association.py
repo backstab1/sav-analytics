@@ -118,6 +118,7 @@ def test_each_pair_type_matches_its_scipy_reference(tmp_path: Path) -> None:
     assert correlation["effect"] == pytest.approx(reference.statistic)
     assert correlation["p_value"] == pytest.approx(reference.pvalue)
     assert "Чем выше" in correlation["conclusion"]
+    assert "с поправкой на 4 карточки" in correlation["conclusion"]
 
     # Поправка Benjamini–Hochberg по всем четырём карточкам.
     adjusted = stats.false_discovery_control(

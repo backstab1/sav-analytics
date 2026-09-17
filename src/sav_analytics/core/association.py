@@ -452,12 +452,22 @@ def _p(value: float) -> str:
     return "< 0,001" if value < 0.001 else f"= {_number(value, 3)}"
 
 
+def _cards(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        word = "карточку"
+    elif count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
+        word = "карточки"
+    else:
+        word = "карточек"
+    return f"{count} {word}"
+
+
 def _conclusion(result: dict[str, Any]) -> str:
     if not result.get("performed"):
         return f"Тест не выполнен: {result.get('reason', 'нет данных')}"
     effect_name = EFFECT_NAMES[result["effect_kind"]]
     p_text = (
-        f"p {_p(result['p_value'])}, с поправкой на {result['comparisons']} карт. "
+        f"p {_p(result['p_value'])}, с поправкой на {_cards(result['comparisons'])} "
         f"p {_p(result['p_adjusted'])}"
     )
     if not result["significant"]:
