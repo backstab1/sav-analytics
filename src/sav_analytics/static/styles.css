@@ -379,6 +379,17 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .analysis-form label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }
 .analysis-form select { padding: 7px 9px; min-width: 0; }
 .analysis-cards { display: grid; gap: 10px; }
+.bld-chart { margin: 10px 0 0; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
+.bld-chart[hidden] { display: none; }
+.bld-chart figcaption { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: var(--t-xs); font-weight: 600; color: var(--c-ink-2); }
+.bld-chart svg { width: 100%; height: auto; margin-top: 8px; }
+.bld-chart-label, .bld-chart-value { font-size: 11px; fill: var(--c-ink-2, #4a544f); }
+.bld-chart-bar { fill: var(--c-brand, #2eae68); opacity: .85; }
+.bld-chart-up { fill: var(--c-positive, #2eae68); }
+.bld-chart-down { fill: var(--c-negative, #b3261e); }
+.bld-chart-faint { fill: var(--c-ink-4, #9aa5a0); }
+.bld-rowchart { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.bld-rowchart:hover { text-decoration: underline; }
 .header-preview { margin-top: 10px; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
 .header-preview summary { cursor: pointer; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
 .header-preview-rows { display: grid; gap: 3px; margin-top: 8px; }

@@ -494,6 +494,66 @@
       return `<td class="${classes.join(" ")}"><button type="button" class="bld-cell-button" data-protocol="${sheetRow}:${index}" aria-label="Протокол теста для ячейки">${text}</button></td>`;
     }
 
+    /* График строки: столбцы по колонкам разреза. Рисуется по уже пришедшим
+       числам таблицы — своего расчёта у графика нет, поэтому он не может
+       разойтись с ней и с книгой. */
+    const chartBox = document.querySelector("#bld-chart");
+    const chartBody = document.querySelector("#bld-chart-body");
+    const chartTitle = document.querySelector("#bld-chart-title");
+    let chartRow = null;
+
+    function renderChart() {
+      if (chartRow == null || !lastTable) {
+        chartBox.hidden = true;
+        return;
+      }
+      const row = lastTable.questions.flatMap(question => question.rows)
+        .find(item => item.sheet_row === chartRow);
+      if (!row) {
+        chartBox.hidden = true;
+        return;
+      }
+      const asIndex = measureSelect.value === "index";
+      const values = row.cells.map(cell => (asIndex ? cell.index : cell.value));
+      const highest = Math.max(1, ...values.filter(value => value != null).map(Math.abs));
+      const step = 26;
+      const height = row.cells.length * step + 10;
+      const labelWidth = 190;
+      const chartWidth = 760;
+      const bars = row.cells.map((cell, index) => {
+        const column = lastTable.columns[index];
+        const value = values[index];
+        const width = value == null ? 0 : Math.abs(value) / highest * (chartWidth - labelWidth - 70);
+        const y = index * step + 6;
+        const tone = cell.direction === "higher" ? "bld-chart-up"
+          : cell.direction === "lower" ? "bld-chart-down"
+          : cell.small ? "bld-chart-faint" : "bld-chart-bar";
+        const text = value == null ? "–" : formatNumber(value, asIndex ? 0 : cell.decimals);
+        const label = `${column.letter}. ${column.label}`;
+        return `<g>
+          <title>${escapeHtml(label)}: ${escapeHtml(text)}${cell.small ? " · малая база" : ""}</title>
+          <text x="0" y="${y + 13}" class="bld-chart-label">${escapeHtml(label.length > 28 ? `${label.slice(0, 27)}…` : label)}</text>
+          <rect x="${labelWidth}" y="${y}" width="${width.toFixed(1)}" height="16" rx="3" class="${tone}"></rect>
+          <text x="${labelWidth + width + 6}" y="${y + 13}" class="bld-chart-value">${escapeHtml(text)}</text>
+        </g>`;
+      }).join("");
+      chartTitle.textContent = `${row.label}${asIndex ? " · индекс к Total" : ""}`;
+      chartBody.innerHTML = `<svg viewBox="0 0 ${chartWidth} ${height}" role="img" aria-label="График строки ${escapeHtml(row.label)}">${bars}</svg>`;
+      chartBox.hidden = false;
+    }
+
+    wrap.addEventListener("click", event => {
+      const button = event.target.closest("[data-chart-row]");
+      if (!button) return;
+      const sheetRow = Number(button.dataset.chartRow);
+      chartRow = chartRow === sheetRow ? null : sheetRow;
+      renderChart();
+    });
+    document.querySelector("#bld-chart-close").addEventListener("click", () => {
+      chartRow = null;
+      renderChart();
+    });
+
     function renderTable(table) {
       const columns = table.columns;
       const width = columns.length + 1;
@@ -534,7 +594,11 @@
             return;
           }
           const rowClass = row.kind === "base" ? "bld-base" : row.derived ? "bld-derived" : "";
-          body += `<tr class="${rowClass}"><td class="bld-rowhead">${escapeHtml(row.label)}</td>`;
+          // Название строки — кнопка графика: те же числа, что в строке.
+          const head = row.kind === "value"
+            ? `<button type="button" class="bld-rowchart" data-chart-row="${row.sheet_row}" title="Показать график строки">${escapeHtml(row.label)}</button>`
+            : escapeHtml(row.label);
+          body += `<tr class="${rowClass}"><td class="bld-rowhead">${head}</td>`;
           row.cells.forEach((cell, index) => { body += cellHtml(cell, index, row.sheet_row); });
           body += "</tr>";
         });
@@ -544,6 +608,7 @@
       wrap.innerHTML = `<table class="bld-grid bld-live">${head}${body}</table>`;
       lastTable = table;
       stackStickyHeader(wrap.querySelector("table.bld-grid"));
+      renderChart();
 
       const settings = table.settings;
       const schemes = [];
