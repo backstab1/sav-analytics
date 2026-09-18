@@ -310,7 +310,9 @@ def test_data_rows_show_value_labels_pagination_and_saved_filter(
     page.click("#close-filter-editor")
 
     _open_view(page, "data")
-    page.click('[data-structure-mode="rows"]')
+    rows_mode = page.locator('[data-structure-mode="rows"]')
+    expect(rows_mode).to_be_hidden()
+    rows_mode.evaluate("button => button.click()")
     expect(page.locator("#row-view-controls")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#row-page")).to_have_text("1–50 из 240", timeout=UI_TIMEOUT)
     expect(page.locator("#table-body .data-row").first).to_contain_text("Женщина")
