@@ -289,6 +289,42 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     assert "подгруппа против остальных респондентов блока" in text
 
 
+def test_data_rows_show_value_labels_pagination_and_saved_filter(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    # Сохранённые базы из отчёта доступны и для просмотра строк.
+    _open_view(page, "reports")
+    page.click('[data-block="filter"] [data-new="filter"]')
+    page.fill("#filter-name", "Только женщины")
+    condition = page.locator("#filter-condition-list .filter-condition").first
+    condition.locator("select.filter-source").select_option("question:SEX")
+    condition.locator(".filter-option", has_text="Женщина").locator("input").check()
+    page.click("#save-filter")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Правило сохранено", timeout=UI_TIMEOUT
+    )
+    page.click("#close-filter-editor")
+
+    _open_view(page, "data")
+    page.click('[data-structure-mode="rows"]')
+    expect(page.locator("#row-view-controls")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#row-page")).to_have_text("1–50 из 240", timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body .data-row").first).to_contain_text("Женщина")
+    raw_sex = page.locator("#table-body .data-row").first.locator(".data-cell").nth(1)
+    expect(raw_sex.locator("small")).to_have_text("2")
+
+    page.click("#row-next")
+    expect(page.locator("#row-page")).to_have_text("51–100 из 240", timeout=UI_TIMEOUT)
+    page.select_option("#row-filter", label="Только женщины")
+    expect(page.locator("#row-page")).to_have_text("1–50 из 120", timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body .data-row").first.locator(".row-number")).to_have_text("1")
+    expect(page.locator("#table-body .data-row").nth(1).locator(".row-number")).to_have_text("3")
+
+
 def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

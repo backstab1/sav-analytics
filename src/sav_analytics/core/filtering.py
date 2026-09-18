@@ -214,6 +214,12 @@ def evaluate_filter_frame(
     return mask
 
 
+def filter_required_columns(definition: dict[str, Any], project: dict[str, Any]) -> list[str]:
+    """Исходные столбцы, нужные для расчёта сохранённого правила."""
+    validate_filter(definition, project)
+    return sorted(_required_columns(definition["rule"], project))
+
+
 def _validate_group(group: dict[str, Any], project: dict[str, Any], depth: int) -> None:
     if depth > 2:
         raise FilterError("Вложенность фильтра не может превышать два уровня.")

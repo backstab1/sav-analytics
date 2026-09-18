@@ -24,6 +24,11 @@ let currentView = "data";
 let structureMode = "questions";
 let structureSearch = "";
 let structureStatusFilter = null;
+let dataRowsOffset = 0;
+let dataRowsFilterId = "";
+let dataRowsRequest = 0;
+let dataRowsSearchTimer = null;
+const DATA_ROWS_LIMIT = 50;
 let bannerFormDirty = false;
 const recodePreviewCache = new Map();
 const filterPreviewCache = new Map();
@@ -334,9 +339,11 @@ document.querySelector("#weight-dimension-list").addEventListener("input", event
 });
 document.querySelectorAll("[data-structure-mode]").forEach(button => button.addEventListener("click", () => {
   structureMode = button.dataset.structureMode;
+  dataRowsOffset = 0;
   document.querySelectorAll("[data-structure-mode]").forEach(item => item.classList.toggle("active", item === button));
   editor.hidden = true;
   currentQuestionCode = null;
+  syncDataRowsControls();
   renderTable();
 }));
 
@@ -344,7 +351,11 @@ const structureSearchInput = document.querySelector("#structure-search");
 structureSearchInput.addEventListener("input", () => {
   structureSearch = structureSearchInput.value.trim();
   document.querySelector("#structure-search-clear").hidden = !structureSearchInput.value;
-  renderTable();
+  if (structureMode === "rows") {
+    dataRowsOffset = 0;
+    clearTimeout(dataRowsSearchTimer);
+    dataRowsSearchTimer = setTimeout(renderTable, 180);
+  } else renderTable();
 });
 structureSearchInput.addEventListener("keydown", event => {
   if (event.key !== "Escape" || !structureSearchInput.value) return;
@@ -382,6 +393,7 @@ document.querySelector("#summary").addEventListener("click", event => {
       button.classList.toggle("active", button.dataset.structureMode === "questions");
     });
     syncSectionChrome("data");
+    syncDataRowsControls();
   }
   renderSummary(currentProject.inspection, configuredQuestions());
   renderTable();
@@ -409,6 +421,36 @@ function updateStructureSearchCount(shown, total) {
   const counter = document.querySelector("#structure-search-count");
   counter.textContent = `${shown} из ${total}`;
 }
+
+function syncDataRowsControls() {
+  const rows = structureMode === "rows";
+  document.querySelector("#row-view-controls").hidden = !rows;
+  document.querySelector("#new-formula").hidden = rows;
+  document.querySelector("#structure-search").placeholder = rows
+    ? "Столбцы по коду или названию"
+    : "Код или название";
+  if (!rows || !currentProject) return;
+  const filters = configuredFilters();
+  if (dataRowsFilterId && !filters.some(item => item.id === dataRowsFilterId)) {
+    dataRowsFilterId = "";
+  }
+  document.querySelector("#row-filter").innerHTML = '<option value="">Все строки</option>'
+    + filters.map(item => `<option value="${escapeAttribute(item.id)}" ${item.id === dataRowsFilterId ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("");
+}
+
+document.querySelector("#row-filter").addEventListener("change", event => {
+  dataRowsFilterId = event.target.value;
+  dataRowsOffset = 0;
+  renderTable();
+});
+document.querySelector("#row-prev").addEventListener("click", () => {
+  dataRowsOffset = Math.max(0, dataRowsOffset - DATA_ROWS_LIMIT);
+  renderTable();
+});
+document.querySelector("#row-next").addEventListener("click", () => {
+  dataRowsOffset += DATA_ROWS_LIMIT;
+  renderTable();
+});
 
 /* ================================================================
    Шапка холста
@@ -1212,6 +1254,9 @@ function showProject(project, view = "data") {
   currentWeightId = null;
   currentView = "data";
   structureMode = "questions";
+  dataRowsOffset = 0;
+  dataRowsFilterId = "";
+  dataRowsRequest += 1;
   resetStructureSearch({ render: false });
   showInspector(null);
   renderSectionHead("data");
@@ -1221,6 +1266,7 @@ function showProject(project, view = "data") {
   document.querySelectorAll("[data-structure-mode]").forEach(button => {
     button.classList.toggle("active", button.dataset.structureMode === "questions");
   });
+  syncDataRowsControls();
   renderProject();
   document.querySelector("#start").hidden = true;
   document.querySelector("#workspace").hidden = false;
@@ -1523,6 +1569,10 @@ function renderTable() {
     renderPhysicalVariables();
     return;
   }
+  if (currentView === "data" && structureMode === "rows") {
+    void renderDataRows();
+    return;
+  }
   if (currentView === "reports") {
     renderReportBlocks();
     return;
@@ -1651,6 +1701,50 @@ function renderPhysicalVariables() {
         <td>${escapeHtml(variable.original_format || variable.storage_type)}</td><td>${escapeHtml(variable.measurement_level || "—")}</td>
         <td>${variable.unique_count.toLocaleString("ru-RU")}</td><td>${variable.valid_count.toLocaleString("ru-RU")}</td><td>${variable.missing_count.toLocaleString("ru-RU")}</td>
       </tr>`).join("");
+}
+
+async function renderDataRows() {
+  syncDataRowsControls();
+  const allVariables = currentProject.inspection.variables;
+  const matching = allVariables.filter(variable => matchesStructureSearch(variable.name, variable.label));
+  const selected = matching.slice(0, 25);
+  const request = ++dataRowsRequest;
+  document.querySelector("#structure-search-count").textContent = `${selected.length} из ${matching.length} столбцов`;
+  document.querySelector("#table-head").innerHTML = `<th class="row-number">Строка</th>${selected.map(variable => `<th title="${escapeAttribute(variable.label)}"><code>${escapeHtml(variable.name)}</code><span class="row-column-label">${escapeHtml(variable.label)}</span></th>`).join("")}`;
+  document.querySelector("#table-body").innerHTML = `<tr><td colspan="${selected.length + 1}"><div class="empty-state">Читаем строки массива…</div></td></tr>`;
+  if (!selected.length) {
+    document.querySelector("#table-body").innerHTML = emptySearchRow(1, "Столбцы не найдены.");
+    document.querySelector("#row-page").textContent = "";
+    return;
+  }
+  const params = new URLSearchParams({ offset: String(dataRowsOffset), limit: String(DATA_ROWS_LIMIT) });
+  selected.forEach(variable => params.append("columns", variable.name));
+  if (dataRowsFilterId) params.set("filter_id", dataRowsFilterId);
+  try {
+    const page = await api(`/api/projects/${currentProject.id}/data/rows?${params}`);
+    if (request !== dataRowsRequest || structureMode !== "rows") return;
+    if (dataRowsOffset && dataRowsOffset >= page.total) {
+      dataRowsOffset = Math.max(0, Math.floor(Math.max(0, page.total - 1) / DATA_ROWS_LIMIT) * DATA_ROWS_LIMIT);
+      void renderDataRows();
+      return;
+    }
+    const first = page.total ? page.offset + 1 : 0;
+    const last = Math.min(page.offset + page.rows.length, page.total);
+    document.querySelector("#row-page").textContent = `${first}–${last} из ${page.total}`;
+    document.querySelector("#row-prev").disabled = page.offset === 0;
+    document.querySelector("#row-next").disabled = page.offset + page.rows.length >= page.total;
+    if (!page.rows.length) {
+      document.querySelector("#table-body").innerHTML = `<tr><td colspan="${selected.length + 1}"><div class="empty-state">Фильтр не оставил строк.</div></td></tr>`;
+      return;
+    }
+    document.querySelector("#table-body").innerHTML = page.rows.map(row => `<tr class="data-row">
+      <td class="row-number">${escapeHtml(row.number)}</td>
+      ${row.values.map(cell => `<td class="data-cell" title="${escapeAttribute(cell.display)}"><span>${escapeHtml(cell.display)}</span>${cell.label != null && String(cell.raw) !== cell.display ? `<small>${escapeHtml(cell.raw)}</small>` : ""}${cell.truncated ? '<em>обрезано</em>' : ""}</td>`).join("")}
+    </tr>`).join("");
+  } catch (error) {
+    if (request !== dataRowsRequest) return;
+    document.querySelector("#table-body").innerHTML = `<tr><td colspan="${selected.length + 1}"><div class="empty-state error">${escapeHtml(error.message)}</div></td></tr>`;
+  }
 }
 
 function logicalOwnerButton(variableName) {

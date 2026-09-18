@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260918-groups-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260918-rows-1" />
   </head>
   <body>
     <!-- ================================================================
@@ -241,6 +241,12 @@
                     <button type="button" class="text-button" data-bulk="undo" id="bulk-undo" hidden>Отменить</button>
                   </span>
                   <div class="toolbar-grow"></div>
+                  <div id="row-view-controls" class="row-view-controls" hidden>
+                    <label>Фильтр <select id="row-filter" aria-label="Фильтр строк массива"><option value="">Все строки</option></select></label>
+                    <button id="row-prev" type="button" class="icon-button" aria-label="Предыдущая страница">←</button>
+                    <span id="row-page" class="toolbar-count"></span>
+                    <button id="row-next" type="button" class="icon-button" aria-label="Следующая страница">→</button>
+                  </div>
                   <div class="search-field">
                     <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
                     <input id="structure-search" type="text" placeholder="Код или название" autocomplete="off" aria-label="Поиск по структуре массива" />
@@ -250,6 +256,7 @@
                   <div class="structure-view-switch">
                     <button type="button" data-structure-mode="questions" class="active">Вопросы</button>
                     <button type="button" data-structure-mode="variables">Столбцы SAV</button>
+                    <button type="button" data-structure-mode="rows">Строки</button>
                   </div>
                 </div>
 
@@ -766,7 +773,7 @@
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
     <script src="/shell.js?v=20260918-groups-1" defer></script>
-    <script src="/app.js?v=20260918-groups-1" defer></script>
+    <script src="/app.js?v=20260918-rows-1" defer></script>
     <script src="/library.js?v=20260918-groups-1" defer></script>
     <script src="/bulk.js?v=20260918-groups-1" defer></script>
     <script src="/question.js?v=20260918-groups-1" defer></script>
