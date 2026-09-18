@@ -12,10 +12,12 @@ from ..api_schemas import (
     NotApplicableUpdate,
     QuestionBaseUpdate,
     QuestionBulkUpdate,
+    QuestionGroupRequest,
     QuestionOrder,
     QuestionSettingsCopy,
     QuestionUpdate,
 )
+from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.not_applicable import suggest_not_applicable_codes
 from ..core.topline import ToplineError, calculate_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -80,6 +82,40 @@ def update_questions(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
     except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/group")
+def group_questions(
+    project_id: UUID,
+    request: QuestionGroupRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.group_questions(
+            project_id,
+            request.codes,
+            request.question_type,
+            code=request.code,
+            label=request.label,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except (InvalidUploadError, ConfigurationIntegrityError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{code}/ungroup")
+def ungroup_question(
+    project_id: UUID,
+    code: str,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.ungroup_question(project_id, code)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или вопрос не найден.") from exc
+    except (InvalidUploadError, ConfigurationIntegrityError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

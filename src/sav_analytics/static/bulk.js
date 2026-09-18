@@ -232,6 +232,33 @@ document.querySelector("#bulk-bar").addEventListener("change", async event => {
     }
     return;
   }
+  if (select.id === "bulk-group") {
+    const questionType = select.value;
+    select.value = "";
+    const codes = configuredQuestions()
+      .map(question => question.code)
+      .filter(code => selectedQuestionCodes.has(code));
+    try {
+      const before = new Set(configuredQuestions().map(question => question.code));
+      currentProject = await api(`/api/projects/${currentProject.id}/questions/group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codes, question_type: questionType }),
+      });
+      const created = configuredQuestions().find(question => !before.has(question.code));
+      // Отмена массовой полосы хранит поля вопросов, а не состав структуры:
+      // группа разбирается обратно кнопкой в её карточке.
+      lastBulkUndo = null;
+      selectedQuestionCodes.clear();
+      renderProject();
+      showToast(`${plural(codes.length, "вопрос", "вопроса", "вопросов")} собраны в ${created?.code || "группу"}`);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      updateBulkBar();
+    }
+    return;
+  }
   const body = { codes: [...selectedQuestionCodes] };
   let caption;
   if (select.id === "bulk-type") {

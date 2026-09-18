@@ -116,6 +116,21 @@ class CodeframeMark(BaseModel):
     value: bool | None
 
 
+class QuestionGroupRequest(BaseModel):
+    """Собрать одиночные вопросы в multiple или матрицу.
+
+    Код и подпись необязательны: без них код берётся из общего префикса
+    имён переменных, подпись — из общего начала их подписей.
+    """
+
+    codes: list[str] = Field(min_length=1, max_length=500)
+    question_type: Literal[
+        "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix"
+    ]
+    code: str | None = Field(default=None, max_length=64)
+    label: str | None = Field(default=None, max_length=500)
+
+
 class QuestionOrder(BaseModel):
     codes: list[str]
 

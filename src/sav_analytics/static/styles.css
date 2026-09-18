@@ -1241,6 +1241,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   background: var(--c-surface-soft); border: 0; border-radius: 10px;
 }
 .question-members > div:first-child, .special-answers > div:first-child { display: grid; gap: 3px; }
+.question-members [data-ungroup] { justify-self: start; margin-top: 4px; padding: 0; }
 .member-list { display: grid; gap: 0; max-height: 200px; overflow: auto; }
 .member-list p {
   display: grid; grid-template-columns: 84px 1fr; gap: var(--s-2);
@@ -2422,5 +2423,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .bulk-bar[hidden] { display: none; }
 .bulk-bar b { color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
 .banner-overlap { margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--c-warn-tint, #fff6e0); color: var(--c-ink-2, inherit); font-size: var(--t-xs); }
-.bulk-select { height: 28px; max-width: 170px; padding: 0 8px; border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: var(--c-surface, #fff); color: inherit; font: inherit; font-size: var(--t-xs); }
+/* Ширина по подписи «Тип…», а не по самому длинному пункту списка:
+   с четырьмя выборами полоса иначе не помещается в строку. */
+.bulk-select { field-sizing: content; width: auto; height: 28px; max-width: 170px; padding: 0 8px; border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: var(--c-surface, #fff); color: inherit; font: inherit; font-size: var(--t-xs); }
 

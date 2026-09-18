@@ -819,6 +819,39 @@ def test_several_questions_are_excluded_at_once(
     expect(page.locator("#bulk-bar")).to_be_hidden()
 
 
+def test_separate_questions_are_grouped_and_split_back(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Ручная сборка группы (PQ.9): слоты без общего префикса — в один вопрос."""
+    source = tmp_path / "slots.sav"
+    brands = {1: "Альфа", 2: "Бета", 3: "Гамма"}
+    pyreadstat.write_sav(
+        pd.DataFrame({"FIRST": [1, 2, 1, 3, 2, 1], "SECOND": [2, 3, 3, 1, 1, 2]}),
+        source,
+        column_labels={"FIRST": "Марки: первая", "SECOND": "Марки: вторая"},
+        variable_value_labels={"FIRST": brands, "SECOND": brands},
+        variable_measure={"FIRST": "nominal", "SECOND": "nominal"},
+    )
+    _open_project(page, live_server, source)
+
+    page.check("#table-body tr[data-code='FIRST'] .select-question")
+    page.check("#table-body tr[data-code='SECOND'] .select-question")
+    page.select_option("#bulk-group", "multiple_choice_categorical")
+    expect(page.locator("#toast-container")).to_contain_text("собраны в", timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body tr[data-code='FIRST']")).to_have_count(0)
+
+    group = page.locator("#table-body tr", has_text="Марки").first
+    group.locator(".question-cell").click()
+    expect(page.locator("#question-members")).to_contain_text(
+        "Состав блока · 2", timeout=UI_TIMEOUT
+    )
+
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.click("#question-members [data-ungroup]")
+    expect(page.locator("#table-body tr[data-code='FIRST']")).to_have_count(1, timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body tr[data-code='SECOND']")).to_have_count(1)
+
+
 def test_csv_upload_opens_a_project(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

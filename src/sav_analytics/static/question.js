@@ -128,8 +128,33 @@ function renderQuestionMembers(question) {
       label: currentProject.inspection.variables.find(item => item.name === name)?.label || name,
     }));
   container.hidden = items.length < 2;
-  container.innerHTML = items.length < 2 ? "" : `<div><strong>Состав блока · ${items.length}</strong><small>Общие настройки выше применяются ко всем пунктам.</small></div><div class="member-list">${items.map(item => `<p><code>${escapeHtml(item.variable)}</code><span>${escapeHtml(item.label)}</span></p>`).join("")}</div>`;
+  // Разобрать можно любую группу из переменных SAV, а не только собранную
+  // руками: ошибка автоопределения исправляется тем же действием.
+  const splittable = !question.formula_id && !question.codeframe_id;
+  const ungroup = splittable
+    ? `<button type="button" class="text-button" data-ungroup="${escapeAttribute(question.code)}">Разгруппировать</button>`
+    : "";
+  container.innerHTML = items.length < 2 ? "" : `<div><strong>Состав блока · ${items.length}</strong><small>Общие настройки выше применяются ко всем пунктам.</small>${ungroup}</div><div class="member-list">${items.map(item => `<p><code>${escapeHtml(item.variable)}</code><span>${escapeHtml(item.label)}</span></p>`).join("")}</div>`;
 }
+
+document.querySelector("#question-members").addEventListener("click", async event => {
+  const button = event.target.closest("[data-ungroup]");
+  if (!button || !currentProject) return;
+  const code = button.dataset.ungroup;
+  const question = configuredQuestions().find(item => item.code === code);
+  const count = question?.source_variables.length || 0;
+  if (!confirm(`Разобрать ${code} на ${plural(count, "отдельный вопрос", "отдельных вопроса", "отдельных вопросов")}? Настройки группы — NET, набор вывода, база — не перейдут.`)) return;
+  button.disabled = true;
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/questions/${encodeURIComponent(code)}/ungroup`, { method: "POST" });
+    closeQuestionEditor();
+    renderProject();
+    showToast(`${code} разгруппирован`);
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
+  }
+});
 
 function renderSpecialAnswers(question) {
   const section = document.querySelector("#special-answers");

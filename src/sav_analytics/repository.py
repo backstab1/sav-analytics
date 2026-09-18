@@ -38,6 +38,7 @@ from .core.open_text import (
     theme_variable,
     validate_codeframe,
 )
+from .core.question_groups import QuestionGroupError, build_group, carry_manual_groups, split_group
 from .core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
     REPORT_SETTING_KEYS,
@@ -573,6 +574,70 @@ class ProjectRepository:
         self._write_project(project_id, project)
         return project
 
+    def group_questions(
+        self,
+        project_id: UUID,
+        codes: list[str],
+        question_type: str,
+        *,
+        code: str | None = None,
+        label: str | None = None,
+    ) -> dict:
+        """Собрать выбранные одиночные вопросы в multiple или матрицу.
+
+        Вопрос, на который ссылается баннер, фильтр, перекодировка или база,
+        в группу не уходит: после сборки его кода не станет, и ссылка повисла
+        бы. Связи снимаются сначала, это же правило действует при удалении.
+        """
+        project = self.get(project_id)
+        configuration = project["configuration"]
+        for member in dict.fromkeys(codes):
+            ensure_not_referenced(configuration, "question", member, f"Вопрос {member}")
+        variables = {item["name"]: item for item in project["inspection"]["variables"]}
+        try:
+            group = build_group(
+                configuration["questions"], variables, codes, question_type, code=code, label=label
+            )
+        except QuestionGroupError as exc:
+            raise InvalidUploadError(str(exc)) from exc
+        frame = read_project_frame(self.source_path(project_id), project, group["source_variables"])
+        answered = frame[group["source_variables"]].notna().any(axis=1)
+        group["valid_count"] = int(answered.sum())
+        group["missing_count"] = int((~answered).sum())
+        members = set(codes)
+        questions = configuration["questions"]
+        position = next(index for index, item in enumerate(questions) if item["code"] in members)
+        remaining = [item for item in questions if item["code"] not in members]
+        remaining.insert(min(position, len(remaining)), group)
+        configuration["questions"] = remaining
+        configuration["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def ungroup_question(self, project_id: UUID, code: str) -> dict:
+        """Разобрать группу на одиночные вопросы — по одному на переменную."""
+        project = self.get(project_id)
+        configuration = project["configuration"]
+        group = self._find_question(project, code)
+        ensure_not_referenced(configuration, "question", code, f"Вопрос {code}")
+        variables = {item["name"]: item for item in project["inspection"]["variables"]}
+        try:
+            singles = split_group(group, variables)
+        except QuestionGroupError as exc:
+            raise InvalidUploadError(str(exc)) from exc
+        taken = {item["code"] for item in configuration["questions"] if item["code"] != code}
+        clashes = [item["code"] for item in singles if item["code"] in taken]
+        if clashes:
+            raise InvalidUploadError(
+                "Коды уже заняты другими вопросами: " + ", ".join(clashes) + "."
+            )
+        questions = configuration["questions"]
+        position = questions.index(group)
+        configuration["questions"] = questions[:position] + singles + questions[position + 1 :]
+        configuration["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
     def question(self, project_id: UUID, code: str) -> tuple[dict, dict]:
         project = self.get(project_id)
         try:
@@ -1056,6 +1121,10 @@ class ProjectRepository:
         )
         merged.extend(
             item for item in previous if item.get("formula_id") or item.get("codeframe_id")
+        )
+        # Ручные группы в SAV не записаны — ридер их не найдёт.
+        merged = carry_manual_groups(
+            previous, merged, {item["name"]: item for item in refreshed["variables"]}
         )
         project["inspection"] = refreshed
         project["configuration"]["questions"] = merged
