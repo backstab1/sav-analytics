@@ -242,7 +242,7 @@ def test_metadata_multiple_response_preserves_counted_value_and_rowwise_base() -
     assert question.missing_count == 1
 
 
-def test_metadata_categorical_multiple_is_excluded_until_supported() -> None:
+def test_metadata_categorical_multiple_is_included_in_report() -> None:
     frame = pd.DataFrame({"SLOT1": [1, 2], "SLOT2": [2, 1]})
     metadata = SimpleNamespace(
         column_names_to_labels={},
@@ -269,5 +269,5 @@ def test_metadata_categorical_multiple_is_excluded_until_supported() -> None:
 
     question = questions[0]
     assert question.question_type is QuestionType.MULTIPLE_CATEGORICAL
-    assert not question.included_in_report
-    assert any("не поддерживается" in warning for warning in question.warnings)
+    assert question.included_in_report
+    assert not any("не поддерживается" in warning for warning in question.warnings)

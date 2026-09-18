@@ -1243,7 +1243,8 @@ window.SavApp = {
 // нет, иначе один и тот же проект читался бы дважды. Строками годятся типы,
 // которые раскладывает лист книги, колонками — одиночный выбор с подписями
 // и группировки.
-const TABLE_ROW_TYPES = ["single_choice", "scale", "numeric", "multiple_choice_dichotomy", "matrix"];
+const TABLE_ROW_TYPES = ["single_choice", "scale", "numeric", "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix"];
+const MULTIPLE_TYPES = ["multiple_choice_dichotomy", "multiple_choice_categorical"];
 
 function publishVariablesToShell(inspection, questions) {
   const questionItems = questions
@@ -1258,7 +1259,7 @@ function publishVariablesToShell(inspection, questions) {
         source: { kind: "question", ref: question.code },
         canRow: TABLE_ROW_TYPES.includes(question.question_type),
         canCol: (question.question_type === "single_choice" && labels.length > 0)
-          || question.question_type === "multiple_choice_dichotomy",
+          || MULTIPLE_TYPES.includes(question.question_type),
       };
     });
   const recodingItems = configuredRecodings().map(recoding => ({

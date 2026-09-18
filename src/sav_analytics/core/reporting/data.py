@@ -108,8 +108,7 @@ def prepare_report_data(
     unsupported = [
         question["code"]
         for question in questions
-        if question["question_type"]
-        in {"multiple_choice_categorical", "ranking"}
+        if question["question_type"] == "ranking"
     ]
     if unsupported:
         raise ReportError(

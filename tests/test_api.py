@@ -250,13 +250,20 @@ def test_question_update_rejects_unsupported_report_types(tmp_path: Path) -> Non
                 "/api/projects",
                 files={"file": ("research.sav", stream, "application/octet-stream")},
             ).json()["id"]
-            for question_type in ("multiple_choice_categorical", "ranking"):
-                response = client.patch(
-                    f"/api/projects/{project_id}/questions/Q1",
-                    json={"question_type": question_type},
-                )
-                assert response.status_code == 422
-                assert "не поддерживается" in response.json()["detail"]
+            response = client.patch(
+                f"/api/projects/{project_id}/questions/Q1",
+                json={"question_type": "ranking"},
+            )
+            assert response.status_code == 422
+            assert "не поддерживается" in response.json()["detail"]
+            # Категориальный multiple поддерживается, но из одной переменной
+            # его не собрать: у него должно быть хотя бы два слота.
+            response = client.patch(
+                f"/api/projects/{project_id}/questions/Q1",
+                json={"question_type": "multiple_choice_categorical"},
+            )
+            assert response.status_code == 422
+            assert "двух и более" in response.json()["detail"]
     finally:
         app.dependency_overrides.clear()
 

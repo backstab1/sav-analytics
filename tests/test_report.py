@@ -159,7 +159,7 @@ def test_topline_multiple_uses_configured_counted_value(tmp_path: Path) -> None:
     assert _cell_value(content, "Марки: Альфа", "B") == pytest.approx(50)
 
 
-@pytest.mark.parametrize("question_type", ["multiple_choice_categorical", "ranking"])
+@pytest.mark.parametrize("question_type", ["ranking"])
 def test_report_rejects_included_unsupported_question_type(
     tmp_path: Path, question_type: str
 ) -> None:

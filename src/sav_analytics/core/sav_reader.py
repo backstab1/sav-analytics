@@ -249,7 +249,6 @@ def _build_questions(
                 ],
                 axis=1,
             ).any(axis=1)
-            unsupported = group_type is QuestionType.MULTIPLE_CATEGORICAL
             missing_counted_value = (
                 group_type is QuestionType.MULTIPLE_DICHOTOMY
                 and definition["multiple_response"].get("counted_value") is None
@@ -257,10 +256,6 @@ def _build_questions(
             group_warnings = (
                 [] if source == "metadata" else ["Автоматически собранная группа."]
             )
-            if unsupported:
-                group_warnings.append(
-                    "Категориальное представление multiple-response пока не поддерживается."
-                )
             if missing_counted_value:
                 group_warnings.append(
                     "В metadata multiple-response не задан код выбранного ответа."
@@ -274,7 +269,7 @@ def _build_questions(
                     source_variables=members,
                     valid_count=int(valid_rows.sum()),
                     missing_count=int((~valid_rows).sum()),
-                    included_in_report=not unsupported and not missing_counted_value,
+                    included_in_report=not missing_counted_value,
                     recognition="metadata" if source == "metadata" else "auto_review",
                     warnings=group_warnings,
                     items=[

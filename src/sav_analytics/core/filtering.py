@@ -9,6 +9,8 @@ from .formulas import read_project_frame
 from .multiple_response import (
     MultipleResponseError,
     answered_mask,
+    response_definition,
+    response_options,
     selected_mask,
 )
 
@@ -93,14 +95,18 @@ def condition_source_options(
     if kind == "multiple":
         try:
             answered = answered_mask(frame, resolved)
-            for name in columns:
+            categorical = response_definition(resolved).get("encoding") == "categorical"
+            for option in response_options(resolved, variables, frame):
+                key = option["key"]
                 options.append(
                     {
-                        "value": name,
-                        "label": _item_label(label, variables.get(name, {}), name),
-                        "code": name,
+                        "value": key,
+                        "label": option["label"]
+                        if categorical
+                        else _item_label(label, variables.get(key, {}), key),
+                        "code": key,
                         "labelled": True,
-                        "count": int(selected_mask(frame, resolved, name).sum()),
+                        "count": int(selected_mask(frame, resolved, key).sum()),
                     }
                 )
         except MultipleResponseError as exc:
@@ -460,9 +466,11 @@ def _value_text(
     if source["kind"] == "recoding":
         return str(value)
     variables = _variables(project)
-    if str(resolved.get("question_type", "")).startswith("multiple_choice"):
+    if resolved.get("question_type") == "multiple_choice_dichotomy":
         name = str(value)
         return _item_label(_source_label(source, resolved), variables.get(name, {}), name)
+    # У категориального multiple вариант — код, и подпись ищется в слотах
+    # так же, как у одиночного вопроса.
     for name in resolved.get("source_variables", []):
         for item in variables.get(name, {}).get("value_labels", []):
             if _key(item["value"]) == _key(value):

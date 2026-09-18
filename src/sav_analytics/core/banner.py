@@ -8,7 +8,12 @@ import pandas as pd
 
 from .filtering import conditional_series, recoding_columns
 from .formulas import read_project_frame
-from .multiple_response import response_definition, selected_mask
+from .multiple_response import (
+    is_multiple,
+    response_definition,
+    response_options,
+    selected_mask,
+)
 
 
 class BannerError(ValueError):
@@ -245,7 +250,8 @@ def _resolve_source(source: dict[str, Any], project: dict[str, Any]) -> dict[str
             raise BannerError("Вопрос для баннера не найден.")
         if _is_multiple(question):
             definition = response_definition(question)
-            if definition.get("encoding") != "dichotomy" or definition.get("counted_value") is None:
+            dichotomy = definition.get("encoding") == "dichotomy"
+            if dichotomy and definition.get("counted_value") is None:
                 raise BannerError(
                     "У multiple-response для баннера должен быть задан код выбранного ответа."
                 )
@@ -267,7 +273,7 @@ def _resolve_source(source: dict[str, Any], project: dict[str, Any]) -> dict[str
 
 
 def _is_multiple(question: dict[str, Any]) -> bool:
-    return question.get("question_type") == "multiple_choice_dichotomy"
+    return is_multiple(question)
 
 
 def _source_variable(source: dict[str, Any], project: dict[str, Any]) -> str:
@@ -308,19 +314,19 @@ def _source_categories(
     if source["kind"] == "question" and _is_multiple(resolved):
         # Колонка на вариант: выбравшие его. Один респондент может выбрать
         # несколько вариантов, поэтому колонки пересекаются.
-        labels = {item["name"]: item["label"] for item in project["inspection"]["variables"]}
+        variables = {item["name"]: item for item in project["inspection"]["variables"]}
         return {
             "label": resolved["label"],
             "overlapping": True,
             "categories": [
                 {
-                    "key": f"question:{resolved['code']}:{name}",
-                    "label": labels.get(name) or name,
-                    "value": name,
+                    "key": f"question:{resolved['code']}:{option['key']}",
+                    "label": option["label"],
+                    "value": option["key"],
                     "is_wave": False,
-                    "mask": selected_mask(frame, resolved, name),
+                    "mask": selected_mask(frame, resolved, option["key"]),
                 }
-                for name in resolved["source_variables"]
+                for option in response_options(resolved, variables, frame)
             ],
         }
     variable_name = _source_variable(source, project)

@@ -346,7 +346,7 @@ class ProjectRepository:
             changes = {
                 field: copy.deepcopy(source.get(field, defaults[field])) for field in fields
             }
-            if changes.get("nets") and source["question_type"] == "multiple_choice_dichotomy":
+            if changes.get("nets") and source["question_type"].startswith("multiple_choice"):
                 # NET multiple собран из вариантов своего вопроса — у другого их нет.
                 raise InvalidUploadError(
                     "NET-группы multiple-response состоят из его вариантов и не переносятся."
@@ -389,7 +389,12 @@ class ProjectRepository:
         confirm_substantive = bool(changes.pop("confirm_substantive", False))
         final_role = changes.get("role", question["role"])
         final_type = changes.get("question_type", question["question_type"])
-        unsupported_types = {"multiple_choice_categorical", "ranking"}
+        unsupported_types = {"ranking"}
+        sources = changes.get("source_variables", question["source_variables"])
+        if final_type == "multiple_choice_categorical" and len(sources or []) < 2:
+            raise InvalidUploadError(
+                "Категориальный multiple собирается из двух и более переменных-слотов."
+            )
         if changes.get("question_type") in unsupported_types:
             raise InvalidUploadError(
                 "Этот тип вопроса пока не поддерживается в расчётах и отчёте."

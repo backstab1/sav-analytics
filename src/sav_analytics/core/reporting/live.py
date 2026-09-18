@@ -22,6 +22,7 @@ from uuid import uuid4
 
 from ..banner import BannerError, banner_columns
 from ..filtering import FilterError, filter_columns
+from ..multiple_response import is_multiple, response_options
 from ..report_settings import resolved_report_settings
 from .builder import build_topline_artifacts
 from .data import prepare_report_data
@@ -32,7 +33,14 @@ from .styles import DOWN, FAINT, NEGATIVE, POSITIVE, UP, _formats
 #: Типы, которые умеет раскладывать лист книги. Открытый текст и технические
 #: переменные в отчёт не входят, и таблица их тоже не строит.
 LIVE_QUESTION_TYPES = frozenset(
-    {"single_choice", "scale", "numeric", "multiple_choice_dichotomy", "matrix"}
+    {
+        "single_choice",
+        "scale",
+        "numeric",
+        "multiple_choice_dichotomy",
+        "multiple_choice_categorical",
+        "matrix",
+    }
 )
 
 _BASE_FORMAT = "#,##0"
@@ -305,8 +313,10 @@ def _net_values(question: dict[str, Any], live: dict[str, Any], values: list[Any
     """Коды ответов по подписям строк: экран знает строки подписями."""
     variables = {item["name"]: item for item in live["inspection"]["variables"]}
     sources = question.get("source_variables") or []
-    if question["question_type"] == "multiple_choice_dichotomy":
-        by_label = {variables[name]["label"]: name for name in sources if name in variables}
+    if is_multiple(question):
+        by_label = {
+            option["label"]: option["key"] for option in response_options(question, variables)
+        }
     elif len(sources) == 1 and sources[0] in variables:
         by_label = {
             item["label"]: item["value"] for item in variables[sources[0]].get("value_labels", [])

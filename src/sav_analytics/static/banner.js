@@ -102,7 +102,7 @@ function bannerSourceOptions(selected, allowEmpty) {
   if (allowEmpty) options.push('<option value="">Без вложения</option>');
   configuredQuestions()
     .filter(item => (item.question_type === "single_choice" && item.source_variables.length === 1)
-      || item.question_type === "multiple_choice_dichotomy")
+      || ["multiple_choice_dichotomy", "multiple_choice_categorical"].includes(item.question_type))
     .forEach(item => options.push(`<option value="question:${escapeAttribute(item.code)}" ${selectedValue === `question:${item.code}` ? "selected" : ""}>${escapeHtml(item.code)} — ${escapeHtml(item.label)}</option>`));
   configuredRecodings().forEach(item => options.push(`<option value="recoding:${item.id}" ${selectedValue === `recoding:${item.id}` ? "selected" : ""}>↳ ${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`));
   return options.join("");

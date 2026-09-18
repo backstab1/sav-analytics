@@ -178,7 +178,7 @@ function refreshFilterJoins(container) {
 function filterSourceOptions(selectedValue) {
   const option = (value, text) => `<option value="${escapeAttribute(value)}" ${selectedValue === value ? "selected" : ""}>${escapeHtml(text)}</option>`;
   const usable = configuredQuestions()
-    .filter(item => ["single_choice", "scale", "numeric", "multiple_choice_dichotomy"].includes(item.question_type));
+    .filter(item => ["single_choice", "scale", "numeric", "multiple_choice_dichotomy", "multiple_choice_categorical"].includes(item.question_type));
   const values = [
     ...usable.map(item => `question:${item.code}`),
     ...configuredRecodings().map(item => `recoding:${item.id}`),

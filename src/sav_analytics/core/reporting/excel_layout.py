@@ -10,7 +10,7 @@ from typing import Any
 import pandas as pd
 
 from ..filtering import evaluate_filter_frame
-from ..multiple_response import answered_mask, selected_mask
+from ..multiple_response import answered_mask, is_multiple, response_options, selected_mask
 from ..not_applicable import applicable_series, excludes
 from ..statistics import (
     CHI_SQUARE,
@@ -270,6 +270,17 @@ def _runs(rows: list[int]) -> list[tuple[int, int]]:
             runs.append((row, row))
     return runs
 
+def _same(key: Any, value: Any) -> bool:
+    """Ключ варианта и значение из NET: у категориального multiple код может
+    прийти из JSON строкой или 3.0, а у дихотомии это имя переменной."""
+    if key == value:
+        return True
+    try:
+        return float(key) == float(value)
+    except (TypeError, ValueError):
+        return str(key) == str(value)
+
+
 def _write_question_rows(
     context: _RowContext,
     row: int,
@@ -279,20 +290,21 @@ def _write_question_rows(
 ) -> int:
     question_type = question["question_type"]
     sources = question["source_variables"]
-    if question_type == "multiple_choice_dichotomy":
+    if is_multiple(question):
         answered = answered_mask(frame, question)
-        for name in sources:
-            selected = selected_mask(frame, question, name)
+        options = response_options(question, variables, frame)
+        keys = [option["key"] for option in options]
+        for option in options:
             row = _write_metric_row(
                 context,
                 row,
-                variables[name]["label"],
+                option["label"],
                 context.denominator(answered),
-                selected,
+                selected_mask(frame, question, option["key"]),
                 "percent",
             )
         for net in question.get("nets", []):
-            chosen = [name for name in net["values"] if name in sources]
+            chosen = [key for key in keys if any(_same(key, value) for value in net["values"])]
             if not chosen:
                 continue
             union = pd.concat(

@@ -12,6 +12,7 @@ from .multiple_response import (
     MultipleResponseError,
     answered_mask,
     response_definition,
+    response_options,
     selected_mask,
 )
 
@@ -37,7 +38,7 @@ def calculate_preview(
     }
     variable_by_name = {item["name"]: item for item in variables}
 
-    if question_type is QuestionType.MULTIPLE_DICHOTOMY:
+    if question_type in {QuestionType.MULTIPLE_DICHOTOMY, QuestionType.MULTIPLE_CATEGORICAL}:
         try:
             return {
                 **base,
@@ -60,10 +61,7 @@ def calculate_preview(
                 question.get("special_values", []),
             ),
         }
-    if question_type in {
-        QuestionType.MULTIPLE_CATEGORICAL,
-        QuestionType.RANKING,
-    }:
+    if question_type is QuestionType.RANKING:
         raise ToplineError("Этот тип вопроса пока не поддерживается в расчётах.")
     if len(source_variables) != 1:
         raise ToplineError("Для этого типа вопроса ожидается одна исходная переменная.")
@@ -128,27 +126,31 @@ def _multiple_preview(
     variable_by_name: dict[str, dict[str, Any]],
     special_items: list[str],
 ) -> dict[str, Any]:
-    source_variables = question["source_variables"]
     answered = answered_mask(frame, question)
     valid_base = int(answered.sum())
+    options = response_options(question, variable_by_name, frame)
+    keys = [option["key"] for option in options]
     rows = []
-    for name in source_variables:
-        count = int(selected_mask(frame, question, name).sum())
-        variable = variable_by_name[name]
+    for option in options:
+        count = int(selected_mask(frame, question, option["key"]).sum())
         rows.append(
             {
-                "value": name,
-                "label": variable["label"],
+                "value": option["key"],
+                "label": option["label"],
                 "count": count,
                 "percent_main": _ratio(count, len(frame)),
                 "percent_filter": _ratio(count, valid_base),
-                "is_special": name in special_items,
+                "is_special": option["key"] in special_items,
             }
         )
-    counted_value = response_definition(question).get("counted_value")
-    warnings = [f"Выбранным считается код {counted_value}."]
-    special = [name for name in special_items if name in source_variables]
-    ordinary = [name for name in source_variables if name not in special]
+    definition = response_definition(question)
+    warnings = (
+        ["Выбранным считается код, записанный хотя бы в одной из переменных группы."]
+        if definition.get("encoding") == "categorical"
+        else [f"Выбранным считается код {definition.get('counted_value')}."]
+    )
+    special = [key for key in special_items if key in keys]
+    ordinary = [key for key in keys if key not in special]
     if special and ordinary:
         conflicting = pd.concat(
             [selected_mask(frame, question, name) for name in special], axis=1

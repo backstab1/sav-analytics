@@ -321,7 +321,7 @@ function collectNotApplicable() {
 // NET-группы: объединение ответов отдельной строкой книги. Варианты берутся
 // из предпросмотра — тех же строк, что аналитик видит над ними; у матрицы —
 // из шкалы первого элемента, она у элементов общая.
-const NET_TYPES = ["single_choice", "scale", "multiple_choice_dichotomy", "matrix"];
+const NET_TYPES = ["single_choice", "scale", "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix"];
 let netOptions = [];
 
 function renderNets(question, preview) {
