@@ -15,6 +15,7 @@ from .multiple_response import (
     response_options,
     selected_mask,
 )
+from .ranking import RankingError, ranking_items
 
 
 class ToplineError(ValueError):
@@ -62,7 +63,24 @@ def calculate_preview(
             ),
         }
     if question_type is QuestionType.RANKING:
-        raise ToplineError("Этот тип вопроса пока не поддерживается в расчётах.")
+        try:
+            ranks = ranking_items(frame, question, variable_by_name)
+        except RankingError as exc:
+            raise ToplineError(str(exc)) from exc
+        labels = {"value_labels": [
+            {"value": rank, "label": f"Место {rank}"}
+            for rank in range(1, len(source_variables) + 1)
+        ]}
+        return {
+            **base, "valid_base": int(ranks[0]["ranks"].notna().sum()),
+            "rows": [], "statistics": None,
+            "items": [
+                {"variable": str(item["key"]), "label": item["label"],
+                 **_categorical_preview(item["ranks"], labels, len(frame)),
+                 "statistics": _numeric_statistics(item["ranks"])}
+                for item in ranks
+            ],
+        }
     if len(source_variables) != 1:
         raise ToplineError("Для этого типа вопроса ожидается одна исходная переменная.")
     series = frame[source_variables[0]]

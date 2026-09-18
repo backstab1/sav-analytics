@@ -180,7 +180,7 @@ def test_report_rejects_included_unsupported_question_type(
         },
     }
 
-    with pytest.raises(ReportError, match="не поддерживаемые типы"):
+    with pytest.raises(ReportError, match="две и более"):
         build_topline_xlsx(source, project)
 
 

@@ -39,6 +39,7 @@ from .core.open_text import (
     validate_codeframe,
 )
 from .core.question_groups import QuestionGroupError, build_group, carry_manual_groups, split_group
+from .core.ranking import RankingError, ranking_items
 from .core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
     REPORT_SETTING_KEYS,
@@ -390,20 +391,27 @@ class ProjectRepository:
         confirm_substantive = bool(changes.pop("confirm_substantive", False))
         final_role = changes.get("role", question["role"])
         final_type = changes.get("question_type", question["question_type"])
-        unsupported_types = {"ranking"}
         sources = changes.get("source_variables", question["source_variables"])
         if final_type == "multiple_choice_categorical" and len(sources or []) < 2:
             raise InvalidUploadError(
                 "Категориальный multiple собирается из двух и более переменных-слотов."
             )
-        if changes.get("question_type") in unsupported_types:
-            raise InvalidUploadError(
-                "Этот тип вопроса пока не поддерживается в расчётах и отчёте."
-            )
-        if final_type in unsupported_types and changes.get("included_in_report") is True:
-            raise InvalidUploadError(
-                "Пока этот тип вопроса нельзя включить в отчёт."
-            )
+        if final_type == "ranking":
+            if changes.get("nets"):
+                raise InvalidUploadError("NET-группы для ранжирования не поддерживаются.")
+            candidate = {**question, **changes}
+            frame = read_project_frame(self.source_path(project_id), project, sources)
+            variables = {item["name"]: item for item in project["inspection"]["variables"]}
+            try:
+                items = ranking_items(frame, candidate, variables)
+            except RankingError as exc:
+                raise InvalidUploadError(str(exc)) from exc
+            changes["valid_count"] = int(items[0]["ranks"].notna().sum())
+            changes["missing_count"] = len(frame) - changes["valid_count"]
+            changes["special_values"] = []
+            changes["nets"] = []
+            if question["question_type"] != "ranking":
+                changes.setdefault("output_metrics", [])
         if changes.get("not_applicable_values") and final_type == "multiple_choice_dichotomy":
             # У дихотомии выбор описывается counted_value, а не распределением
             # значений, поэтому пометка кода здесь ничего бы не изменила.
@@ -582,8 +590,9 @@ class ProjectRepository:
         *,
         code: str | None = None,
         label: str | None = None,
+        ranking_encoding: str | None = None,
     ) -> dict:
-        """Собрать выбранные одиночные вопросы в multiple или матрицу.
+        """Собрать выбранные одиночные вопросы в multiple, матрицу или ранжирование.
 
         Вопрос, на который ссылается баннер, фильтр, перекодировка или база,
         в группу не уходит: после сборки его кода не станет, и ссылка повисла
@@ -596,12 +605,18 @@ class ProjectRepository:
         variables = {item["name"]: item for item in project["inspection"]["variables"]}
         try:
             group = build_group(
-                configuration["questions"], variables, codes, question_type, code=code, label=label
+                configuration["questions"], variables, codes, question_type, code=code, label=label,
+                ranking_encoding=ranking_encoding,
             )
         except QuestionGroupError as exc:
             raise InvalidUploadError(str(exc)) from exc
         frame = read_project_frame(self.source_path(project_id), project, group["source_variables"])
         answered = frame[group["source_variables"]].notna().any(axis=1)
+        if question_type == "ranking":
+            try:
+                answered = ranking_items(frame, group, variables)[0]["ranks"].notna()
+            except RankingError as exc:
+                raise InvalidUploadError(str(exc)) from exc
         group["valid_count"] = int(answered.sum())
         group["missing_count"] = int((~answered).sum())
         members = set(codes)
@@ -1070,6 +1085,7 @@ class ProjectRepository:
         editable_fields = {
             "label",
             "question_type",
+            "ranking_encoding",
             "role",
             "included_in_report",
             "special_values",
@@ -1616,6 +1632,7 @@ def _validated_output(question_type: str, metrics: list[str]) -> list[str]:
     from .core.report_settings import NUMERIC_METRICS, SCALE_METRICS
 
     allowed = {
+        "ranking": ("distribution", "mean"),
         "scale": SCALE_METRICS,
         "matrix": SCALE_METRICS,
         "numeric": NUMERIC_METRICS,

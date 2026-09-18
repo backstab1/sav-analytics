@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 from numbers import Number
 from typing import Any
@@ -12,6 +12,7 @@ import pandas as pd
 from ..filtering import evaluate_filter_frame
 from ..multiple_response import answered_mask, is_multiple, response_options, selected_mask
 from ..not_applicable import applicable_series, excludes
+from ..ranking import ranking_items
 from ..statistics import (
     CHI_SQUARE,
     WELCH_ANOVA,
@@ -290,6 +291,26 @@ def _write_question_rows(
 ) -> int:
     question_type = question["question_type"]
     sources = question["source_variables"]
+    if question_type == "ranking":
+        chosen = question.get("output_metrics") or context.settings.get(
+            "ranking_metrics", ("distribution", "mean")
+        )
+        for item in ranking_items(frame, question, variables):
+            item_context = replace(context, audit_context=(
+                context.audit_context[0], context.audit_context[1],
+                f"{context.audit_context[2]} — {item['label']}",
+            ))
+            series = item["ranks"]
+            row = _write_subquestion(context, row, item["label"])
+            row = _write_valid_base_row(context, row, series.notna())
+            for rank in range(1, len(sources) + 1) if "distribution" in chosen else ():
+                row = _write_metric_row(
+                    item_context, row, f"Место {rank}", context.denominator(series.notna()),
+                    series.eq(rank), "percent",
+                )
+            if "mean" in chosen:
+                row = _write_numeric_metric(item_context, row, "Средний ранг", series)
+        return row
     if is_multiple(question):
         answered = answered_mask(frame, question)
         options = response_options(question, variables, frame)

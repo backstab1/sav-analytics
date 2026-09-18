@@ -978,6 +978,10 @@ def _output_line(settings: dict[str, Any]) -> str:
         + ("; под долями — число ответивших, N" if settings.get("show_counts") else "")
         + ("; % по строке" if settings.get("row_percents") else "")
         + ("; % от общего" if settings.get("table_percents") else "")
+        + ("; ранжирование — " + ", ".join(
+            "средний ранг" if metric == "mean" else "распределение мест"
+            for metric in settings.get("ranking_metrics", ("distribution", "mean"))
+        ) if settings.get("ranking_present") else "")
     )
 
 

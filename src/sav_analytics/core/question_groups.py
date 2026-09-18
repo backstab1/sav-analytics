@@ -17,7 +17,7 @@ from typing import Any
 from .inference import group_prefix, is_special_label
 
 GROUP_TYPES = frozenset(
-    {"multiple_choice_dichotomy", "multiple_choice_categorical", "matrix"}
+    {"multiple_choice_dichotomy", "multiple_choice_categorical", "matrix", "ranking"}
 )
 #: Признак ручной группы. Перераспознавание структуры строит вопросы заново
 #: из SAV и ручную группу не нашло бы — по этому признаку оно её переносит.
@@ -36,6 +36,7 @@ def build_group(
     *,
     code: str | None = None,
     label: str | None = None,
+    ranking_encoding: str | None = None,
 ) -> dict[str, Any]:
     """Вопрос-группа из выбранных одиночных вопросов.
 
@@ -43,7 +44,7 @@ def build_group(
     так варианты в книге стоят там же, где аналитик их видел.
     """
     if question_type not in GROUP_TYPES:
-        raise QuestionGroupError("Собрать можно multiple-response или матрицу.")
+        raise QuestionGroupError("Собрать можно multiple-response, матрицу или ранжирование.")
     wanted = list(dict.fromkeys(codes))
     if len(wanted) < 2:
         raise QuestionGroupError("Для группы выберите хотя бы два вопроса.")
@@ -64,7 +65,8 @@ def build_group(
         if member["role"] != "question":
             raise QuestionGroupError(f"{member['code']} — не вопрос, а служебная переменная.")
     sources = [member["source_variables"][0] for member in members]
-    _check_compatible(question_type, [variables[name] for name in sources])
+    if question_type != "ranking":
+        _check_compatible(question_type, [variables[name] for name in sources])
 
     taken = {item["code"] for item in questions if item["code"] not in wanted}
     final_code = (code or "").strip() or _suggest_code(sources, taken)
@@ -99,6 +101,9 @@ def build_group(
         "base_filter_id": None,
         "group_source": MANUAL,
     }
+    if question_type == "ranking":
+        group["ranking_encoding"] = ranking_encoding
+        group["special_values"] = []
     return group
 
 

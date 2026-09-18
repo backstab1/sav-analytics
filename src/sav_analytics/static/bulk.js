@@ -233,7 +233,7 @@ document.querySelector("#bulk-bar").addEventListener("change", async event => {
     return;
   }
   if (select.id === "bulk-group") {
-    const questionType = select.value;
+    const [questionType, rankingEncoding] = select.value.split(":");
     select.value = "";
     const codes = configuredQuestions()
       .map(question => question.code)
@@ -243,7 +243,7 @@ document.querySelector("#bulk-bar").addEventListener("change", async event => {
       currentProject = await api(`/api/projects/${currentProject.id}/questions/group`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codes, question_type: questionType }),
+        body: JSON.stringify({ codes, question_type: questionType, ranking_encoding: rankingEncoding }),
       });
       const created = configuredQuestions().find(question => !before.has(question.code));
       // Отмена массовой полосы хранит поля вопросов, а не состав структуры:

@@ -289,6 +289,9 @@ function reportStatisticsColumn(settings) {
         <div class="stat-controls stat-row"><span class="stat-label">Числовые</span>
           ${numericMetricOptions.map(option => statToggle(`numeric:${option.value}`, option.label, settings.numeric_metrics.includes(option.value))).join("")}
         </div>
+        <div class="stat-controls stat-row"><span class="stat-label">Ранжирование</span>
+          ${rankingMetricOptions.map(option => statToggle(`ranking:${option.value}`, option.label, settings.ranking_metrics.includes(option.value))).join("")}
+        </div>
         <div class="stat-controls stat-row"><span class="stat-label">Знаков</span>
           <span class="stat-label-inline">доли</span>
           ${statSegment("percent-decimals", ["0", "1", "2"].map(value => ({ value, label: value })), String(settings.percent_decimals))}
@@ -382,6 +385,7 @@ function reportSettingsPayload(settings) {
       ? settings.wave_control_value
       : null,
     scale_metrics: settings.scale_metrics,
+    ranking_metrics: settings.ranking_metrics,
     numeric_metrics: settings.numeric_metrics,
     percent_decimals: settings.percent_decimals,
     mean_decimals: settings.mean_decimals,
@@ -443,10 +447,10 @@ function statPatch(name, value) {
   if (name === "row-percents") return { row_percents: value === "on" };
   if (name === "table-percents") return { table_percents: value === "on" };
   if (name === "charts") return { show_charts: value === "on" };
-  if (name.startsWith("scale:") || name.startsWith("numeric:")) {
+  if (name.startsWith("scale:") || name.startsWith("numeric:") || name.startsWith("ranking:")) {
     const [group, metric] = name.split(":");
     const key = `${group}_metrics`;
-    const options = group === "scale" ? scaleMetricOptions : numericMetricOptions;
+    const options = group === "ranking" ? rankingMetricOptions : group === "scale" ? scaleMetricOptions : numericMetricOptions;
     const chosen = new Set(configuredReportSettings()[key]);
     if (value === "on") chosen.add(metric);
     else chosen.delete(metric);

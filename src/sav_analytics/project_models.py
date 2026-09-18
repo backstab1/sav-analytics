@@ -28,6 +28,7 @@ class StoredSource(_StoredModel):
 
 
 class StoredQuestion(_StoredModel):
+    ranking_encoding: Literal["rank_per_item", "item_per_rank"] | None = None
     code: str = Field(min_length=1, max_length=64)
     label: str = Field(min_length=1)
     question_type: QuestionType
@@ -43,6 +44,9 @@ class StoredConfigurationEntity(_StoredModel):
 
 
 class StoredReportSettings(_StoredModel):
+    ranking_metrics: list[Literal["distribution", "mean"]] = Field(
+        default_factory=lambda: ["distribution", "mean"], min_length=1
+    )
     compare_to_total: bool
     compare_target: Literal["rest", "total"]
     compare_pairwise: bool

@@ -10,6 +10,7 @@ SCALE_METRICS = ("distribution", "mean", "top2", "bottom2")
 NUMERIC_METRICS = ("mean", "median", "min", "max", "std", "stderr")
 
 DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
+    "ranking_metrics": ["distribution", "mean"],
     "compare_to_total": False,
     "compare_target": "rest",
     "compare_pairwise": False,

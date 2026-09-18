@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .filtering import evaluate_filter_frame
+from .ranking import ranking_items
 from .reporting.data import ReportData, prepare_report_data
 from .reporting.models import ReportError
 from .review import questions_needing_review
@@ -119,6 +120,17 @@ def _empty_question_bases(
     cache: dict[str, bool] = {}
     for question in data.questions:
         filter_id = question.get("base_filter_id")
+        if question["question_type"] == "ranking":
+            active = report_mask.copy()
+            if filter_id and filter_id in data.filters:
+                active &= evaluate_filter_frame(data.filters[filter_id], project, data.frame)
+            valid = ranking_items(data.frame, question, data.variables)[0]["ranks"].notna()
+            if not (active & valid).any():
+                findings.append(PreflightFinding(
+                    "EMPTY_QUESTION_BASE",
+                    f"Ранжирование {question['code']}: в активной базе нет полных ответов.",
+                    question["code"],
+                ))
         if not filter_id:
             continue
         if filter_id not in cache:

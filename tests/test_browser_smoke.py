@@ -852,6 +852,51 @@ def test_separate_questions_are_grouped_and_split_back(
     expect(page.locator("#table-body tr[data-code='SECOND']")).to_have_count(1)
 
 
+@pytest.mark.parametrize("encoding", ["rank_per_item", "item_per_rank"])
+def test_ranking_group_preview_and_saved_settings(
+    page: Page, live_server: str, tmp_path: Path, encoding: str
+) -> None:
+    from tests.test_ranking import SOURCES, write_ranking
+
+    source = tmp_path / "ranks.sav"
+    write_ranking(source, encoding)
+    _open_project(page, live_server, source)
+    for code in SOURCES:
+        page.check(f"#table-body tr[data-code='{code}'] .select-question")
+    page.select_option("#bulk-group", f"ranking:{encoding}")
+    expect(page.locator("#toast-container")).to_contain_text("собраны в", timeout=UI_TIMEOUT)
+    page.locator("#table-body tr[data-code='ALPHA_grp'] .question-cell").click()
+    expect(page.locator("#ranking-encoding")).to_have_value(encoding)
+    expect(page.locator("#preview-content")).to_contain_text("Альфа", timeout=UI_TIMEOUT)
+
+    page.click("#close-editor")
+    _open_view(page, "tables")
+    page.click('.bld-param[data-zone="rows"]')
+    page.click('#bld-list .bld-var[data-code="ALPHA_grp"]')
+    page.keyboard.press("Escape")
+    table = page.locator("#bld-grid-wrap table.bld-grid")
+    expect(table).to_contain_text("Средний ранг", timeout=UI_TIMEOUT)
+    first_rank = table.locator("tbody tr", has_text="Место 1").first
+    expect(first_rank.locator("td.bld-val").first).to_have_text("40")
+    page.screenshot(path=str(tmp_path / "ranking-table.png"), full_page=True)
+
+    _open_view(page, "data")
+    page.locator("#table-body tr[data-code='ALPHA_grp'] .question-cell").click()
+    expect(page.locator("#preview-content .base-line")).to_contain_text("Валидная база 4")
+    page.locator("#preview-content details").first.click()
+    expect(page.locator("#preview-content details").first).to_contain_text("Место 1")
+    page.fill("#question-label", "Строгое ранжирование")
+    page.click("#save-question")
+    expect(page.locator("#table-body tr[data-code='ALPHA_grp']")).to_contain_text(
+        "Строгое ранжирование", timeout=UI_TIMEOUT
+    )
+    page.reload()
+    expect(page.locator("#table-body tr[data-code='ALPHA_grp']")).to_be_visible(timeout=UI_TIMEOUT)
+    page.locator("#table-body tr[data-code='ALPHA_grp'] .question-cell").click()
+    expect(page.locator("#ranking-encoding")).to_have_value(encoding)
+    expect(page.locator("#preview-content")).to_contain_text("Альфа", timeout=UI_TIMEOUT)
+
+
 def test_csv_upload_opens_a_project(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

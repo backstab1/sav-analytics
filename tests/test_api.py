@@ -43,6 +43,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             assert project["inspection"]["row_count"] == 4
             assert project["configuration"]["schema_version"] == 2
             assert project["configuration"]["report_settings"] == {
+                "ranking_metrics": ["distribution", "mean"],
                 "compare_to_total": False,
                 "compare_target": "rest",
                 "compare_pairwise": False,
@@ -255,7 +256,7 @@ def test_question_update_rejects_unsupported_report_types(tmp_path: Path) -> Non
                 json={"question_type": "ranking"},
             )
             assert response.status_code == 422
-            assert "не поддерживается" in response.json()["detail"]
+            assert "две и более" in response.json()["detail"]
             # Категориальный multiple поддерживается, но из одной переменной
             # его не собрать: у него должно быть хотя бы два слота.
             response = client.patch(

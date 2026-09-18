@@ -22,6 +22,7 @@ class NetDefinition(BaseModel):
 class QuestionUpdate(BaseModel):
     label: str | None = Field(default=None, min_length=1, max_length=5000)
     question_type: QuestionType | None = None
+    ranking_encoding: Literal["rank_per_item", "item_per_rank"] | None = None
     role: VariableRole | None = None
     included_in_report: bool | None = None
     special_values: list[str | int | float] | None = None
@@ -117,7 +118,7 @@ class CodeframeMark(BaseModel):
 
 
 class QuestionGroupRequest(BaseModel):
-    """Собрать одиночные вопросы в multiple или матрицу.
+    """Собрать одиночные вопросы в multiple, матрицу или ранжирование.
 
     Код и подпись необязательны: без них код берётся из общего префикса
     имён переменных, подпись — из общего начала их подписей.
@@ -125,8 +126,9 @@ class QuestionGroupRequest(BaseModel):
 
     codes: list[str] = Field(min_length=1, max_length=500)
     question_type: Literal[
-        "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix"
+        "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix", "ranking"
     ]
+    ranking_encoding: Literal["rank_per_item", "item_per_rank"] | None = None
     code: str | None = Field(default=None, max_length=64)
     label: str | None = Field(default=None, max_length=500)
 
@@ -251,6 +253,9 @@ class TableExportRequest(TablePreviewRequest):
 
 
 class ReportSettingsDefinition(BaseModel):
+    ranking_metrics: list[Literal["distribution", "mean"]] = Field(
+        default_factory=lambda: ["distribution", "mean"], min_length=1, max_length=2
+    )
     compare_to_total: bool = False
     # С кем сравнивается подгруппа: с непересекающимся остатком (по умолчанию)
     # или с самим Total, как это делают клиентские макросы.
@@ -304,6 +309,7 @@ class ReportSettingsDefinition(BaseModel):
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:
         order = {
+            "ranking_metrics": ("distribution", "mean"),
             "scale_metrics": ("distribution", "mean", "top2", "bottom2"),
             "numeric_metrics": ("mean", "median", "min", "max", "std", "stderr"),
         }

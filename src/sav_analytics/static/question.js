@@ -22,6 +22,8 @@ function fillEditor(question) {
     : "Это название попадёт в содержание и топлайн Excel.";
   document.querySelector("#question-label").value = question.label;
   document.querySelector("#question-type").value = question.question_type;
+  document.querySelector("#ranking-encoding").value = question.ranking_encoding || "rank_per_item";
+  document.querySelector("#ranking-encoding-field").hidden = question.question_type !== "ranking";
   document.querySelector("#question-role").value = question.role;
   document.querySelector("#question-included").checked = question.included_in_report;
   document.querySelector("#question-base-filter").innerHTML = '<option value="">Стандартная база</option>' + configuredFilters().map(filter => `<option value="${filter.id}" ${question.base_filter_id === filter.id ? "selected" : ""}>${escapeHtml(filter.name)}</option>`).join("");
@@ -392,6 +394,7 @@ document.querySelector("#add-net").addEventListener("click", () => addNetRow());
 // Свой набор вывода вопроса. Отметки по умолчанию — набор отчёта: снять
 // флажок значит вернуться к нему, а не очистить строки вопроса.
 function questionOutputOptions(type) {
+  if (type === "ranking") return rankingMetricOptions;
   if (type === "scale" || type === "matrix") return scaleMetricOptions;
   if (type === "numeric") return numericMetricOptions;
   return null;
@@ -404,7 +407,8 @@ function renderQuestionOutput(question) {
   if (!options) return;
   const settings = configuredReportSettings();
   const own = (question.output_metrics || []).length > 0;
-  const reportSet = question.question_type === "numeric" ? settings.numeric_metrics : settings.scale_metrics;
+  const reportSet = question.question_type === "ranking" ? settings.ranking_metrics
+    : question.question_type === "numeric" ? settings.numeric_metrics : settings.scale_metrics;
   const chosen = own ? question.output_metrics : reportSet;
   document.querySelector("#question-output-own").checked = own;
   const list = document.querySelector("#question-output-list");

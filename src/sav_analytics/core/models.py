@@ -46,6 +46,7 @@ class VariableInspection:
     unique_count: int
     value_labels: list[ValueLabel] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    missing_ranges: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

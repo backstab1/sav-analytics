@@ -225,6 +225,8 @@
                       <option value="multiple_choice_dichotomy">Множественный — дихотомии</option>
                       <option value="multiple_choice_categorical">Множественный — коды в слотах</option>
                       <option value="matrix">Матрица шкал</option>
+                      <option value="ranking:rank_per_item">Ранжирование — место у объекта</option>
+                      <option value="ranking:item_per_rank">Ранжирование — объект на месте</option>
                     </select>
                     <select id="bulk-role" class="bulk-select" aria-label="Назначить роль выбранным вопросам">
                       <option value="">Роль…</option>
@@ -302,7 +304,7 @@
                       <option value="multiple_choice_categorical" disabled>Множественный — категории (скоро)</option>
                       <option value="scale">Шкала</option>
                       <option value="numeric">Числовой показатель</option>
-                      <option value="ranking" disabled>Ранжирование (скоро)</option>
+                      <option value="ranking">Ранжирование</option>
                       <option value="matrix">Матрица шкал</option>
                       <option value="open_text">Открытый текст</option>
                       <option value="technical">Технический</option>
@@ -316,6 +318,10 @@
                       <option value="technical">Техническая</option>
                     </select></label>
                   </div>
+                  <label class="f" id="ranking-encoding-field" hidden>Структура ранжирования<select id="ranking-encoding">
+                    <option value="rank_per_item">Место у каждого объекта</option>
+                    <option value="item_per_rank">Объект на каждом месте</option>
+                  </select><small>Строгое полное ранжирование. В режиме «объект на месте» переменные идут от первого места к последнему в порядке структуры.</small></label>
                   <label class="tgl-row boxed question-report-toggle"><span><strong>Включить в отчёт</strong><small>Попадёт в топлайн и содержание Excel</small></span><span class="tgl"><input id="question-included" type="checkbox" /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
                   <label id="special-metric-label" class="f" hidden>Специальный показатель<select id="question-special-metric"><option value="none">Нет</option><option value="nps">NPS (шкала 0–10)</option><option value="csat">CSAT (шкала 1–5)</option></select><small>Границы групп фиксированы и применяются автоматически.</small></label>
                   <label class="f">Пользовательская база<select id="question-base-filter"><option value="">Стандартная база</option></select></label>

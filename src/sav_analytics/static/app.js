@@ -44,6 +44,7 @@ const defaultReportSettings = Object.freeze({
   wave_comparison: "none",
   wave_control_value: null,
   scale_metrics: ["distribution", "mean", "top2", "bottom2"],
+  ranking_metrics: ["distribution", "mean"],
   numeric_metrics: ["mean", "median", "min", "max", "std", "stderr"],
   percent_decimals: 0,
   mean_decimals: 1,
@@ -71,6 +72,11 @@ function scaleMetricLabel(option, size) {
   if (option.value === "bottom2") return `Bottom-${size}`;
   return option.label;
 }
+
+const rankingMetricOptions = [
+  { value: "distribution", label: "Распределение мест" },
+  { value: "mean", label: "Средний ранг" },
+];
 
 const numericMetricOptions = [
   { value: "mean", label: "Среднее" },
@@ -217,7 +223,14 @@ document.querySelector("#close-editor").addEventListener("click", () => {
 document.querySelector("#refresh-preview").addEventListener("click", loadPreview);
 document.querySelector("#refresh-structure").addEventListener("click", refreshStructure);
 document.querySelector("#question-type").addEventListener("change", () => {
+  document.querySelector("#ranking-encoding-field").hidden = document.querySelector("#question-type").value !== "ranking";
   const question = findQuestion(currentQuestionCode);
+  if (question) renderQuestionOutput({
+    ...question, question_type: document.querySelector("#question-type").value, output_metrics: [],
+  });
+  if (document.querySelector("#question-type").value === "ranking") {
+    document.querySelector("#question-nets").hidden = true;
+  }
   if (question) renderSpecialAnswers({
     ...question,
     question_type: document.querySelector("#question-type").value,
@@ -1152,6 +1165,8 @@ document.querySelector("#question-form").addEventListener("submit", async event 
         body: JSON.stringify({
           label: document.querySelector("#question-label").value.trim(),
           question_type: document.querySelector("#question-type").value,
+          ...(document.querySelector("#question-type").value === "ranking"
+            ? { ranking_encoding: document.querySelector("#ranking-encoding").value } : {}),
           role: document.querySelector("#question-role").value,
           included_in_report: document.querySelector("#question-included").checked,
           special_metric: document.querySelector("#question-special-metric").value,
@@ -1243,7 +1258,7 @@ window.SavApp = {
 // нет, иначе один и тот же проект читался бы дважды. Строками годятся типы,
 // которые раскладывает лист книги, колонками — одиночный выбор с подписями
 // и группировки.
-const TABLE_ROW_TYPES = ["single_choice", "scale", "numeric", "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix"];
+const TABLE_ROW_TYPES = ["single_choice", "scale", "numeric", "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix", "ranking"];
 const MULTIPLE_TYPES = ["multiple_choice_dichotomy", "multiple_choice_categorical"];
 
 function publishVariablesToShell(inspection, questions) {

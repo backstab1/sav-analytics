@@ -98,6 +98,7 @@ def _inspect_variable(series: pd.Series, name: str, metadata: Any) -> VariableIn
         valid_count=int((~missing_mask).sum()),
         missing_count=int(missing_mask.sum()),
         unique_count=int(analysis_series.nunique(dropna=True)),
+        missing_ranges=(getattr(metadata, "missing_ranges", {}) or {}).get(name, []),
         value_labels=[
             ValueLabel(value=_json_scalar(value), label=str(label))
             for value, label in value_labels.items()

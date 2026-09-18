@@ -15,6 +15,7 @@ from ..filtering import evaluate_filter_frame
 from ..formulas import read_project_frame
 from ..multiple_response import response_definition
 from ..not_applicable import not_applicable_values
+from ..ranking import RankingError, ranking_items
 from ..report_settings import resolved_report_settings
 from ..weight_validation import assess_ready_weight, weight_role
 from ..weighting import WeightingError, calculate_raking
@@ -105,17 +106,13 @@ def prepare_report_data(
     questions = [
         question for question in configuration["questions"] if question["included_in_report"]
     ]
-    unsupported = [
-        question["code"]
-        for question in questions
-        if question["question_type"] == "ranking"
-    ]
-    if unsupported:
-        raise ReportError(
-            "Отчёт содержит пока не поддерживаемые типы вопросов: "
-            + ", ".join(unsupported)
-            + ". Исключите их из отчёта."
-        )
+    variables = {item["name"]: item for item in project["inspection"]["variables"]}
+    for question in questions:
+        if question["question_type"] == "ranking":
+            try:
+                ranking_items(frame, question, variables)
+            except RankingError as exc:
+                raise ReportError(str(exc)) from exc
     invalid_multiple = [
         question["code"]
         for question in questions
@@ -131,7 +128,6 @@ def prepare_report_data(
             + ", ".join(invalid_multiple)
             + "."
         )
-    variables = {item["name"]: item for item in project["inspection"]["variables"]}
     filters = {item["id"]: item for item in configuration.get("filters", [])}
     # «Задавался не всем» — это и объявленный пропуск SPSS, и код, который
     # пользователь пометил как «не применимо»: для отчёта они равнозначны.
@@ -156,6 +152,8 @@ def prepare_report_data(
         "wave_comparison": report_settings["wave_comparison"],
         "wave_control_value": report_settings.get("wave_control_value"),
         "scale_metrics": tuple(report_settings["scale_metrics"]),
+        "ranking_metrics": tuple(report_settings["ranking_metrics"]),
+        "ranking_present": any(q["question_type"] == "ranking" for q in questions),
         "numeric_metrics": tuple(report_settings["numeric_metrics"]),
         "percent_decimals": report_settings["percent_decimals"],
         "mean_decimals": report_settings["mean_decimals"],

@@ -98,6 +98,7 @@ def group_questions(
             request.question_type,
             code=request.code,
             label=request.label,
+            ranking_encoding=request.ranking_encoding,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc

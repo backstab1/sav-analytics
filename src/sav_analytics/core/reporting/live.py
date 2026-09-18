@@ -39,6 +39,7 @@ LIVE_QUESTION_TYPES = frozenset(
         "numeric",
         "multiple_choice_dichotomy",
         "multiple_choice_categorical",
+        "ranking",
         "matrix",
     }
 )
