@@ -962,6 +962,52 @@ def test_unsaved_question_edits_are_not_lost_silently(
     expect(page.locator("#question-editor")).to_be_hidden(timeout=UI_TIMEOUT)
 
 
+def test_revision_conflict_is_resolved_without_losing_input(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """409 из-за правки в другом окне: диалог, повтор поверх или перезагрузка (GAP-024)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    project_id = page.url.split("#/projects/")[1].split("/")[0]
+
+    def change_elsewhere(minimum_base: int) -> None:
+        revision = page.evaluate("currentProject.configuration.revision")
+        response = page.request.put(
+            f"{live_server}/api/projects/{project_id}/report-settings",
+            data={"minimum_base": minimum_base},
+            headers={"If-Match": str(revision)},
+        )
+        assert response.ok
+
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#question-label", "Марка после конфликта")
+    change_elsewhere(40)
+    page.click("#save-question")
+    dialog = page.locator("#conflict-dialog")
+    expect(dialog).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#conflict-sections")).to_contain_text("настройки отчёта")
+    page.click("#conflict-retry")
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Настройки вопроса сохранены", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#table-body tr[data-code='BRAND']")).to_contain_text(
+        "Марка после конфликта"
+    )
+
+    page.click("#table-body tr[data-code='SEX'] .question-cell")
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#question-label", "Пол, ввод не теряется")
+    change_elsewhere(50)
+    page.click("#save-question")
+    expect(dialog).to_be_visible(timeout=UI_TIMEOUT)
+    page.click("#conflict-reload")
+    expect(page.locator("#editor-error")).to_contain_text("перезагружен", timeout=UI_TIMEOUT)
+    expect(page.locator("#question-label")).to_have_value("Пол, ввод не теряется")
+    assert page.evaluate("currentProject.configuration.report_settings.minimum_base") == 50
+
+
 def test_several_questions_are_excluded_at_once(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

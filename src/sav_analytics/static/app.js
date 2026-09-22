@@ -2145,7 +2145,7 @@ function renderPreflightFindings(container, preflight) {
   return rows.length > 0;
 }
 
-async function api(url, options = {}) {
+async function api(url, options = {}, retried = false) {
   const method = (options.method || "GET").toUpperCase();
   const projectPrefix = currentProject ? `/api/projects/${currentProject.id}` : null;
   const revision = currentProject?.configuration?.revision;
@@ -2162,8 +2162,81 @@ async function api(url, options = {}) {
   } catch {
     payload = { detail: responseText || `Ошибка сервера ${response.status}` };
   }
+  if (response.status === 409 && payload.error_code === "CONFIGURATION_CONFLICT" && currentProject && !retried) {
+    return resolveRevisionConflict(url, options, payload);
+  }
   if (!response.ok) throw new Error(payload.detail || "Запрос не выполнен.");
   return payload;
+}
+
+/* Конфликт ревизий (P2, GAP-024). Сервер отвечает 409, когда проект успели
+   изменить в другой вкладке. Разбор идёт здесь, а не в каждом редакторе:
+   приложение перечитывает проект, называет изменившиеся разделы и даёт
+   выбрать. «Повторить» отправляет тот же запрос на новой ревизии, остальные
+   варианты заканчиваются ошибкой вызывающему — и его редактор с вводом
+   остаётся открытым, как при любой другой ошибке сохранения. */
+const CONFLICT_SECTIONS = {
+  questions: "структура вопросов",
+  recodings: "перекодировки",
+  banners: "баннеры",
+  filters: "фильтры и базы",
+  calculated_weights: "рассчитанные веса",
+  report_settings: "настройки отчёта",
+  report_banner_id: "баннер отчёта",
+  report_filter_id: "общий фильтр",
+  formulas: "формулы",
+  codeframes: "кодификаторы открытых ответов",
+  analysis_cards: "карточки анализа",
+};
+
+function changedConfigurationSections(before, after) {
+  const skip = new Set(["revision", "updated_at"]);
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  const changed = [];
+  keys.forEach(key => {
+    if (skip.has(key)) return;
+    if (JSON.stringify(before?.[key]) === JSON.stringify(after?.[key])) return;
+    const name = CONFLICT_SECTIONS[key] || "прочие настройки";
+    if (!changed.includes(name)) changed.push(name);
+  });
+  return changed;
+}
+
+function askConflictChoice(sections, mine, theirs) {
+  const dialog = document.querySelector("#conflict-dialog");
+  document.querySelector("#conflict-summary").textContent =
+    `Вы редактировали версию ${mine}, в проекте уже версия ${theirs}. В другом окне изменились:`;
+  document.querySelector("#conflict-sections").innerHTML = (sections.length ? sections : ["данные проекта"])
+    .map(name => `<li>${escapeHtml(name)}</li>`).join("");
+  return new Promise(resolve => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue || "cancel"), { once: true });
+    dialog.returnValue = "";
+    dialog.showModal();
+    document.querySelector("#conflict-retry").focus();
+  });
+}
+
+async function resolveRevisionConflict(url, options, payload) {
+  const response = await fetch(`/api/projects/${currentProject.id}`);
+  if (!response.ok) throw new Error(payload.detail || "Проект изменён в другом окне.");
+  const fresh = await response.json();
+  const choice = await askConflictChoice(
+    changedConfigurationSections(currentProject.configuration, fresh.configuration),
+    currentProject.configuration.revision,
+    fresh.configuration.revision,
+  );
+  if (choice === "retry") {
+    // Новая ревизия подставится в If-Match при повторе; проект целиком
+    // вызывающий получит ответом, как при обычном сохранении.
+    currentProject = fresh;
+    return api(url, options, true);
+  }
+  if (choice === "reload") {
+    currentProject = fresh;
+    renderProject();
+    throw new Error("Проект перезагружен с изменениями из другого окна. Ваш ввод остался в редакторе — проверьте и сохраните снова.");
+  }
+  throw new Error(payload.detail || "Сохранение отменено: проект изменён в другом окне.");
 }
 
 function setBusy(button, busy, text) {

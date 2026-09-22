@@ -775,6 +775,19 @@
 
     <div id="editor-backdrop" class="editor-backdrop"></div>
     <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <dialog id="conflict-dialog" class="conflict-dialog" aria-labelledby="conflict-title">
+      <form method="dialog">
+        <h3 id="conflict-title">Проект изменён в другом окне</h3>
+        <p id="conflict-summary"></p>
+        <ul id="conflict-sections"></ul>
+        <p class="muted">Ваш ввод в редакторе не потерян. «Повторить поверх» сохранит его на новой версии проекта; «Перезагрузить» покажет чужие изменения и оставит ваш ввод в редакторе, чтобы сохранить его снова.</p>
+        <div class="conflict-actions">
+          <button id="conflict-retry" value="retry">Повторить поверх</button>
+          <button id="conflict-reload" class="secondary" value="reload">Перезагрузить проект</button>
+          <button id="conflict-cancel" class="text-button" value="cancel">Отмена</button>
+        </div>
+      </form>
+    </dialog>
     <script src="/shell.js?v=20260923-settings-1" defer></script>
     <script src="/app.js?v=20260923-settings-1" defer></script>
     <script src="/library.js?v=20260923-settings-1" defer></script>
