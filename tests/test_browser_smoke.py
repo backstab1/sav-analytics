@@ -1032,6 +1032,30 @@ def test_banner_category_can_be_hidden_and_renamed(
 
 
 
+def test_banner_categories_are_merged_into_one_column(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Категории с одной группой выводятся одной колонкой — без перекодировки (PQ.5)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+
+    page.click('[data-block="banner"] [data-new="banner"]')
+    expect(page.locator("#banner-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#banner-name", "Марка")
+    page.locator("#banner-block-list select").first.select_option("question:BRAND")
+    page.locator("#banner-block-list .banner-categories summary").first.click()
+    rows = page.locator("#banner-block-list .banner-category")
+    expect(rows).to_have_count(2, timeout=UI_TIMEOUT)
+    rows.nth(0).locator(".banner-category-group").fill("Любая марка")
+    rows.nth(1).locator(".banner-category-group").fill("Любая марка")
+    page.click("#save-banner")
+    expect(page.locator("#banner-preview")).to_contain_text("Любая марка", timeout=UI_TIMEOUT)
+    expect(page.locator("#banner-preview")).not_to_contain_text("Первая")
+    expect(page.locator("#banner-preview-count")).to_have_text("2 колонок")
+
+
 def test_derived_sav_downloads_from_the_export_menu(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

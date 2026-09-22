@@ -87,6 +87,7 @@ def source_category_options(
     return {
         "label": resolved["label"],
         "total_base": len(frame),
+        "overlapping": bool(resolved.get("overlapping")),
         "categories": [
             {
                 "key": category["key"],
@@ -125,7 +126,50 @@ def _configured_categories(source: dict[str, Any], resolved: dict[str, Any]) -> 
     )
     if not ordered:
         raise BannerError(f"В «{resolved['label']}» скрыты все категории.")
+    groups = {
+        setting["key"]: (setting.get("group") or "").strip()
+        for setting in settings
+        if (setting.get("group") or "").strip()
+    }
+    if groups:
+        ordered = _merged_categories(ordered, groups, resolved["label"])
     return {**resolved, "categories": ordered}
+
+
+def _merged_categories(
+    categories: list[dict[str, Any]], groups: dict[str, str], source_label: str
+) -> list[dict[str, Any]]:
+    """Категории одной группы — одна колонка на месте первой из них.
+
+    Колонка группы — респонденты любой из её категорий. У одиночного выбора и
+    перекодировки категории не пересекаются, поэтому и после объединения
+    колонки остаются непересекающимися, и схема Subgroup/Rest с попарными
+    тестами применима без оговорок. Волны не объединяются: сравнение волн
+    идёт по каждой волне отдельно, и сумма двух волн его бы подменила.
+    """
+    merged: list[dict[str, Any]] = []
+    by_group: dict[str, dict[str, Any]] = {}
+    for category in categories:
+        group = groups.get(category["key"])
+        if not group:
+            merged.append(category)
+            continue
+        if category["is_wave"]:
+            raise BannerError(f"Волны в «{source_label}» не объединяются в группы.")
+        existing = by_group.get(group)
+        if existing is None:
+            existing = {
+                "key": f"group:{group}",
+                "label": group,
+                "value": None,
+                "is_wave": False,
+                "mask": category["mask"].copy(),
+            }
+            by_group[group] = existing
+            merged.append(existing)
+        else:
+            existing["mask"] = existing["mask"] | category["mask"]
+    return merged
 
 
 def _block_overlaps(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:

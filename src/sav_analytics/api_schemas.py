@@ -197,11 +197,13 @@ class CategoricalRecodeDefinition(BaseModel):
 
 
 class BannerCategorySetting(BaseModel):
-    """Настройка категории в конкретном баннере: порядок списка, подпись, скрытие."""
+    """Настройка категории в конкретном баннере: порядок, подпись, скрытие, объединение."""
 
     key: str = Field(min_length=1, max_length=300)
     label: str | None = Field(default=None, max_length=250)
     hidden: bool = False
+    # Категории с одной группой выводятся одной колонкой с этой подписью.
+    group: str | None = Field(default=None, max_length=250)
 
 
 class BannerSource(BaseModel):

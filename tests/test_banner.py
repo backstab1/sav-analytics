@@ -152,3 +152,64 @@ def test_banner_categories_are_reordered_renamed_and_hidden(tmp_path: Path) -> N
     with pytest.raises(BannerError, match="скрыты все категории"):
         calculate_banner_preview(source, definition, project)
 
+
+
+def test_banner_categories_in_one_group_become_one_column(tmp_path: Path) -> None:
+    """Редкие категории объединяются прямо в баннере, без новой перекодировки (PQ.5)."""
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    project = project_fixture(source)
+    definition = {
+        "name": "Оценка",
+        "blocks": [
+            {
+                "label": None,
+                "sources": [
+                    {"kind": "question", "ref": "Q1"},
+                    {
+                        "kind": "recoding",
+                        "ref": "score-groups",
+                        "categories": [
+                            {"key": "recoding:score-groups:1", "group": "Любая оценка"},
+                            {"key": "recoding:score-groups:2", "group": "Любая оценка"},
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+
+    preview = calculate_banner_preview(source, definition, project)
+
+    columns = preview["columns"][1:]
+    assert [column["path"][1] for column in columns] == ["Любая оценка", "Любая оценка"]
+    # База группы — сумма баз её категорий: без группы было 1, 1 | 0, 1.
+    assert [column["base"] for column in columns] == [2, 1]
+    assert not any(column["overlapping"] for column in columns)
+    assert len({column["key"] for column in columns}) == 2
+
+
+def test_waves_are_not_merged_into_a_group(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    project = project_fixture(source)
+    wave = next(item for item in project["configuration"]["questions"] if item["code"] == "Q1")
+    wave["role"] = "wave"
+    keys = ["question:Q1:1.0", "question:Q1:2.0"]
+    definition = {
+        "name": "Волны",
+        "blocks": [
+            {
+                "sources": [
+                    {
+                        "kind": "question",
+                        "ref": "Q1",
+                        "categories": [{"key": key, "group": "Обе"} for key in keys],
+                    }
+                ]
+            }
+        ],
+    }
+
+    with pytest.raises(BannerError, match="Волны"):
+        calculate_banner_preview(source, definition, project)

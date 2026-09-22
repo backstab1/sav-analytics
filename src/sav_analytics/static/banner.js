@@ -27,14 +27,25 @@ async function loadBannerCategories(details) {
       ...options.categories.filter(item => !settings.some(setting => setting.key === item.key)).map(item => ({ ...item, setting: null })),
     ];
     list.dataset.source = select.value;
-    list.innerHTML = ordered.map(item => `
-      <div class="banner-category" data-key="${escapeAttribute(item.key)}">
+    // Объединять имеет смысл только непересекающиеся категории; у multiple
+    // колонки пересекаются, и группа из них — уже другой вопрос.
+    const mergeable = !options.overlapping;
+    const rows = ordered.map(item => `
+      <div class="banner-category" data-key="${escapeAttribute(item.key)}" data-base="${item.base}">
         <input type="checkbox" class="banner-category-shown" ${item.setting?.hidden ? "" : "checked"} aria-label="Показывать «${escapeAttribute(item.label)}»" />
         <input class="banner-category-label" value="${escapeAttribute(item.setting?.label || "")}" placeholder="${escapeAttribute(item.label)}" aria-label="Подпись колонки" />
+        ${mergeable ? `<input class="banner-category-group" value="${escapeAttribute(item.setting?.group || "")}" placeholder="Группа" aria-label="Объединить в колонку" title="Категории с одной группой выводятся одной колонкой" />` : ""}
         <em>${item.base.toLocaleString("ru-RU")}</em>
         <button type="button" class="icon-button" data-move-category="-1" aria-label="Выше">↑</button>
         <button type="button" class="icon-button" data-move-category="1" aria-label="Ниже">↓</button>
-      </div>`).join("") || '<p class="muted">Категорий нет.</p>';
+      </div>`).join("");
+    const minimumBase = configuredReportSettings().minimum_base;
+    const rare = ordered.filter(item => item.base < minimumBase).length;
+    const merge = mergeable && rare > 1
+      ? `<button type="button" class="secondary compact-button" data-merge-rare="${minimumBase}">Объединить редкие (база меньше ${minimumBase}) в «Другое»</button>`
+      : "";
+    list.classList.toggle("mergeable", mergeable);
+    list.innerHTML = rows ? rows + merge : '<p class="muted">Категорий нет.</p>';
   } catch (error) {
     list.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
   }
@@ -48,10 +59,11 @@ function collectBannerCategories(block, level) {
     key: row.dataset.key,
     label: row.querySelector(".banner-category-label").value.trim() || null,
     hidden: !row.querySelector(".banner-category-shown").checked,
+    group: row.querySelector(".banner-category-group")?.value.trim() || null,
   }));
   // Список, не отличающийся от данных, не сохраняем: так в баннер не попадает
   // замороженный порядок, и новые категории встают на свои места.
-  const untouched = settings.every(item => !item.label && !item.hidden)
+  const untouched = settings.every(item => !item.label && !item.hidden && !item.group)
     && list.dataset.initialOrder === rows.map(row => row.dataset.key).join("\n")
     && !block.bannerCategories[level];
   return untouched ? null : settings;
@@ -69,6 +81,16 @@ document.querySelector("#banner-block-list").addEventListener("toggle", event =>
 }, true);
 
 document.querySelector("#banner-block-list").addEventListener("click", event => {
+  const merge = event.target.closest("[data-merge-rare]");
+  if (merge) {
+    const threshold = Number(merge.dataset.mergeRare);
+    merge.closest(".banner-category-list").querySelectorAll(".banner-category").forEach(row => {
+      const group = row.querySelector(".banner-category-group");
+      if (Number(row.dataset.base) < threshold && group && !group.value.trim()) group.value = "Другое";
+    });
+    setBannerFormDirty(true);
+    return;
+  }
   const button = event.target.closest("[data-move-category]");
   if (!button) return;
   const row = button.closest(".banner-category");
