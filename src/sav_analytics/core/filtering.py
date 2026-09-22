@@ -154,6 +154,10 @@ def recoding_columns(recoding: dict[str, Any], project: dict[str, Any]) -> set[s
         for category in recoding["categories"]:
             columns |= _required_columns(category["rule"], project)
         return columns
+    if recoding.get("mode") == "segments":
+        from .segmentation import segment_columns
+
+        return set(segment_columns(recoding, project))
     return {recoding["source_variable"]}
 
 
@@ -377,6 +381,12 @@ def _source_series(
         if project is None:
             raise FilterError("Для логической переменной нужен проект.")
         return conditional_series(resolved, project, frame)
+    if resolved.get("mode") == "segments":
+        if project is None:
+            raise FilterError("Для сегментации нужен проект.")
+        from .segmentation import segment_series
+
+        return segment_series(resolved, project, frame)
     series = frame[resolved["source_variable"]]
     result = pd.Series(pd.NA, index=series.index, dtype="object")
     for category in resolved["categories"]:

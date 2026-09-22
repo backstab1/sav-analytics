@@ -258,3 +258,18 @@ def test_model_is_saved_computed_and_protects_its_sources(tmp_path: Path) -> Non
             assert removed.status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+def test_driver_map_carries_the_mean_of_numeric_predictors(tmp_path: Path) -> None:
+    project, frame = _project(tmp_path / "survey.sav")
+    definition = {
+        "kind": "linear",
+        "dependent": _question("INCOME"),
+        "predictors": [_question("SCORE"), _question("REGION")],
+    }
+
+    result = fit_model(definition, project, frame)
+
+    by_name = {item["predictor"]: item for item in result["importance"]}
+    assert by_name["SCORE Оценка"]["mean"] == pytest.approx(frame["SCORE"].mean())
+    assert "mean" not in by_name["REGION Регион"]

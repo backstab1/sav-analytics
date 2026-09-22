@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
-from ..api_schemas import RangeSuggestionRequest, RecodeDefinition
+from ..api_schemas import RangeSuggestionRequest, RecodeDefinition, SegmentSuggestionRequest
 from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.recoding import (
     RecodingError,
@@ -72,6 +72,42 @@ def suggest_recoding_ranges(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.post("/segments/suggest")
+def suggest_segment_count(
+    project_id: UUID,
+    request: SegmentSuggestionRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Варианты числа сегментов с силуэтом и размерами — до сохранения."""
+    from ..core.segmentation import SegmentationError, suggest_segments
+
+    try:
+        project = repository.get(project_id)
+        return suggest_segments(
+            repository.source_path(project_id),
+            project,
+            request.variables,
+            request.k_min,
+            max(request.k_min, request.k_max),
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except SegmentationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _fitted(payload: dict, project: dict, repository: ProjectRepository, project_id: UUID) -> dict:
+    """Сегментации сервер сам считает центры: клиент их не присылает."""
+    if payload.get("mode") != "segments":
+        return payload
+    from ..core.segmentation import SegmentationError, build_segment_definition
+
+    try:
+        return build_segment_definition(repository.source_path(project_id), project, payload)
+    except SegmentationError as exc:
+        raise RecodingError(str(exc)) from exc
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_recoding(
     project_id: UUID,
@@ -82,6 +118,7 @@ def create_recoding(
     try:
         project = repository.get(project_id)
         validate_recode(payload, project["inspection"]["variables"], project)
+        payload = _fitted(payload, project, repository, project_id)
         return repository.create_recoding(project_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
@@ -100,6 +137,7 @@ def update_recoding(
     try:
         project = repository.get(project_id)
         validate_recode(payload, project["inspection"]["variables"], project)
+        payload = _fitted(payload, project, repository, project_id)
         return repository.update_recoding(project_id, recoding_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или перекодировка не найдены.") from exc

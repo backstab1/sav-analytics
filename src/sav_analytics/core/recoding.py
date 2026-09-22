@@ -30,6 +30,18 @@ def validate_recode(
             raise RecodingError("Логическую переменную можно проверить только в проекте.")
         _validate_conditional_recode(definition, project)
         return
+    if definition.get("mode") == "segments":
+        if project is None:
+            raise RecodingError("Сегментацию можно проверить только в проекте.")
+        from .segmentation import SegmentationError, segment_questions
+
+        try:
+            segment_questions(definition["variables"], project)
+        except SegmentationError as exc:
+            raise RecodingError(str(exc)) from exc
+        if len(set(definition["variables"])) != len(definition["variables"]):
+            raise RecodingError("Переменная сегментации указана дважды.")
+        return
     source = next(
         (item for item in variables if item["name"] == definition["source_variable"]), None
     )
@@ -91,6 +103,10 @@ def calculate_recode_preview(
         if project is None:
             raise RecodingError("Логическую переменную можно посчитать только в проекте.")
         return _conditional_preview(path, definition, project)
+    if definition.get("mode") == "segments":
+        if project is None:
+            raise RecodingError("Сегментацию можно посчитать только в проекте.")
+        return _segment_preview(path, definition, project)
     source_variable = definition["source_variable"]
     frame = read_project_frame(path, project, [source_variable])
     series = pd.to_numeric(frame[source_variable], errors="coerce")
@@ -358,3 +374,40 @@ def _range_label(lower: float | None, upper: float | None, decimals: int) -> str
         return f"{number(lower)} и больше"
     return f"{number(lower)}–{number(upper)}"
 
+
+
+def _segment_preview(
+    path: str | Path, definition: dict[str, Any], project: dict[str, Any]
+) -> dict[str, Any]:
+    """Размер каждого сегмента на текущих данных и профиль его центра."""
+    from .segmentation import SegmentationError, segment_columns, segment_series
+
+    try:
+        frame = read_project_frame(path, project, segment_columns(definition, project))
+        labels = segment_series(definition, project, frame)
+    except SegmentationError as exc:
+        raise RecodingError(str(exc)) from exc
+    profiles = (definition.get("model") or {}).get("profiles") or []
+    rows = []
+    for position, category in enumerate(definition["categories"], start=1):
+        count = int((labels == category["label"]).sum())
+        profile = next((item for item in profiles if item["position"] == position), None)
+        rows.append(
+            {
+                "value": position,
+                "label": category["label"],
+                "count": count,
+                "percent_total": count / len(frame) if len(frame) else None,
+                "means": (profile or {}).get("means", {}),
+            }
+        )
+    return {
+        "id": definition.get("id"),
+        "code": definition["code"],
+        "name": definition["name"],
+        "mode": "segments",
+        "total_base": len(frame),
+        "missing_count": int(labels.isna().sum()),
+        "variables": definition["variables"],
+        "rows": rows,
+    }

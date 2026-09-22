@@ -478,8 +478,33 @@ class FormulaDefinition(BaseModel):
     expression: str = Field(min_length=1, max_length=2000)
 
 
+class SegmentCategory(BaseModel):
+    label: str = Field(min_length=1, max_length=250)
+
+
+class SegmentRecodeDefinition(BaseModel):
+    """Сегментация k-means: центры считает сервер при сохранении (PQ.11)."""
+
+    mode: Literal["segments"]
+    code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+    name: str = Field(min_length=1, max_length=500)
+    variables: list[str] = Field(min_length=1, max_length=20)
+    k: int = Field(ge=2, le=10)
+    # Подписи сегментов; пусто — «Сегмент 1…k» по убыванию размера.
+    categories: list[SegmentCategory] = Field(default_factory=list, max_length=10)
+
+
+class SegmentSuggestionRequest(BaseModel):
+    variables: list[str] = Field(min_length=1, max_length=20)
+    k_min: int = Field(default=2, ge=2, le=10)
+    k_max: int = Field(default=6, ge=2, le=10)
+
+
 RecodeDefinition = (
-    NumericRecodeDefinition | CategoricalRecodeDefinition | ConditionalRecodeDefinition
+    NumericRecodeDefinition
+    | CategoricalRecodeDefinition
+    | ConditionalRecodeDefinition
+    | SegmentRecodeDefinition
 )
 
 

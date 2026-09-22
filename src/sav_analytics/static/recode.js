@@ -23,7 +23,10 @@ function openRecoding(recodingId = null, options = {}) {
   const categoryList = document.querySelector("#category-group-list");
   categoryList.innerHTML = "";
   document.querySelector("#condition-category-list").innerHTML = "";
-  if (document.querySelector("#recode-mode").value === "categories") {
+  renderSegmentEditor(recoding?.mode === "segments" ? recoding : null);
+  if (document.querySelector("#recode-mode").value === "segments") {
+    // Сегменты считает сервер при сохранении; здесь только их параметры.
+  } else if (document.querySelector("#recode-mode").value === "categories") {
     void renderCategoryEditor(recoding?.categories || defaultCategoryGroups());
   } else if (document.querySelector("#recode-mode").value === "conditions") {
     renderConditionCategories(recoding?.categories || defaultConditionCategories());
@@ -70,10 +73,68 @@ function renderRecodeMode() {
   document.querySelector("#range-editor").hidden = mode !== "ranges";
   document.querySelector("#category-editor").hidden = mode !== "categories";
   document.querySelector("#condition-editor").hidden = mode !== "conditions";
-  // У логической переменной нет одной исходной переменной: её категории — правила.
-  document.querySelector("#recode-source-field").hidden = mode === "conditions";
-  document.querySelector("#recode-source").disabled = mode === "conditions";
+  document.querySelector("#segment-editor").hidden = mode !== "segments";
+  // У логической переменной и сегментации нет одной исходной переменной.
+  const sourceless = mode === "conditions" || mode === "segments";
+  document.querySelector("#recode-source-field").hidden = sourceless;
+  document.querySelector("#recode-source").disabled = sourceless;
 }
+
+/* Сегментация (PQ.11): переменные, число сегментов и подписи. Центры
+   считает сервер при сохранении, подбор числа сегментов — тоже он. */
+function renderSegmentEditor(recoding) {
+  const chosen = new Set(recoding?.variables || []);
+  const candidates = configuredQuestions().filter(question =>
+    ["numeric", "scale"].includes(question.question_type) && question.source_variables.length === 1);
+  document.querySelector("#segment-variable-list").innerHTML = candidates.length
+    ? candidates.map(question => `<label class="checkbox"><input type="checkbox" value="${escapeAttribute(question.code)}" ${chosen.has(question.code) ? "checked" : ""} /> <code>${escapeHtml(question.code)}</code> ${escapeHtml(question.label)}</label>`).join("")
+    : '<p class="muted">В проекте нет числовых вопросов и шкал.</p>';
+  document.querySelector("#segment-k").value = recoding?.k || 3;
+  document.querySelector("#segment-options").innerHTML = "";
+  document.querySelector("#segment-labels").innerHTML = recoding
+    ? `<div class="range-heading grp-cap"><strong>Подписи сегментов</strong><small>По убыванию размера</small></div>${recoding.categories.map((category, index) => `<label class="f">Сегмент ${index + 1}<input class="segment-label" value="${escapeAttribute(category.label)}" maxlength="250" /></label>`).join("")}`
+    : "";
+}
+
+function chosenSegmentVariables() {
+  return [...document.querySelectorAll("#segment-variable-list input:checked")].map(input => input.value);
+}
+
+function collectSegmentDefinition() {
+  const variables = chosenSegmentVariables();
+  if (!variables.length) throw new Error("Отметьте хотя бы одну переменную сегментации.");
+  const k = Number(document.querySelector("#segment-k").value);
+  const labels = [...document.querySelectorAll("#segment-labels .segment-label")].map(input => ({ label: input.value.trim() || input.placeholder }));
+  return { variables, k, categories: labels.length === k ? labels : [] };
+}
+
+async function suggestSegmentCount() {
+  const box = document.querySelector("#segment-options");
+  const variables = chosenSegmentVariables();
+  if (!variables.length) {
+    box.innerHTML = '<p class="error">Отметьте переменные сегментации.</p>';
+    return;
+  }
+  box.innerHTML = '<p class="muted">Считаем варианты…</p>';
+  try {
+    const result = await api(`/api/projects/${currentProject.id}/recodings/segments/suggest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ variables, k_min: 2, k_max: 6 }),
+    });
+    box.innerHTML = `<p class="muted">База без пропусков: ${result.base.toLocaleString("ru-RU")}. Силуэт ближе к 1 — сегменты лучше разделены.</p><table class="segment-table"><tr><th>Сегментов</th><th>Силуэт</th><th>Размеры</th><th></th></tr>${result.options.map(option => `<tr class="${option.k === result.best ? "best" : ""}"><td>${option.k}</td><td>${option.silhouette.toLocaleString("ru-RU", { maximumFractionDigits: 3 })}</td><td>${option.sizes.join(" · ")}</td><td><button type="button" class="text-button" data-segment-k="${option.k}">${option.k === result.best ? "Лучший — выбрать" : "Выбрать"}</button></td></tr>`).join("")}</table>`;
+  } catch (error) {
+    box.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+document.querySelector("#suggest-segments").addEventListener("click", () => { void suggestSegmentCount(); });
+document.querySelector("#segment-options").addEventListener("click", event => {
+  const button = event.target.closest("[data-segment-k]");
+  if (!button) return;
+  document.querySelector("#segment-k").value = button.dataset.segmentK;
+  markInspectorDirty(recodeEditor);
+});
 
 // Логическая переменная: категория — подпись и группа условий, собранная тем
 // же редактором, что фильтр. Порядок важен: респондент попадает в первую
@@ -131,10 +192,11 @@ document.querySelector("#condition-category-list").addEventListener("click", eve
 // с панели раздела «Данные», а не из карточки вопроса.
 function renderLogicVariablePicker() {
   const select = document.querySelector("#logic-variables");
-  const logic = configuredRecodings().filter(item => item.mode === "conditions");
+  const logic = configuredRecodings().filter(item => item.mode === "conditions" || item.mode === "segments");
   select.innerHTML = `<option value="">${logic.length ? `Логические переменные · ${logic.length}` : "Логические переменные"}</option>`
-    + logic.map(item => `<option value="${escapeAttribute(item.id)}">${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`).join("")
-    + '<option value="new">+ Новая логическая переменная</option>';
+    + logic.map(item => `<option value="${escapeAttribute(item.id)}">${item.mode === "segments" ? "◎ " : ""}${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`).join("")
+    + '<option value="new">+ Новая логическая переменная</option>'
+    + '<option value="new-segments">+ Новая сегментация (k-means)</option>';
   select.value = "";
 }
 
@@ -143,6 +205,7 @@ document.querySelector("#logic-variables").addEventListener("change", event => {
   event.target.value = "";
   if (!value) return;
   if (value === "new") openRecoding(null, { mode: "conditions" });
+  else if (value === "new-segments") openRecoding(null, { mode: "segments", suggestName: "Сегменты" });
   else openRecoding(value);
 });
 
@@ -313,7 +376,13 @@ async function loadRecodePreview() {
 function renderRecodePreview(preview) {
   const base = `<div class="base-line"><span>Total <strong>${preview.total_base.toLocaleString("ru-RU")}</strong></span><span>Пропуски <strong>${preview.source_missing_count}</strong></span><span>Вне диапазонов <strong>${preview.out_of_range_count}</strong></span></div>`;
   const rows = `<div class="preview-rows">${preview.rows.map(row => `
-    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_total)}</em><em>${escapeHtml(preview.mode === "categories" ? `${row.source_values.length} знач.` : preview.mode === "conditions" ? "по правилу" : formatRange(row))}</em></div>`).join("")}</div>`;
+    <div><span>${escapeHtml(row.label)}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_total)}</em><em>${escapeHtml(preview.mode === "categories" ? `${row.source_values.length} знач.` : preview.mode === "conditions" ? "по правилу" : preview.mode === "segments" ? "центр" : formatRange(row))}</em></div>`).join("")}</div>`;
+  if (preview.mode === "segments") {
+    // Профиль — средние переменных в исходных единицах: по нему сегмент называют.
+    const codes = preview.variables;
+    const profile = `<table class="segment-table"><tr><th>Сегмент</th>${codes.map(code => `<th>${escapeHtml(code)}</th>`).join("")}</tr>${preview.rows.map(row => `<tr><td>${escapeHtml(row.label)}</td>${codes.map(code => `<td>${row.means[code] == null ? "—" : Number(row.means[code]).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</td>`).join("")}</tr>`).join("")}</table>`;
+    return `<div class="base-line"><span>Total <strong>${preview.total_base.toLocaleString("ru-RU")}</strong></span><span>Без сегмента <strong>${preview.missing_count}</strong></span></div>${rows}${profile}`;
+  }
   return base + rows;
 }
 

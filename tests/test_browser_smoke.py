@@ -1460,6 +1460,8 @@ def test_models_are_built_with_coefficients_and_drivers(
     expect(model).to_contain_text("R²", timeout=UI_TIMEOUT)
     expect(model).to_contain_text("Базовые категории")
     expect(model.locator(".model-importance .driver-row")).to_have_count(2)
+    # На карте драйверов — только числовой предиктор: у пола среднего нет.
+    expect(model.locator(".driver-map")).to_have_count(0)
 
     page.select_option("#model-kind", "logistic")
     page.select_option("#model-dependent", "question:BRAND")
@@ -1470,6 +1472,34 @@ def test_models_are_built_with_coefficients_and_drivers(
     logistic = page.locator("#model-list .model-card").nth(1)
     expect(logistic).to_contain_text("Отношение шансов", timeout=UI_TIMEOUT)
     expect(logistic).to_contain_text("= «Вторая»")
+
+
+def test_segmentation_is_suggested_saved_and_profiled(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Сегментация k-means: подбор числа по силуэту, сохранение и профиль (PQ.11)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.select_option("#logic-variables", "new-segments")
+    expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#segment-editor")).to_be_visible()
+    page.fill("#recode-code", "SEG")
+    page.check("#segment-variable-list input[value='AGE']")
+    page.check("#segment-variable-list input[value='SCORE']")
+    page.click("#suggest-segments")
+    options = page.locator("#segment-options")
+    expect(options).to_contain_text("Силуэт", timeout=UI_TIMEOUT)
+    options.locator("[data-segment-k='2']").click()
+    expect(page.locator("#segment-k")).to_have_value("2")
+    page.click("#save-recoding")
+
+    preview = page.locator("#recode-preview")
+    expect(preview).to_contain_text("Сегмент 1", timeout=UI_TIMEOUT)
+    expect(preview.locator(".segment-table")).to_contain_text("AGE")
+    expect(page.locator("#segment-labels .segment-label")).to_have_count(2)
+    expect(page.locator("#logic-variables")).to_contain_text("SEG")
 
 
 def test_open_answers_are_coded_by_query_and_by_hand(

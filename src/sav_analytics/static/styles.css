@@ -2485,3 +2485,19 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .driver-bar { height: 8px; background: var(--c-line, #e3e7e4); border-radius: 4px; overflow: hidden; }
 .driver-bar i { display: block; height: 100%; background: var(--c-accent, #2e7d52); }
 .model-predictor-list label.checkbox { display: flex; align-items: center; gap: 6px; }
+/* Сегментация в редакторе перекодировки. */
+.segment-variable-list { display: grid; gap: 2px; max-height: 180px; overflow: auto; margin: 6px 0; }
+.segment-variable-list label.checkbox { display: flex; align-items: center; gap: 6px; font-size: var(--t-xs); }
+.segment-count { display: flex; align-items: end; gap: 10px; margin: 6px 0; }
+.segment-count label { display: grid; gap: 4px; font-size: var(--t-xs); }
+.segment-count input { width: 70px; }
+.segment-table { width: auto; border-collapse: collapse; font-size: var(--t-xs); margin: 6px 0; }
+.segment-table th, .segment-table td { padding: 3px 8px; border-bottom: 1px solid var(--c-line, #e3e7e4); text-align: right; height: auto; text-transform: none; }
+.segment-table th:first-child, .segment-table td:first-child { text-align: left; }
+.segment-table tr.best td { font-weight: 600; }
+.driver-map svg { width: 100%; max-width: 520px; height: auto; display: block; }
+.driver-map .axis { stroke: var(--c-ink-3, #8a948f); stroke-width: 1; }
+.driver-map .quadrant { stroke: var(--c-line, #cfd6d2); stroke-dasharray: 4 4; }
+.driver-map circle { fill: var(--c-accent, #2e7d52); }
+.driver-map text { font-size: 11px; fill: var(--c-ink-2, #3f4a44); }
+.driver-map text.caption { font-size: 10px; fill: var(--c-ink-3, #8a948f); }

@@ -159,7 +159,16 @@ def fit_model(
     if weights is not None:
         result["effective_base"] = effective_sample_size(w)
     if kind == "linear" and parameters > 1:
-        result["importance"] = relative_importance(x[:, 1:], y, w, design.groups[1:])
+        importance = relative_importance(x[:, 1:], y, w, design.groups[1:])
+        # Карта драйверов: важность × оценка. Оценка — взвешенное среднее
+        # числового предиктора на той же базе, что модель; у категориального
+        # предиктора среднего нет, и на карту он не попадает.
+        numeric = {variable.label for variable in predictors if variable.kind == "numeric"}
+        for item in importance:
+            if item["predictor"] in numeric:
+                column = design.names.index(item["predictor"])
+                item["mean"] = float(np.average(x[:, column], weights=w))
+        result["importance"] = importance
     result["performed"] = True
     return result
 

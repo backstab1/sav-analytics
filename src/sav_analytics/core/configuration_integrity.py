@@ -52,6 +52,19 @@ def find_references(
                     )
                 )
 
+        if target_kind == "question":
+            for recoding in configuration.get("recodings", []):
+                if recoding.get("mode") == "segments" and identifier in recoding.get(
+                    "variables", []
+                ):
+                    references.append(
+                        ConfigurationReference(
+                            target_kind,
+                            identifier,
+                            f"сегментация «{recoding.get('name') or recoding.get('code')}»",
+                        )
+                    )
+
         for model in configuration.get("analysis_models", []):
             if any(
                 source.get("kind") == target_kind and str(source.get("ref")) == identifier
@@ -177,6 +190,15 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
                     f"{kind}:{reference}"
                 )
 
+    for recoding in configuration.get("recodings", []):
+        if recoding.get("mode") != "segments":
+            continue
+        missing = [code for code in recoding.get("variables", []) if code not in questions]
+        if missing:
+            problems.append(
+                f"сегментация «{recoding.get('name') or recoding.get('code')}» ссылается на "
+                f"отсутствующие вопросы {', '.join(missing)}"
+            )
     for model in configuration.get("analysis_models", []):
         for source in (model.get("dependent", {}), *model.get("predictors", [])):
             kind = source.get("kind")

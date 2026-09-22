@@ -329,7 +329,7 @@ def _source_variable(source: dict[str, Any], project: dict[str, Any]) -> str:
 
 def _source_columns(source: dict[str, Any], project: dict[str, Any]) -> list[str]:
     resolved = _resolve_source(source, project)
-    if source["kind"] == "recoding" and resolved.get("mode") == "conditions":
+    if source["kind"] == "recoding" and resolved.get("mode") in {"conditions", "segments"}:
         return sorted(recoding_columns(resolved, project))
     if source["kind"] == "question" and _is_multiple(resolved):
         return list(resolved["source_variables"])
@@ -340,8 +340,16 @@ def _source_categories(
     source: dict[str, Any], project: dict[str, Any], frame: pd.DataFrame
 ) -> dict[str, Any]:
     resolved = _resolve_source(source, project)
-    if source["kind"] == "recoding" and resolved.get("mode") == "conditions":
-        labels = conditional_series(resolved, project, frame)
+    if source["kind"] == "recoding" and resolved.get("mode") in {"conditions", "segments"}:
+        if resolved.get("mode") == "segments":
+            from .segmentation import SegmentationError, segment_series
+
+            try:
+                labels = segment_series(resolved, project, frame)
+            except SegmentationError as exc:
+                raise BannerError(str(exc)) from exc
+        else:
+            labels = conditional_series(resolved, project, frame)
         return {
             "label": resolved["name"],
             "categories": [

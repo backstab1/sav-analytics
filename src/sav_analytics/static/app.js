@@ -1174,10 +1174,16 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
   recodeError.hidden = true;
   let categories;
   const mode = document.querySelector("#recode-mode").value;
+  let segments = null;
   try {
-    categories = mode === "ranges"
-      ? collectRanges()
-      : mode === "conditions" ? collectConditionCategories() : collectCategoryGroups();
+    if (mode === "segments") {
+      segments = collectSegmentDefinition();
+      categories = segments.categories;
+    } else {
+      categories = mode === "ranges"
+        ? collectRanges()
+        : mode === "conditions" ? collectConditionCategories() : collectCategoryGroups();
+    }
   } catch (error) {
     showError(recodeError, error);
     return;
@@ -1186,8 +1192,9 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
     mode,
     code: document.querySelector("#recode-code").value.trim(),
     name: document.querySelector("#recode-name").value.trim(),
-    source_variable: mode === "conditions" ? undefined : document.querySelector("#recode-source").value,
+    source_variable: mode === "conditions" || mode === "segments" ? undefined : document.querySelector("#recode-source").value,
     categories,
+    ...(segments ? { variables: segments.variables, k: segments.k } : {}),
   };
   setBusy(saveButton, true, "Сохраняем…");
   try {

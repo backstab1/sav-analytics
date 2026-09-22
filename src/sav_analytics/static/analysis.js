@@ -118,7 +118,44 @@ function renderModel(model) {
   const drivers = importance.length > 1
     ? `<details class="analysis-detail model-importance" open><summary>Важность драйверов · относительные веса Джонсона</summary>${importance.map(item => `<div class="driver-row"><span title="${escapeAttribute(item.predictor)}">${escapeHtml(item.predictor)}</span><span class="driver-bar"><i style="width:${Math.round(item.share * 100)}%"></i></span><b>${Math.round(item.share * 100)}%</b></div>`).join("")}<p class="analysis-note">Доля R², приходящаяся на предиктор с учётом корреляции с остальными; в сумме — весь R².</p></details>`
     : "";
-  return `<article class="analysis-card model-card" data-model-id="${escapeAttribute(model.id || "")}">${head}${facts}${notes}${table}${drivers}</article>`;
+  return `<article class="analysis-card model-card" data-model-id="${escapeAttribute(model.id || "")}">${head}${facts}${notes}${table}${drivers}${driverMap(importance)}</article>`;
+}
+
+/* Карта драйверов: по горизонтали — доля в R², по вертикали — средняя оценка.
+   Линии — средние по драйверам: справа снизу «важно, но оценено ниже» —
+   первое, что стоит улучшать. Числа на карте — те же, что в таблице важности. */
+function driverMap(importance) {
+  const points = importance.filter(item => item.mean != null);
+  if (points.length < 2) return "";
+  const width = 420;
+  const height = 240;
+  const pad = 36;
+  const xs = points.map(item => item.share);
+  const ys = points.map(item => item.mean);
+  const [xMin, xMax] = [0, Math.max(...xs) * 1.1 || 1];
+  const yLow = Math.min(...ys);
+  const yHigh = Math.max(...ys);
+  const ySpan = yHigh - yLow || 1;
+  const [yMin, yMax] = [yLow - ySpan * 0.15, yHigh + ySpan * 0.15];
+  const sx = value => pad + (value - xMin) / (xMax - xMin) * (width - pad * 1.5);
+  const sy = value => height - pad - (value - yMin) / (yMax - yMin) * (height - pad * 1.5);
+  const meanX = xs.reduce((sum, value) => sum + value, 0) / xs.length;
+  const meanY = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+  const dots = points.map(item => {
+    const label = item.predictor.split(" ")[0];
+    return `<g><circle cx="${sx(item.share).toFixed(1)}" cy="${sy(item.mean).toFixed(1)}" r="5"><title>${escapeHtml(item.predictor)}: ${Math.round(item.share * 100)}% R², среднее ${analysisNumber(item.mean)}</title></circle><text x="${(sx(item.share) + 8).toFixed(1)}" y="${(sy(item.mean) + 4).toFixed(1)}">${escapeHtml(label)}</text></g>`;
+  }).join("");
+  return `<details class="analysis-detail driver-map" open><summary>Карта драйверов · важность × оценка</summary>
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Карта драйверов: важность по горизонтали, средняя оценка по вертикали">
+      <line class="axis" x1="${pad}" y1="${height - pad}" x2="${width - pad / 2}" y2="${height - pad}" />
+      <line class="axis" x1="${pad}" y1="${pad / 2}" x2="${pad}" y2="${height - pad}" />
+      <line class="quadrant" x1="${sx(meanX).toFixed(1)}" y1="${pad / 2}" x2="${sx(meanX).toFixed(1)}" y2="${height - pad}" />
+      <line class="quadrant" x1="${pad}" y1="${sy(meanY).toFixed(1)}" x2="${width - pad / 2}" y2="${sy(meanY).toFixed(1)}" />
+      <text class="caption" x="${width - pad / 2}" y="${height - 8}" text-anchor="end">важность, доля R² →</text>
+      <text class="caption" x="6" y="${pad / 2 - 4}">оценка ↑</text>
+      <text class="caption" x="${width - pad / 2 - 4}" y="${height - pad - 6}" text-anchor="end">важно, оценено ниже</text>
+      ${dots}
+    </svg></details>`;
 }
 
 document.querySelector("#model-kind").addEventListener("change", renderModelEvent);
