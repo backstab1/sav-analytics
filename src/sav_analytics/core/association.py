@@ -332,11 +332,10 @@ def _categorical_pair(
             "cramers_v", n, "Нужны хотя бы две заполненные категории у каждой переменной."
         )
     table = counts
-    effective = None
     if weights is not None:
-        # Взвешенные доли таблицы, отмасштабированные к эффективной базе всех
-        # попавших в таблицу: хи-квадрат видит столько информации, сколько её
-        # реально в выборке с таким разбросом весов.
+        # Взвешенный хи-квадрат выводится только с поправкой Rao–Scott, как
+        # общий тест книги (PQ.6): приближение через n_eff для него не принято.
+        # Сила связи по взвешенной таблице от этого не зависит и показывается.
         sums = np.array(
             [
                 [
@@ -346,33 +345,20 @@ def _categorical_pair(
                 for _, row_mask in first.categories
             ]
         )[keep_rows][:, keep_columns]
-        inside = rows & pd.concat([mask for _, mask in first.categories], axis=1).any(axis=1)
-        inside &= pd.concat([mask for _, mask in second.categories], axis=1).any(axis=1)
-        effective = effective_sample_size(weights[inside])
-        table = sums / sums.sum() * effective
+        return {
+            **_table_summary(first, second, counts, keep_rows, keep_columns, n),
+            "effect": _cramers_v(sums),
+            "performed": False,
+            "method": "Хи-квадрат Пирсона",
+            "reason": "Данные взвешены: хи-квадрату нужна поправка Rao–Scott, она ещё "
+            "не реализована. V Крамера посчитан по взвешенной таблице.",
+        }
     chi = chi_square_test(table, confidence_level=0.95, minimum_base=1)
-    total = float(table.sum())
-    expected = np.outer(table.sum(axis=1), table.sum(axis=0)) / total
-    statistic = float(((table - expected) ** 2 / expected).sum())
-    df_star = min(table.shape) - 1
-    # V Крамера зависит только от долей таблицы, поэтому масштаб к n_eff его
-    # не меняет: на весах это V взвешенной таблицы.
-    cramers_v = math.sqrt(statistic / (total * df_star)) if total and df_star else 0.0
     result: dict[str, Any] = {
-        "effect_kind": "cramers_v",
-        "effect": cramers_v,
-        "n": n,
-        "table": counts.astype(int).tolist(),
-        "rows": [
-            label for (label, _), keep in zip(first.categories, keep_rows, strict=True) if keep
-        ],
-        "columns": [
-            label for (label, _), keep in zip(second.categories, keep_columns, strict=True) if keep
-        ],
+        **_table_summary(first, second, counts, keep_rows, keep_columns, n),
+        "effect": _cramers_v(table),
     }
     if chi.performed:
-        if effective is not None:
-            result["effective_base"] = effective
         return {
             **result,
             "performed": True,
@@ -380,15 +366,6 @@ def _categorical_pair(
             "statistic": chi.statistic,
             "degrees_of_freedom": list(chi.degrees_of_freedom or ()),
             "p_value": chi.p_value,
-        }
-    if effective is not None:
-        result["effective_base"] = effective
-        return {
-            **result,
-            "performed": False,
-            "method": "Хи-квадрат Пирсона",
-            "reason": (chi.reason or "Тест не выполнен.")
-            + " На весах точный тест Фишера не выполняется: объедините редкие категории.",
         }
     if table.shape == (2, 2):
         _, p_value = stats.fisher_exact(table.astype(int))
@@ -407,6 +384,36 @@ def _categorical_pair(
         "method": "Хи-квадрат Пирсона",
         "reason": chi.reason + " Объедините редкие категории перекодировкой.",
     }
+
+
+def _table_summary(
+    first: Variable,
+    second: Variable,
+    counts: np.ndarray,
+    keep_rows: np.ndarray,
+    keep_columns: np.ndarray,
+    n: int,
+) -> dict[str, Any]:
+    return {
+        "effect_kind": "cramers_v",
+        "n": n,
+        "table": counts.astype(int).tolist(),
+        "rows": [
+            label for (label, _), keep in zip(first.categories, keep_rows, strict=True) if keep
+        ],
+        "columns": [
+            label for (label, _), keep in zip(second.categories, keep_columns, strict=True) if keep
+        ],
+    }
+
+
+def _cramers_v(table: np.ndarray) -> float:
+    """V Крамера по таблице: зависит только от её долей, не от масштаба."""
+    total = float(table.sum())
+    expected = np.outer(table.sum(axis=1), table.sum(axis=0)) / total
+    statistic = float(((table - expected) ** 2 / expected).sum())
+    df_star = min(table.shape) - 1
+    return math.sqrt(statistic / (total * df_star)) if total and df_star else 0.0
 
 
 def _means_pair(

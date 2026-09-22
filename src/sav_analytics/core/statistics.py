@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from statistics import NormalDist
 from typing import Literal
 
@@ -699,6 +699,8 @@ class OverallTestResult:
     bases: tuple[int, ...]
     reason: str | None = None
     min_expected: float | None = None
+    # На весах: размер колонки — эффективная база Киша, p-value приближённый.
+    effective_bases: tuple[float, ...] | None = None
 
 
 CHI_SQUARE = "Хи-квадрат Пирсона"
@@ -853,7 +855,8 @@ def weighted_welch_anova(
         return skipped_overall(
             WELCH_ANOVA, confidence_level, bases, "В колонке нет разброса значений."
         )
-    return _welch_anova_result(effective, means, variances, confidence_level, bases)
+    result = _welch_anova_result(effective, means, variances, confidence_level, bases)
+    return replace(result, effective_bases=tuple(float(value) for value in effective))
 
 
 def _welch_anova_result(

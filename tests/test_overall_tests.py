@@ -151,6 +151,20 @@ def test_overall_tests_are_not_run_on_weighted_data(tmp_path: Path) -> None:
     assert "Rao–Scott" in (_cell_comment(content, "Хи-квадрат, p", "C") or "")
 
 
+def test_weighted_welch_anova_is_run_with_effective_bases(tmp_path: Path) -> None:
+    """На весах Welch ANOVA считается по n_eff и помечается приближённым (PQ.6)."""
+    source = tmp_path / "weighted.sav"
+    project = _project(source, weighted=True)
+
+    audit = build_statistics_txt(source, project)
+
+    anova = audit[audit.index("Метод: Welch ANOVA") :].split("Метод:")[1]
+    assert "Эффективные базы" in anova
+    assert "p-value приближённый" in anova
+    assert "пропущен" not in anova
+    assert "хи-квадрат не выполняется" in audit
+
+
 def test_overall_tests_are_off_by_default(tmp_path: Path) -> None:
     source = tmp_path / "overall.sav"
     content = build_topline_xlsx(source, _project(source, overall_tests=False))

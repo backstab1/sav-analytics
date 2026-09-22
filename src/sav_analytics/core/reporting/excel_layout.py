@@ -15,12 +15,12 @@ from ..not_applicable import applicable_series, excludes
 from ..ranking import ranking_items
 from ..statistics import (
     CHI_SQUARE,
-    WELCH_ANOVA,
     OverallTestResult,
     StatisticalTestResult,
     chi_square_test,
     effective_sample_size,
     skipped_overall,
+    weighted_welch_anova,
     welch_anova,
 )
 from .data import ReportData
@@ -631,8 +631,8 @@ def _write_distribution(
 
 
 WEIGHTED_OVERALL_REASON = (
-    "Данные взвешены: хи-квадрату нужна поправка Rao–Scott, а Welch ANOVA — учёт "
-    "весов; они ещё не реализованы, поэтому тест не выполняется."
+    "Данные взвешены: хи-квадрату нужна поправка Rao–Scott; она ещё не "
+    "реализована, поэтому тест не выполняется."
 )
 
 
@@ -672,12 +672,15 @@ def _welch_runner(
     def run(members: list[dict[str, Any]]) -> OverallTestResult:
         settings = context.settings
         groups = [numeric[column["mask"] & context.base_mask].dropna() for column in members]
-        if settings["weights"] is not None:
-            return skipped_overall(
-                WELCH_ANOVA,
-                settings["confidence_level"],
-                tuple(len(group) for group in groups),
-                WEIGHTED_OVERALL_REASON,
+        weights = settings["weights"]
+        if weights is not None:
+            # То же приближение, что у взвешенного Welch t-test (инвариант 4):
+            # взвешенные среднее и дисперсия, размер колонки — n_eff.
+            return weighted_welch_anova(
+                [group.to_numpy() for group in groups],
+                [weights[group.index].to_numpy() for group in groups],
+                confidence_level=settings["confidence_level"],
+                minimum_base=settings["minimum_base"],
             )
         return welch_anova(
             [group.to_numpy() for group in groups],

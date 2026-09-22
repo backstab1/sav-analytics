@@ -124,27 +124,27 @@ def _categorical(values: np.ndarray, label: str) -> Variable:
     )
 
 
-def test_weighted_chi_square_is_the_weighted_table_scaled_to_the_effective_base() -> None:
-    """Хи-квадрат взвешенной таблицы, приведённой к n_eff.
+def test_weighted_chi_square_waits_for_rao_scott_but_shows_the_weighted_v() -> None:
+    """Взвешенный хи-квадрат без Rao–Scott не выводится — как общий тест книги.
 
-    Эталон: SciPy на таблице, размноженной частотными весами, — её статистика,
-    умноженная на n_eff / Σw.
+    V Крамера при этом считается по взвешенной таблице. Эталон: SciPy на
+    таблице, размноженной частотными весами.
     """
     first = _categorical((X > 10).astype(int), "Выше 10")
     second = _categorical((Y > 5).astype(int), "Выше 5")
     rows = pd.Series(True, index=first.series.index)
-    weights = pd.Series(FREQUENCY)
 
-    result = _categorical_pair(first, second, rows, weights)
+    result = _categorical_pair(first, second, rows, pd.Series(FREQUENCY))
 
     replicated = pd.crosstab(
         np.repeat(first.series.to_numpy(), FREQUENCY.astype(int)),
         np.repeat(second.series.to_numpy(), FREQUENCY.astype(int)),
     ).to_numpy()
-    reference = stats.chi2_contingency(replicated, correction=False)[0]
-    effective = effective_sample_size(FREQUENCY)
-    assert result["statistic"] == pytest.approx(reference * effective / FREQUENCY.sum())
-    assert result["effective_base"] == pytest.approx(effective)
+    assert not result["performed"]
+    assert "Rao–Scott" in result["reason"]
+    assert result["effect"] == pytest.approx(
+        stats.contingency.association(replicated, method="cramer", correction=False)
+    )
     # Таблица в карточке — невзвешенные числа респондентов.
     assert np.asarray(result["table"]).sum() == len(X)
 
@@ -184,13 +184,14 @@ def test_cards_use_the_report_weight(tmp_path: Path) -> None:
         if question["code"] == "SCORE":
             question["role"] = "weight"
     project["configuration"]["report_settings"] = {"weight_variable": "SCORE"}
-    card = {"id": "1", "a": {"kind": "question", "ref": "SEX"}}
-    cards = [{**card, "b": {"kind": "question", "ref": "REGION"}}]
+    card = {"id": "1", "a": {"kind": "question", "ref": "REGION"}}
+    cards = [{**card, "b": {"kind": "question", "ref": "INCOME"}}]
 
     (result,) = analyse_cards(tmp_path / "survey.sav", project, cards)
 
+    assert result["performed"] and result["method"] == "Welch ANOVA"
     assert result["weighted"] and "эффективной базе" in result["note"]
-    assert result["effective_base"] < result["n"]
+    assert all(group["effective_base"] < group["n"] for group in result["groups"])
 
 
 def test_unusable_report_weight_fails_the_card_instead_of_ignoring_it(tmp_path: Path) -> None:

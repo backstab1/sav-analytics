@@ -913,6 +913,11 @@ def _render_overall(result: Any) -> list[str]:
     ]
     if result.min_expected is not None:
         lines.append(f"      Наименьшая ожидаемая частота: {_number(result.min_expected)}")
+    if getattr(result, "effective_bases", None):
+        lines.append(
+            "      Эффективные базы: " + "; ".join(_number(base) for base in result.effective_bases)
+        )
+        lines.append("      Взвешенный тест: p-value приближённый, размер колонки — n_eff")
     if not result.performed:
         lines.append(f"      Статус: пропущен. Причина: {result.reason}")
         return lines
@@ -930,7 +935,7 @@ def _overall_test_lines(settings: dict[str, Any]) -> list[str]:
         return []
     return [
         "Общие тесты: хи-квадрат Пирсона для распределений, Welch ANOVA для средних; "
-        "на взвешенных данных не выполняются"
+        "на взвешенных данных хи-квадрат не выполняется, Welch ANOVA приближённый по n_eff"
     ]
 
 
