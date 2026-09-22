@@ -2463,3 +2463,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .conflict-dialog h3 { margin: 0 0 8px; }
 .conflict-dialog ul { margin: 6px 0 10px; padding-left: 18px; }
 .conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* Отменить и вернуть — пара узких пилюль рядом с «Выгрузкой». */
+.history-buttons { display: inline-flex; gap: 4px; margin-right: 6px; }
+.history-button { min-width: 30px; padding: 0 8px; font-size: 15px; line-height: 1; }
+.history-button:disabled { opacity: 0.4; cursor: default; }

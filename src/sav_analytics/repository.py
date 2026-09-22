@@ -15,11 +15,16 @@ from uuid import UUID, uuid4
 import pandas as pd
 import pyreadstat
 
+from . import project_history
 from .configuration_revision import (
     ConfigurationConflictError,
     current_expected_revision,
 )
-from .core.configuration_integrity import ConfigurationIntegrityError, ensure_not_referenced
+from .core.configuration_integrity import (
+    ConfigurationIntegrityError,
+    ensure_not_referenced,
+    validate_configuration_references,
+)
 from .core.formulas import (
     FormulaError,
     formula_question,
@@ -224,7 +229,9 @@ class ProjectRepository:
                         )
             for codeframe in project["configuration"].get("codeframes", []):
                 self._sync_codeframe(project_id, project, codeframe)
-            self._write_project(project_id, project)
+            # Прежние шаги относятся к другим данным: отмена вернула бы
+            # настройки, рассчитанные на исходник, которого больше нет.
+            self._write_project(project_id, project, history="reset")
             return project, diff
         finally:
             shutil.rmtree(staging, ignore_errors=True)
@@ -249,7 +256,7 @@ class ProjectRepository:
                 project_id, project, metadata_path, stored_schema
             )
         if project["configuration"].get("structure_version", 0) < STRUCTURE_VERSION:
-            project = self._refresh_structure_data(project_id, project)
+            project = self._refresh_structure_data(project_id, project, history="reset")
         validate_stored_project(project)
         return project
 
@@ -273,7 +280,8 @@ class ProjectRepository:
             for key in REPORT_SETTING_KEYS:
                 banner.pop(key, None)
         project["configuration"]["schema_version"] = CONFIGURATION_SCHEMA_VERSION
-        self._write_project(project_id, project)
+        # Снимки прежней схемы отменой возвращать нельзя: история начинается заново.
+        self._write_project(project_id, project, history="reset")
         return project
 
     def update_question(self, project_id: UUID, code: str, changes: dict) -> dict:
@@ -1066,10 +1074,12 @@ class ProjectRepository:
         project = self.get(project_id)
         return self._refresh_structure_data(project_id, project)
 
-    def _refresh_structure_data(self, project_id: UUID, project: dict) -> dict:
+    def _refresh_structure_data(
+        self, project_id: UUID, project: dict, *, history: str = "record"
+    ) -> dict:
         """Перечитать структуру из SAV и записать проект."""
         project = self._merged_structure(project_id, project)
-        self._write_project(project_id, project)
+        self._write_project(project_id, project, history=history)
         return project
 
     def _merged_structure(self, project_id: UUID, project: dict) -> dict:
@@ -1557,7 +1567,46 @@ class ProjectRepository:
         if updates:
             project["configuration"]["report_settings"].update(updates)
 
-    def _write_project(self, project_id: UUID, project: dict) -> None:
+    def history(self, project_id: UUID) -> dict:
+        self.get(project_id)
+        return project_history.summary(self.root / str(project_id))
+
+    def undo(self, project_id: UUID) -> dict:
+        """Отменить последний шаг: записать прежнюю конфигурацию новой ревизией."""
+        return self._step_back(project_id, "undo")
+
+    def redo(self, project_id: UUID) -> dict:
+        return self._step_back(project_id, "redo")
+
+    def _step_back(self, project_id: UUID, direction: str) -> dict:
+        project = self.get(project_id)
+        stacks = project_history.load(self.root / str(project_id))
+        if not stacks[direction]:
+            raise InvalidUploadError(
+                "Отменять нечего." if direction == "undo" else "Возвращать нечего."
+            )
+        restored = project_history.restored(project, stacks[direction][-1])
+        # Прежнее состояние было целостным, но проверка стоит: история могла
+        # пережить правку проекта в обход приложения.
+        try:
+            validate_configuration_references(restored["configuration"])
+        except ConfigurationIntegrityError as exc:
+            project_history.reset(self.root / str(project_id))
+            raise InvalidUploadError(
+                f"Шаг нельзя вернуть: {exc} История отмены очищена."
+            ) from exc
+        self._write_project(project_id, restored, history=direction)
+        return self.get(project_id)
+
+    def _write_project(
+        self, project_id: UUID, project: dict, *, history: str = "record"
+    ) -> None:
+        """Записать проект, проверив ревизию, и вести историю отмены.
+
+        `history`: `record` — обычная правка, прежнее состояние уходит в
+        отмену, возврат очищается; `undo` и `redo` — шаг по истории;
+        `reset` — история начинается заново (новые данные, миграция).
+        """
         project_dir = self.root / str(project_id)
         target = project_dir / "project.json"
         temporary = project_dir / ".project.json.tmp"
@@ -1581,6 +1630,27 @@ class ProjectRepository:
                 json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             os.replace(temporary, target)
+            self._record_history(project_dir, current, project, history)
+
+    @staticmethod
+    def _record_history(project_dir: Path, before: dict, after: dict, history: str) -> None:
+        if history == "reset":
+            project_history.reset(project_dir)
+            return
+        stacks = project_history.load(project_dir)
+        step = project_history.snapshot(before, after)
+        if history == "record":
+            if step is None:
+                return
+            stacks["undo"].append(step)
+            stacks["redo"] = []
+        else:
+            back = "redo" if history == "undo" else "undo"
+            if stacks[history]:
+                stacks[history].pop()
+            if step is not None:
+                stacks[back].append(step)
+        project_history.save(project_dir, stacks)
 
     def _project_lock(self, project_id: UUID) -> Lock:
         identifier = str(project_id)

@@ -178,6 +178,10 @@
                   </button>
                   <label class="pill pill-select"><select id="logic-variables" aria-label="Логические переменные"></select></label>
 
+                  <div class="history-buttons" role="group" aria-label="История изменений">
+                    <button id="undo-change" class="pill history-button" type="button" disabled aria-label="Отменить" title="Отменить (Ctrl+Z)">↶</button>
+                    <button id="redo-change" class="pill history-button" type="button" disabled aria-label="Вернуть" title="Вернуть (Ctrl+Shift+Z)">↷</button>
+                  </div>
                   <div id="project-actions" class="export-menu">
                     <button id="export-toggle" class="export-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
                       <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -804,6 +808,7 @@
     <script src="/analysis.js?v=20260923-settings-1" defer></script>
     <script src="/coding.js?v=20260923-settings-1" defer></script>
     <script src="/select-search.js?v=20260923-settings-1" defer></script>
+    <script src="/history.js?v=20260923-settings-1" defer></script>
     <script src="/boot.js?v=20260923-settings-1" defer></script>
   </body>
 </html>

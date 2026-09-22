@@ -1267,6 +1267,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
 
 function showProject(project, view = "data") {
   if (!confirmDiscard(openInspectorPanel())) return;
+  window.setTimeout(() => refreshProjectHistory(), 0);
   // Выбор вопросов принадлежит проекту: в другом проекте тех кодов может не быть.
   selectedQuestionCodes.clear();
   document.querySelector("#bulk-bar").hidden = true;
@@ -2166,6 +2167,10 @@ async function api(url, options = {}, retried = false) {
     return resolveRevisionConflict(url, options, payload);
   }
   if (!response.ok) throw new Error(payload.detail || "Запрос не выполнен.");
+  // Любая правка проекта — новый шаг истории: кнопки отмены узнают об этом сразу.
+  if (projectPrefix && url.startsWith(projectPrefix) && method !== "GET") {
+    window.setTimeout(() => refreshProjectHistory(), 0);
+  }
   return payload;
 }
 

@@ -126,6 +126,44 @@ def refresh_structure(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.get("/{project_id}/history")
+def project_history_summary(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Сколько шагов можно отменить и вернуть и что именно они меняют."""
+    try:
+        return repository.history(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+
+
+@router.post("/{project_id}/undo")
+def undo_project_change(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.undo(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{project_id}/redo")
+def redo_project_change(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.redo(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.post("/{project_id}/source/diff")
 def inspect_wave(
     project_id: UUID,

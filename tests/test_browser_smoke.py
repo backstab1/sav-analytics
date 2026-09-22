@@ -1008,6 +1008,37 @@ def test_revision_conflict_is_resolved_without_losing_input(
     assert page.evaluate("currentProject.configuration.report_settings.minimum_base") == 50
 
 
+def test_change_is_undone_with_the_button_and_ctrl_z(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Отмена и возврат правки проекта кнопками и Ctrl+Z (GAP-006)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    undo = page.locator("#undo-change")
+    redo = page.locator("#redo-change")
+    expect(undo).to_be_disabled(timeout=UI_TIMEOUT)
+
+    row = page.locator("#table-body tr[data-code='BRAND']")
+    row.locator(".question-cell").click()
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#question-label", "Марка, которую отменят")
+    page.click("#save-question")
+    expect(row).to_contain_text("Марка, которую отменят", timeout=UI_TIMEOUT)
+    expect(undo).to_be_enabled(timeout=UI_TIMEOUT)
+    expect(undo).to_have_attribute("title", re.compile("структура вопросов"))
+
+    undo.click()
+    expect(row).to_contain_text("Какой маркой пользуетесь", timeout=UI_TIMEOUT)
+    expect(redo).to_be_enabled(timeout=UI_TIMEOUT)
+
+    page.locator("body").click(position={"x": 5, "y": 5})
+    page.keyboard.press("Control+Shift+Z")
+    expect(row).to_contain_text("Марка, которую отменят", timeout=UI_TIMEOUT)
+    page.keyboard.press("Control+Z")
+    expect(row).to_contain_text("Какой маркой пользуетесь", timeout=UI_TIMEOUT)
+
+
 def test_several_questions_are_excluded_at_once(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
