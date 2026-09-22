@@ -1298,6 +1298,9 @@ window.SavApp = {
     currentProject = await api(`/api/projects/${currentProject.id}`);
     renderProject();
   },
+  banners() {
+    return currentProject?.configuration?.banners || [];
+  },
 };
 
 // Раздел «Таблицы» берёт список переменных отсюда: своей загрузки у него

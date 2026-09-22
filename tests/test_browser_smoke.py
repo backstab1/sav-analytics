@@ -641,6 +641,11 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     page.click('.bld-param[data-zone="cols"]')
     expect(page.locator("#bld-list")).to_contain_text("Баннеры отчёта", timeout=UI_TIMEOUT)
     page.keyboard.press("Escape")
+    # Повторное нажатие не копит одинаковые баннеры, а называет сохранённый.
+    page.click("#bld-save-cut")
+    expect(page.locator("#bld-stage-note")).to_contain_text("уже сохранён", timeout=UI_TIMEOUT)
+    banners = page.evaluate("window.SavApp.banners().length")
+    assert banners == 1
 
     # Та же раскладка выгружается книгой Excel.
     page.click("#bld-export")

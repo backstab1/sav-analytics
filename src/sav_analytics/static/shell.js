@@ -777,9 +777,26 @@
     /* Мост в отчёт: разрез сохраняется баннером, таблица выгружается книгой.
        Имя баннера складывается из подписей переменных — переименовать его
        можно там же, где правят баннеры, в разделе «Отчёты». */
+    // Тот же разрез — те же источники блоков в том же порядке. Баннер с
+    // настроенными категориями уже не тот же: у него другие колонки.
+    function sameCut(banner, blocks) {
+      const key = items => JSON.stringify(items.map(block => block.sources.map(source =>
+        source.categories && source.categories.length ? null : `${source.kind}:${source.ref}`)));
+      return key(banner.blocks || []) === key(blocks);
+    }
+
     async function saveCut() {
       const blocks = blocksOfLayout();
       if (!projectId || !blocks.length) return;
+      // Повторное нажатие копило одинаковые баннеры: в демо-проекте их
+      // набралось четырнадцать «Пол · Возраст». Такой разрез не сохраняем
+      // второй раз, а называем уже сохранённый.
+      const existing = (window.SavApp?.banners() || []).find(banner => sameCut(banner, blocks));
+      if (existing) {
+        notice = `Этот разрез уже сохранён баннером «${existing.name}»`;
+        note.textContent = notice;
+        return;
+      }
       const name = blocks.map(block => block.label).join(" · ").slice(0, 500);
       saveCutButton.disabled = true;
       try {
