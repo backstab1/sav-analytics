@@ -52,6 +52,15 @@ def find_references(
                     )
                 )
 
+        for model in configuration.get("analysis_models", []):
+            if any(
+                source.get("kind") == target_kind and str(source.get("ref")) == identifier
+                for source in (model.get("dependent", {}), *model.get("predictors", []))
+            ):
+                references.append(
+                    ConfigurationReference(target_kind, identifier, "модель «Анализа»")
+                )
+
         for card in configuration.get("analysis_cards", []):
             if any(
                 source.get("kind") == target_kind and str(source.get("ref")) == identifier
@@ -168,6 +177,15 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
                     f"{kind}:{reference}"
                 )
 
+    for model in configuration.get("analysis_models", []):
+        for source in (model.get("dependent", {}), *model.get("predictors", [])):
+            kind = source.get("kind")
+            reference = str(source.get("ref"))
+            known = questions if kind == "question" else recodings
+            if kind not in {"question", "recoding"} or reference not in known:
+                problems.append(
+                    f"модель «Анализа» ссылается на отсутствующий источник {kind}:{reference}"
+                )
     for weight in configuration.get("calculated_weights", []):
         for dimension in weight.get("dimensions", []):
             recoding_id = dimension.get("recoding_id")

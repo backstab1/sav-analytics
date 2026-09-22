@@ -34,7 +34,147 @@ function renderAnalysisSection() {
     else if (select.options.length > index) select.selectedIndex = index;
   });
   void loadAnalysisCards();
+  renderModelForm();
+  void loadAnalysisModels();
 }
+
+/* Модели (PQ.11). Как и карточки, экран ничего не считает: коэффициенты,
+   ошибки, R² и важность драйверов приходят с сервера. */
+function sourceCategoryLabels(value) {
+  if (value.startsWith("recoding:")) {
+    const recoding = configuredRecodings().find(item => item.id === value.slice(9));
+    return (recoding?.categories || []).map(category => category.label);
+  }
+  const question = configuredQuestions().find(item => item.code === value.slice(9));
+  const variable = currentProject.inspection.variables.find(item => item.name === question?.source_variables?.[0]);
+  return (variable?.value_labels || []).map(item => item.label);
+}
+
+function renderModelForm() {
+  const sources = analysisSources();
+  const dependent = document.querySelector("#model-dependent");
+  const previous = dependent.value;
+  dependent.innerHTML = sources.map(item => `<option value="${escapeAttribute(item.value)}">${escapeHtml(item.label)}</option>`).join("");
+  if (previous) dependent.value = previous;
+  const checked = new Set([...document.querySelectorAll("#model-predictors input:checked")].map(input => input.value));
+  document.querySelector("#model-predictors").innerHTML = sources.map(item =>
+    `<label class="checkbox" data-search="${escapeAttribute(item.label.toLowerCase())}"><input type="checkbox" value="${escapeAttribute(item.value)}" ${checked.has(item.value) ? "checked" : ""} /> ${escapeHtml(item.label)}</label>`).join("");
+  renderModelEvent();
+}
+
+function renderModelEvent() {
+  const logistic = document.querySelector("#model-kind").value === "logistic";
+  const field = document.querySelector("#model-event-field");
+  field.hidden = !logistic;
+  if (!logistic) return;
+  const select = document.querySelector("#model-event");
+  const previous = select.value;
+  select.innerHTML = sourceCategoryLabels(document.querySelector("#model-dependent").value)
+    .map(label => `<option value="${escapeAttribute(label)}">${escapeHtml(label)}</option>`).join("");
+  if (previous) select.value = previous;
+}
+
+async function loadAnalysisModels() {
+  const container = document.querySelector("#model-list");
+  if (!(currentProject.configuration.analysis_models || []).length) {
+    container.innerHTML = '<p class="analysis-note">Моделей пока нет.</p>';
+    return;
+  }
+  container.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  try {
+    const { models } = await api(`/api/projects/${currentProject.id}/analysis/models`);
+    container.innerHTML = models.map(renderModel).join("");
+  } catch (error) {
+    container.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderModel(model) {
+  const kind = model.kind === "logistic" ? "Логистическая регрессия" : "Линейная регрессия";
+  const head = `<header><span><strong>${escapeHtml(kind)}</strong>${model.dependent ? ` · ${escapeHtml(model.dependent)}${model.event ? ` = «${escapeHtml(model.event)}»` : ""}` : ""}</span><button type="button" data-delete-model="${escapeAttribute(model.id || "")}" aria-label="Удалить модель">×</button></header>`;
+  if (!model.performed) {
+    return `<article class="analysis-card model-card">${head}<p class="analysis-conclusion">${escapeHtml(model.reason || "Модель не построена.")}</p></article>`;
+  }
+  const excluded = model.base_before - model.base;
+  const quality = model.kind === "logistic"
+    ? `<span>псевдо-R² Макфаддена <b>${analysisNumber(model.pseudo_r_squared, 3)}</b></span>`
+    : `<span>R² <b>${analysisNumber(model.r_squared, 3)}</b></span><span>скорр. R² <b>${analysisNumber(model.adjusted_r_squared, 3)}</b></span><span>F-тест, p <b>${analysisP(model.f_p_value)}</b></span>`;
+  const facts = `<p class="analysis-facts"><span>База <b>${model.base.toLocaleString("ru-RU")}</b>${excluded ? ` из ${model.base_before.toLocaleString("ru-RU")} (исключено ${excluded.toLocaleString("ru-RU")})` : ""}</span>${model.effective_base != null ? `<span>эфф. база <b>${analysisNumber(model.effective_base, 0)}</b></span>` : ""}${quality}</p>`;
+  const references = Object.entries(model.references || {});
+  const notes = [
+    model.method,
+    references.length ? `Базовые категории: ${references.map(([name, label]) => `${name} — «${label}»`).join("; ")}.` : null,
+    model.missing === "missing_category" ? "Пропуск категориального предиктора — отдельная категория." : "Неполные строки исключены.",
+    model.filtered ? "Учтён общий фильтр отчёта." : null,
+  ].filter(Boolean).map(note => `<p class="analysis-note">${escapeHtml(note)}</p>`).join("");
+  const logistic = model.kind === "logistic";
+  const rows = model.coefficients.map(row => {
+    const significant = row.p_value < 0.05 && row.name !== "Константа";
+    const value = logistic ? analysisNumber(row.odds_ratio, 3) : analysisNumber(row.estimate, 3);
+    return `<tr class="${significant ? "significant" : ""}"><td>${escapeHtml(row.name)}</td><td>${value}</td><td>${analysisNumber(row.std_error, 3)}</td><td>${analysisP(row.p_value)}</td><td>${analysisNumber(row.ci_low, 3)} … ${analysisNumber(row.ci_high, 3)}</td></tr>`;
+  }).join("");
+  const table = `<table class="model-table"><tr><th>Коэффициент</th><th>${logistic ? "Отношение шансов" : "B"}</th><th>Ст. ошибка${logistic ? " (B)" : ""}</th><th>p</th><th>95% ДИ${logistic ? " (ОШ)" : ""}</th></tr>${rows}</table>`;
+  const importance = (model.importance || []).slice().sort((a, b) => b.share - a.share);
+  const drivers = importance.length > 1
+    ? `<details class="analysis-detail model-importance" open><summary>Важность драйверов · относительные веса Джонсона</summary>${importance.map(item => `<div class="driver-row"><span title="${escapeAttribute(item.predictor)}">${escapeHtml(item.predictor)}</span><span class="driver-bar"><i style="width:${Math.round(item.share * 100)}%"></i></span><b>${Math.round(item.share * 100)}%</b></div>`).join("")}<p class="analysis-note">Доля R², приходящаяся на предиктор с учётом корреляции с остальными; в сумме — весь R².</p></details>`
+    : "";
+  return `<article class="analysis-card model-card" data-model-id="${escapeAttribute(model.id || "")}">${head}${facts}${notes}${table}${drivers}</article>`;
+}
+
+document.querySelector("#model-kind").addEventListener("change", renderModelEvent);
+document.querySelector("#model-dependent").addEventListener("change", renderModelEvent);
+document.querySelector("#model-predictor-search").addEventListener("input", event => {
+  const needle = event.target.value.trim().toLowerCase();
+  document.querySelectorAll("#model-predictors label").forEach(label => {
+    label.hidden = Boolean(needle) && !label.dataset.search.includes(needle);
+  });
+});
+
+document.querySelector("#model-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const errorBox = document.querySelector("#model-error");
+  errorBox.hidden = true;
+  const parse = value => ({ kind: value.slice(0, value.indexOf(":")), ref: value.slice(value.indexOf(":") + 1) });
+  const dependent = document.querySelector("#model-dependent").value;
+  const predictors = [...document.querySelectorAll("#model-predictors input:checked")]
+    .map(input => input.value).filter(value => value !== dependent);
+  if (!predictors.length) {
+    showError(errorBox, new Error("Отметьте хотя бы один предиктор, кроме зависимой."));
+    return;
+  }
+  const kind = document.querySelector("#model-kind").value;
+  const button = document.querySelector("#add-model");
+  setBusy(button, true, "Строим…");
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/analysis/models`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind,
+        dependent: parse(dependent),
+        predictors: predictors.map(parse),
+        missing: document.querySelector("#model-missing").value,
+        event: kind === "logistic" ? document.querySelector("#model-event").value || null : null,
+      }),
+    });
+    await loadAnalysisModels();
+  } catch (error) {
+    showError(errorBox, error);
+  } finally {
+    setBusy(button, false, "Построить модель");
+  }
+});
+
+document.querySelector("#model-list").addEventListener("click", async event => {
+  const button = event.target.closest("[data-delete-model]");
+  if (!button) return;
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/analysis/models/${button.dataset.deleteModel}`, { method: "DELETE" });
+    await loadAnalysisModels();
+  } catch (error) {
+    showError(document.querySelector("#model-error"), error);
+  }
+});
 
 async function loadAnalysisCards() {
   const container = document.querySelector("#analysis-cards");

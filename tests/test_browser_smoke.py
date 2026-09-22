@@ -41,10 +41,19 @@ UI_TIMEOUT = 15_000
 REPORT_TIMEOUT = 90_000
 
 
+# Порты, которые Chromium отказывается открывать (ERR_UNSAFE_PORT). Система
+# изредка выдаёт свободным один из них, и тест падал на переходе к странице.
+_UNSAFE_PORTS = {1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566,
+                 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080}
+
+
 def _free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
+    while True:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = int(probe.getsockname()[1])
+        if port not in _UNSAFE_PORTS:
+            return port
 
 
 def _write_survey(path: Path) -> None:
@@ -1431,6 +1440,36 @@ def test_anova_card_lists_the_pairs_that_differ(
     card = page.locator("#analysis-cards .analysis-card").first
     expect(card).to_contain_text("Welch ANOVA", timeout=UI_TIMEOUT)
     expect(card.locator(".analysis-posthoc")).to_contain_text("18–32 — 33–47")
+
+
+def test_models_are_built_with_coefficients_and_drivers(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Линейная модель с важностью драйверов и логистическая с шансами (PQ.11)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    page.click(".tabs button[data-view='analysis']")
+    expect(page.locator("#model-list")).to_contain_text("Моделей пока нет", timeout=UI_TIMEOUT)
+
+    page.select_option("#model-dependent", "question:SCORE")
+    page.check("#model-predictors input[value='question:AGE']")
+    page.check("#model-predictors input[value='question:SEX']")
+    page.click("#add-model")
+    model = page.locator("#model-list .model-card").first
+    expect(model).to_contain_text("R²", timeout=UI_TIMEOUT)
+    expect(model).to_contain_text("Базовые категории")
+    expect(model.locator(".model-importance .driver-row")).to_have_count(2)
+
+    page.select_option("#model-kind", "logistic")
+    page.select_option("#model-dependent", "question:BRAND")
+    expect(page.locator("#model-event-field")).to_be_visible()
+    page.select_option("#model-event", "Вторая")
+    page.uncheck("#model-predictors input[value='question:SEX']")
+    page.click("#add-model")
+    logistic = page.locator("#model-list .model-card").nth(1)
+    expect(logistic).to_contain_text("Отношение шансов", timeout=UI_TIMEOUT)
+    expect(logistic).to_contain_text("= «Вторая»")
 
 
 def test_open_answers_are_coded_by_query_and_by_hand(

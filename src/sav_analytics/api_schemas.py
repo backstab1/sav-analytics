@@ -80,6 +80,25 @@ class AnalysisSource(BaseModel):
     ref: str = Field(min_length=1, max_length=64)
 
 
+class AnalysisModelCreate(BaseModel):
+    """Модель «Анализа»: зависимая, предикторы и обращение с пропусками (PQ.11)."""
+
+    kind: Literal["linear", "logistic"] = "linear"
+    dependent: AnalysisSource
+    predictors: list[AnalysisSource] = Field(min_length=1, max_length=20)
+    missing: Literal["listwise", "missing_category"] = "listwise"
+    # Логистическая: какая категория зависимой считается событием.
+    event: str | None = Field(default=None, max_length=250)
+
+    @model_validator(mode="after")
+    def validate_distinct(self) -> Self:
+        if self.dependent in self.predictors:
+            raise ValueError("Зависимая переменная не может быть собственным предиктором.")
+        if len(set(map(str, self.predictors))) != len(self.predictors):
+            raise ValueError("Предиктор указан дважды.")
+        return self
+
+
 class AnalysisCardCreate(BaseModel):
     """Карточка связи двух переменных в рабочей области «Анализа»."""
 

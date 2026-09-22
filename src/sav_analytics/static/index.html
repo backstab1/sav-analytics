@@ -644,6 +644,20 @@
                 </div>
                 <p id="analysis-error" class="error" hidden></p>
                 <div id="analysis-cards" class="analysis-cards" aria-live="polite"></div>
+                <section class="analysis-models" aria-labelledby="models-title">
+                  <h2 id="models-title">Модели</h2>
+                  <p class="lead">Линейная регрессия для числовой зависимой, логистическая — для двух категорий. Категориальный предиктор кодируется фиктивными переменными; на весе отчёта ошибки — сэндвич-оценка. Модель не строится, если на параметр меньше 10 наблюдений.</p>
+                  <form id="model-form" class="model-form">
+                    <label>Вид модели<select id="model-kind"><option value="linear">Линейная регрессия</option><option value="logistic">Логистическая регрессия</option></select></label>
+                    <label>Зависимая<select id="model-dependent" required></select></label>
+                    <label id="model-event-field" hidden>Событие (исход = 1)<select id="model-event"></select></label>
+                    <label>Пропуски<select id="model-missing"><option value="listwise">Исключить неполные строки</option><option value="missing_category">Пропуск категориального предиктора — отдельная категория</option></select></label>
+                    <fieldset class="model-predictors"><legend>Предикторы</legend><input id="model-predictor-search" type="search" placeholder="Поиск по коду и подписи" aria-label="Поиск предикторов" /><div id="model-predictors" class="model-predictor-list"></div></fieldset>
+                    <button id="add-model" type="submit">Построить модель</button>
+                  </form>
+                  <p id="model-error" class="error" hidden></p>
+                  <div id="model-list" class="model-list" aria-live="polite"></div>
+                </section>
               </div>
             </section>
 

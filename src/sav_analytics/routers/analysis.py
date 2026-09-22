@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
-from ..api_schemas import AnalysisCardCreate
+from ..api_schemas import AnalysisCardCreate, AnalysisModelCreate
 from ..core.association import AssociationError, analyse_cards, variable_profile
+from ..core.regression import fit_models
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(
@@ -76,3 +77,44 @@ def delete_card(
         return repository.delete_analysis_card(project_id, card_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или карточка не найдены.") from exc
+
+
+@router.get("/models")
+def list_models(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Сохранённые модели, посчитанные на общем фильтре и весе отчёта."""
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    models = project["configuration"].get("analysis_models", [])
+    return {"models": fit_models(source, project, models)}
+
+
+@router.post("/models", status_code=status.HTTP_201_CREATED)
+def add_model(
+    project_id: UUID,
+    model: AnalysisModelCreate,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.add_analysis_model(project_id, model.model_dump())
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или переменная не найдены.") from exc
+    except InvalidUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/models/{model_id}")
+def delete_model(
+    project_id: UUID,
+    model_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.delete_analysis_model(project_id, model_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект или модель не найдены.") from exc

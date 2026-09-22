@@ -168,18 +168,31 @@ def association_columns(sources: list[dict[str, Any]], project: dict[str, Any]) 
     return columns
 
 
-def analyse_cards(
-    path: str | Path, project: dict[str, Any], cards: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    """Посчитать все карточки и скорректировать p-value по Benjamini–Hochberg."""
-    if not cards:
-        return []
+@dataclass
+class AnalysisData:
+    """Данные «Анализа»: нужные столбцы, общий фильтр и вес отчёта.
+
+    Карточки и модели берут их одинаково, поэтому число в карточке и в
+    модели считается от той же выборки и на том же весе, что книга.
+    """
+
+    frame: pd.DataFrame | None
+    mask: pd.Series | None
+    weights: pd.Series | None
+    weight_problem: str | None
+    problems: dict[int, str]
+
+
+def load_analysis_data(
+    path: str | Path, project: dict[str, Any], source_sets: list[list[dict[str, Any]]]
+) -> AnalysisData:
+    """Прочитать столбцы для наборов источников; проблема набора — по его номеру."""
     configuration = project["configuration"]
     columns: list[str] = []
     problems: dict[int, str] = {}
-    for position, card in enumerate(cards):
+    for position, sources in enumerate(source_sets):
         try:
-            for name in association_columns([card["a"], card["b"]], project):
+            for name in association_columns(sources, project):
                 if name not in columns:
                     columns.append(name)
         except AssociationError as exc:
@@ -215,13 +228,25 @@ def analyse_cards(
             weights = _report_weight_series(frame, settings, project)
         except AssociationError as exc:
             weight_problem = str(exc)
+    return AnalysisData(frame, mask, weights, weight_problem, problems)
+
+
+def analyse_cards(
+    path: str | Path, project: dict[str, Any], cards: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Посчитать все карточки и скорректировать p-value по Benjamini–Hochberg."""
+    if not cards:
+        return []
+    data = load_analysis_data(path, project, [[card["a"], card["b"]] for card in cards])
     results = []
     for position, card in enumerate(cards):
-        if position in problems or weight_problem:
-            results.append(_failed(card, problems.get(position) or str(weight_problem)))
+        if position in data.problems or data.weight_problem:
+            results.append(_failed(card, data.problems.get(position) or str(data.weight_problem)))
             continue
         try:
-            results.append(analyse_pair(card, project, frame, mask, weights=weights))
+            results.append(
+                analyse_pair(card, project, data.frame, data.mask, weights=data.weights)
+            )
         except AssociationError as exc:
             results.append(_failed(card, str(exc)))
     adjust_benjamini_hochberg(results)

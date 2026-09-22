@@ -2467,3 +2467,21 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .history-buttons { display: inline-flex; gap: 4px; margin-right: 6px; }
 .history-button { min-width: 30px; padding: 0 8px; font-size: 15px; line-height: 1; }
 .history-button:disabled { opacity: 0.4; cursor: default; }
+/* Модели «Анализа». */
+.analysis-models { margin-top: 28px; }
+.analysis-models h2 { margin: 0 0 4px; font-size: var(--t-lg, 16px); }
+.model-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; align-items: end; margin: 10px 0; }
+.model-form label { display: grid; gap: 4px; font-size: var(--t-xs); }
+.model-predictors { grid-column: 1 / -1; border: 1px solid var(--c-line, #d6dbd8); border-radius: 8px; padding: 8px 10px; margin: 0; }
+.model-predictors legend { font-size: var(--t-xs); padding: 0 4px; }
+.model-predictor-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 12px; max-height: 180px; overflow: auto; margin-top: 6px; }
+.model-list { display: grid; gap: 12px; }
+.model-table { width: auto; border-collapse: collapse; font-size: var(--t-xs); margin: 8px 0; }
+.model-table th, .model-table td { padding: 4px 10px; text-align: right; border-bottom: 1px solid var(--c-line, #e3e7e4); height: auto; text-transform: none; }
+.model-table th:first-child, .model-table td:first-child { text-align: left; }
+.model-table tr.significant td { font-weight: 600; }
+.driver-row { display: grid; grid-template-columns: minmax(0, 220px) minmax(80px, 1fr) 44px; align-items: center; gap: 8px; font-size: var(--t-xs); margin: 3px 0; }
+.driver-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.driver-bar { height: 8px; background: var(--c-line, #e3e7e4); border-radius: 4px; overflow: hidden; }
+.driver-bar i { display: block; height: 100%; background: var(--c-accent, #2e7d52); }
+.model-predictor-list label.checkbox { display: flex; align-items: center; gap: 6px; }
