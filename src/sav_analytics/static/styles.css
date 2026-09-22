@@ -2452,3 +2452,5 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .weight-cell { display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 8px; }
 .weight-cell .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); }
 .weight-cell input { padding: 5px 8px; font-size: var(--t-xs); }
+.weight-target-file { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; font-size: var(--t-xs); }
+.weight-target-file label { cursor: pointer; }

@@ -339,6 +339,12 @@ document.querySelector("#weight-dimension-list").addEventListener("change", even
   }
 });
 document.querySelector("#weight-method").addEventListener("change", () => renderWeightMethod());
+document.querySelector("#weight-template").addEventListener("click", () => { void downloadWeightTemplate(); });
+document.querySelector("#weight-targets-file").addEventListener("change", event => {
+  const [file] = event.target.files;
+  event.target.value = "";
+  if (file) void importWeightTargets(file);
+});
 document.querySelector("#weight-cell-list").addEventListener("input", () => updateWeightCellsStatus());
 document.querySelector("#weight-dimension-list").addEventListener("input", event => {
   if (event.target.matches(".weight-target input")) {

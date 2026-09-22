@@ -373,6 +373,14 @@ class WeightDimension(BaseModel):
     targets: list[WeightTarget] = Field(min_length=2, max_length=100)
 
 
+class WeightTargetTemplateRequest(BaseModel):
+    """Что стоит в редакторе веса: по этому строится шаблон целей."""
+
+    method: Literal["raking", "cells"] = "raking"
+    dimensions: list[WeightDimension] = Field(min_length=1, max_length=20)
+    cells: list[WeightCell] = Field(default_factory=list, max_length=1000)
+
+
 class CalculatedWeightDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
     method: Literal["raking", "cells"] = "raking"

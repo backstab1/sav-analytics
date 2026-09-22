@@ -4,13 +4,14 @@ from typing import Annotated
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
-from ..api_schemas import CalculatedWeightDefinition
+from ..api_schemas import CalculatedWeightDefinition, WeightTargetTemplateRequest
 from ..core.configuration_integrity import ConfigurationIntegrityError
+from ..core.weight_targets import WeightTargetError, build_target_template, read_target_file
 from ..core.weight_validation import assess_project_weight
 from ..core.weighting import WeightingError, build_raking_export, calculate_raking_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -38,6 +39,41 @@ def ready_weight_diagnostics(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
     return assess_project_weight(source, variable, project).to_dict()
+
+
+@router.post("/targets-template")
+def download_target_template(
+    project_id: UUID,
+    request: WeightTargetTemplateRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> StreamingResponse:
+    """Шаблон целей по переменным редактора — заполнить в Excel и загрузить обратно."""
+    try:
+        repository.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    content = build_target_template(request.model_dump(mode="json"))
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename*=UTF-8''weight_targets.xlsx"},
+    )
+
+
+@router.post("/targets-import")
+def import_targets(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+    file: Annotated[UploadFile, File()],
+) -> dict:
+    """Строки заполненного шаблона. Расставляет их по редактору интерфейс."""
+    try:
+        repository.get(project_id)
+        return {"rows": read_target_file(file.filename or "", file.file)}
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except WeightTargetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

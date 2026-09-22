@@ -134,6 +134,101 @@ function collectWeightCells() {
   return cells;
 }
 
+/* Шаблон целей (§10): Excel по переменным редактора — заполнить и загрузить
+   обратно. Загрузка только расставляет проценты по строкам редактора: ключ
+   строки — источник измерения и код категории (или подпись, если кода нет),
+   у ячеек — подписи их категорий. */
+function weightTargetDraft() {
+  const dimensions = [...document.querySelectorAll("#weight-dimension-list .weight-dimension")].map(element => {
+    const source = weightSourceCategories(element.querySelector(".weight-dimension-source").value);
+    return {
+      variable: source.code,
+      label: source.label,
+      recoding_id: source.recodingId,
+      targets: [...element.querySelectorAll(".weight-target")].map(row => ({
+        label: row.querySelector(".lbl").textContent,
+        values: [JSON.parse(row.dataset.value)],
+        percent: Number(row.querySelector("input").value) || null,
+      })),
+    };
+  });
+  const cells = [...document.querySelectorAll("#weight-cell-list .weight-cell")].map(row => ({
+    categories: JSON.parse(row.dataset.cell),
+    percent: Number(row.querySelector("input").value) || 0,
+  }));
+  return { method: weightMethod(), dimensions, cells };
+}
+
+async function downloadWeightTemplate() {
+  const status = document.querySelector("#weight-targets-status");
+  status.textContent = "";
+  try {
+    const response = await fetch(`/api/projects/${currentProject.id}/weights/targets-template`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(weightTargetDraft()),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(typeof payload.detail === "string" ? payload.detail : "Шаблон собрать не удалось.");
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = "weight_targets.xlsx";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
+function sameTargetCode(code, value) {
+  if (code === "") return false;
+  const number = Number(code);
+  return Number.isFinite(number) && typeof value === "number" ? number === value : code === String(value);
+}
+
+async function importWeightTargets(file) {
+  const status = document.querySelector("#weight-targets-status");
+  status.textContent = "Читаем…";
+  const body = new FormData();
+  body.append("file", file);
+  try {
+    const { rows } = await api(`/api/projects/${currentProject.id}/weights/targets-import`, { method: "POST", body });
+    let applied = 0;
+    rows.forEach(row => {
+      if (row.key === "ячейка") {
+        const cell = [...document.querySelectorAll("#weight-cell-list .weight-cell")]
+          .find(element => JSON.parse(element.dataset.cell).join(" × ") === row.category);
+        if (cell) {
+          cell.querySelector("input").value = row.percent;
+          applied += 1;
+        }
+        return;
+      }
+      const dimension = [...document.querySelectorAll("#weight-dimension-list .weight-dimension")]
+        .find(element => element.querySelector(".weight-dimension-source").value === row.key);
+      const target = dimension && [...dimension.querySelectorAll(".weight-target")].find(element =>
+        sameTargetCode(row.code, JSON.parse(element.dataset.value))
+        || element.querySelector(".lbl").textContent === row.category);
+      if (target) {
+        target.querySelector("input").value = row.percent;
+        applied += 1;
+      }
+    });
+    document.querySelectorAll("#weight-dimension-list .weight-dimension").forEach(updateWeightDimensionStatus);
+    if (weightMethod() === "cells") updateWeightCellsStatus();
+    markInspectorDirty(weightEditor);
+    const missed = rows.length - applied;
+    status.textContent = `Цели загружены: ${applied} из ${rows.length}`
+      + (missed ? ` · не нашлось в редакторе: ${missed}` : "");
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
 function renderWeightTrimming() {
   const enabled = document.querySelector("#weight-trimming").checked;
   document.querySelector("#weight-lower").disabled = !enabled;

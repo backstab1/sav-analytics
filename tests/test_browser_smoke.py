@@ -508,6 +508,43 @@ def test_raking_dimension_can_be_a_saved_recoding(
     expect(page.locator("#weight-preview")).to_contain_text("Возрастная группа", timeout=UI_TIMEOUT)
 
 
+def test_weight_targets_round_trip_through_the_excel_template(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Шаблон целей скачивается по редактору и загружается заполненным (§10)."""
+    import xlsxwriter
+
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+    page.click('[data-picker="weight"]')
+    page.click('#picker [data-new="weight"]')
+    expect(page.locator("#weight-editor")).to_be_visible(timeout=UI_TIMEOUT)
+
+    with page.expect_download() as download:
+        page.click("#weight-template")
+    template = tmp_path / "weight_targets.xlsx"
+    download.value.save_as(template)
+    assert template.stat().st_size > 1000
+
+    filled = tmp_path / "filled.xlsx"
+    workbook = xlsxwriter.Workbook(str(filled))
+    sheet = workbook.add_worksheet()
+    sheet.write_row(0, 0, ["Ключ", "Переменная", "Категория", "Код", "Цель, %"])
+    sheet.write_row(1, 0, ["SEX", "Ваш пол", "Мужчина", "1", 48])
+    sheet.write_row(2, 0, ["SEX", "Ваш пол", "Женщина", "2", 52])
+    workbook.close()
+    page.set_input_files("#weight-targets-file", str(filled))
+
+    expect(page.locator("#weight-targets-status")).to_have_text(
+        "Цели загружены: 2 из 2", timeout=UI_TIMEOUT
+    )
+    inputs = page.locator(".weight-dimension").first.locator(".weight-target input")
+    expect(inputs.nth(0)).to_have_value("48")
+    expect(inputs.nth(1)).to_have_value("52")
+
+
 def test_heuristic_scale_is_counted_for_review_until_confirmed(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
