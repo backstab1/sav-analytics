@@ -1337,6 +1337,7 @@ document.querySelector("#question-form").addEventListener("submit", async event 
 function showProject(project, view = "data") {
   if (!confirmDiscard(openInspectorPanel())) return;
   window.setTimeout(() => refreshProjectHistory(), 0);
+  window.setTimeout(() => resumeReportJob(), 0);
   // Выбор вопросов принадлежит проекту: в другом проекте тех кодов может не быть.
   selectedQuestionCodes.clear();
   document.querySelector("#bulk-bar").hidden = true;
@@ -2111,6 +2112,82 @@ function updateFileLabel() {
   fileCaption.textContent = `${(file.size / 1024 / 1024).toFixed(1)} МБ`;
 }
 
+/* Сборка переживает перезагрузку страницы (P2): задание идёт на сервере, а
+   его номер лежит в sessionStorage вкладки. Открыв тот же проект, экран
+   продолжает следить за ним и по готовности предлагает скачать файлы — сам
+   скачивать не начинает: после перезагрузки аналитик мог уже не ждать. */
+const REPORT_JOB_KEY = "sav-analytics:report-job";
+
+function rememberReportJob(result) {
+  if (!result?.job_id || !["queued", "running"].includes(result.status)) return;
+  try {
+    sessionStorage.setItem(REPORT_JOB_KEY, JSON.stringify({ project: currentProject.id, job: result.job_id }));
+  } catch {
+    // Без хранилища сборка просто не восстановится после перезагрузки.
+  }
+}
+
+function forgetReportJob() {
+  try {
+    sessionStorage.removeItem(REPORT_JOB_KEY);
+  } catch {
+    // см. rememberReportJob
+  }
+}
+
+async function resumeReportJob() {
+  let saved = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(REPORT_JOB_KEY) || "null");
+  } catch {
+    saved = null;
+  }
+  if (!saved || !currentProject || saved.project !== currentProject.id) return;
+  const feedback = document.querySelector("#report-feedback");
+  let status = document.querySelector("#report-status");
+  if (!status) {
+    status = document.createElement("span");
+    status.id = "report-status";
+    status.className = "report-status";
+    status.setAttribute("role", "status");
+    feedback.append(status);
+  }
+  feedback.hidden = false;
+  status.classList.remove("error");
+  const projectId = currentProject.id;
+  let result;
+  try {
+    do {
+      const response = await fetch(`/api/projects/${projectId}/reports/jobs/${saved.job}`);
+      if (!response.ok) {
+        // Задание знает только процесс сервера: после его перезапуска номера нет.
+        forgetReportJob();
+        status.textContent = "Сборка, начатая до перезагрузки, не найдена — запустите её заново.";
+        return;
+      }
+      result = await response.json();
+      if (currentProject?.id !== projectId) return;
+      if (result.status === "queued" || result.status === "running") {
+        status.textContent = `Сборка продолжается: ${result.stage} · ${result.progress || 0}%`;
+        await new Promise(resolve => window.setTimeout(resolve, 700));
+      }
+    } while (result.status === "queued" || result.status === "running");
+  } catch {
+    return;
+  }
+  forgetReportJob();
+  if (result.status === "failed") {
+    status.textContent = result.error || "Сборка, начатая до перезагрузки, не удалась.";
+    status.classList.add("error");
+    return;
+  }
+  const links = Object.entries(result.downloads || {})
+    .map(([kind, url]) => `<a href="${escapeAttribute(url)}" class="report-ready-link">${kind === "statistics" ? "statistics.txt" : "Excel"}</a>`)
+    .join(" · ");
+  status.innerHTML = `Отчёт, собиравшийся до перезагрузки, готов: ${links}`;
+  if (currentView === "reports") void loadRunHistory(true);
+}
+
 async function downloadPreparedReport(event) {
   event.preventDefault();
   const link = event.currentTarget;
@@ -2163,6 +2240,7 @@ async function downloadPreparedReport(event) {
     let result = await api(`/api/projects/${currentProject.id}/reports/prepare`, {
       method: "POST",
     });
+    rememberReportJob(result);
     while (result.status === "queued" || result.status === "running") {
       progress.value = result.progress || 0;
       status.textContent = `${result.stage} · ${result.progress || 0}%`;
@@ -2171,6 +2249,7 @@ async function downloadPreparedReport(event) {
         `/api/projects/${currentProject.id}/reports/jobs/${result.job_id}`
       );
     }
+    forgetReportJob();
     if (result.status === "failed") {
       throw new Error(result.error || "Не удалось сформировать отчёт.");
     }

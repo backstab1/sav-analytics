@@ -1078,6 +1078,41 @@ def test_structure_is_usable_from_the_keyboard(
     expect(page.locator("#table-body [data-drag-code='SEX']")).to_be_focused()
 
 
+def test_report_build_is_picked_up_after_reload(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Сборка, начатая до перезагрузки, досматривается и предлагает файлы (P2)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    project_id = page.url.split("#/projects/")[1].split("/")[0]
+    revision = page.evaluate("currentProject.configuration.revision")
+    started = page.request.post(
+        f"{live_server}/api/projects/{project_id}/reports/prepare",
+        headers={"If-Match": str(revision)},
+    )
+    assert started.ok, started.text()
+    job = started.json()["job_id"]
+    page.evaluate(
+        "([project, job]) => sessionStorage.setItem("
+        "'sav-analytics:report-job', JSON.stringify({ project, job }))",
+        [project_id, job],
+    )
+    page.reload()
+    status = page.locator("#report-status")
+    expect(status).to_contain_text("готов", timeout=REPORT_TIMEOUT)
+    expect(status.locator("a.report-ready-link")).to_have_count(2)
+    assert page.evaluate("sessionStorage.getItem('sav-analytics:report-job')") is None
+
+    page.evaluate(
+        "([project]) => sessionStorage.setItem('sav-analytics:report-job',"
+        " JSON.stringify({ project, job: '00000000-0000-0000-0000-000000000000' }))",
+        [project_id],
+    )
+    page.reload()
+    expect(status).to_contain_text("не найдена", timeout=UI_TIMEOUT)
+
+
 def test_several_questions_are_excluded_at_once(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
