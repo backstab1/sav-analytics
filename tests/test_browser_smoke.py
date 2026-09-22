@@ -650,8 +650,20 @@ def test_category_groups_are_built_by_moving_answers(
     groups.nth(0).locator(".zone-move").click()
     expect(groups.nth(0).locator(".category-zone-count")).to_contain_text("160")
 
-    # Мышью: ответ перетаскивается в другую группу.
-    pool.locator(".value-chip", has_text="Вторая").drag_to(groups.nth(1).locator(".value-chips"))
+    # Мышью: ответ перетаскивается в другую группу. Жест HTML5 drag-and-drop
+    # в Playwright под нагрузкой полного прогона изредка не доходит до drop
+    # (в дневнике 18 сентября — «нестабилен, причина не найдена»), поэтому
+    # жест повторяется; результат проверяется тем же ожиданием.
+    target = groups.nth(1).locator(".value-chip", has_text="Вторая")
+    for _ in range(3):
+        pool.locator(".value-chip", has_text="Вторая").drag_to(
+            groups.nth(1).locator(".value-chips")
+        )
+        try:
+            expect(target).to_have_count(1, timeout=3_000)
+            break
+        except AssertionError:
+            continue
     expect(groups.nth(1).locator(".value-chip")).to_contain_text("Вторая", timeout=UI_TIMEOUT)
     expect(groups.nth(1).locator(".category-zone-count")).to_contain_text("80")
     expect(pool).to_contain_text("все ответы разложены")
@@ -1156,6 +1168,42 @@ def test_banner_categories_are_merged_into_one_column(
     expect(page.locator("#banner-preview")).to_contain_text("Любая марка", timeout=UI_TIMEOUT)
     expect(page.locator("#banner-preview")).not_to_contain_text("Первая")
     expect(page.locator("#banner-preview-count")).to_have_text("2 колонок")
+
+
+def test_long_variable_list_is_searched_by_code_and_label(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Над длинным списком переменных — поиск по коду и подписи (GAP-018)."""
+    source = tmp_path / "wide.sav"
+    size = 60
+    frame = pd.DataFrame(
+        {f"Q{index:02d}": [1 + (row + index) % 2 for row in range(size)] for index in range(1, 16)}
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={f"Q{index:02d}": f"Вопрос номер {index}" for index in range(1, 16)}
+        | {"Q07": "Любимый напиток"},
+        variable_value_labels={
+            f"Q{index:02d}": {1: "Да", 2: "Нет"} for index in range(1, 16)
+        },
+        variable_measure={f"Q{index:02d}": "nominal" for index in range(1, 16)},
+    )
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+    page.click('[data-block="banner"] [data-new="banner"]')
+    expect(page.locator("#banner-editor")).to_be_visible(timeout=UI_TIMEOUT)
+
+    select = page.locator("#banner-block-list select.banner-source-first").first
+    search = page.locator("#banner-block-list .select-search").first
+    expect(search).to_be_visible(timeout=UI_TIMEOUT)
+    search.fill("напиток")
+    visible = select.locator("option:not([hidden])")
+    expect(visible).to_have_count(1)
+    search.press("Enter")
+    expect(select).to_have_value("question:Q07")
+    # Поиск сбрасывается после выбора: список снова полный.
+    expect(select.locator("option[hidden]")).to_have_count(0)
 
 
 def test_derived_sav_downloads_from_the_export_menu(
