@@ -141,11 +141,34 @@ function renderWeightTrimming() {
   document.querySelector("#weight-bound-fields").hidden = !enabled;
 }
 
-function weightSourceOptions(selectedVariable = "") {
-  return eligibleWeightQuestions().map(question => {
+// Источник измерения — переменная SAV или сохранённая перекодировка. У
+// перекодировки значение опции `recoding:<id>`, цели — её категории по номеру.
+function weightSourceOptions(dimension = {}) {
+  const selected = dimension.recoding_id ? `recoding:${dimension.recoding_id}` : dimension.variable || "";
+  const questions = eligibleWeightQuestions().map(question => {
     const variable = question.source_variables[0];
-    return `<option value="${escapeAttribute(variable)}" ${variable === selectedVariable ? "selected" : ""}>${escapeHtml(question.code)} — ${escapeHtml(question.label)}</option>`;
-  }).join("");
+    return `<option value="${escapeAttribute(variable)}" ${variable === selected ? "selected" : ""}>${escapeHtml(question.code)} — ${escapeHtml(question.label)}</option>`;
+  });
+  const recodings = configuredRecodings().map(recoding => {
+    const value = `recoding:${recoding.id}`;
+    return `<option value="${escapeAttribute(value)}" ${value === selected ? "selected" : ""}>↳ ${escapeHtml(recoding.code)} — ${escapeHtml(recoding.name)}</option>`;
+  });
+  return questions.join("") + recodings.join("");
+}
+
+// Категории выбранного источника: подпись и значение цели.
+function weightSourceCategories(value) {
+  if (value.startsWith("recoding:")) {
+    const recoding = configuredRecodings().find(item => item.id === value.slice(9));
+    return {
+      label: recoding.name,
+      code: recoding.code,
+      recodingId: recoding.id,
+      categories: recoding.categories.map((category, index) => ({ value: index + 1, label: category.label })),
+    };
+  }
+  const variable = currentProject.inspection.variables.find(item => item.name === value);
+  return { label: variable.label, code: value, recodingId: null, categories: variable.value_labels };
 }
 
 function eligibleWeightQuestions() {
@@ -157,21 +180,20 @@ function eligibleWeightQuestions() {
 }
 
 function addWeightDimension(dimension = {}) {
-  if (!eligibleWeightQuestions().length) {
-    throw new Error("Для raking нужна хотя бы одна категориальная переменная с метками значений.");
+  if (!eligibleWeightQuestions().length && !configuredRecodings().length) {
+    throw new Error("Для веса нужна категориальная переменная с метками значений или перекодировка.");
   }
   const element = document.createElement("div");
   element.className = "weight-dimension dim";
-  element.innerHTML = `<div class="dim-head"><div class="weight-dimension-source-field"><span>Переменная</span><select class="weight-dimension-source" aria-label="Переменная целевого распределения">${weightSourceOptions(dimension.variable)}</select></div><span class="sum" aria-live="polite"></span><button class="del" type="button" data-remove-weight-dimension title="Удалить распределение" aria-label="Удалить распределение">×</button></div><div class="weight-targets"></div>`;
+  element.innerHTML = `<div class="dim-head"><div class="weight-dimension-source-field"><span>Переменная</span><select class="weight-dimension-source" aria-label="Переменная целевого распределения">${weightSourceOptions(dimension)}</select></div><span class="sum" aria-live="polite"></span><button class="del" type="button" data-remove-weight-dimension title="Удалить распределение" aria-label="Удалить распределение">×</button></div><div class="weight-targets"></div>`;
   document.querySelector("#weight-dimension-list").append(element);
   renderWeightTargets(element, dimension.targets || []);
 }
 
 function renderWeightTargets(element, savedTargets = []) {
-  const variableName = element.querySelector(".weight-dimension-source").value;
-  const variable = currentProject.inspection.variables.find(item => item.name === variableName);
-  const equalTarget = 100 / variable.value_labels.length;
-  element.querySelector(".weight-targets").innerHTML = variable.value_labels.map(item => {
+  const source = weightSourceCategories(element.querySelector(".weight-dimension-source").value);
+  const equalTarget = 100 / source.categories.length;
+  element.querySelector(".weight-targets").innerHTML = source.categories.map(item => {
     const saved = savedTargets.find(target => target.values.some(value => String(value) === String(item.value)));
     const encoded = escapeAttribute(JSON.stringify(item.value));
     const percent = saved?.percent ?? equalTarget;
@@ -199,18 +221,16 @@ function collectWeightDimensions() {
   if (!elements.length) throw new Error("Добавьте хотя бы одно целевое распределение.");
   if (weightMethod() === "cells") {
     return elements.map(element => {
-      const variableName = element.querySelector(".weight-dimension-source").value;
-      const variable = currentProject.inspection.variables.find(item => item.name === variableName);
+      const source = weightSourceCategories(element.querySelector(".weight-dimension-source").value);
       const targets = [...element.querySelectorAll(".weight-target")].map(row => ({
         label: row.querySelector(".lbl").textContent,
         values: [JSON.parse(row.dataset.value)],
       }));
-      return { variable: variableName, label: variable.label, targets };
+      return { variable: source.code, label: source.label, recoding_id: source.recodingId, targets };
     });
   }
   return elements.map(element => {
-    const variableName = element.querySelector(".weight-dimension-source").value;
-    const variable = currentProject.inspection.variables.find(item => item.name === variableName);
+    const source = weightSourceCategories(element.querySelector(".weight-dimension-source").value);
     const targets = [...element.querySelectorAll(".weight-target")].map(row => ({
       label: row.querySelector(".lbl").textContent,
       values: [JSON.parse(row.dataset.value)],
@@ -218,9 +238,9 @@ function collectWeightDimensions() {
     }));
     const total = targets.reduce((sum, target) => sum + target.percent, 0);
     if (Math.abs(total - 100) > 0.1) {
-      throw new Error(`Сумма целей для «${variable.label}» должна составлять 100%. Сейчас ${formatWeightNumber(total)}%.`);
+      throw new Error(`Сумма целей для «${source.label}» должна составлять 100%. Сейчас ${formatWeightNumber(total)}%.`);
     }
-    return { variable: variableName, label: variable.label, targets };
+    return { variable: source.code, label: source.label, recoding_id: source.recodingId, targets };
   });
 }
 

@@ -61,6 +61,20 @@ def find_references(
                     ConfigurationReference(target_kind, identifier, "карточка «Анализа»")
                 )
 
+        if target_kind == "recoding":
+            for weight in configuration.get("calculated_weights", []):
+                if any(
+                    str(dimension.get("recoding_id") or "") == identifier
+                    for dimension in weight.get("dimensions", [])
+                ):
+                    references.append(
+                        ConfigurationReference(
+                            target_kind,
+                            identifier,
+                            f"рассчитанный вес «{weight.get('name') or weight.get('id')}»",
+                        )
+                    )
+
         for definition in configuration.get("filters", []):
             if any(
                 source.get("kind") == target_kind
@@ -152,6 +166,15 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
                 problems.append(
                     f"фильтр «{filter_label}» ссылается на отсутствующий источник "
                     f"{kind}:{reference}"
+                )
+
+    for weight in configuration.get("calculated_weights", []):
+        for dimension in weight.get("dimensions", []):
+            recoding_id = dimension.get("recoding_id")
+            if recoding_id and str(recoding_id) not in recodings:
+                problems.append(
+                    f"рассчитанный вес «{weight.get('name') or weight.get('id')}» ссылается "
+                    f"на отсутствующую перекодировку {recoding_id}"
                 )
 
     for recoding in _conditional_recodings(configuration):

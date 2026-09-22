@@ -367,6 +367,9 @@ class WeightCell(BaseModel):
 class WeightDimension(BaseModel):
     variable: str = Field(min_length=1, max_length=64)
     label: str = Field(min_length=1, max_length=500)
+    # Измерение по сохранённой перекодировке: значения целей — номера её
+    # категорий, `variable` тогда хранит код перекодировки для подписи.
+    recoding_id: str | None = Field(default=None, max_length=64)
     targets: list[WeightTarget] = Field(min_length=2, max_length=100)
 
 

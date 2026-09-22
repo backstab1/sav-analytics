@@ -471,6 +471,43 @@ def test_cell_weight_is_built_from_combinations(
     expect(page.locator("#weight-editor-kicker")).to_have_text("Взвешивание по ячейкам")
 
 
+def test_raking_dimension_can_be_a_saved_recoding(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Цель веса задаётся группам перекодировки возраста, а не годам (P1.3)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    project_id = page.url.split("#/projects/")[1].split("/")[0]
+    created = page.request.post(
+        f"{live_server}/api/projects/{project_id}/recodings",
+        data={
+            "code": "AGE_GROUP",
+            "name": "Возрастная группа",
+            "source_variable": "AGE",
+            "categories": [
+                {"label": "До 40", "lower": 0, "upper": 39},
+                {"label": "40+", "lower": 40, "upper": 120},
+            ],
+        },
+    )
+    assert created.ok
+    recoding_id = created.json()["configuration"]["recodings"][0]["id"]
+    page.reload()
+    expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
+    _open_view(page, "reports")
+
+    page.click('[data-picker="weight"]')
+    page.click('#picker [data-new="weight"]')
+    expect(page.locator("#weight-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.locator(".weight-dimension-source").first.select_option(f"recoding:{recoding_id}")
+    targets = page.locator(".weight-dimension").first.locator(".weight-target .lbl")
+    expect(targets).to_have_text(["До 40", "40+"])
+    page.fill("#weight-name", "По возрастной группе")
+    page.click("#save-weight")
+    expect(page.locator("#weight-preview")).to_contain_text("Возрастная группа", timeout=UI_TIMEOUT)
+
+
 def test_heuristic_scale_is_counted_for_review_until_confirmed(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

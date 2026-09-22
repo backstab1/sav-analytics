@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyreadstat
 import xlsxwriter
 
+from .banner import BannerError, _source_categories, _source_columns
+from .formulas import read_project_frame
 from .statistics import effective_sample_size
 
 
@@ -38,6 +39,7 @@ def calculate_weight(
     волна с другим составом выборки перетягивала бы цели соседней, и
     сравнение волн мерило бы разницу весов, а не мнений.
     """
+    frame, definition = _with_recoding_dimensions(frame, definition, project)
     wave = project_wave_variable(project) if project else None
     if wave is None:
         return _calculate_single(frame, definition)
@@ -93,6 +95,58 @@ def calculate_weight(
     )
 
 
+def weight_columns(definition: dict[str, Any], project: dict[str, Any]) -> list[str]:
+    """Столбцы SAV, нужные для расчёта веса: измерения, их перекодировки и волна."""
+    columns: list[str] = []
+    for dimension in definition.get("dimensions", []):
+        if dimension.get("recoding_id"):
+            source = {"kind": "recoding", "ref": dimension["recoding_id"]}
+            try:
+                columns.extend(_source_columns(source, project))
+            except BannerError as exc:
+                raise WeightingError(str(exc)) from exc
+        else:
+            columns.append(dimension["variable"])
+    wave = project_wave_variable(project)
+    if wave:
+        columns.append(wave)
+    return list(dict.fromkeys(columns))
+
+
+def _with_recoding_dimensions(
+    frame: pd.DataFrame, definition: dict[str, Any], project: dict[str, Any] | None
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Измерение по сохранённой перекодировке — служебным столбцом её категорий.
+
+    Категории перекодировки берутся тем же `_source_categories`, что у колонок
+    баннера, поэтому группа «18–34» в весе и в баннере — один и тот же набор
+    респондентов. Цель категории сопоставляется по её номеру в перекодировке.
+    """
+    dimensions = definition.get("dimensions", [])
+    if not any(dimension.get("recoding_id") for dimension in dimensions):
+        return frame, definition
+    if project is None:
+        raise WeightingError("Измерение по перекодировке считается только в проекте.")
+    frame = frame.copy()
+    prepared = []
+    for dimension in dimensions:
+        recoding_id = dimension.get("recoding_id")
+        if not recoding_id:
+            prepared.append(dimension)
+            continue
+        try:
+            resolved = _source_categories({"kind": "recoding", "ref": recoding_id}, project, frame)
+        except BannerError as exc:
+            raise WeightingError(str(exc)) from exc
+        series = pd.Series(float("nan"), index=frame.index)
+        for category in resolved["categories"]:
+            series = series.where(series.notna() | ~category["mask"], float(category["value"]))
+        column = f"__weight_recoding_{recoding_id}"
+        frame[column] = series
+        prepared.append({**dimension, "variable": column})
+    return frame, {**definition, "dimensions": prepared}
+
+
 def _calculate_single(frame: pd.DataFrame, definition: dict[str, Any]) -> RakingResult:
     if definition.get("method", "raking") == "cells":
         return calculate_cell_weighting(frame, definition)
@@ -146,18 +200,8 @@ def build_raking_export(
     for question in (id_question, weight_question):
         if question and len(question.get("source_variables", [])) == 1:
             extra_variables.append(question["source_variables"][0])
-    dimension_variables = [item["variable"] for item in definition["dimensions"]]
-    wave = project_wave_variable(project)
-    if wave:
-        extra_variables.append(wave)
-    variables = list(dict.fromkeys([*dimension_variables, *extra_variables]))
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=variables,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    variables = list(dict.fromkeys([*weight_columns(definition, project), *extra_variables]))
+    frame = read_project_frame(path, project, variables)
     result = calculate_weight(frame, definition, project)
 
     identifier_name = (
@@ -255,18 +299,11 @@ def _write_export_value(
 def calculate_raking_preview(
     path: str | Path, definition: dict[str, Any], project: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    variables = [item["variable"] for item in definition["dimensions"]]
-    wave = project_wave_variable(project) if project else None
-    if wave:
-        variables.append(wave)
-    variables = list(dict.fromkeys(variables))
-    frame, _ = pyreadstat.read_sav(
-        path,
-        usecols=variables,
-        apply_value_formats=False,
-        user_missing=False,
-        dates_as_pandas_datetime=False,
-    )
+    if project is None:
+        variables = list(dict.fromkeys(item["variable"] for item in definition["dimensions"]))
+    else:
+        variables = weight_columns(definition, project)
+    frame = read_project_frame(path, project, variables)
     result = calculate_weight(frame, definition, project)
     return {
         "id": definition.get("id"),

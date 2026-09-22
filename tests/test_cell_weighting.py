@@ -251,3 +251,71 @@ def test_wave_error_names_the_wave_and_missing_wave_is_refused() -> None:
     frame["WAVE"] = [1, 1, 1, 1, 2, 2, 2, None]
     with pytest.raises(WeightingError, match="не указана волна"):
         calculate_weight(frame, definition, _wave_project())
+
+
+def test_raking_target_can_be_a_saved_recoding(tmp_path: Path) -> None:
+    """Цели по перекодировке: вес по возрастным группам, а не по годам (P1.3)."""
+    source = tmp_path / "ages.sav"
+    years = [20, 25, 30, 35, 40, 50, 55, 60, 65, 70]
+    pyreadstat.write_sav(
+        pd.DataFrame({"SEX": SEX, "YEARS": years}),
+        source,
+        column_labels={"SEX": "Пол", "YEARS": "Возраст, лет"},
+        variable_value_labels={"SEX": {1: "М", 2: "Ж"}},
+        variable_measure={"SEX": "nominal", "YEARS": "scale"},
+    )
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects", files={"file": ("ages.sav", stream, "application/octet-stream")}
+            ).json()["id"]
+            recoding = client.post(
+                f"/api/projects/{project_id}/recodings",
+                json={
+                    "code": "AGE_GROUP",
+                    "name": "Возрастная группа",
+                    "source_variable": "YEARS",
+                    "categories": [
+                        {"label": "До 44", "lower": 0, "upper": 44},
+                        {"label": "45+", "lower": 45, "upper": 120},
+                    ],
+                },
+            )
+            assert recoding.status_code == 201, recoding.text
+            recoding_id = recoding.json()["configuration"]["recodings"][0]["id"]
+            created = client.post(
+                f"/api/projects/{project_id}/weights",
+                json={
+                    "name": "По возрастной группе",
+                    "dimensions": [
+                        {
+                            "variable": "AGE_GROUP",
+                            "label": "Возрастная группа",
+                            "recoding_id": recoding_id,
+                            "targets": [
+                                {"label": "До 44", "values": [1], "percent": 40},
+                                {"label": "45+", "values": [2], "percent": 60},
+                            ],
+                        }
+                    ],
+                    "lower_bound": None,
+                    "upper_bound": None,
+                },
+            )
+            assert created.status_code == 201, created.text
+            weight = created.json()["configuration"]["calculated_weights"][0]
+            preview = client.get(
+                f"/api/projects/{project_id}/weights/{weight['id']}/preview"
+            ).json()
+            young = preview["distributions"][0]["categories"][0]
+            # В выборке «до 44» пятеро из десяти; после веса — цель 40%.
+            assert young["before_percent"] == pytest.approx(50)
+            assert young["after_percent"] == pytest.approx(40)
+
+            blocked = client.delete(f"/api/projects/{project_id}/recodings/{recoding_id}")
+            assert blocked.status_code == 422
+            assert "рассчитанный вес" in blocked.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
