@@ -473,6 +473,29 @@ def test_heuristic_scale_is_counted_for_review_until_confirmed(
     expect(page.locator("#save-question")).to_have_text("Сохранить")
 
 
+def test_excluded_answers_are_offered_only_where_they_change_numbers(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """У одиночного выбора «Исключить ответы» ничего не меняла — панели нет (GAP-003).
+
+    У шкалы панель остаётся, и подпись называет фактический эффект: среднее и
+    Top/Bottom, а не распределение.
+    """
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#special-answers")).to_be_hidden()
+
+    page.select_option("#question-type", "scale")
+    expect(page.locator("#special-answers")).to_be_visible()
+    expect(page.locator("#special-answers .grp-cap small")).to_contain_text(
+        "Не входят в среднее и Top/Bottom"
+    )
+
+
 def test_marking_a_labelled_category_not_applicable_needs_confirmation(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

@@ -158,16 +158,26 @@ document.querySelector("#question-members").addEventListener("click", async even
   }
 });
 
+// Подпись говорит, что пометка меняет на самом деле: у одиночного выбора она
+// не меняла ни одного числа, поэтому панели у него нет (GAP-003).
+const specialAnswerEffects = {
+  multiple_choice_dichotomy: "Помечаются в предпросмотре; предупредим, если выбраны вместе с обычным вариантом. Числа книги не меняются",
+  scale: "Остаются в распределении и базе. Не входят в среднее и Top/Bottom; на листе от ответивших Top/Bottom считается без них",
+  matrix: "Остаются в распределении и базе. Не входят в среднее и Top/Bottom; на листе от ответивших Top/Bottom считается без них",
+};
+
 function renderSpecialAnswers(question) {
   const section = document.querySelector("#special-answers");
   const list = document.querySelector("#special-answer-list");
+  const effect = specialAnswerEffects[question.question_type];
+  if (effect) section.querySelector(".grp-cap small").textContent = effect;
   if (question.question_type === "multiple_choice_dichotomy") {
     const items = question.items || [];
     section.hidden = items.length === 0;
     list.innerHTML = items.map(item => `<label class="checkbox"><input type="checkbox" data-special-item="${escapeAttribute(item.variable)}" ${(question.special_items || []).includes(item.variable) ? "checked" : ""} /> ${escapeHtml(item.label)}</label>`).join("");
     return;
   }
-  if (!["scale", "matrix", "single_choice"].includes(question.question_type)) {
+  if (!effect) {
     section.hidden = true;
     list.innerHTML = "";
     return;
