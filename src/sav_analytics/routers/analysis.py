@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
-from ..api_schemas import AnalysisCardCreate, AnalysisModelCreate
+from ..api_schemas import (
+    AnalysisCardCreate,
+    AnalysisModelCreate,
+    GaborGrangerRequest,
+    TurfRequest,
+    VanWestendorpRequest,
+)
 from ..core.association import AssociationError, analyse_cards, variable_profile
 from ..core.regression import fit_models
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -118,3 +124,61 @@ def delete_model(
         return repository.delete_analysis_model(project_id, model_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или модель не найдены.") from exc
+
+
+def _method(project_id: UUID, repository: ProjectRepository, run) -> dict:  # type: ignore[no-untyped-def]
+    """Методы считаются по запросу и в проект не сохраняются."""
+    from ..core.research_methods import MethodError
+
+    try:
+        project = repository.get(project_id)
+        return run(repository.source_path(project_id), project)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except MethodError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/methods/turf")
+def run_turf(
+    project_id: UUID,
+    request: TurfRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """TURF: портфели вариантов с наибольшим охватом (PQ.15)."""
+    from ..core.research_methods import turf
+
+    def run(path, project):  # type: ignore[no-untyped-def]
+        return turf(path, project, request.code, request.max_size)
+
+    return _method(project_id, repository, run)
+
+
+@router.post("/methods/van-westendorp")
+def run_van_westendorp(
+    project_id: UUID,
+    request: VanWestendorpRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Van Westendorp: оптимальная цена и приемлемый диапазон (PQ.15)."""
+    from ..core.research_methods import van_westendorp
+
+    def run(path, project):  # type: ignore[no-untyped-def]
+        return van_westendorp(path, project, request.model_dump())
+
+    return _method(project_id, repository, run)
+
+
+@router.post("/methods/gabor-granger")
+def run_gabor_granger(
+    project_id: UUID,
+    request: GaborGrangerRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Gabor–Granger: кривая спроса и цена наибольшей выручки (PQ.15)."""
+    from ..core.research_methods import gabor_granger
+
+    steps = [step.model_dump() for step in request.steps]
+    return _method(
+        project_id, repository, lambda path, project: gabor_granger(path, project, steps)
+    )

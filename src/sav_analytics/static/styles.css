@@ -2501,3 +2501,22 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .driver-map circle { fill: var(--c-accent, #2e7d52); }
 .driver-map text { font-size: 11px; fill: var(--c-ink-2, #3f4a44); }
 .driver-map text.caption { font-size: 10px; fill: var(--c-ink-3, #8a948f); }
+/* Методы исследования. */
+.analysis-methods { margin-top: 28px; }
+.analysis-methods h2 { margin: 0 0 4px; font-size: var(--t-lg, 16px); }
+.method-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; }
+.method-fields label { display: grid; gap: 4px; font-size: var(--t-xs); }
+.gg-steps { grid-column: 1 / -1; display: grid; gap: 8px; }
+.gg-step { display: grid; grid-template-columns: minmax(200px, 2fr) minmax(90px, 1fr) minmax(200px, 3fr); gap: 10px; align-items: end; }
+.gg-codes { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: var(--t-xs); }
+.gg-codes label.checkbox { display: flex; align-items: center; gap: 4px; }
+.method-card { margin-top: 10px; }
+.price-curves svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.price-curves .axis { stroke: var(--c-ink-3, #8a948f); }
+.price-curves polyline { fill: none; stroke-width: 2; }
+.price-curves .c1, .curve-legend i.c1 { stroke: #2e7d52; background: #2e7d52; }
+.price-curves .c2, .curve-legend i.c2 { stroke: #7fbf95; background: #7fbf95; }
+.price-curves .c3, .curve-legend i.c3 { stroke: #e0a24a; background: #e0a24a; }
+.price-curves .c4, .curve-legend i.c4 { stroke: #c0503f; background: #c0503f; }
+.price-curves text { font-size: 10px; fill: var(--c-ink-3, #8a948f); }
+.curve-legend i { display: inline-block; width: 12px; height: 3px; margin: 0 4px 2px 8px; vertical-align: middle; }

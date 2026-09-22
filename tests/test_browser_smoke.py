@@ -1502,6 +1502,62 @@ def test_segmentation_is_suggested_saved_and_profiled(
     expect(page.locator("#logic-variables")).to_contain_text("SEG")
 
 
+def test_price_methods_are_run_from_the_analysis_section(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Van Westendorp и Gabor–Granger по запросу из «Анализа» (PQ.15)."""
+    size = 60
+    low = [20 + index % 30 for index in range(size)]
+    frame = pd.DataFrame(
+        {
+            "TOOCHEAP": low,
+            "CHEAP": [value + 10 for value in low],
+            "PRICEY": [value + 30 for value in low],
+            "TOOPRICEY": [value + 50 for value in low],
+            "BUYLOW": [1 if index % 5 else 2 for index in range(size)],
+            "BUYHIGH": [1 if index % 2 else 2 for index in range(size)],
+        }
+    )
+    source = tmp_path / "prices.sav"
+    pyreadstat.write_sav(
+        frame,
+        source,
+        column_labels={
+            "TOOCHEAP": "Слишком дёшево", "CHEAP": "Дёшево", "PRICEY": "Дорого",
+            "TOOPRICEY": "Слишком дорого", "BUYLOW": "Купите за 100", "BUYHIGH": "Купите за 200",
+        },
+        variable_value_labels={
+            "BUYLOW": {1: "Да", 2: "Нет"}, "BUYHIGH": {1: "Куплю", 2: "Не куплю"},
+        },
+        variable_measure={
+            "TOOCHEAP": "scale", "CHEAP": "scale", "PRICEY": "scale", "TOOPRICEY": "scale",
+            "BUYLOW": "nominal", "BUYHIGH": "nominal",
+        },
+    )
+    _open_project(page, live_server, source)
+    page.click(".tabs button[data-view='analysis']")
+
+    page.select_option("#method-kind", "van-westendorp")
+    for role, code in (
+        ("too_cheap", "TOOCHEAP"), ("cheap", "CHEAP"),
+        ("expensive", "PRICEY"), ("too_expensive", "TOOPRICEY"),
+    ):
+        page.select_option(f"[data-price-role='{role}']", code)
+    page.click("#run-method")
+    result = page.locator("#method-result")
+    expect(result).to_contain_text("Оптимальная цена", timeout=UI_TIMEOUT)
+    expect(result.locator(".price-curves polyline")).to_have_count(4)
+
+    page.select_option("#method-kind", "gabor-granger")
+    steps = page.locator("#gg-steps .gg-step")
+    steps.nth(0).locator(".gg-question").select_option("BUYLOW")
+    steps.nth(0).locator(".gg-price").fill("100")
+    steps.nth(1).locator(".gg-question").select_option("BUYHIGH")
+    steps.nth(1).locator(".gg-price").fill("200")
+    page.click("#run-method")
+    expect(result).to_contain_text("Цена наибольшей выручки", timeout=UI_TIMEOUT)
+
+
 def test_open_answers_are_coded_by_query_and_by_hand(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

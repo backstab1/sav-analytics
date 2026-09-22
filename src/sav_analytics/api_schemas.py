@@ -80,6 +80,28 @@ class AnalysisSource(BaseModel):
     ref: str = Field(min_length=1, max_length=64)
 
 
+class TurfRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    max_size: int = Field(default=3, ge=1, le=8)
+
+
+class VanWestendorpRequest(BaseModel):
+    too_cheap: str = Field(min_length=1, max_length=64)
+    cheap: str = Field(min_length=1, max_length=64)
+    expensive: str = Field(min_length=1, max_length=64)
+    too_expensive: str = Field(min_length=1, max_length=64)
+
+
+class GaborGrangerStep(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    price: float = Field(gt=0)
+    buy_values: list[str | int | float] = Field(min_length=1, max_length=20)
+
+
+class GaborGrangerRequest(BaseModel):
+    steps: list[GaborGrangerStep] = Field(min_length=2, max_length=20)
+
+
 class AnalysisModelCreate(BaseModel):
     """Модель «Анализа»: зависимая, предикторы и обращение с пропусками (PQ.11)."""
 

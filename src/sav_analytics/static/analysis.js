@@ -36,7 +36,172 @@ function renderAnalysisSection() {
   void loadAnalysisCards();
   renderModelForm();
   void loadAnalysisModels();
+  renderMethodFields();
 }
+
+/* Методы исследования (PQ.15): TURF, Van Westendorp, Gabor–Granger. Считает
+   сервер, по запросу; экран собирает параметры и показывает результат. */
+function questionOptions(filter) {
+  return configuredQuestions().filter(filter)
+    .map(question => `<option value="${escapeAttribute(question.code)}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</option>`).join("");
+}
+
+const PRICE_ROLES = [
+  ["too_cheap", "Слишком дёшево"], ["cheap", "Дёшево, выгодно"],
+  ["expensive", "Дорого, но можно купить"], ["too_expensive", "Слишком дорого"],
+];
+
+function renderMethodFields() {
+  const kind = document.querySelector("#method-kind").value;
+  const box = document.querySelector("#method-fields");
+  const numeric = questionOptions(question => ["numeric", "scale"].includes(question.question_type) && question.source_variables.length === 1);
+  if (kind === "turf") {
+    const multiple = questionOptions(question => ["multiple_choice_dichotomy", "multiple_choice_categorical"].includes(question.question_type));
+    box.innerHTML = multiple
+      ? `<label>Вопрос с несколькими ответами<select id="turf-question">${multiple}</select></label><label>Портфель до<input id="turf-size" type="number" min="1" max="8" value="3" /></label>`
+      : '<p class="analysis-note">В проекте нет вопросов с несколькими ответами.</p>';
+  } else if (kind === "van-westendorp") {
+    box.innerHTML = PRICE_ROLES.map(([role, label], index) =>
+      `<label>${label}<select data-price-role="${role}">${numeric}</select></label>`).join("");
+    box.querySelectorAll("select").forEach((select, index) => {
+      if (select.options.length > index) select.selectedIndex = index;
+    });
+  } else {
+    box.innerHTML = '<div id="gg-steps" class="gg-steps"></div><button id="add-gg-step" class="secondary compact-button" type="button">+ Цена</button>';
+    addGaborStep();
+    addGaborStep();
+  }
+}
+
+function addGaborStep() {
+  const single = questionOptions(question => question.question_type === "single_choice" && question.source_variables.length === 1);
+  const row = document.createElement("div");
+  row.className = "gg-step";
+  row.innerHTML = `<label>Вопрос о покупке<select class="gg-question">${single}</select></label><label>Цена<input class="gg-price" type="number" min="0.01" step="0.01" required /></label><div class="gg-codes"></div>`;
+  document.querySelector("#gg-steps").append(row);
+  const select = row.querySelector(".gg-question");
+  const steps = document.querySelectorAll("#gg-steps .gg-step").length;
+  if (select.options.length >= steps) select.selectedIndex = steps - 1;
+  renderGaborCodes(row);
+}
+
+function renderGaborCodes(row) {
+  const code = row.querySelector(".gg-question").value;
+  const question = configuredQuestions().find(item => item.code === code);
+  const variable = currentProject.inspection.variables.find(item => item.name === question?.source_variables?.[0]);
+  row.querySelector(".gg-codes").innerHTML = `<span>«Куплю» —</span>${(variable?.value_labels || []).map((item, index) =>
+    `<label class="checkbox"><input type="checkbox" value="${escapeAttribute(String(item.value))}" ${index === 0 ? "checked" : ""} /> ${escapeHtml(item.label)}</label>`).join("")}`;
+}
+
+function methodPayload(kind) {
+  if (kind === "turf") {
+    const question = document.querySelector("#turf-question");
+    if (!question) throw new Error("В проекте нет вопросов с несколькими ответами.");
+    return { code: question.value, max_size: Number(document.querySelector("#turf-size").value) || 3 };
+  }
+  if (kind === "van-westendorp") {
+    const payload = {};
+    document.querySelectorAll("[data-price-role]").forEach(select => { payload[select.dataset.priceRole] = select.value; });
+    if (new Set(Object.values(payload)).size < 4) throw new Error("Для четырёх ценовых вопросов нужны четыре разных вопроса.");
+    return payload;
+  }
+  const steps = [...document.querySelectorAll("#gg-steps .gg-step")].map(row => ({
+    code: row.querySelector(".gg-question").value,
+    price: Number(row.querySelector(".gg-price").value),
+    buy_values: [...row.querySelectorAll(".gg-codes input:checked")].map(input => Number.isNaN(Number(input.value)) ? input.value : Number(input.value)),
+  }));
+  if (steps.some(step => !step.price)) throw new Error("Укажите цену у каждого вопроса.");
+  if (steps.some(step => !step.buy_values.length)) throw new Error("Отметьте ответы «куплю» у каждого вопроса.");
+  return { steps };
+}
+
+function percent(value) {
+  return `${(value * 100).toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
+}
+
+function renderMethodResult(kind, result) {
+  const weighted = result.weighted ? '<p class="analysis-note">Взвешено весом отчёта.</p>' : "";
+  if (kind === "turf") {
+    return `<article class="analysis-card method-card"><header><span><strong>TURF</strong> · ${escapeHtml(result.question)}</span></header>
+      <p class="analysis-facts"><span>База <b>${result.base.toLocaleString("ru-RU")}</b></span></p>${weighted}
+      <table class="model-table"><tr><th>Вариантов</th><th>Лучший портфель</th><th>Охват</th><th>Частота</th><th>Отбор</th></tr>${result.portfolios.map(item => `<tr><td>${item.size}</td><td>${item.items.map(escapeHtml).join(" + ")}</td><td>${percent(item.reach)}</td><td>${analysisNumber(item.frequency)}</td><td>${escapeHtml(item.method)}</td></tr>`).join("")}</table>
+      <p class="analysis-note">Охват — доля выбравших хотя бы один вариант портфеля, частота — среднее число выбранных из него.</p></article>`;
+  }
+  if (kind === "van-westendorp") {
+    const points = result.points;
+    const money = value => value == null ? "—" : analysisNumber(value, 2);
+    return `<article class="analysis-card method-card"><header><span><strong>Van Westendorp</strong></span></header>
+      <p class="analysis-facts"><span>База <b>${result.consistent_base.toLocaleString("ru-RU")}</b>${result.excluded_inconsistent ? ` · исключено непоследовательных ${result.excluded_inconsistent}` : ""}</span></p>${weighted}
+      <table class="model-table"><tr><th>Точка</th><th>Цена</th></tr>
+        <tr><td>Нижняя граница приемлемого (PMC)</td><td>${money(points.marginal_cheapness)}</td></tr>
+        <tr class="significant"><td>Оптимальная цена (OPP)</td><td>${money(points.optimal)}</td></tr>
+        <tr><td>Безразличная цена (IPP)</td><td>${money(points.indifference)}</td></tr>
+        <tr><td>Верхняя граница приемлемого (PME)</td><td>${money(points.marginal_expensiveness)}</td></tr>
+      </table>${priceCurves(result.curves)}</article>`;
+  }
+  return `<article class="analysis-card method-card"><header><span><strong>Gabor–Granger</strong></span></header>${weighted}
+    <table class="model-table"><tr><th>Цена</th><th>Ответили</th><th>Спрос</th><th>Индекс выручки</th></tr>${result.points.map(point => `<tr class="${point.price === result.optimal_price ? "significant" : ""}"><td>${analysisNumber(point.price, 2)}</td><td>${point.base}</td><td>${percent(point.demand)}</td><td>${analysisNumber(point.revenue, 2)}</td></tr>`).join("")}</table>
+    <p class="analysis-note">Цена наибольшей выручки — ${analysisNumber(result.optimal_price, 2)}: спрос ${percent(result.optimal_demand)}.</p></article>`;
+}
+
+/* Четыре кривые Van Westendorp теми же долями, что посчитал сервер. */
+function priceCurves(curves) {
+  const width = 460;
+  const height = 220;
+  const pad = 34;
+  const prices = curves.prices;
+  if (prices.length < 2) return "";
+  const minPrice = prices[0];
+  const maxPrice = prices[prices.length - 1];
+  const sx = value => pad + (value - minPrice) / (maxPrice - minPrice || 1) * (width - pad * 1.5);
+  const sy = value => height - pad - value * (height - pad * 1.5);
+  const line = (key, css) => `<polyline class="${css}" points="${prices.map((price, index) => `${sx(price).toFixed(1)},${sy(curves[key][index]).toFixed(1)}`).join(" ")}" />`;
+  return `<details class="analysis-detail price-curves" open><summary>Кривые</summary><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Кривые Van Westendorp">
+    <line class="axis" x1="${pad}" y1="${height - pad}" x2="${width - pad / 2}" y2="${height - pad}" />
+    <line class="axis" x1="${pad}" y1="${pad / 2}" x2="${pad}" y2="${height - pad}" />
+    ${line("too_cheap", "c1")}${line("cheap", "c2")}${line("expensive", "c3")}${line("too_expensive", "c4")}
+    <text class="caption" x="${pad}" y="${height - 10}">${analysisNumber(minPrice, 0)}</text>
+    <text class="caption" x="${width - pad / 2}" y="${height - 10}" text-anchor="end">${analysisNumber(maxPrice, 0)} цена →</text>
+  </svg><p class="analysis-note curve-legend"><i class="c1"></i>слишком дёшево <i class="c2"></i>дёшево <i class="c3"></i>дорого <i class="c4"></i>слишком дорого</p></details>`;
+}
+
+document.querySelector("#method-kind").addEventListener("change", () => {
+  document.querySelector("#method-result").innerHTML = "";
+  renderMethodFields();
+});
+document.querySelector("#method-fields").addEventListener("click", event => {
+  if (event.target.closest("#add-gg-step")) addGaborStep();
+});
+document.querySelector("#method-fields").addEventListener("change", event => {
+  const select = event.target.closest(".gg-question");
+  if (select) renderGaborCodes(select.closest(".gg-step"));
+});
+document.querySelector("#method-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const errorBox = document.querySelector("#method-error");
+  errorBox.hidden = true;
+  const kind = document.querySelector("#method-kind").value;
+  const result = document.querySelector("#method-result");
+  let payload;
+  try {
+    payload = methodPayload(kind);
+  } catch (error) {
+    showError(errorBox, error);
+    return;
+  }
+  result.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  try {
+    const response = await api(`/api/projects/${currentProject.id}/analysis/methods/${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    result.innerHTML = renderMethodResult(kind, response);
+  } catch (error) {
+    result.innerHTML = "";
+    showError(errorBox, error);
+  }
+});
 
 /* Модели (PQ.11). Как и карточки, экран ничего не считает: коэффициенты,
    ошибки, R² и важность драйверов приходят с сервера. */
