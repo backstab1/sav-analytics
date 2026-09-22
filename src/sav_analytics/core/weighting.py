@@ -25,11 +25,108 @@ class RakingResult:
     diagnostics: dict[str, Any]
 
 
-def calculate_weight(frame: pd.DataFrame, definition: dict[str, Any]) -> RakingResult:
-    """Рассчитанный вес проекта тем методом, который в нём выбран."""
+def calculate_weight(
+    frame: pd.DataFrame,
+    definition: dict[str, Any],
+    project: dict[str, Any] | None = None,
+) -> RakingResult:
+    """Рассчитанный вес проекта тем методом, который в нём выбран.
+
+    Если в проекте есть переменная с ролью «Волна» и в массиве больше одной
+    волны, вес считается отдельно внутри каждой волны с теми же целями и
+    нормируется к среднему 1 внутри волны (`requirements.md` §10). Иначе
+    волна с другим составом выборки перетягивала бы цели соседней, и
+    сравнение волн мерило бы разницу весов, а не мнений.
+    """
+    wave = project_wave_variable(project) if project else None
+    if wave is None:
+        return _calculate_single(frame, definition)
+    if wave not in frame.columns:
+        raise WeightingError("Переменная волны не прочитана из SAV.")
+    series = frame[wave]
+    if series.isna().any():
+        raise WeightingError(
+            f"У {int(series.isna().sum())} респондентов не указана волна: "
+            "вес считается внутри каждой волны."
+        )
+    values = list(dict.fromkeys(series.tolist()))
+    if len(values) < 2:
+        return _calculate_single(frame, definition)
+    labels = _value_labels(project, wave)
+    weights = pd.Series(0.0, index=frame.index)
+    waves = []
+    iterations = 0
+    deviation = 0.0
+    for value in values:
+        mask = series.map(lambda item, expected=value: _equal(item, expected))
+        label = labels.get(str(_scalar(value)), str(_scalar(value)))
+        try:
+            part = _calculate_single(frame[mask], definition)
+        except WeightingError as exc:
+            raise WeightingError(f"Волна «{label}»: {exc}") from exc
+        weights.loc[mask] = part.weights
+        iterations = max(iterations, part.iterations)
+        deviation = max(deviation, part.maximum_deviation)
+        waves.append(
+            {
+                "label": label,
+                "base": int(mask.sum()),
+                "iterations": part.iterations,
+                "effective_base": part.diagnostics["effective_base"],
+                "design_effect": part.diagnostics["design_effect"],
+            }
+        )
+    cells = definition.get("method", "raking") == "cells"
+    prepared = [
+        _prepare_dimension(frame, dimension, shares=not cells)
+        for dimension in definition.get("dimensions", [])
+    ]
+    if cells:
+        total = float(weights.sum())
+        for dimension in prepared:
+            for category in dimension["categories"]:
+                category["target_share"] = float(weights[category["mask"]].sum()) / total
+    diagnostics = _diagnostics(weights, prepared, iterations, deviation)
+    diagnostics["waves"] = waves
+    return RakingResult(
+        weights=weights, iterations=iterations, maximum_deviation=deviation, diagnostics=diagnostics
+    )
+
+
+def _calculate_single(frame: pd.DataFrame, definition: dict[str, Any]) -> RakingResult:
     if definition.get("method", "raking") == "cells":
         return calculate_cell_weighting(frame, definition)
     return calculate_raking(frame, definition)
+
+
+def project_wave_variable(project: dict[str, Any]) -> str | None:
+    """Переменная SAV вопроса с ролью «Волна», если он есть."""
+    for question in project.get("configuration", {}).get("questions", []):
+        if question.get("role") == "wave" and len(question.get("source_variables", [])) == 1:
+            return str(question["source_variables"][0])
+    return None
+
+
+def _value_labels(project: dict[str, Any], variable: str) -> dict[str, str]:
+    found = next(
+        (
+            item
+            for item in project.get("inspection", {}).get("variables", [])
+            if item["name"] == variable
+        ),
+        None,
+    )
+    return {
+        str(_scalar(item["value"])): item["label"] for item in (found or {}).get("value_labels", [])
+    }
+
+
+def _scalar(value: Any) -> Any:
+    if hasattr(value, "item"):
+        value = value.item()
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
 
 
 def weight_method_label(definition: dict[str, Any]) -> str:
@@ -50,6 +147,9 @@ def build_raking_export(
         if question and len(question.get("source_variables", [])) == 1:
             extra_variables.append(question["source_variables"][0])
     dimension_variables = [item["variable"] for item in definition["dimensions"]]
+    wave = project_wave_variable(project)
+    if wave:
+        extra_variables.append(wave)
     variables = list(dict.fromkeys([*dimension_variables, *extra_variables]))
     frame, _ = pyreadstat.read_sav(
         path,
@@ -58,7 +158,7 @@ def build_raking_export(
         user_missing=False,
         dates_as_pandas_datetime=False,
     )
-    result = calculate_weight(frame, definition)
+    result = calculate_weight(frame, definition, project)
 
     identifier_name = (
         id_question["source_variables"][0]
@@ -153,9 +253,13 @@ def _write_export_value(
 
 
 def calculate_raking_preview(
-    path: str | Path, definition: dict[str, Any]
+    path: str | Path, definition: dict[str, Any], project: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    variables = list(dict.fromkeys(item["variable"] for item in definition["dimensions"]))
+    variables = [item["variable"] for item in definition["dimensions"]]
+    wave = project_wave_variable(project) if project else None
+    if wave:
+        variables.append(wave)
+    variables = list(dict.fromkeys(variables))
     frame, _ = pyreadstat.read_sav(
         path,
         usecols=variables,
@@ -163,7 +267,7 @@ def calculate_raking_preview(
         user_missing=False,
         dates_as_pandas_datetime=False,
     )
-    result = calculate_weight(frame, definition)
+    result = calculate_weight(frame, definition, project)
     return {
         "id": definition.get("id"),
         "name": definition["name"],

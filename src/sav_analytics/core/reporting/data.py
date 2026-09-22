@@ -208,7 +208,7 @@ def _report_weights(
         if definition is None:
             raise ReportError("Рассчитанный вес не найден в проекте.")
         try:
-            result = calculate_weight(frame, definition)
+            result = calculate_weight(frame, definition, project)
         except WeightingError as exc:
             raise ReportError(str(exc)) from exc
         return result.weights, f"{definition['name']} ({weight_method_label(definition)})"

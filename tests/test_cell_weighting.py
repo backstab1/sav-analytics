@@ -182,3 +182,72 @@ def test_cell_weight_is_saved_and_used_by_the_report(tmp_path: Path) -> None:
             assert not statistics.json()["errors"]
     finally:
         app.dependency_overrides.clear()
+
+
+def _wave_project() -> dict:
+    return {
+        "configuration": {
+            "questions": [{"code": "WAVE", "role": "wave", "source_variables": ["WAVE"]}]
+        },
+        "inspection": {
+            "variables": [
+                {
+                    "name": "WAVE",
+                    "value_labels": [
+                        {"value": 1, "label": "Весна"},
+                        {"value": 2, "label": "Осень"},
+                    ],
+                }
+            ]
+        },
+    }
+
+
+def test_weight_is_calculated_inside_each_wave() -> None:
+    """§10: цели достигаются в каждой волне, а не только в сумме волн.
+
+    Весной мужчин 80%, осенью 20%. Общий raking к 50/50 по всему массиву
+    оставил бы волны 80/20 и 20/80 в сумме, и сравнение волн мерило бы состав.
+    """
+    frame = pd.DataFrame(
+        {"WAVE": [1] * 10 + [2] * 10, "SEX": [1] * 8 + [2] * 2 + [1] * 2 + [2] * 8}
+    )
+    definition = {
+        "name": "Пол",
+        "dimensions": [
+            {
+                "variable": "SEX",
+                "label": "Пол",
+                "targets": [
+                    {"label": "М", "values": [1], "percent": 50},
+                    {"label": "Ж", "values": [2], "percent": 50},
+                ],
+            }
+        ],
+        "lower_bound": None,
+        "upper_bound": None,
+    }
+
+    result = calculate_weight(frame, definition, _wave_project())
+
+    for wave in (1, 2):
+        part = frame["WAVE"] == wave
+        men = result.weights[part & (frame["SEX"] == 1)].sum() / result.weights[part].sum()
+        assert men == pytest.approx(0.5)
+        assert result.weights[part].mean() == pytest.approx(1)
+    assert [item["label"] for item in result.diagnostics["waves"]] == ["Весна", "Осень"]
+    # Весной вес мужчины 0,5/0,8, осенью 0,5/0,2.
+    assert result.weights.iloc[0] == pytest.approx(0.625)
+    assert result.weights.iloc[10] == pytest.approx(2.5)
+
+
+def test_wave_error_names_the_wave_and_missing_wave_is_refused() -> None:
+    frame = pd.DataFrame({"WAVE": [1] * 4 + [2] * 4, "SEX": SEX[:4] + [2, 2, 2, 2], "AGE": AGE[:8]})
+    definition = _definition(EVEN)
+
+    with pytest.raises(WeightingError, match="Волна «Весна»"):
+        calculate_weight(frame, definition, _wave_project())
+
+    frame["WAVE"] = [1, 1, 1, 1, 2, 2, 2, None]
+    with pytest.raises(WeightingError, match="не указана волна"):
+        calculate_weight(frame, definition, _wave_project())

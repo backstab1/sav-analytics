@@ -249,7 +249,11 @@ function renderWeightPreview(preview) {
   const cells = preview.cells
     ? `<section class="weight-distribution"><div class="weight-distribution-head"><strong>Ячейки</strong><span>Доля в выборке → цель · вес</span></div>${preview.cells.map(cell => `<div class="weight-result-row"><span title="${escapeAttribute(cell.label)}">${escapeHtml(cell.label)}</span><em>${cell.before_percent.toFixed(1)} → <b>${cell.target_percent.toFixed(1)}%</b> · ${formatWeightNumber(cell.weight)}</em></div>`).join("")}</section>`
     : "";
-  return metricGrid + cells + distributions;
+  // Вес считается внутри каждой волны: у каждой свои база и design effect.
+  const waves = preview.waves
+    ? `<section class="weight-distribution"><div class="weight-distribution-head"><strong>Внутри волн</strong><span>База · эфф. база · DEFF</span></div>${preview.waves.map(wave => `<div class="weight-result-row"><span title="${escapeAttribute(wave.label)}">${escapeHtml(wave.label)}</span><em>${wave.base.toLocaleString("ru-RU")} · ${formatWeightNumber(wave.effective_base)} · <b>${formatWeightNumber(wave.design_effect)}</b></em></div>`).join("")}</section>`
+    : "";
+  return metricGrid + waves + cells + distributions;
 }
 
 function formatWeightNumber(value) {

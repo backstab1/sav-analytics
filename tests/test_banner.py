@@ -213,3 +213,48 @@ def test_waves_are_not_merged_into_a_group(tmp_path: Path) -> None:
 
     with pytest.raises(BannerError, match="Волны"):
         calculate_banner_preview(source, definition, project)
+
+
+def test_wave_order_and_selection_follow_the_banner_categories(tmp_path: Path) -> None:
+    """Порядок волн и их отключение задаются категориями баннера.
+
+    «Предыдущая волна» — предыдущая колонка блока, поэтому переставленные
+    категории меняют, с чем сравнивается волна, а скрытая волна выпадает из
+    сравнения целиком.
+    """
+    from sav_analytics.core.banner import build_banner_columns
+    from sav_analytics.core.formulas import read_project_frame
+    from sav_analytics.core.reporting.statistics import _wave_target
+
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    project = project_fixture(source)
+    wave = next(item for item in project["configuration"]["questions"] if item["code"] == "Q1")
+    wave["role"] = "wave"
+    keys = ["question:Q1:1.0", "question:Q1:2.0"]
+    definition = {
+        "name": "Волны",
+        "wave_comparison": "previous",
+        "blocks": [
+            {
+                "sources": [
+                    {
+                        "kind": "question",
+                        "ref": "Q1",
+                        "categories": [{"key": keys[1]}, {"key": keys[0]}],
+                    }
+                ]
+            }
+        ],
+    }
+    frame = read_project_frame(source, project)
+
+    columns = build_banner_columns(frame, definition, project)
+    assert [column["wave_value"] for column in columns[1:]] == [2.0, 1.0]
+    target = _wave_target(columns[2], columns, definition)
+    assert target is columns[1]
+
+    definition["blocks"][0]["sources"][0]["categories"][0]["hidden"] = True
+    columns = build_banner_columns(frame, definition, project)
+    assert [column["wave_value"] for column in columns[1:]] == [1.0]
+    assert _wave_target(columns[1], columns, definition) is None

@@ -104,7 +104,7 @@ def export_project_sav(
 
     for weight in configuration.get("calculated_weights", []):
         try:
-            result = calculate_weight(computed, weight)
+            result = calculate_weight(computed, weight, project)
         except WeightingError as exc:
             raise SavExportError(f"Вес «{weight['name']}»: {exc}") from exc
         name = _unique_name("W_" + _identifier(weight["name"]), taken)

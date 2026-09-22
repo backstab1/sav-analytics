@@ -48,8 +48,8 @@ def create_calculated_weight(
 ) -> dict:
     payload = definition.model_dump(mode="json")
     try:
-        repository.get(project_id)
-        calculate_raking_preview(repository.source_path(project_id), payload)
+        project = repository.get(project_id)
+        calculate_raking_preview(repository.source_path(project_id), payload, project)
         return repository.create_calculated_weight(project_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
@@ -66,8 +66,8 @@ def update_calculated_weight(
 ) -> dict:
     payload = definition.model_dump(mode="json")
     try:
-        repository.get(project_id)
-        calculate_raking_preview(repository.source_path(project_id), payload)
+        project = repository.get(project_id)
+        calculate_raking_preview(repository.source_path(project_id), payload, project)
         return repository.update_calculated_weight(project_id, weight_id, payload)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
@@ -96,8 +96,8 @@ def preview_calculated_weight(
     repository: Annotated[ProjectRepository, Depends(get_repository)],
 ) -> dict:
     try:
-        _project, definition = repository.calculated_weight(project_id, weight_id)
-        return calculate_raking_preview(repository.source_path(project_id), definition)
+        project, definition = repository.calculated_weight(project_id, weight_id)
+        return calculate_raking_preview(repository.source_path(project_id), definition, project)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект или вес не найдены.") from exc
     except (WeightingError, KeyError) as exc:
