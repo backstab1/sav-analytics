@@ -2443,3 +2443,12 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Ширина по подписи «Тип…», а не по самому длинному пункту списка:
    с четырьмя выборами полоса иначе не помещается в строку. */
 .bulk-select { field-sizing: content; width: auto; height: 28px; max-width: 170px; padding: 0 8px; border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: var(--c-surface, #fff); color: inherit; font: inherit; font-size: var(--t-xs); }
+
+/* Взвешивание по ячейкам: цели категорий не нужны, их задаёт сетка ячеек. */
+.weight-dimension-list.cells-mode .weight-target .t-track,
+.weight-dimension-list.cells-mode .weight-target input,
+.weight-dimension-list.cells-mode .dim-head .sum { display: none; }
+.weight-cell-list { display: grid; gap: 4px; }
+.weight-cell { display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 8px; }
+.weight-cell .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); }
+.weight-cell input { padding: 5px 8px; font-size: var(--t-xs); }

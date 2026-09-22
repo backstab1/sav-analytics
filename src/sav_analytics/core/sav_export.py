@@ -21,7 +21,7 @@ import pyreadstat
 from .banner import BannerError, _source_categories
 from .formulas import read_project_frame
 from .sav_writing import SavWriteMismatchError, long_text_columns, verify_written_sav
-from .weighting import WeightingError, calculate_raking
+from .weighting import WeightingError, calculate_weight, weight_method_label
 
 
 class SavExportError(ValueError):
@@ -104,12 +104,12 @@ def export_project_sav(
 
     for weight in configuration.get("calculated_weights", []):
         try:
-            result = calculate_raking(computed, weight)
+            result = calculate_weight(computed, weight)
         except WeightingError as exc:
             raise SavExportError(f"Вес «{weight['name']}»: {exc}") from exc
         name = _unique_name("W_" + _identifier(weight["name"]), taken)
         raw[name] = result.weights
-        labels[name] = f"{weight['name']} (raking)"
+        labels[name] = f"{weight['name']} ({weight_method_label(weight)})"
         measures[name] = "scale"
         formats[name] = "F16.6"
         summary.weights.append(name)

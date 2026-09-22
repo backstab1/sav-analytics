@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import BytesIO
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,17 @@ class RakingResult:
     iterations: int
     maximum_deviation: float
     diagnostics: dict[str, Any]
+
+
+def calculate_weight(frame: pd.DataFrame, definition: dict[str, Any]) -> RakingResult:
+    """Рассчитанный вес проекта тем методом, который в нём выбран."""
+    if definition.get("method", "raking") == "cells":
+        return calculate_cell_weighting(frame, definition)
+    return calculate_raking(frame, definition)
+
+
+def weight_method_label(definition: dict[str, Any]) -> str:
+    return "по ячейкам" if definition.get("method", "raking") == "cells" else "raking/IPF"
 
 
 def build_raking_export(
@@ -46,7 +58,7 @@ def build_raking_export(
         user_missing=False,
         dates_as_pandas_datetime=False,
     )
-    result = calculate_raking(frame, definition)
+    result = calculate_weight(frame, definition)
 
     identifier_name = (
         id_question["source_variables"][0]
@@ -63,7 +75,7 @@ def build_raking_export(
     workbook.set_properties(
         {
             "title": f"Рассчитанный вес — {definition['name']}",
-            "subject": "Респондентский экспорт веса raking/IPF",
+            "subject": f"Респондентский экспорт веса {weight_method_label(definition)}",
             "author": "sav-analytics",
         }
     )
@@ -151,10 +163,11 @@ def calculate_raking_preview(
         user_missing=False,
         dates_as_pandas_datetime=False,
     )
-    result = calculate_raking(frame, definition)
+    result = calculate_weight(frame, definition)
     return {
         "id": definition.get("id"),
         "name": definition["name"],
+        "method": definition.get("method", "raking"),
         **result.diagnostics,
     }
 
@@ -218,16 +231,125 @@ def calculate_raking(
     )
 
 
-def _prepare_dimension(frame: pd.DataFrame, definition: dict[str, Any]) -> dict[str, Any]:
+def calculate_cell_weighting(
+    frame: pd.DataFrame,
+    definition: dict[str, Any],
+) -> RakingResult:
+    """Взвешивание по ячейкам сочетаний: вес ячейки — цель, делённая на долю в выборке.
+
+    В отличие от raking, цели задаются совместному распределению, поэтому
+    результат точный и итераций не требует. Ограничения веса здесь не
+    обрезают, а проверяют: обрезка ячейкового веса молча увела бы ячейку от
+    цели. Ячейка с весом вне границ, пустая ячейка с ненулевой целью и
+    респонденты в ячейке с нулевой целью — ошибки с именем ячейки, лечатся
+    объединением категорий или правкой целей.
+    """
+    dimensions = definition.get("dimensions", [])
+    if not dimensions:
+        raise WeightingError("Добавьте хотя бы одну переменную ячеек.")
+    if len(dimensions) > 3:
+        raise WeightingError("Ячейки строятся не более чем по трём переменным.")
+    prepared = [_prepare_dimension(frame, dimension, shares=False) for dimension in dimensions]
+    for dimension in prepared:
+        labels = [category["label"] for category in dimension["categories"]]
+        if len(set(labels)) != len(labels):
+            raise WeightingError(f"В «{dimension['label']}» повторяются подписи категорий.")
+    targets: dict[tuple[str, ...], float] = {}
+    for cell in definition.get("cells", []):
+        key = tuple(str(label) for label in cell.get("categories", []))
+        if len(key) != len(prepared):
+            raise WeightingError("Каждая ячейка должна называть категорию каждой переменной.")
+        if key in targets:
+            raise WeightingError(f"Ячейка «{' × '.join(key)}» задана дважды.")
+        targets[key] = float(cell.get("percent") or 0)
+    total_percent = sum(targets.values())
+    if not 99.9 <= total_percent <= 100.1:
+        raise WeightingError(f"Цели ячеек должны давать 100%. Сейчас {total_percent:.2f}%.")
+    lower = definition.get("lower_bound")
+    upper = definition.get("upper_bound")
+
+    size = len(frame)
+    weights = pd.Series(0.0, index=frame.index)
+    cells = []
+    for combination in product(*(dimension["categories"] for dimension in prepared)):
+        key = tuple(category["label"] for category in combination)
+        label = " × ".join(key)
+        mask = pd.Series(True, index=frame.index)
+        for category in combination:
+            mask &= category["mask"]
+        base = int(mask.sum())
+        share = targets.pop(key, 0.0) / total_percent
+        if base == 0 and share > 0:
+            raise WeightingError(
+                f"Ячейка «{label}» пуста в выборке, а её цель {share * 100:.2f}%. "
+                "Объедините категории или перенесите цель в соседнюю ячейку."
+            )
+        if base > 0 and share == 0:
+            raise WeightingError(
+                f"У {base} респондентов ячейки «{label}» цель 0%: их вес был бы нулевым."
+            )
+        if base == 0:
+            continue
+        weight = share * size / base
+        if (lower is not None and weight < float(lower)) or (
+            upper is not None and weight > float(upper)
+        ):
+            raise WeightingError(
+                f"Вес ячейки «{label}» равен {weight:.3f} и выходит за границы "
+                f"{_bound(lower)}–{_bound(upper)}. Объедините её с соседней "
+                "или ослабьте ограничения."
+            )
+        weights.loc[mask] = weight
+        cells.append(
+            {
+                "label": label,
+                "base": base,
+                "before_percent": base / size * 100,
+                "target_percent": share * 100,
+                "weight": weight,
+            }
+        )
+    if targets:
+        unknown = next(iter(targets))
+        raise WeightingError(f"Ячейки «{' × '.join(unknown)}» нет среди сочетаний категорий.")
+    # Цель категории — сумма целей её ячеек: так диагностика измерений
+    # показывает то же «до → после · цель», что у raking.
+    total = float(weights.sum())
+    for dimension in prepared:
+        for category in dimension["categories"]:
+            category["target_share"] = float(weights[category["mask"]].sum()) / total
+    diagnostics = _diagnostics(weights, prepared, 1, 0.0)
+    diagnostics["cells"] = cells
+    return RakingResult(
+        weights=weights, iterations=1, maximum_deviation=0.0, diagnostics=diagnostics
+    )
+
+
+def _bound(value: Any) -> str:
+    return "—" if value is None else f"{float(value):g}"
+
+
+def _prepare_dimension(
+    frame: pd.DataFrame, definition: dict[str, Any], *, shares: bool = True
+) -> dict[str, Any]:
+    """Категории измерения с масками; `shares=False` — без целевых долей.
+
+    У взвешивания по ячейкам цель задаётся сочетанию категорий, а не
+    категории, поэтому доли измерения там не нужны и не проверяются.
+    """
     variable = definition.get("variable")
     if not variable or variable not in frame.columns:
         raise WeightingError("Переменная взвешивания не найдена в SAV.")
     targets = definition.get("targets", [])
     if len(targets) < 2:
         raise WeightingError("Целевое распределение должно содержать минимум две категории.")
-    total_percent = sum(float(target["percent"]) for target in targets)
-    if not 99.9 <= total_percent <= 100.1:
-        raise WeightingError("Целевые доли каждого распределения должны давать 100%.")
+    total_percent = 100.0
+    if shares:
+        if any(target.get("percent") is None for target in targets):
+            raise WeightingError("Для raking задайте цель каждой категории распределения.")
+        total_percent = sum(float(target["percent"]) for target in targets)
+        if not 99.9 <= total_percent <= 100.1:
+            raise WeightingError("Целевые доли каждого распределения должны давать 100%.")
     series = frame[variable]
     if series.isna().any():
         raise WeightingError(
@@ -251,7 +373,9 @@ def _prepare_dimension(frame: pd.DataFrame, definition: dict[str, Any]) -> dict[
             {
                 "label": target["label"],
                 "mask": mask,
-                "target_share": float(target["percent"]) / total_percent,
+                "target_share": (
+                    float(target["percent"]) / total_percent if shares else 0.0
+                ),
             }
         )
     if (coverage == 0).any():

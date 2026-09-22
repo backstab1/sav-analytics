@@ -51,7 +51,7 @@ function pickerRows(kind) {
     .concat(configuredWeights().map(weight => ({
       value: `calculated:${weight.id}`,
       title: weight.name,
-      note: `raking / IPF · ${plural(weight.dimensions.length, "распределение", "распределения", "распределений")}`,
+      note: calculatedWeightSummary(weight),
       checked: selection === `calculated:${weight.id}`,
       edit: { kind: "weight", id: weight.id },
     })));
@@ -60,7 +60,7 @@ function pickerRows(kind) {
 const pickerHeads = {
   banner: { caption: "Баннеры проекта", create: "+ Новый баннер" },
   filter: { caption: "Базы и фильтры", create: "+ Новое правило" },
-  weight: { caption: "Веса проекта", create: "+ Новый вес (raking)" },
+  weight: { caption: "Веса проекта", create: "+ Новый рассчитанный вес" },
 };
 
 function renderPicker(kind) {

@@ -18,7 +18,7 @@ from ..not_applicable import not_applicable_values
 from ..ranking import RankingError, ranking_items
 from ..report_settings import resolved_report_settings
 from ..weight_validation import assess_ready_weight, weight_role
-from ..weighting import WeightingError, calculate_raking
+from ..weighting import WeightingError, calculate_weight, weight_method_label
 from .models import ReportError
 
 
@@ -208,10 +208,10 @@ def _report_weights(
         if definition is None:
             raise ReportError("Рассчитанный вес не найден в проекте.")
         try:
-            result = calculate_raking(frame, definition)
+            result = calculate_weight(frame, definition)
         except WeightingError as exc:
             raise ReportError(str(exc)) from exc
-        return result.weights, f"{definition['name']} (raking/IPF)"
+        return result.weights, f"{definition['name']} ({weight_method_label(definition)})"
     if not variable:
         return None, None
     if variable not in frame.columns:

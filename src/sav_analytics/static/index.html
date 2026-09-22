@@ -455,23 +455,25 @@
 
             <aside id="weight-editor" class="insp weight-editor" hidden>
               <div class="insp-head">
-                <div><p class="kicker">Raking / IPF</p><h3 id="weight-editor-title">Новый вес</h3></div>
+                <div><p id="weight-editor-kicker" class="kicker">Raking / IPF</p><h3 id="weight-editor-title">Новый вес</h3></div>
                 <button id="close-weight-editor" class="icon-button" type="button" aria-label="Закрыть редактор весов">×</button>
               </div>
               <form id="weight-form">
                 <div class="insp-body editor-scroll scroll">
                   <label class="f">Название веса<input id="weight-name" required maxlength="500" placeholder="Например, Вес по полу и возрасту" /></label>
+                  <label class="f">Метод<select id="weight-method"><option value="raking">Raking — цели по каждой переменной</option><option value="cells">По ячейкам — цель каждому сочетанию</option></select><small id="weight-method-note">Подгоняет маргинальные распределения по очереди, пока все не сойдутся.</small></label>
                   <section class="weight-limit-card">
-                    <label class="tgl-row boxed weight-toggle-setting"><span><strong>Ограничивать веса</strong><small>Обрезать экстремумы и подогнать цели заново</small></span><span class="tgl"><input id="weight-trimming" type="checkbox" checked /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
+                    <label class="tgl-row boxed weight-toggle-setting"><span><strong>Ограничивать веса</strong><small id="weight-trimming-note">Обрезать экстремумы и подогнать цели заново</small></span><span class="tgl"><input id="weight-trimming" type="checkbox" checked /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
                     <div id="weight-bound-fields" class="weight-bound-fields">
                       <label><span>Минимум</span><span class="weight-bound-input"><input id="weight-lower" type="number" min="0.01" step="0.01" value="0.3" /><em>×</em></span></label>
                       <span class="weight-bound-separator">—</span>
                       <label><span>Максимум</span><span class="weight-bound-input"><input id="weight-upper" type="number" min="0.01" step="0.01" value="3" /><em>×</em></span></label>
                     </div>
                   </section>
-                  <div class="range-heading grp-cap weight-section-heading"><strong>Целевые распределения</strong><small>сумма = 100%</small></div>
+                  <div class="range-heading grp-cap weight-section-heading"><strong id="weight-dimensions-title">Целевые распределения</strong><small id="weight-dimensions-note">сумма = 100%</small></div>
                   <div id="weight-dimension-list" class="weight-dimension-list rows"></div>
                   <button id="add-weight-dimension" class="secondary compact-button add-dashed" type="button">+ Добавить распределение</button>
+                  <section id="weight-cells" class="weight-cells" hidden><div class="range-heading grp-cap weight-section-heading"><strong>Цели ячеек</strong><span id="weight-cells-sum" class="sum" aria-live="polite"></span></div><div id="weight-cell-list" class="weight-cell-list"></div></section>
                   <section id="weight-preview-section" class="preview weight-preview-section" hidden><div class="preview-title"><h3>Диагностика веса</h3><button id="refresh-weight-preview" class="text-button" type="button">Пересчитать</button></div><div id="weight-preview" class="preview-content"></div></section>
                   <p id="weight-error" class="error" hidden></p>
                 </div>

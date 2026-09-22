@@ -141,7 +141,7 @@ function reportWeightRow(settings) {
     const bounds = calculated.lower_bound == null
       ? ""
       : ` · границы <b>${formatWeightNumber(calculated.lower_bound)}–${formatWeightNumber(calculated.upper_bound)}</b>`;
-    meta = `raking / IPF · ${plural(calculated.dimensions.length, "распределение", "распределения", "распределений")}${bounds}`;
+    meta = `${calculatedWeightSummary(calculated)}${bounds}`;
     action = `<button type="button" class="prop-act" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">править</button>`;
   } else if (ready) {
     value = escapeHtml(ready);

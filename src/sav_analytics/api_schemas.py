@@ -353,7 +353,15 @@ class ReportBannerUpdate(BaseModel):
 class WeightTarget(BaseModel):
     label: str = Field(min_length=1, max_length=250)
     values: list[str | int | float] = Field(min_length=1, max_length=500)
-    percent: float = Field(gt=0, le=100)
+    # У raking обязательна; у взвешивания по ячейкам цель задаёт ячейка.
+    percent: float | None = Field(default=None, gt=0, le=100)
+
+
+class WeightCell(BaseModel):
+    """Цель сочетания категорий: по подписи категории каждой переменной."""
+
+    categories: list[str] = Field(min_length=1, max_length=3)
+    percent: float = Field(ge=0, le=100)
 
 
 class WeightDimension(BaseModel):
@@ -364,7 +372,9 @@ class WeightDimension(BaseModel):
 
 class CalculatedWeightDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
+    method: Literal["raking", "cells"] = "raking"
     dimensions: list[WeightDimension] = Field(min_length=1, max_length=20)
+    cells: list[WeightCell] = Field(default_factory=list, max_length=1000)
     lower_bound: float | None = Field(default=0.3, gt=0)
     upper_bound: float | None = Field(default=3.0, gt=0)
     tolerance: float = Field(default=0.001, gt=0, lt=1)
@@ -378,6 +388,15 @@ class CalculatedWeightDefinition(BaseModel):
             and self.lower_bound >= self.upper_bound
         ):
             raise ValueError("Нижняя граница веса должна быть меньше верхней.")
+        if self.method == "raking" and any(
+            target.percent is None for dimension in self.dimensions for target in dimension.targets
+        ):
+            raise ValueError("Для raking задайте цель каждой категории распределения.")
+        if self.method == "cells":
+            if len(self.dimensions) > 3:
+                raise ValueError("Ячейки строятся не более чем по трём переменным.")
+            if not self.cells:
+                raise ValueError("Задайте цели ячеек.")
         return self
 
 

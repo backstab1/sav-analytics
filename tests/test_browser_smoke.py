@@ -443,6 +443,34 @@ def test_identifier_cannot_be_chosen_as_a_report_weight(
     expect(page.locator("#save-report-settings")).to_be_enabled()
 
 
+def test_cell_weight_is_built_from_combinations(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Вес по ячейкам: цель задаётся каждому сочетанию пол × марка (PQ.9)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+
+    page.click('[data-picker="weight"]')
+    page.click('#picker [data-new="weight"]')
+    expect(page.locator("#weight-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.select_option("#weight-method", "cells")
+    expect(page.locator("#weight-cells")).to_be_visible()
+    page.click("#add-weight-dimension")
+    page.locator(".weight-dimension-source").nth(1).select_option("BRAND")
+    cells = page.locator("#weight-cell-list .weight-cell")
+    expect(cells).to_have_count(4)
+    expect(page.locator("#weight-cells-sum")).to_have_text("100%")
+    page.fill("#weight-name", "Пол × марка")
+    page.click("#save-weight")
+
+    preview = page.locator("#weight-preview")
+    expect(preview).to_contain_text("Ячейки", timeout=UI_TIMEOUT)
+    expect(preview).to_contain_text("Мужчина × Первая")
+    expect(page.locator("#weight-editor-kicker")).to_have_text("Взвешивание по ячейкам")
+
+
 def test_heuristic_scale_is_counted_for_review_until_confirmed(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

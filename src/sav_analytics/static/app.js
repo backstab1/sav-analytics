@@ -317,7 +317,10 @@ document.querySelector("#copy-filter").addEventListener("click", (...args) => co
 document.querySelector("#close-weight-editor").addEventListener("click", () => {
   if (confirmDiscard(weightEditor)) closeWeight();
 });
-document.querySelector("#add-weight-dimension").addEventListener("click", () => addWeightDimension());
+document.querySelector("#add-weight-dimension").addEventListener("click", () => {
+  addWeightDimension();
+  if (weightMethod() === "cells") renderWeightCells();
+});
 document.querySelector("#delete-weight").addEventListener("click", (...args) => deleteWeight(...args));
 document.querySelector("#refresh-weight-preview").addEventListener("click", (...args) => loadWeightPreview(...args));
 document.querySelector("#weight-trimming").addEventListener("change", (...args) => renderWeightTrimming(...args));
@@ -325,13 +328,18 @@ document.querySelector("#report-weight").addEventListener("change", loadReportWe
 document.querySelector("#report-weight-declare-button").addEventListener("click", declareSelectedWeight);
 document.querySelector("#weight-dimension-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-weight-dimension]");
-  if (button) button.closest(".weight-dimension").remove();
+  if (!button) return;
+  button.closest(".weight-dimension").remove();
+  if (weightMethod() === "cells") renderWeightCells();
 });
 document.querySelector("#weight-dimension-list").addEventListener("change", event => {
   if (event.target.matches(".weight-dimension-source")) {
     renderWeightTargets(event.target.closest(".weight-dimension"));
+    if (weightMethod() === "cells") renderWeightCells();
   }
 });
+document.querySelector("#weight-method").addEventListener("change", () => renderWeightMethod());
+document.querySelector("#weight-cell-list").addEventListener("input", () => updateWeightCellsStatus());
 document.querySelector("#weight-dimension-list").addEventListener("input", event => {
   if (event.target.matches(".weight-target input")) {
     updateWeightDimensionStatus(event.target.closest(".weight-dimension"));
@@ -1071,10 +1079,20 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
     showError(weightError, error);
     return;
   }
+  const method = weightMethod();
+  let cells = [];
+  try {
+    if (method === "cells") cells = collectWeightCells();
+  } catch (error) {
+    showError(weightError, error);
+    return;
+  }
   const trimming = document.querySelector("#weight-trimming").checked;
   const payload = {
     name: document.querySelector("#weight-name").value.trim(),
+    method,
     dimensions,
+    cells,
     lower_bound: trimming ? Number(document.querySelector("#weight-lower").value) : null,
     upper_bound: trimming ? Number(document.querySelector("#weight-upper").value) : null,
     tolerance: 0.001,
