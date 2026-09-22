@@ -1048,6 +1048,36 @@ def test_change_is_undone_with_the_button_and_ctrl_z(
     expect(row).to_contain_text("Какой маркой пользуетесь", timeout=UI_TIMEOUT)
 
 
+def test_structure_is_usable_from_the_keyboard(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Вопрос открывается и переставляется без мыши, фокус не теряется (GAP-027, 028)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    title = page.locator("#table-body tr[data-code='BRAND'] .q-title")
+    title.focus()
+    page.keyboard.press("Enter")
+    editor = page.locator("#question-editor")
+    expect(editor).to_be_visible(timeout=UI_TIMEOUT)
+    expect(editor.locator(":focus")).to_have_count(1, timeout=UI_TIMEOUT)
+
+    page.keyboard.press("Escape")
+    expect(editor).to_be_hidden(timeout=UI_TIMEOUT)
+    expect(page.locator("#table-body tr[data-code='BRAND'] .q-title")).to_be_focused()
+
+    codes = page.locator("#table-body tr[data-code]")
+    before = codes.evaluate_all("rows => rows.map(row => row.dataset.code)")
+    page.locator("#table-body [data-drag-code='SEX']").focus()
+    page.keyboard.press("ArrowDown")
+    expect(page.locator("#toast-container")).to_contain_text("Порядок", timeout=UI_TIMEOUT)
+    after = codes.evaluate_all("rows => rows.map(row => row.dataset.code)")
+    position = before.index("SEX")
+    assert after[position + 1] == "SEX" and after[position] == before[position + 1]
+    expect(page.locator("#table-body [data-drag-code='SEX']")).to_be_focused()
+
+
 def test_several_questions_are_excluded_at_once(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

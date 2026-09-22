@@ -534,6 +534,15 @@ function closeSlideOver() {
   openEditors().forEach(([, close]) => close());
 }
 
+// Escape закрывает открытый редактор при любой ширине окна (GAP-028): у
+// клавиатуры другого короткого пути из панели нет. Несохранённое — с вопросом.
+function closeOpenEditor() {
+  const open = openEditors();
+  if (!open.length) return;
+  if (!confirmDiscard(openInspectorPanel())) return;
+  open.forEach(([, close]) => close());
+}
+
 /* ================================================================
    Листы: настройка отчёта и пропуски по анкете
    ================================================================ */
@@ -571,7 +580,8 @@ document.addEventListener("keydown", event => {
     closeSheet();
     return;
   }
-  closeSlideOver();
+  if (document.querySelector("dialog[open]")) return;
+  closeOpenEditor();
 });
 document.querySelector("#banner-block-list").addEventListener("click", event => {
   const button = event.target.closest("button[data-remove-banner-block]");
@@ -759,10 +769,62 @@ window.addEventListener("beforeunload", event => {
   }
 });
 
+/* Фокус в редакторах (GAP-028). Открытый редактор получает фокус на первом
+   поле, закрытый возвращает его туда, откуда редактор открыли: иначе после
+   Escape или «Сохранить» клавиатура оказывалась в начале страницы. */
+let inspectorOpener = null;
+// Последний фокус вне редакторов: открытие вопроса перерисовывает таблицу
+// раньше, чем показывается редактор, и к тому моменту фокус уже на body.
+let lastOutsideFocus = null;
+document.addEventListener("focusin", event => {
+  if (!INSPECTORS.some(item => item.contains(event.target))) lastOutsideFocus = event.target;
+});
+
 function showInspector(panel) {
+  const previous = INSPECTORS.find(item => !item.hidden) || null;
+  if (panel && panel !== previous && !INSPECTORS.some(item => item.contains(document.activeElement))) {
+    const active = document.activeElement;
+    inspectorOpener = active && active !== document.body ? active : lastOutsideFocus;
+  }
   INSPECTORS.forEach(item => { item.hidden = item !== panel; });
   if (panel) markInspectorClean(panel);
+  if (panel && panel !== previous) {
+    // Поля редактора заполняются следом за показом — фокус ставим после них.
+    window.setTimeout(() => {
+      if (panel.hidden || panel.contains(document.activeElement)) return;
+      const target = panel.querySelector(
+        "input:not([type=hidden]):not([disabled]):not([hidden]), select:not([disabled]), textarea:not([disabled])"
+      );
+      (target && target.offsetParent !== null ? target : panel.querySelector("button"))?.focus();
+    }, 0);
+  }
 }
+
+// Редакторы закрываются разными функциями, и все прячут панель атрибутом
+// hidden. Скрытая панель роняет фокус на body — тогда он возвращается туда,
+// откуда редактор открыли.
+const inspectorFocusObserver = new MutationObserver(records => {
+  const closed = records.some(record => record.target.hidden);
+  if (!closed || INSPECTORS.some(item => !item.hidden)) return;
+  // Браузер снимает фокус со скрытого поля не сразу: фокус внутри уже
+  // скрытой панели — тоже потерянный.
+  const active = document.activeElement;
+  const lost = !active || active === document.body
+    || INSPECTORS.some(panel => panel.hidden && panel.contains(active));
+  if (!lost) return;
+  const opener = inspectorOpener;
+  inspectorOpener = null;
+  if (opener?.isConnected && opener.offsetParent !== null) {
+    opener.focus();
+    return;
+  }
+  // Строку таблицы перерисовали — ищем её заново по коду вопроса.
+  const code = opener?.closest?.("tr[data-code]")?.dataset.code;
+  if (code) document.querySelector(`#table-body tr[data-code="${CSS.escape(code)}"] .q-title`)?.focus();
+});
+INSPECTORS.forEach(panel => inspectorFocusObserver.observe(panel, {
+  attributes: true, attributeFilter: ["hidden"],
+}));
 
 function closeAllInspectors() {
   showInspector(null);
@@ -1655,7 +1717,7 @@ function renderTable() {
       <td class="select-cell"><input type="checkbox" class="select-question" data-select-code="${escapeAttribute(question.code)}" aria-label="Выбрать ${escapeAttribute(question.code)}" ${checked} /></td>
       <td class="drag-cell"><button type="button" class="drag-handle" draggable="${draggable}" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="${structureFiltered() ? "Сбросьте фильтр, чтобы менять порядок" : "Перетащите, чтобы изменить порядок"}"><span aria-hidden="true">⋮⋮</span></button></td>
       <td class="code-column"><code>${escapeHtml(question.code)}</code></td>
-      <td class="question-cell"><span class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</span>${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
+      <td class="question-cell"><button type="button" class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</button>${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
       <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
       <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
       <td class="status-column"><span class="status ${status === "ready" ? "" : status}">${statusLabels[status]}</span></td>
@@ -1885,6 +1947,20 @@ function addBannerBlock(block = {}) {
   element.bannerCategories = [first?.categories || null, second?.categories || null];
   document.querySelector("#banner-block-list").append(element);
 }
+
+// Клавиатурная альтернатива перетаскиванию (P2): стрелки на ручке строки.
+document.querySelector("#table-body").addEventListener("keydown", async event => {
+  const handle = event.target.closest?.(".drag-handle");
+  if (!handle || !["ArrowUp", "ArrowDown"].includes(event.key) || handle.getAttribute("draggable") !== "true") return;
+  event.preventDefault();
+  const code = handle.dataset.dragCode;
+  const codes = configuredQuestions().map(item => item.code);
+  const index = codes.indexOf(code);
+  const neighbour = codes[index + (event.key === "ArrowUp" ? -1 : 1)];
+  if (!neighbour) return;
+  await moveQuestionTo(code, neighbour, event.key === "ArrowDown");
+  document.querySelector(`#table-body [data-drag-code="${CSS.escape(code)}"]`)?.focus();
+});
 
 async function moveQuestionTo(code, targetCode, placeAfter) {
   const codes = configuredQuestions().map(item => item.code);

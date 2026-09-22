@@ -1012,6 +1012,7 @@ td small { display: block; max-width: 560px; margin-top: 1px; color: var(--c-ink
 .question-row.selected td:first-child { box-shadow: inset 3px 0 0 var(--c-brand); }
 
 td .q-title {
+  width: 100%; margin: 0; padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer;
   display: block; overflow: hidden; color: var(--c-ink); font-weight: 600;
   letter-spacing: -0.01em; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -2520,3 +2521,5 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .price-curves .c4, .curve-legend i.c4 { stroke: #c0503f; background: #c0503f; }
 .price-curves text { font-size: 10px; fill: var(--c-ink-3, #8a948f); }
 .curve-legend i { display: inline-block; width: 12px; height: 3px; margin: 0 4px 2px 8px; vertical-align: middle; }
+/* Видимый фокус у заголовка вопроса и ручки — это теперь точки входа с клавиатуры. */
+td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(--c-brand, #2e7d52); outline-offset: 2px; border-radius: 3px; }
