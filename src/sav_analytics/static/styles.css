@@ -2454,3 +2454,4 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .weight-cell input { padding: 5px 8px; font-size: var(--t-xs); }
 .weight-target-file { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; font-size: var(--t-xs); }
 .weight-target-file label { cursor: pointer; }
+.analysis-posthoc tr.significant td { font-weight: 600; }

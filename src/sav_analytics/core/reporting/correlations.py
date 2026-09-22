@@ -5,8 +5,9 @@
 ранговый Спирмен, — и p-value всех пар корректируется Benjamini–Hochberg.
 Поэтому число на листе не может разойтись с числом в карточке.
 
-Учитывается общий фильтр отчёта; взвешивание к корреляциям пока не
-применяется, и лист говорит об этом прямо.
+Учитывается общий фильтр отчёта и вес: взвешенный Пирсон через взвешенную
+ковариацию, Спирмен — по взвешенным рангам, p-value приближённый по
+эффективной базе Киша (`requirements.md` §11).
 """
 
 from __future__ import annotations
@@ -48,7 +49,9 @@ def correlation_matrix(data: ReportData, project: dict[str, Any]) -> dict[str, A
     results = []
     for left in range(len(variables)):
         for right in range(left + 1, len(variables)):
-            result = numeric_correlation(variables[left], variables[right], rows)
+            result = numeric_correlation(
+                variables[left], variables[right], rows, data.statistical_settings["weights"]
+            )
             cells[(left, right)] = result
             results.append(result)
     adjust_benjamini_hochberg(results)
@@ -73,7 +76,10 @@ def write_correlations(
         "поправки Benjamini–Hochberg на все пары листа."
     )
     if matrix["weighted"]:
-        lead += " Отчёт взвешен, а корреляции считаются без веса."
+        lead += (
+            " Взвешено: коэффициенты взвешенные, p-value приближённый по эффективной"
+            " базе Киша."
+        )
     sheet.write(1, 0, lead, formats.meta())
     if not labels:
         sheet.write(3, 0, "Числовых вопросов в отчёте нет.", formats.meta())

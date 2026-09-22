@@ -65,6 +65,7 @@ function renderAnalysisCard(card) {
     <p class="analysis-facts">
       <span>Метод <b>${escapeHtml(card.method)}</b></span>
       <span>N <b>${Number(card.n).toLocaleString("ru-RU")}</b></span>
+      ${card.effective_base != null ? `<span>эфф. база <b>${analysisNumber(card.effective_base)}</b></span>` : ""}
       <span>${escapeHtml(EFFECT_LABELS[card.effect_kind] || "Эффект")} <b>${analysisNumber(card.effect)}</b> — ${escapeHtml(card.magnitude || "")}</span>
       <span>p <b>${analysisP(card.p_value)}</b></span>
       <span>p с поправкой BH <b>${analysisP(card.p_adjusted)}</b></span>
@@ -73,7 +74,12 @@ function renderAnalysisCard(card) {
     .filter(Boolean).map(note => `<p class="analysis-note">${escapeHtml(note)}</p>`).join("");
   let detail = "";
   if (card.groups?.length) {
-    detail = `<details class="analysis-detail"><summary>Средние по группам</summary><table><tr><th>Группа</th><th>N</th><th>Среднее</th></tr>${card.groups.map(group => `<tr><td>${escapeHtml(group.label)}</td><td>${group.n}</td><td>${analysisNumber(group.mean)}</td></tr>`).join("")}</table></details>`;
+    const effective = card.groups.some(group => group.effective_base != null);
+    detail = `<details class="analysis-detail"><summary>Средние по группам</summary><table><tr><th>Группа</th><th>N</th>${effective ? "<th>Эфф. база</th>" : ""}<th>Среднее</th></tr>${card.groups.map(group => `<tr><td>${escapeHtml(group.label)}</td><td>${group.n}</td>${effective ? `<td>${analysisNumber(group.effective_base)}</td>` : ""}<td>${analysisNumber(group.mean)}</td></tr>`).join("")}</table></details>`;
+    // После Welch ANOVA — какие именно пары различаются (Games–Howell).
+    if (card.posthoc?.length) {
+      detail += `<details class="analysis-detail analysis-posthoc" open><summary>Какие группы различаются · Games–Howell</summary><table><tr><th>Пара</th><th>Разница</th><th>p</th></tr>${card.posthoc.map(pair => `<tr class="${pair.significant ? "significant" : ""}"><td>${escapeHtml(pair.a)} — ${escapeHtml(pair.b)}</td><td>${analysisNumber(pair.difference)}</td><td>${analysisP(pair.p_value)}${pair.significant ? " ✓" : ""}</td></tr>`).join("")}</table></details>`;
+    }
   } else if (card.table?.length) {
     detail = `<details class="analysis-detail"><summary>Таблица сопряжённости</summary><table><tr><th></th>${card.columns.map(label => `<th>${escapeHtml(label)}</th>`).join("")}</tr>${card.table.map((row, index) => `<tr><td>${escapeHtml(card.rows[index])}</td>${row.map(value => `<td>${value}</td>`).join("")}</tr>`).join("")}</table></details>`;
   }

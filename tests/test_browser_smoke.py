@@ -1273,6 +1273,41 @@ def test_analysis_card_shows_the_test_chosen_by_types(
     expect(page.locator("#variable-body")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
 
 
+def test_anova_card_lists_the_pairs_that_differ(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """После Welch ANOVA карточка разбирает пары групп по Games–Howell (PQ.10)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    project_id = page.url.split("#/projects/")[1].split("/")[0]
+    created = page.request.post(
+        f"{live_server}/api/projects/{project_id}/recodings",
+        data={
+            "code": "AGE3",
+            "name": "Возраст, три группы",
+            "source_variable": "AGE",
+            "categories": [
+                {"label": "18–32", "lower": 0, "upper": 32},
+                {"label": "33–47", "lower": 33, "upper": 47},
+                {"label": "48+", "lower": 48, "upper": 120},
+            ],
+        },
+    )
+    assert created.ok
+    recoding_id = created.json()["configuration"]["recodings"][0]["id"]
+    page.reload()
+    expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
+
+    page.click(".tabs button[data-view='analysis']")
+    page.select_option("#analysis-a", f"recoding:{recoding_id}")
+    page.select_option("#analysis-b", "question:SCORE")
+    page.click("#add-analysis-card")
+    card = page.locator("#analysis-cards .analysis-card").first
+    expect(card).to_contain_text("Welch ANOVA", timeout=UI_TIMEOUT)
+    expect(card.locator(".analysis-posthoc")).to_contain_text("18–32 — 33–47")
+
+
 def test_open_answers_are_coded_by_query_and_by_hand(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

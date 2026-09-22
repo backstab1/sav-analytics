@@ -7,7 +7,7 @@ from statistics import NormalDist
 from typing import Literal
 
 import numpy as np
-from scipy.stats import chi2
+from scipy.stats import chi2, studentized_range
 from scipy.stats import f as fisher_f
 from scipy.stats import t as student_t
 
@@ -812,7 +812,58 @@ def welch_anova(
         )
     counts = np.array(bases, dtype=float)
     means = np.array([sample.mean() for sample in samples])
-    groups_count = len(samples)
+    return _welch_anova_result(counts, means, variances, confidence_level, bases)
+
+
+def weighted_welch_anova(
+    groups: Iterable[Iterable[float]],
+    group_weights: Iterable[Iterable[float]],
+    *,
+    confidence_level: float,
+    minimum_base: int,
+) -> OverallTestResult:
+    """Welch ANOVA на весах: размер группы — её эффективная база Киша.
+
+    То же приближение, что у взвешенного Welch t-test (инвариант 4):
+    взвешенные среднее и дисперсия, а вместо числа наблюдений — `n_eff`.
+    Порог базы проверяется и по невзвешенной, и по эффективной базе.
+    """
+    prepared = [
+        _weighted_numeric_sample(values, weights)
+        for values, weights in zip(groups, group_weights, strict=True)
+    ]
+    bases = tuple(len(sample) for sample, _ in prepared)
+    effective = np.array([effective_sample_size(weights) for _, weights in prepared])
+    if any(base < minimum_base for base in bases) or np.any(effective < minimum_base):
+        return skipped_overall(
+            WELCH_ANOVA, confidence_level, bases, f"База колонки меньше {minimum_base}."
+        )
+    if len(prepared) < 2 or np.any(effective <= 1):
+        return skipped_overall(
+            WELCH_ANOVA, confidence_level, bases, "Нужны хотя бы две колонки по два значения."
+        )
+    means = np.array([np.average(sample, weights=weights) for sample, weights in prepared])
+    variances = np.array(
+        [
+            _weighted_variance(sample, weights, float(mean))
+            for (sample, weights), mean in zip(prepared, means, strict=True)
+        ]
+    )
+    if np.any(variances <= 0):
+        return skipped_overall(
+            WELCH_ANOVA, confidence_level, bases, "В колонке нет разброса значений."
+        )
+    return _welch_anova_result(effective, means, variances, confidence_level, bases)
+
+
+def _welch_anova_result(
+    counts: np.ndarray,
+    means: np.ndarray,
+    variances: np.ndarray,
+    confidence_level: float,
+    bases: tuple[int, ...],
+) -> OverallTestResult:
+    groups_count = len(counts)
     weights = counts / variances
     weight_sum = weights.sum()
     weighted_mean = float((weights * means).sum() / weight_sum)
@@ -835,3 +886,103 @@ def welch_anova(
         bases=bases,
     )
 
+
+
+@dataclass(frozen=True)
+class PairwiseMeanDifference:
+    """Одна пара групп апостериорного теста Games–Howell."""
+
+    first: int
+    second: int
+    difference: float
+    statistic: float
+    degrees_of_freedom: float
+    p_value: float
+
+
+def games_howell(
+    counts: Iterable[float], means: Iterable[float], variances: Iterable[float]
+) -> list[PairwiseMeanDifference]:
+    """Games–Howell: какие именно пары групп различаются после Welch ANOVA.
+
+    Как Welch, не предполагает равных дисперсий: у каждой пары своя ошибка
+    `√(s²ᵢ/nᵢ + s²ⱼ/nⱼ)` и степени свободы Уэлча–Саттертуэйта. Семейство —
+    все пары этих групп: p-value берётся из распределения стьюдентизированного
+    размаха для `k` групп, поэтому отдельная поправка на множественность не
+    нужна. При двух группах p-value совпадает с Welch t-test. На весах сюда
+    передаются эффективные базы и взвешенные дисперсии.
+    """
+    sizes = np.asarray(list(counts), dtype=float)
+    centres = np.asarray(list(means), dtype=float)
+    spreads = np.asarray(list(variances), dtype=float)
+    groups_count = len(sizes)
+    pairs = []
+    for first in range(groups_count):
+        for second in range(first + 1, groups_count):
+            terms = spreads[first] / sizes[first], spreads[second] / sizes[second]
+            standard_error = math.sqrt(terms[0] + terms[1])
+            difference = float(centres[first] - centres[second])
+            statistic = difference / standard_error if standard_error else 0.0
+            degrees = (terms[0] + terms[1]) ** 2 / (
+                terms[0] ** 2 / (sizes[first] - 1) + terms[1] ** 2 / (sizes[second] - 1)
+            )
+            p_value = float(
+                studentized_range.sf(abs(statistic) * math.sqrt(2), groups_count, degrees)
+            )
+            pairs.append(
+                PairwiseMeanDifference(
+                    first=first,
+                    second=second,
+                    difference=difference,
+                    statistic=statistic,
+                    degrees_of_freedom=float(degrees),
+                    p_value=min(1.0, p_value),
+                )
+            )
+    return pairs
+
+
+def weighted_correlation(
+    x: np.ndarray, y: np.ndarray, weights: np.ndarray, *, ranks: bool = False
+) -> tuple[float, float, float]:
+    """Взвешенная корреляция и её приближённый p-value через `n_eff`.
+
+    Пирсон — через взвешенную ковариацию; Спирмен (`ranks=True`) — Пирсон
+    взвешенных рангов, где ранг значения — середина его накопленного веса.
+    p-value — по `t = r·√((n_eff − 2)/(1 − r²))` с `n_eff − 2` степенями
+    свободы (`requirements.md` §11). Возвращает r, p-value и `n_eff`.
+    """
+    if ranks:
+        x = _weighted_ranks(x, weights)
+        y = _weighted_ranks(y, weights)
+    total = weights.sum()
+    mean_x = float((weights * x).sum() / total)
+    mean_y = float((weights * y).sum() / total)
+    covariance = float((weights * (x - mean_x) * (y - mean_y)).sum())
+    spread = math.sqrt(
+        float((weights * (x - mean_x) ** 2).sum()) * float((weights * (y - mean_y) ** 2).sum())
+    )
+    r = covariance / spread if spread else 0.0
+    r = max(-1.0, min(1.0, r))
+    effective = effective_sample_size(weights)
+    if effective <= 2 or abs(r) >= 1:
+        return r, 0.0 if abs(r) >= 1 else 1.0, effective
+    statistic = r * math.sqrt((effective - 2) / (1 - r**2))
+    return r, float(2 * student_t.sf(abs(statistic), effective - 2)), effective
+
+
+def _weighted_ranks(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    order = np.argsort(values, kind="mergesort")
+    ranks = np.empty(len(values), dtype=float)
+    position = 0
+    cumulative = 0.0
+    while position < len(order):
+        end = position
+        while end + 1 < len(order) and values[order[end + 1]] == values[order[position]]:
+            end += 1
+        tied = order[position : end + 1]
+        tied_weight = float(weights[tied].sum())
+        ranks[tied] = cumulative + (tied_weight + 1) / 2
+        cumulative += tied_weight
+        position = end + 1
+    return ranks
