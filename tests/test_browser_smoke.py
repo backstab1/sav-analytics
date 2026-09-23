@@ -662,20 +662,12 @@ def test_category_groups_are_built_by_moving_answers(
     groups.nth(0).locator(".zone-move").click()
     expect(groups.nth(0).locator(".category-zone-count")).to_contain_text("160")
 
-    # Мышью: ответ перетаскивается в другую группу. Жест HTML5 drag-and-drop
-    # в Playwright под нагрузкой полного прогона изредка не доходит до drop
-    # (в дневнике 18 сентября — «нестабилен, причина не найдена»), поэтому
-    # жест повторяется; результат проверяется тем же ожиданием.
-    target = groups.nth(1).locator(".value-chip", has_text="Вторая")
-    for _ in range(3):
-        pool.locator(".value-chip", has_text="Вторая").drag_to(
-            groups.nth(1).locator(".value-chips")
-        )
-        try:
-            expect(target).to_have_count(1, timeout=3_000)
-            break
-        except AssertionError:
-            continue
+    # Мышью: ответ перетаскивается в другую группу. Цель заранее выводится в
+    # видимую часть панели: иначе Playwright прокручивает панель посреди жеста,
+    # и Chromium теряет drop (так тест падал в CI, где вторая группа стояла
+    # на три пикселя ниже края панели).
+    groups.nth(1).evaluate("element => element.scrollIntoView({ block: 'end' })")
+    pool.locator(".value-chip", has_text="Вторая").drag_to(groups.nth(1).locator(".value-chips"))
     expect(groups.nth(1).locator(".value-chip")).to_contain_text("Вторая", timeout=UI_TIMEOUT)
     expect(groups.nth(1).locator(".category-zone-count")).to_contain_text("80")
     expect(pool).to_contain_text("все ответы разложены")
