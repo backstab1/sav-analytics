@@ -387,3 +387,102 @@ async function deleteWeight() {
     showError(errorBox, error);
   }
 }
+
+/* ---------------- Кнопки и поля редактора ---------------- */
+
+document.querySelector("#close-weight-editor").addEventListener("click", () => {
+  if (confirmDiscard(weightEditor)) closeWeight();
+});
+document.querySelector("#add-weight-dimension").addEventListener("click", () => {
+  addWeightDimension();
+  if (weightMethod() === "cells") renderWeightCells();
+});
+document.querySelector("#delete-weight").addEventListener("click", (...args) => deleteWeight(...args));
+document.querySelector("#refresh-weight-preview").addEventListener("click", (...args) => loadWeightPreview(...args));
+document.querySelector("#weight-trimming").addEventListener("change", (...args) => renderWeightTrimming(...args));
+
+/* ---------------- Измерения и цели ---------------- */
+
+document.querySelector("#weight-dimension-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-weight-dimension]");
+  if (!button) return;
+  button.closest(".weight-dimension").remove();
+  if (weightMethod() === "cells") renderWeightCells();
+});
+document.querySelector("#weight-dimension-list").addEventListener("change", event => {
+  if (event.target.matches(".weight-dimension-source")) {
+    renderWeightTargets(event.target.closest(".weight-dimension"));
+    if (weightMethod() === "cells") renderWeightCells();
+  }
+});
+document.querySelector("#weight-method").addEventListener("change", () => renderWeightMethod());
+document.querySelector("#weight-template").addEventListener("click", () => { void downloadWeightTemplate(); });
+document.querySelector("#weight-targets-file").addEventListener("change", event => {
+  const [file] = event.target.files;
+  event.target.value = "";
+  if (file) void importWeightTargets(file);
+});
+document.querySelector("#weight-cell-list").addEventListener("input", () => updateWeightCellsStatus());
+document.querySelector("#weight-dimension-list").addEventListener("input", event => {
+  if (event.target.matches(".weight-target input")) {
+    updateWeightDimensionStatus(event.target.closest(".weight-dimension"));
+  }
+});
+
+/* ---------------- Сохранение ---------------- */
+
+document.querySelector("#weight-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-weight");
+  const weightError = document.querySelector("#weight-error");
+  weightError.hidden = true;
+  let dimensions;
+  try {
+    dimensions = collectWeightDimensions();
+  } catch (error) {
+    showError(weightError, error);
+    return;
+  }
+  const method = weightMethod();
+  let cells = [];
+  try {
+    if (method === "cells") cells = collectWeightCells();
+  } catch (error) {
+    showError(weightError, error);
+    return;
+  }
+  const trimming = document.querySelector("#weight-trimming").checked;
+  const payload = {
+    name: document.querySelector("#weight-name").value.trim(),
+    method,
+    dimensions,
+    cells,
+    lower_bound: trimming ? Number(document.querySelector("#weight-lower").value) : null,
+    upper_bound: trimming ? Number(document.querySelector("#weight-upper").value) : null,
+    tolerance: 0.001,
+    maximum_iterations: 500,
+  };
+  setBusy(saveButton, true, "Рассчитываем…");
+  try {
+    const url = currentWeightId
+      ? `/api/projects/${currentProject.id}/weights/${currentWeightId}`
+      : `/api/projects/${currentProject.id}/weights`;
+    currentProject = await api(url, {
+      method: currentWeightId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentWeightId) {
+      currentWeightId = configuredWeights().find(item => item.name === payload.name)?.id;
+    }
+    markInspectorClean(weightEditor);
+    renderProject();
+    openWeight(currentWeightId);
+    await loadWeightPreview();
+    showToast("Вес рассчитан и сохранён");
+  } catch (error) {
+    showError(weightError, error);
+  } finally {
+    setBusy(saveButton, false, "Рассчитать и сохранить");
+  }
+});

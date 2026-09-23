@@ -201,3 +201,148 @@ async function deleteBanner() {
     showError(errorBox, error);
   }
 }
+
+/* ---------------- Кнопки редактора ---------------- */
+
+document.querySelector("#close-banner-editor").addEventListener("click", () => closeBanner());
+document.querySelector("#add-banner-block").addEventListener("click", () => {
+  addBannerBlock();
+  setBannerFormDirty(true);
+});
+document.querySelector("#delete-banner").addEventListener("click", (...args) => deleteBanner(...args));
+document.querySelector("#refresh-banner-preview").addEventListener("click", (...args) => loadBannerPreview(...args));
+
+/* ---------------- Блоки и отметка изменений ---------------- */
+
+document.querySelector("#banner-block-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-banner-block]");
+  if (button) {
+    button.closest(".banner-block").remove();
+    setBannerFormDirty(true);
+  }
+});
+
+const bannerForm = document.querySelector("#banner-form");
+bannerForm.addEventListener("input", () => setBannerFormDirty(true));
+bannerForm.addEventListener("change", () => setBannerFormDirty(true));
+
+/* ---------------- Сохранение ---------------- */
+
+document.querySelector("#banner-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-banner");
+  const bannerError = document.querySelector("#banner-error");
+  bannerError.hidden = true;
+  let blocks;
+  try {
+    blocks = collectBannerBlocks();
+  } catch (error) {
+    showError(bannerError, error);
+    return;
+  }
+  const payload = {
+    name: document.querySelector("#banner-name").value.trim(),
+    blocks,
+  };
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    const url = currentBannerId
+      ? `/api/projects/${currentProject.id}/banners/${currentBannerId}`
+      : `/api/projects/${currentProject.id}/banners`;
+    currentProject = await api(url, {
+      method: currentBannerId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentBannerId) {
+      currentBannerId = configuredBanners().at(-1)?.id;
+    }
+    markInspectorClean(bannerEditor);
+    renderProject();
+    openBanner(currentBannerId);
+    await loadBannerPreview();
+    showToast("Баннер сохранён");
+  } catch (error) {
+    showError(bannerError, error);
+  } finally {
+    setBusy(saveButton, false, "Сохранить");
+  }
+});
+
+reportSettingsForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-report-settings");
+  const settingsError = document.querySelector("#report-settings-error");
+  const weightSelection = document.querySelector("#report-weight").value;
+  settingsError.hidden = true;
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    await patchReportSettings({
+      weight_variable: weightSelection.startsWith("ready:") ? weightSelection.slice(6) : null,
+      calculated_weight_id: weightSelection.startsWith("calculated:")
+        ? weightSelection.slice(11)
+        : null,
+    });
+    closeSheet();
+    showToast("Настройки отчёта сохранены");
+  } catch (error) {
+    showError(settingsError, error);
+  } finally {
+    setBusy(saveButton, false, "Применить вес");
+  }
+});
+
+/* ---------------- Открытие, закрытие и блоки ---------------- */
+
+function openBanner(bannerId = null) {
+  if (!confirmDiscard(openInspectorPanel())) return;
+  currentBannerId = bannerId;
+  currentQuestionCode = null;
+  currentRecodingId = null;
+  showInspector(bannerEditor);
+  const banner = bannerId ? configuredBanners().find(item => item.id === bannerId) : null;
+  setHeadingText(document.querySelector("#banner-editor-title"), banner?.name || "Новый баннер");
+  document.querySelector("#banner-name").value = banner?.name || `Баннер ${configuredBanners().length + 1}`;
+  const list = document.querySelector("#banner-block-list");
+  list.innerHTML = "";
+  if (banner) banner.blocks.forEach(block => addBannerBlock(block));
+  else addBannerBlock();
+  document.querySelector("#delete-banner").hidden = !banner;
+  document.querySelector("#banner-error").hidden = true;
+  document.querySelector("#banner-preview-count").textContent = "";
+  document.querySelector("#banner-preview").innerHTML = banner
+    ? '<p class="muted">Считаем…</p>'
+    : '<p class="muted">Сохраните баннер для расчёта.</p>';
+  setBannerFormDirty(false);
+  renderTable();
+  if (banner) loadBannerPreview();
+}
+
+function closeBanner() {
+  if (bannerFormDirty && !confirm("Есть несохранённые изменения. Закрыть редактор без сохранения?")) return;
+  setBannerFormDirty(false);
+  bannerEditor.hidden = true;
+  currentBannerId = null;
+  renderTable();
+}
+
+function setBannerFormDirty(dirty) {
+  bannerFormDirty = dirty;
+  const warning = document.querySelector("#banner-unsaved-warning");
+  warning.hidden = !dirty;
+  document.querySelector("#save-banner").classList.toggle("has-unsaved-changes", dirty);
+}
+
+function addBannerBlock(block = {}) {
+  const first = block.sources?.[0];
+  const second = block.sources?.[1];
+  const element = document.createElement("div");
+  element.className = "banner-block block-row";
+  element.innerHTML = `<div class="banner-block-head block-row-head"><input class="banner-block-label" placeholder="Название блока — необязательно" value="${escapeAttribute(block.label || "")}" /><button class="del" type="button" data-remove-banner-block title="Удалить блок" aria-label="Удалить блок">×</button></div><div class="block-lvls"><label>Первый уровень<select class="banner-source-first">${bannerSourceOptions(first, false)}</select></label><label>Второй уровень<select class="banner-source-second">${bannerSourceOptions(second, true)}</select></label></div>
+    <details class="banner-categories" data-level="0"><summary>Категории первого уровня</summary><div class="banner-category-list"></div></details>
+    <details class="banner-categories" data-level="1" ${second ? "" : "hidden"}><summary>Категории второго уровня</summary><div class="banner-category-list"></div></details>`;
+  // Сохранённые настройки категорий живут на блоке, пока список не открыли:
+  // неоткрытый список не должен их терять при сохранении.
+  element.bannerCategories = [first?.categories || null, second?.categories || null];
+  document.querySelector("#banner-block-list").append(element);
+}

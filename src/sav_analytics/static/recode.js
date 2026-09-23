@@ -567,3 +567,193 @@ async function deleteRecoding() {
     showError(recodeError, error);
   }
 }
+
+/* ---------------- Кнопки и форма редактора ---------------- */
+
+document.querySelector("#close-recode-editor").addEventListener("click", () => {
+  if (confirmDiscard(recodeEditor)) closeRecoding();
+});
+document.querySelector("#add-range").addEventListener("click", () => addRangeRow());
+// Заготовка диапазонов по данным: равные по численности группы или интервалы.
+document.querySelector("#suggest-ranges").addEventListener("click", async () => {
+  const note = document.querySelector("#range-suggest-note");
+  const variable = document.querySelector("#recode-source").value;
+  note.hidden = false;
+  if (!variable) {
+    note.textContent = "Сначала выберите исходную переменную.";
+    return;
+  }
+  note.textContent = "Считаем…";
+  try {
+    const suggestion = await api(`/api/projects/${currentProject.id}/recodings/suggest-ranges`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        variable,
+        method: document.querySelector("#range-method").value,
+        groups: Number(document.querySelector("#range-groups").value),
+      }),
+    });
+    const list = document.querySelector("#range-list");
+    list.innerHTML = "";
+    suggestion.categories.forEach(category => addRangeRow(category));
+    const counts = suggestion.categories.map(category => category.count.toLocaleString("ru-RU")).join(" · ");
+    const fewer = suggestion.categories.length < suggestion.requested
+      ? ` Групп ${suggestion.categories.length} вместо ${suggestion.requested}: у многих одинаковые значения.`
+      : "";
+    note.textContent = `Респондентов в группах: ${counts}.${fewer}`;
+    markInspectorDirty(recodeEditor);
+  } catch (error) {
+    note.textContent = error.message;
+  }
+});
+document.querySelector("#add-category-group").addEventListener("click", () => {
+  const count = document.querySelectorAll("#category-group-list .category-group").length;
+  addCategoryGroup(`Группа ${count + 1}`);
+  refreshCategoryZones();
+});
+document.querySelector("#recode-mode").addEventListener("change", () => {
+  fillRecodeSources();
+  renderRecodeMode();
+  if (document.querySelector("#recode-mode").value === "categories") void renderCategoryEditor(defaultCategoryGroups());
+  if (document.querySelector("#recode-mode").value === "conditions") renderConditionCategories(defaultConditionCategories());
+});
+document.querySelector("#recode-source").addEventListener("change", () => {
+  if (document.querySelector("#recode-mode").value === "categories") void renderCategoryEditor(defaultCategoryGroups());
+});
+document.querySelector("#refresh-recode-preview").addEventListener("click", (...args) => loadRecodePreview(...args));
+document.querySelector("#delete-recoding").addEventListener("click", (...args) => deleteRecoding(...args));
+
+/* ---------------- Удаление диапазона и раскладка ответов по группам ---------------- */
+
+document.querySelector("#range-list").addEventListener("click", event => {
+  const button = event.target.closest("button[data-remove-range]");
+  if (button) button.closest(".range-row").remove();
+});
+const categoryEditorElement = document.querySelector("#category-editor");
+categoryEditorElement.addEventListener("click", event => {
+  const remove = event.target.closest("button[data-remove-category-group]");
+  if (remove) {
+    const group = remove.closest(".category-group");
+    const pool = document.querySelector('#category-pool [data-zone="pool"]');
+    if (pool) moveValueChips([...group.querySelectorAll(".value-chip")], pool);
+    group.remove();
+    refreshCategoryZones();
+    return;
+  }
+  const move = event.target.closest(".zone-move");
+  if (move) {
+    moveValueChips([...categoryEditorElement.querySelectorAll('.value-chip[aria-pressed="true"]')], move.closest(".category-zone"));
+    return;
+  }
+  const chip = event.target.closest(".value-chip");
+  if (chip) {
+    chip.setAttribute("aria-pressed", chip.getAttribute("aria-pressed") === "true" ? "false" : "true");
+    refreshCategoryZones();
+  }
+});
+categoryEditorElement.addEventListener("dragstart", event => {
+  const chip = event.target.closest?.(".value-chip");
+  if (!chip) return;
+  // Выбранные ответы тянутся вместе, если среди них тот, за который взялись.
+  const pressed = [...categoryEditorElement.querySelectorAll('.value-chip[aria-pressed="true"]')];
+  draggedValueChips = pressed.includes(chip) ? pressed : [chip];
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", chip.dataset.sourceValue);
+  draggedValueChips.forEach(item => item.classList.add("dragging"));
+});
+categoryEditorElement.addEventListener("dragover", event => {
+  const zone = event.target.closest?.(".category-zone");
+  if (!zone || !draggedValueChips.length) return;
+  event.preventDefault();
+  zone.classList.add("drop-target");
+});
+categoryEditorElement.addEventListener("dragleave", event => {
+  const zone = event.target.closest?.(".category-zone");
+  if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove("drop-target");
+});
+categoryEditorElement.addEventListener("drop", event => {
+  const zone = event.target.closest?.(".category-zone");
+  if (!zone || !draggedValueChips.length) return;
+  event.preventDefault();
+  zone.classList.remove("drop-target");
+  moveValueChips(draggedValueChips, zone);
+});
+categoryEditorElement.addEventListener("dragend", () => {
+  draggedValueChips.forEach(item => item.classList.remove("dragging"));
+  draggedValueChips = [];
+  categoryEditorElement.querySelectorAll(".drop-target").forEach(zone => zone.classList.remove("drop-target"));
+});
+
+/* ---------------- Сохранение ---------------- */
+
+document.querySelector("#recode-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-recoding");
+  const recodeError = document.querySelector("#recode-error");
+  recodeError.hidden = true;
+  let categories;
+  const mode = document.querySelector("#recode-mode").value;
+  let segments = null;
+  try {
+    if (mode === "segments") {
+      segments = collectSegmentDefinition();
+      categories = segments.categories;
+    } else {
+      categories = mode === "ranges"
+        ? collectRanges()
+        : mode === "conditions" ? collectConditionCategories() : collectCategoryGroups();
+    }
+  } catch (error) {
+    showError(recodeError, error);
+    return;
+  }
+  const payload = {
+    mode,
+    code: document.querySelector("#recode-code").value.trim(),
+    name: document.querySelector("#recode-name").value.trim(),
+    source_variable: mode === "conditions" || mode === "segments" ? undefined : document.querySelector("#recode-source").value,
+    categories,
+    ...(segments ? { variables: segments.variables, k: segments.k } : {}),
+  };
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    const url = currentRecodingId
+      ? `/api/projects/${currentProject.id}/recodings/${currentRecodingId}`
+      : `/api/projects/${currentProject.id}/recodings`;
+    const method = currentRecodingId ? "PUT" : "POST";
+    currentProject = await api(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentRecodingId) {
+      currentRecodingId = configuredRecodings().find(item => item.code === payload.code)?.id;
+    }
+    recodePreviewCache.delete(recodePreviewKey(currentRecodingId));
+    markInspectorClean(recodeEditor);
+    renderProject();
+    openRecoding(currentRecodingId);
+    await loadRecodePreview();
+    showToast("Перекодировка сохранена");
+  } catch (error) {
+    showError(recodeError, error);
+  } finally {
+    setBusy(saveButton, false, "Сохранить");
+  }
+});
+
+/* ---------------- Ключ кэша предпросмотра ---------------- */
+
+function recodePreviewKey(recodingId) {
+  return `${currentProject?.id || ""}:${recodingId}`;
+}
+
+/* ---------------- Свободный код новой перекодировки ---------------- */
+
+function suggestRecodeCode() {
+  const used = new Set(configuredRecodings().map(item => item.code.toUpperCase()));
+  let index = used.size + 1;
+  while (used.has(`RECODE_${index}`)) index += 1;
+  return `RECODE_${index}`;
+}

@@ -310,3 +310,114 @@ async function copyFilter() {
     setBusy(button, false, "Копия");
   }
 }
+
+/* ---------------- Кнопки редактора ---------------- */
+
+document.querySelector("#close-filter-editor").addEventListener("click", () => {
+  if (confirmDiscard(filterEditor)) closeFilter();
+});
+document.querySelector("#add-filter-condition").addEventListener("click", () => {
+  addFilterCondition();
+  scheduleFilterPreview();
+});
+document.querySelector("#delete-filter").addEventListener("click", (...args) => deleteFilter(...args));
+document.querySelector("#copy-filter").addEventListener("click", (...args) => copyFilter(...args));
+
+/* ---------------- Обработчики конструктора условий ---------------- */
+
+// Редактор условий один на фильтр и на категории логической переменной:
+// те же обработчики навешиваются на оба списка.
+const conditionEditorRoots = [
+  document.querySelector("#filter-condition-list"),
+  document.querySelector("#condition-category-list"),
+];
+conditionEditorRoots.forEach(root => root.addEventListener("click", event => {
+  const join = event.target.closest("button[data-filter-join]");
+  if (join) {
+    const group = join.closest(".filter-group");
+    const operator = group?.querySelector(".filter-group-operator") || document.querySelector("#filter-operator");
+    if (operator.value === join.dataset.filterJoin) return;
+    operator.value = join.dataset.filterJoin;
+    refreshFilterJoins(group?.querySelector(".filter-group-items") || document.querySelector("#filter-condition-list"));
+    scheduleFilterPreview();
+    return;
+  }
+  const removeCondition = event.target.closest("button[data-remove-filter-condition]");
+  if (removeCondition) {
+    const container = removeCondition.closest(".filter-condition").parentElement;
+    removeCondition.closest(".filter-condition").remove();
+    refreshFilterJoins(container);
+    scheduleFilterPreview();
+    return;
+  }
+  const removeGroup = event.target.closest("button[data-remove-filter-group]");
+  if (removeGroup) {
+    const container = removeGroup.closest(".filter-group").parentElement;
+    removeGroup.closest(".filter-group").remove();
+    refreshFilterJoins(container);
+    scheduleFilterPreview();
+    return;
+  }
+  const addNested = event.target.closest("button[data-add-group-condition]");
+  if (addNested) {
+    addFilterCondition({}, addNested.closest(".filter-group").querySelector(".filter-group-items"));
+    scheduleFilterPreview();
+  }
+}));
+conditionEditorRoots.forEach(root => root.addEventListener("change", event => {
+  const condition = event.target.closest(".filter-condition");
+  if (event.target.matches(".filter-source")) void loadFilterConditionSource(condition, {});
+  if (event.target.matches(".filter-operation")) renderFilterConditionValues(condition, filterConditionDraft(condition));
+  if (event.target.matches(".filter-group-operator")) {
+    refreshFilterJoins(event.target.closest(".filter-group").querySelector(".filter-group-items"));
+  }
+}));
+conditionEditorRoots.forEach(root => root.addEventListener("input", event => {
+  if (!event.target.matches(".filter-option-search")) return;
+  const query = event.target.value.trim().toLowerCase();
+  event.target.closest(".filter-values").querySelectorAll(".filter-option").forEach(option => {
+    option.hidden = Boolean(query) && !option.dataset.search.includes(query);
+  });
+}));
+document.querySelector("#filter-form").addEventListener("input", (...args) => scheduleFilterPreview(...args));
+document.querySelector("#filter-form").addEventListener("change", (...args) => scheduleFilterPreview(...args));
+
+/* ---------------- Сохранение ---------------- */
+
+document.querySelector("#filter-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const saveButton = document.querySelector("#save-filter");
+  const filterError = document.querySelector("#filter-error");
+  filterError.hidden = true;
+  let rule;
+  try {
+    rule = collectFilterRule();
+  } catch (error) {
+    showError(filterError, error);
+    return;
+  }
+  const payload = { name: document.querySelector("#filter-name").value.trim(), rule };
+  setBusy(saveButton, true, "Сохраняем…");
+  try {
+    const url = currentFilterId
+      ? `/api/projects/${currentProject.id}/filters/${currentFilterId}`
+      : `/api/projects/${currentProject.id}/filters`;
+    currentProject = await api(url, {
+      method: currentFilterId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!currentFilterId) {
+      currentFilterId = configuredFilters().find(item => item.name === payload.name)?.id;
+    }
+    markInspectorClean(filterEditor);
+    renderProject();
+    openFilter(currentFilterId);
+    await loadFilterPreview();
+    showToast("Правило сохранено");
+  } catch (error) {
+    showError(filterError, error);
+  } finally {
+    setBusy(saveButton, false, "Сохранить");
+  }
+});
