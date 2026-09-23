@@ -26,25 +26,25 @@ from ..statistics import (
 from .data import ReportData
 from .models import ReportError, StatisticalAuditEntry
 from .statistics import (
-    _balance_result,
-    _column_position,
-    _mean_test,
-    _pairwise_balance_entries,
-    _pairwise_mean_entries,
-    _pairwise_proportion_entries,
-    _proportion_test,
-    _record_total_comparison,
-    _record_wave_comparison,
-    _render_audit_entry,
-    _StatisticsAuditWriter,
-    _unweighted_mean_context,
-    _unweighted_mean_test,
-    _unweighted_proportion_context,
-    _unweighted_proportion_test,
-    _wave_mean_test,
-    _wave_proportion_test,
-    _wave_target,
+    StatisticsAuditWriter,
+    balance_result,
     cell_note,
+    column_position,
+    find_wave_target,
+    mean_test,
+    pairwise_balance_entries,
+    pairwise_mean_entries,
+    pairwise_proportion_entries,
+    proportion_test,
+    record_total_comparison,
+    record_wave_comparison,
+    render_audit_entry,
+    unweighted_mean_context,
+    unweighted_mean_test,
+    unweighted_proportion_context,
+    unweighted_proportion_test,
+    wave_mean_test,
+    wave_proportion_test,
 )
 from .styles import (
     BAR,
@@ -57,7 +57,7 @@ from .styles import (
     QUESTION_HEIGHT,
     ROW_HEIGHT,
     ReportFormats,
-    _result_format,
+    result_format,
 )
 
 
@@ -65,7 +65,7 @@ from .styles import (
 class _RowContext:
     """Куда и с какими настройками пишутся строки одного вопроса.
 
-    Собирается один раз на вопрос в :func:`_write_topline` и передаётся вниз
+    Собирается один раз на вопрос в :func:`write_topline` и передаётся вниз
     целиком, вместо того чтобы протаскивать те же восемь значений через
     каждую функцию записи.
     """
@@ -91,7 +91,7 @@ class _RowContext:
         return index in self.separators
 
 
-def _write_topline(
+def write_topline(
     sheet: Any,
     data: ReportData,
     project: dict[str, Any],
@@ -101,7 +101,7 @@ def _write_topline(
     sheet_name: str,
     *,
     valid_denominator: bool,
-    audit_writer: _StatisticsAuditWriter | None = None,
+    audit_writer: StatisticsAuditWriter | None = None,
     advance: Callable[[str], None] | None = None,
     charts: list[tuple[dict[str, Any], list[int]]] | None = None,
 ) -> dict[str, int]:
@@ -125,7 +125,7 @@ def _write_topline(
     else:
         sheet.write(0, 1, caption, formats.meta())
 
-    for start, end, label in _banner_blocks(columns):
+    for start, end, label in banner_blocks(columns):
         if not label:
             continue
         if end > start:
@@ -140,7 +140,7 @@ def _write_topline(
     for index, column in enumerate(columns, start=1):
         separated = index in separators
         sheet.write(2, index, column["label"], formats.column_label(separated=separated))
-        sheet.write(3, index, _excel_column_name(index), formats.column_letter())
+        sheet.write(3, index, excel_column_name(index), formats.column_letter())
         sheet.write_number(
             4, index, column["base"], formats.base(separated=separated, rule=weights is None)
         )
@@ -209,7 +209,7 @@ def _write_topline(
         row += 1
     return positions
 
-def _banner_blocks(
+def banner_blocks(
     columns: list[dict[str, Any]],
 ) -> list[tuple[int, int, str | None]]:
     """Границы блоков баннера как (первая колонка, последняя, подпись).
@@ -227,7 +227,7 @@ def _banner_blocks(
 
 def _block_separators(columns: list[dict[str, Any]]) -> frozenset[int]:
     return frozenset(
-        start for start, _end, _label in _banner_blocks(columns) if start > 1
+        start for start, _end, _label in banner_blocks(columns) if start > 1
     )
 
 def _caption(project: dict[str, Any], data: ReportData) -> str:
@@ -708,7 +708,7 @@ def _write_overall_row(
         return row
     blocks = [
         (start, end, label_text)
-        for start, end, label_text in _banner_blocks(context.columns)
+        for start, end, label_text in banner_blocks(context.columns)
         if start > 1
     ]
     if not blocks:
@@ -748,7 +748,7 @@ def _write_overall_row(
         sheet.write_comment(
             row,
             start,
-            "\n".join(line.strip() for line in _render_audit_entry(entry)),
+            "\n".join(line.strip() for line in render_audit_entry(entry)),
             COMMENT_BOX_DETAILED,
         )
     return row + 1
@@ -783,7 +783,7 @@ def _write_metric_row(
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     weights = statistical_settings["weights"]
     vectorized = (
-        _unweighted_proportion_context(outcome, eligible_mask, columns)
+        unweighted_proportion_context(outcome, eligible_mask, columns)
         if weights is None
         else None
     )
@@ -797,7 +797,7 @@ def _write_metric_row(
         if vectorized is None:
             value = _weighted_ratio(outcome, mask, weights)
             base = int(mask.sum())
-            result = _proportion_test(
+            result = proportion_test(
                 outcome,
                 total_mask,
                 column,
@@ -808,23 +808,23 @@ def _write_metric_row(
         else:
             base = vectorized.bases[position]
             value = _ratio(vectorized.successes[position], base)
-            result = _unweighted_proportion_test(
+            result = unweighted_proportion_test(
                 vectorized,
                 position,
                 column,
                 columns,
                 statistical_settings,
             )
-        total_entry = _record_total_comparison(
+        total_entry = record_total_comparison(
             audit_entries, audit_context, label, column, columns, result
         )
-        wave_target, wave_result = _wave_proportion_test(
+        wave_target, wave_result = wave_proportion_test(
             outcome, column, eligible_mask, columns, statistical_settings
         )
-        wave_entry = _record_wave_comparison(
+        wave_entry = record_wave_comparison(
             audit_entries, audit_context, label, column, columns, wave_target, wave_result
         )
-        pairwise = _pairwise_proportion_entries(
+        pairwise = pairwise_proportion_entries(
             outcome,
             column,
             eligible_mask,
@@ -948,7 +948,7 @@ def _write_numeric_metric(
     pairwise_cache: dict[tuple[int, int], StatisticalTestResult | None] = {}
     weights = statistical_settings["weights"]
     mean_context = (
-        _unweighted_mean_context(series, base_mask, columns)
+        unweighted_mean_context(series, base_mask, columns)
         if metric == "mean" and weights is None
         else None
     )
@@ -978,7 +978,7 @@ def _write_numeric_metric(
         total_entry = None
         if metric == "mean":
             result = (
-                _unweighted_mean_test(
+                unweighted_mean_test(
                     mean_context,
                     index - 1,
                     column,
@@ -986,7 +986,7 @@ def _write_numeric_metric(
                     statistical_settings,
                 )
                 if mean_context is not None
-                else _mean_test(
+                else mean_test(
                     series,
                     columns[0]["mask"],
                     column,
@@ -995,17 +995,17 @@ def _write_numeric_metric(
                     statistical_settings,
                 )
             )
-            total_entry = _record_total_comparison(
+            total_entry = record_total_comparison(
                 audit_entries, audit_context, label, column, columns, result
             )
         wave_target = None
         wave_result = None
         wave_entry = None
         if metric == "mean":
-            wave_target, wave_result = _wave_mean_test(
+            wave_target, wave_result = wave_mean_test(
                 series, column, base_mask, columns, statistical_settings
             )
-            wave_entry = _record_wave_comparison(
+            wave_entry = record_wave_comparison(
                 audit_entries,
                 audit_context,
                 label,
@@ -1020,7 +1020,7 @@ def _write_numeric_metric(
                 row, index, "–", formats.absent(separated=separated, derived=True)
             )
         else:
-            cell_format = _result_format(
+            cell_format = result_format(
                 formats,
                 "mean",
                 len(numeric),
@@ -1032,7 +1032,7 @@ def _write_numeric_metric(
             )
             sheet.write_number(row, index, value, cell_format)
         if metric == "mean":
-            pairwise = _pairwise_mean_entries(
+            pairwise = pairwise_mean_entries(
                 series,
                 column,
                 base_mask,
@@ -1087,7 +1087,7 @@ def _write_balance_metric_row(
         total_result = None
         total_entry = None
         if column.get("compare_to_total"):
-            total_result = _balance_result(
+            total_result = balance_result(
                 scores,
                 current_mask,
                 total_mask & ~column["mask"],
@@ -1096,14 +1096,14 @@ def _write_balance_metric_row(
                 column,
                 method,
             )
-            total_entry = _record_total_comparison(
+            total_entry = record_total_comparison(
                 audit_entries, audit_context, label, column, columns, total_result
             )
-        wave_target = _wave_target(column, columns, settings)
+        wave_target = find_wave_target(column, columns, settings)
         wave_result = None
         wave_entry = None
         if wave_target is not None:
-            wave_result = _balance_result(
+            wave_result = balance_result(
                 scores,
                 current_mask,
                 wave_target["mask"] & eligible_mask,
@@ -1112,7 +1112,7 @@ def _write_balance_metric_row(
                 column,
                 method,
             )
-            wave_entry = _record_wave_comparison(
+            wave_entry = record_wave_comparison(
                 audit_entries,
                 audit_context,
                 label,
@@ -1121,7 +1121,7 @@ def _write_balance_metric_row(
                 wave_target,
                 wave_result,
             )
-        pairwise = _pairwise_balance_entries(
+        pairwise = pairwise_balance_entries(
             scores,
             column,
             eligible_mask,
@@ -1175,7 +1175,7 @@ def _write_row_cells(
                 row, index, "–", context.formats.absent(separated=separated, derived=derived)
             )
         else:
-            cell_format = _result_format(
+            cell_format = result_format(
                 context.formats,
                 family,
                 cell.base,
@@ -1214,7 +1214,7 @@ def _rounding_hides_difference(
             pairs.append((position, 0))
         if cell.wave_target is not None and cell.wave_result is not None:
             if cell.wave_result.significant:
-                pairs.append((position, _column_position(columns, cell.wave_target)))
+                pairs.append((position, column_position(columns, cell.wave_target)))
     return any(
         _shown_equal(cells[left].value, cells[right].value, decimals)
         for left, right in pairs
@@ -1249,7 +1249,7 @@ CHART_SERIES_LIMIT = 12
 CHART_HEIGHT_ROWS = 16
 
 
-def _write_charts(
+def write_charts(
     workbook: Any,
     sheet: Any,
     charts: list[tuple[dict[str, Any], list[int]]],
@@ -1297,7 +1297,7 @@ def _write_charts(
             position += 1
 
 
-def _write_parameters(
+def write_parameters(
     sheet: Any, pairs: list[tuple[str, str]], formats: ReportFormats
 ) -> None:
     """Лист «Параметры»: книга сама говорит, из чего и как собрана.
@@ -1321,7 +1321,7 @@ def _write_parameters(
         sheet.write_string(3 + offset, 1, value, formats.parameter_value())
 
 
-def _write_contents(
+def write_contents(
     sheet: Any,
     project: dict[str, Any],
     questions: list[dict[str, Any]],
@@ -1377,7 +1377,7 @@ def _write_contents(
         row += 1
     sheet.freeze_panes(4, 0)
 
-def _excel_column_name(index: int) -> str:
+def excel_column_name(index: int) -> str:
     result = ""
     value = index
     while value:

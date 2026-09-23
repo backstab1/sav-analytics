@@ -1,7 +1,7 @@
 """Живая таблица: те же строки, что пишет книга, без файла Excel.
 
 Экран «Таблицы» не получает своих формул. Таблица собирается функцией
-:func:`_write_topline` — той же, что пишет лист книги, — только вместо листа
+:func:`write_topline` — той же, что пишет лист книги, — только вместо листа
 xlsxwriter ей передаётся лист, который запоминает записанное: значение ячейки,
 её формат и примечание. Цвет значимости, стрелка волны, серая малая база и
 число знаков читаются из того же формата, что уходит в Excel. Поэтому число
@@ -26,9 +26,9 @@ from ..multiple_response import is_multiple, response_options
 from ..report_settings import resolved_report_settings
 from .builder import build_topline_artifacts
 from .data import prepare_report_data
-from .excel_layout import _banner_blocks, _excel_column_name, _write_topline
+from .excel_layout import banner_blocks, excel_column_name, write_topline
 from .models import ReportError, StatisticalAuditEntry
-from .styles import DOWN, FAINT, NEGATIVE, POSITIVE, UP, _formats
+from .styles import DOWN, FAINT, NEGATIVE, POSITIVE, UP, report_formats
 
 #: Типы, которые умеет раскладывать лист книги. Открытый текст и технические
 #: переменные в отчёт не входят, и таблица их тоже не строит.
@@ -118,12 +118,12 @@ def build_live_table(
     valid = sheet == "filter"
     chosen = data.filter_questions if valid else data.questions
     entries: list[StatisticalAuditEntry] = []
-    positions = _write_topline(
+    positions = write_topline(
         recording,
         data,
         live,
         chosen,
-        _formats(_Workbook(), data.statistical_settings),
+        report_formats(_Workbook(), data.statistical_settings),
         entries,
         "topline_filter" if valid else "topline_main",
         valid_denominator=valid,
@@ -145,7 +145,7 @@ def build_live_table(
         "columns": _columns(recording, data, header_rows),
         "blocks": [
             {"label": label, "first": start - 1, "last": end - 1}
-            for start, end, label in _banner_blocks(data.columns)
+            for start, end, label in banner_blocks(data.columns)
             if label
         ],
         "empty_columns": data.empty_columns,
@@ -378,7 +378,7 @@ def _columns(
         weighted = recording.cells.get((5, index)) if header_rows == 6 else None
         result.append(
             {
-                "letter": _excel_column_name(index),
+                "letter": excel_column_name(index),
                 "label": column["label"],
                 "base": base,
                 "weighted_base": int(weighted[0]) if weighted else None,

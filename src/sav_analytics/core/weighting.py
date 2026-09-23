@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 import xlsxwriter
 
-from .banner import BannerError, _source_categories, _source_columns
+from .banner import BannerError, source_categories, source_columns
 from .formulas import read_project_frame
 from .statistics import effective_sample_size
 
@@ -102,7 +102,7 @@ def weight_columns(definition: dict[str, Any], project: dict[str, Any]) -> list[
         if dimension.get("recoding_id"):
             source = {"kind": "recoding", "ref": dimension["recoding_id"]}
             try:
-                columns.extend(_source_columns(source, project))
+                columns.extend(source_columns(source, project))
             except BannerError as exc:
                 raise WeightingError(str(exc)) from exc
         else:
@@ -118,7 +118,7 @@ def _with_recoding_dimensions(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Измерение по сохранённой перекодировке — служебным столбцом её категорий.
 
-    Категории перекодировки берутся тем же `_source_categories`, что у колонок
+    Категории перекодировки берутся тем же `source_categories`, что у колонок
     баннера, поэтому группа «18–34» в весе и в баннере — один и тот же набор
     респондентов. Цель категории сопоставляется по её номеру в перекодировке.
     """
@@ -135,7 +135,7 @@ def _with_recoding_dimensions(
             prepared.append(dimension)
             continue
         try:
-            resolved = _source_categories({"kind": "recoding", "ref": recoding_id}, project, frame)
+            resolved = source_categories({"kind": "recoding", "ref": recoding_id}, project, frame)
         except BannerError as exc:
             raise WeightingError(str(exc)) from exc
         series = pd.Series(float("nan"), index=frame.index)

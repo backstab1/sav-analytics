@@ -18,7 +18,7 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
-from .banner import BannerError, _source_categories
+from .banner import BannerError, source_categories
 from .formulas import read_project_frame
 from .sav_writing import SavWriteMismatchError, long_text_columns, verify_written_sav
 from .weighting import WeightingError, calculate_weight, weight_method_label
@@ -82,7 +82,7 @@ def export_project_sav(
 
     for recoding in configuration.get("recodings", []):
         try:
-            resolved = _source_categories(
+            resolved = source_categories(
                 {"kind": "recoding", "ref": recoding["id"]}, project, computed
             )
         except BannerError as exc:

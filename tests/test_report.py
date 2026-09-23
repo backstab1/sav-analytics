@@ -8,18 +8,16 @@ import pandas as pd
 import pyreadstat
 import pytest
 
-from sav_analytics.core.report import (
-    ReportError,
-    _mean_test,
-    _proportion_test,
-    _unweighted_mean_context,
-    _unweighted_mean_test,
-    _unweighted_proportion_context,
-    _unweighted_proportion_test,
-    build_statistics_txt,
-    build_topline_xlsx,
-)
+from sav_analytics.core.report import ReportError, build_statistics_txt, build_topline_xlsx
 from sav_analytics.core.reporting.data import prepare_report_data
+from sav_analytics.core.reporting.statistics import (
+    mean_test,
+    proportion_test,
+    unweighted_mean_context,
+    unweighted_mean_test,
+    unweighted_proportion_context,
+    unweighted_proportion_test,
+)
 from sav_analytics.core.sav_reader import inspect_sav
 from tests.test_sav_reader import write_counted_value_fixture, write_fixture
 
@@ -57,11 +55,11 @@ def test_vectorized_unweighted_proportion_matches_legacy_path_exactly() -> None:
             "bonferroni": True,
             "minimum_base": 30,
         }
-        legacy = _proportion_test(
+        legacy = proportion_test(
             outcome, total, columns[1], eligible, columns, settings
         )
-        context = _unweighted_proportion_context(outcome, eligible, columns)
-        vectorized = _unweighted_proportion_test(
+        context = unweighted_proportion_context(outcome, eligible, columns)
+        vectorized = unweighted_proportion_test(
             context, 1, columns[1], columns, settings
         )
         assert vectorized == legacy
@@ -85,11 +83,11 @@ def test_vectorized_unweighted_mean_matches_legacy_path_exactly() -> None:
             "bonferroni": True,
             "minimum_base": 30,
         }
-        legacy = _mean_test(
+        legacy = mean_test(
             values, total, columns[1], base, columns, settings
         )
-        context = _unweighted_mean_context(values, base, columns)
-        vectorized = _unweighted_mean_test(context, 1, columns[1], columns, settings)
+        context = unweighted_mean_context(values, base, columns)
+        vectorized = unweighted_mean_test(context, 1, columns[1], columns, settings)
         assert vectorized == legacy
 
 

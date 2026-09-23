@@ -136,7 +136,7 @@ def prepare_report_data(
         for question in questions
         if question["missing_count"] > 0 or not_applicable_values(question)
     ]
-    weights, weight_label = _report_weights(
+    weights, weight_label = report_weights(
         frame,
         report_settings.get("weight_variable"),
         report_settings.get("calculated_weight_id"),
@@ -188,7 +188,7 @@ def _find_by_id(items: list[dict[str, Any]], identifier: str, label: str) -> dic
         raise ReportError(f"{label} не найден.")
     return found
 
-def _report_weights(
+def report_weights(
     frame: pd.DataFrame,
     variable: str | None,
     calculated_weight_id: str | None,

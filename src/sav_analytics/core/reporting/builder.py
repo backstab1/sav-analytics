@@ -10,11 +10,11 @@ import xlsxwriter
 
 from .correlations import correlation_matrix, write_correlations
 from .data import prepare_report_data
-from .excel_layout import _write_charts, _write_contents, _write_parameters, _write_topline
+from .excel_layout import write_charts, write_contents, write_parameters, write_topline
 from .models import StatisticalAuditEntry, ToplineArtifacts
 from .parameters import report_parameters
-from .statistics import _StatisticsAuditWriter
-from .styles import _formats
+from .statistics import StatisticsAuditWriter
+from .styles import report_formats
 
 
 def build_topline_xlsx(path: str | Path, project: dict[str, Any]) -> bytes:
@@ -52,10 +52,10 @@ def build_topline_artifacts(
             "author": "sav-analytics",
         }
     )
-    formats = _formats(workbook, data.statistical_settings)
+    formats = report_formats(workbook, data.statistical_settings)
     audit_entries: list[StatisticalAuditEntry] = []
     statistics_buffer = StringIO() if statistics_stream is None else statistics_stream
-    audit_writer = _StatisticsAuditWriter(
+    audit_writer = StatisticsAuditWriter(
         statistics_buffer,
         project,
         data.active_banner,
@@ -73,7 +73,7 @@ def build_topline_artifacts(
     show_correlations = bool(data.statistical_settings.get("correlations"))
     correlation_sheet = workbook.add_worksheet("Correlations") if show_correlations else None
     chart_rows: list[tuple[dict[str, Any], list[int]]] = []
-    main_rows = _write_topline(
+    main_rows = write_topline(
         main,
         data,
         project,
@@ -86,7 +86,7 @@ def build_topline_artifacts(
         advance=advance,
         charts=chart_rows if show_charts else None,
     )
-    filter_rows = _write_topline(
+    filter_rows = write_topline(
         filtered,
         data,
         project,
@@ -115,20 +115,20 @@ def build_topline_artifacts(
                 "overall_tests": False,
             },
         )
-        _write_topline(
+        write_topline(
             counts_sheet,
             counts_data,
             project,
             data.questions,
-            _formats(workbook, counts_data.statistical_settings),
+            report_formats(workbook, counts_data.statistical_settings),
             [],
             "Счётчики",
             valid_denominator=False,
         )
-    _write_contents(contents, project, data.questions, main_rows, filter_rows, formats)
-    _write_parameters(parameters, report_parameters(project, data), formats)
+    write_contents(contents, project, data.questions, main_rows, filter_rows, formats)
+    write_parameters(parameters, report_parameters(project, data), formats)
     if chart_sheet is not None:
-        _write_charts(workbook, chart_sheet, chart_rows, data.columns, formats)
+        write_charts(workbook, chart_sheet, chart_rows, data.columns, formats)
     if correlation_sheet is not None:
         write_correlations(correlation_sheet, correlation_matrix(data, project), formats)
     workbook.close()

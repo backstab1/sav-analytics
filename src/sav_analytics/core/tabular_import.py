@@ -57,7 +57,7 @@ def is_tabular(filename: str) -> bool:
 
 
 def convert_to_sav(source: Path, target: Path) -> None:
-    frame = _read_table(source)
+    frame = read_table(source)
     if frame.empty or not len(frame.columns):
         raise TabularImportError("В таблице нет строк с данными.")
     names, labels = _variable_names(list(frame.columns))
@@ -105,7 +105,7 @@ def convert_to_sav(source: Path, target: Path) -> None:
         ) from exc
 
 
-def _read_table(source: Path) -> pd.DataFrame:
+def read_table(source: Path) -> pd.DataFrame:
     if source.suffix.lower() == ".xlsx":
         return _read_xlsx(source)
     separator = "\t" if source.suffix.lower() == ".tsv" else None

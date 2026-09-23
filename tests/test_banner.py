@@ -224,7 +224,7 @@ def test_wave_order_and_selection_follow_the_banner_categories(tmp_path: Path) -
     """
     from sav_analytics.core.banner import build_banner_columns
     from sav_analytics.core.formulas import read_project_frame
-    from sav_analytics.core.reporting.statistics import _wave_target
+    from sav_analytics.core.reporting.statistics import find_wave_target
 
     source = tmp_path / "fixture.sav"
     write_fixture(source)
@@ -251,10 +251,10 @@ def test_wave_order_and_selection_follow_the_banner_categories(tmp_path: Path) -
 
     columns = build_banner_columns(frame, definition, project)
     assert [column["wave_value"] for column in columns[1:]] == [2.0, 1.0]
-    target = _wave_target(columns[2], columns, definition)
+    target = find_wave_target(columns[2], columns, definition)
     assert target is columns[1]
 
     definition["blocks"][0]["sources"][0]["categories"][0]["hidden"] = True
     columns = build_banner_columns(frame, definition, project)
     assert [column["wave_value"] for column in columns[1:]] == [1.0]
-    assert _wave_target(columns[1], columns, definition) is None
+    assert find_wave_target(columns[1], columns, definition) is None

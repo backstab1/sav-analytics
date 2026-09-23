@@ -2,7 +2,7 @@
 
 До этого модуля готовым весом становилась любая строго положительная числовая
 колонка: `validate_report_settings` проверял только существование переменной в
-SAV, а `_report_weights` — числовой тип, конечность и положительность. Роль
+SAV, а `report_weights` — числовой тип, конечность и положительность. Роль
 переменной не проверял никто, поэтому `ID` сохранялся весом, проходил preflight
 без единого замечания и давал математически валидный отчёт, внешне неотличимый
 от правильного.
@@ -219,20 +219,20 @@ def assess_ready_weight(
             WeightProblem(
                 "WEIGHT_EXTREME_VALUES",
                 f"У {diagnostics.extreme_count} респондентов вес отличается от среднего "
-                f"более чем в {_number(EXTREME_WEIGHT_RATIO)} раз — это "
-                f"{_number(diagnostics.extreme_share_percent)}% при пороге "
-                f"{_number(EXTREME_SHARE_LIMIT * 100)}%. "
-                f"Разброс {_number(diagnostics.minimum)}…{_number(diagnostics.maximum)} "
-                f"при среднем {_number(diagnostics.mean)} не похож на поправочный вес.",
+                f"более чем в {audit_number(EXTREME_WEIGHT_RATIO)} раз — это "
+                f"{audit_number(diagnostics.extreme_share_percent)}% при пороге "
+                f"{audit_number(EXTREME_SHARE_LIMIT * 100)}%. "
+                f"Разброс {audit_number(diagnostics.minimum)}…{audit_number(diagnostics.maximum)} "
+                f"при среднем {audit_number(diagnostics.mean)} не похож на поправочный вес.",
             )
         )
     if diagnostics.design_effect > DESIGN_EFFECT_LIMIT:
         problems.append(
             WeightProblem(
                 "WEIGHT_DESIGN_EFFECT",
-                f"Design effect {_number(diagnostics.design_effect)} выше порога "
-                f"{_number(DESIGN_EFFECT_LIMIT)}: {diagnostics.count} интервью работают как "
-                f"{_number(diagnostics.effective_base)}.",
+                f"Design effect {audit_number(diagnostics.design_effect)} выше порога "
+                f"{audit_number(DESIGN_EFFECT_LIMIT)}: {diagnostics.count} интервью работают как "
+                f"{audit_number(diagnostics.effective_base)}.",
             )
         )
 
@@ -328,7 +328,7 @@ def _role_title(role: str | None) -> str:
     }.get(role or "", "не задана")
 
 
-def _number(value: float) -> str:
+def audit_number(value: float) -> str:
     text = f"{value:.2f}".rstrip("0").rstrip(".")
     return text.replace(".", ",") if text else "0"
 

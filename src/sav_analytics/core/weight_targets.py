@@ -15,7 +15,7 @@ from typing import IO, Any
 
 import xlsxwriter
 
-from .tabular_import import TabularImportError, _read_table
+from .tabular_import import TabularImportError, read_table
 
 MAX_TEMPLATE_BYTES = 2 * 1024 * 1024
 CELL_KEY = "ячейка"
@@ -79,7 +79,7 @@ def read_target_file(filename: str, stream: IO[bytes]) -> list[dict[str, Any]]:
         path = Path(directory) / f"targets{suffix}"
         path.write_bytes(content)
         try:
-            table = _read_table(path)
+            table = read_table(path)
         except TabularImportError as exc:
             raise WeightTargetError(str(exc)) from exc
     headers = [str(column).strip() for column in table.columns]

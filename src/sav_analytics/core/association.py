@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from .banner import BannerError, _source_categories
+from .banner import BannerError, source_categories
 from .filtering import evaluate_filter_frame
 from .formulas import read_project_frame
 from .not_applicable import applicable_series
@@ -86,7 +86,7 @@ def resolve_variable(
     configuration = project["configuration"]
     if source["kind"] == "recoding":
         try:
-            resolved = _source_categories(source, project, frame)
+            resolved = source_categories(source, project, frame)
         except BannerError as exc:
             raise AssociationError(str(exc)) from exc
         return _categorical(resolved["label"], resolved["categories"], frame.index)
@@ -104,7 +104,7 @@ def resolve_variable(
     label = f"{question['code']} {question['label']}"
     if question["question_type"] in CATEGORICAL_TYPES:
         try:
-            resolved = _source_categories(source, project, frame)
+            resolved = source_categories(source, project, frame)
         except BannerError as exc:
             raise AssociationError(str(exc)) from exc
         return _categorical(label, resolved["categories"], frame.index, series)
@@ -141,7 +141,7 @@ def _categorical(
 
 
 def association_columns(sources: list[dict[str, Any]], project: dict[str, Any]) -> list[str]:
-    from .banner import _source_columns
+    from .banner import source_columns
 
     columns: list[str] = []
     for source in sources:
@@ -159,7 +159,7 @@ def association_columns(sources: list[dict[str, Any]], project: dict[str, Any]) 
             names = list(question.get("source_variables") or [])
         else:
             try:
-                names = _source_columns(source, project)
+                names = source_columns(source, project)
             except BannerError as exc:
                 raise AssociationError(str(exc)) from exc
         for name in names:
@@ -287,10 +287,10 @@ def _report_weight_series(
     Непригодный вес — отказ карточки с причиной, а не невзвешенный расчёт:
     иначе карточка и книга молча разошлись бы.
     """
-    from .reporting.data import ReportError, _report_weights
+    from .reporting.data import ReportError, report_weights
 
     try:
-        weights, _ = _report_weights(
+        weights, _ = report_weights(
             frame, settings.get("weight_variable"), settings.get("calculated_weight_id"), project
         )
     except ReportError as exc:
@@ -660,12 +660,12 @@ def magnitude(kind: str, effect: float, result: dict[str, Any] | None = None) ->
     return MAGNITUDES[0]
 
 
-def _number(value: float, digits: int = 2) -> str:
+def audit_number(value: float, digits: int = 2) -> str:
     return f"{value:.{digits}f}".replace(".", ",")
 
 
 def _p(value: float) -> str:
-    return "< 0,001" if value < 0.001 else f"= {_number(value, 3)}"
+    return "< 0,001" if value < 0.001 else f"= {audit_number(value, 3)}"
 
 
 def _cards(count: int) -> str:
@@ -690,7 +690,7 @@ def _conclusion(result: dict[str, Any]) -> str:
         return f"Связь не подтверждена ({p_text})."
     text = (
         f"Связь есть, сила — {result['magnitude']} "
-        f"({effect_name} = {_number(result['effect'])}; {p_text})."
+        f"({effect_name} = {audit_number(result['effect'])}; {p_text})."
     )
     if result["effect_kind"] == "r":
         direction = "больше" if result["effect"] > 0 else "меньше"
@@ -699,8 +699,8 @@ def _conclusion(result: dict[str, Any]) -> str:
         top = max(result["groups"], key=lambda group: group["mean"])
         low = min(result["groups"], key=lambda group: group["mean"])
         text += (
-            f" Среднее выше всего у «{top['label']}» ({_number(top['mean'])}), "
-            f"ниже всего у «{low['label']}» ({_number(low['mean'])})."
+            f" Среднее выше всего у «{top['label']}» ({audit_number(top['mean'])}), "
+            f"ниже всего у «{low['label']}» ({audit_number(low['mean'])})."
         )
     return text
 

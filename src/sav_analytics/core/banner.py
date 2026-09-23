@@ -60,7 +60,7 @@ def calculate_banner_preview(
     required = []
     for block in definition["blocks"]:
         for source in block["sources"]:
-            for variable in _source_columns(source, project):
+            for variable in source_columns(source, project):
                 if variable not in required:
                     required.append(variable)
     frame = read_project_frame(path, project, required)
@@ -82,8 +82,8 @@ def source_category_options(
     path: str | Path, source: dict[str, Any], project: dict[str, Any]
 ) -> dict[str, Any]:
     """Категории источника с базами — для настройки порядка, подписей и скрытия."""
-    frame = read_project_frame(path, project, _source_columns(source, project))
-    resolved = _source_categories(source, project, frame)
+    frame = read_project_frame(path, project, source_columns(source, project))
+    resolved = source_categories(source, project, frame)
     return {
         "label": resolved["label"],
         "total_base": len(frame),
@@ -200,7 +200,7 @@ def banner_columns(definition: dict[str, Any], project: dict[str, Any]) -> set[s
         column
         for block in definition["blocks"]
         for source in block["sources"]
-        for column in _source_columns(source, project)
+        for column in source_columns(source, project)
     }
 
 
@@ -231,7 +231,7 @@ def build_banner_columns(
         )
     for block_index, block in enumerate(definition["blocks"]):
         resolved = [
-            _configured_categories(source, _source_categories(source, project, frame))
+            _configured_categories(source, source_categories(source, project, frame))
             for source in block["sources"]
         ]
         overlapping = any(item.get("overlapping") for item in resolved)
@@ -327,7 +327,7 @@ def _source_variable(source: dict[str, Any], project: dict[str, Any]) -> str:
     return resolved["source_variable"]
 
 
-def _source_columns(source: dict[str, Any], project: dict[str, Any]) -> list[str]:
+def source_columns(source: dict[str, Any], project: dict[str, Any]) -> list[str]:
     resolved = _resolve_source(source, project)
     if source["kind"] == "recoding" and resolved.get("mode") in {"conditions", "segments"}:
         return sorted(recoding_columns(resolved, project))
@@ -336,7 +336,7 @@ def _source_columns(source: dict[str, Any], project: dict[str, Any]) -> list[str
     return [_source_variable(source, project)]
 
 
-def _source_categories(
+def source_categories(
     source: dict[str, Any], project: dict[str, Any], frame: pd.DataFrame
 ) -> dict[str, Any]:
     resolved = _resolve_source(source, project)

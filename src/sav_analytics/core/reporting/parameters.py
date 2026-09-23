@@ -14,11 +14,11 @@ from typing import Any
 from ..weight_validation import weight_diagnostics
 from .data import ReportData
 from .statistics import (
-    _comparison_scheme_line,
-    _number,
-    _output_line,
-    _report_filter_line,
-    _source_lines,
+    audit_number,
+    comparison_scheme_line,
+    output_line,
+    report_filter_line,
+    source_lines,
 )
 
 _WAVES = {
@@ -42,7 +42,7 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
     wave_text = _WAVES.get(wave) or f"с контрольной волной {settings.get('wave_control_value')}"
     source = [
         (label, value)
-        for label, value in (line.split(": ", 1) for line in _source_lines(project, configuration))
+        for label, value in (line.split(": ", 1) for line in source_lines(project, configuration))
     ]
     return [
         ("Проект", str(project["name"])),
@@ -56,10 +56,10 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
         ("Total, N", str(data.columns[0]["base"])),
         ("Баннер", banner_text),
         ("Колонки без респондентов", ", ".join(data.empty_columns) or "нет"),
-        ("Общий фильтр", _report_filter_line(project, configuration)),
+        ("Общий фильтр", report_filter_line(project, configuration)),
         ("Вес", settings["weight_label"] or "не используется"),
         ("Диагностика веса", _weight_line(data)),
-        ("Уровень доверия", f"{_number(settings['confidence_level'] * 100)}%"),
+        ("Уровень доверия", f"{audit_number(settings['confidence_level'] * 100)}%"),
         (
             "Второй уровень доверия",
             f"{settings['secondary_confidence_level'] * 100:g}%, строчные буквы"
@@ -68,9 +68,9 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
         ),
         ("Bonferroni", "включена" if settings["bonferroni"] else "выключена"),
         ("Порог малой базы", f"N < {settings['minimum_base']}"),
-        ("Схема сравнения", _comparison_scheme_line(banner).split(": ", 1)[1]),
+        ("Схема сравнения", comparison_scheme_line(banner).split(": ", 1)[1]),
         ("Сравнение волн", wave_text),
-        ("Вывод", _output_line(settings).split(": ", 1)[1]),
+        ("Вывод", output_line(settings).split(": ", 1)[1]),
         (
             "Свой набор вывода",
             ", ".join(item["code"] for item in data.questions if item.get("output_metrics"))
@@ -115,11 +115,11 @@ def _weight_line(data: ReportData) -> str:
         return "нет респондентов"
     diagnostics = weight_diagnostics(within)
     return (
-        f"N {diagnostics.count}; вес от {_number(diagnostics.minimum)} до "
-        f"{_number(diagnostics.maximum)}; эффективная база "
-        f"{_number(diagnostics.effective_base)}; design effect "
-        f"{_number(diagnostics.design_effect)}; эффективность "
-        f"{_number(diagnostics.efficiency_percent)}%; крайних весов "
+        f"N {diagnostics.count}; вес от {audit_number(diagnostics.minimum)} до "
+        f"{audit_number(diagnostics.maximum)}; эффективная база "
+        f"{audit_number(diagnostics.effective_base)}; design effect "
+        f"{audit_number(diagnostics.design_effect)}; эффективность "
+        f"{audit_number(diagnostics.efficiency_percent)}%; крайних весов "
         f"{diagnostics.extreme_count}"
     )
 

@@ -57,7 +57,7 @@ _AUDIT_NOTES = (
 )
 
 
-def _excel_column_name(index: int) -> str:
+def excel_column_name(index: int) -> str:
     result = ""
     value = index
     while value:
@@ -65,7 +65,7 @@ def _excel_column_name(index: int) -> str:
         result = chr(65 + remainder) + result
     return result
 
-def _unweighted_proportion_context(
+def unweighted_proportion_context(
     outcome: pd.Series,
     eligible_mask: pd.Series,
     columns: list[dict[str, Any]],
@@ -89,7 +89,7 @@ def _unweighted_proportion_context(
         successes,
     )
 
-def _comparison_scheme_line(banner: dict[str, Any]) -> str:
+def comparison_scheme_line(banner: dict[str, Any]) -> str:
     """Строка шапки аудита: с кем сравнивались подгруппы."""
     if (banner.get("compare_target") or "rest") == "total":
         return (
@@ -128,7 +128,7 @@ def _reference_mask(
     return total_mask & ~column_mask & eligible_mask
 
 
-def _unweighted_proportion_test(
+def unweighted_proportion_test(
     context: _UnweightedProportionContext,
     position: int,
     column: dict[str, Any],
@@ -154,7 +154,7 @@ def _unweighted_proportion_test(
     except ValueError:
         return None
 
-def _unweighted_mean_context(
+def unweighted_mean_context(
     series: pd.Series,
     base_mask: pd.Series,
     columns: list[dict[str, Any]],
@@ -169,7 +169,7 @@ def _unweighted_mean_context(
     samples = tuple(values[mask & base & valid] for mask in column_masks)
     return _UnweightedMeanContext(values, valid, base, column_masks, samples)
 
-def _unweighted_mean_test(
+def unweighted_mean_test(
     context: _UnweightedMeanContext,
     position: int,
     column: dict[str, Any],
@@ -197,7 +197,7 @@ def _unweighted_mean_test(
         minimum_base=settings["minimum_base"],
     )
 
-def _balance_result(
+def balance_result(
     scores: pd.Series,
     mask_a: pd.Series,
     mask_b: pd.Series,
@@ -251,7 +251,7 @@ def _pairwise_note(
     """
     if not column.get("compare_pairwise"):
         return []
-    current_position = _column_position(columns, column)
+    current_position = column_position(columns, column)
     entries: list[StatisticalAuditEntry] = []
     overlapping = bool(column.get("overlapping"))
     for position, other in enumerate(columns):
@@ -284,7 +284,7 @@ def _pairwise_note(
             audit_entries.append(entry)
     return entries
 
-def _pairwise_balance_entries(
+def pairwise_balance_entries(
     scores: pd.Series,
     column: dict[str, Any],
     eligible_mask: pd.Series,
@@ -300,7 +300,7 @@ def _pairwise_balance_entries(
         left_position: int, right_position: int
     ) -> StatisticalTestResult | None:
         left, right = (columns[left_position], columns[right_position])
-        return _balance_result(
+        return balance_result(
             scores,
             left["mask"] & eligible_mask,
             right["mask"] & eligible_mask,
@@ -314,7 +314,7 @@ def _pairwise_balance_entries(
         column, columns, audit_entries, audit_context, row_label, cache, run_pair
     )
 
-def _proportion_test(
+def proportion_test(
     outcome: pd.Series,
     total_mask: pd.Series,
     column: dict[str, Any],
@@ -358,7 +358,7 @@ def _proportion_test(
     except ValueError:
         return None
 
-def _mean_test(
+def mean_test(
     series: pd.Series,
     total_mask: pd.Series,
     column: dict[str, Any],
@@ -415,7 +415,7 @@ def _comparison_count(column: dict[str, Any], columns: list[dict[str, Any]]) -> 
     )
     return max(1, total_comparisons + pairwise_comparisons + wave_comparisons)
 
-def _wave_target(
+def find_wave_target(
     column: dict[str, Any],
     columns: list[dict[str, Any]],
     settings: dict[str, Any],
@@ -443,14 +443,14 @@ def _wave_target(
         None,
     )
 
-def _wave_proportion_test(
+def wave_proportion_test(
     outcome: pd.Series,
     column: dict[str, Any],
     eligible_mask: pd.Series,
     columns: list[dict[str, Any]],
     settings: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, StatisticalTestResult | None]:
-    target = _wave_target(column, columns, settings)
+    target = find_wave_target(column, columns, settings)
     if target is None:
         return None, None
     current_mask = column["mask"] & eligible_mask
@@ -483,14 +483,14 @@ def _wave_proportion_test(
         result = None
     return target, result
 
-def _wave_mean_test(
+def wave_mean_test(
     series: pd.Series,
     column: dict[str, Any],
     base_mask: pd.Series,
     columns: list[dict[str, Any]],
     settings: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, StatisticalTestResult | None]:
-    target = _wave_target(column, columns, settings)
+    target = find_wave_target(column, columns, settings)
     if target is None:
         return None, None
     current = pd.to_numeric(series[column["mask"] & base_mask], errors="coerce").dropna()
@@ -519,7 +519,7 @@ def _wave_mean_test(
         )
     return target, result
 
-def _record_wave_comparison(
+def record_wave_comparison(
     audit_entries: list[StatisticalAuditEntry],
     audit_context: tuple[str, str, str],
     row_label: str,
@@ -536,8 +536,8 @@ def _record_wave_comparison(
         question_label=audit_context[2],
         row_label=row_label,
         comparison="Wave",
-        group_a=_worksheet_column_title(_column_position(columns, column), column),
-        group_b=_worksheet_column_title(_column_position(columns, target), target),
+        group_a=_worksheet_column_title(column_position(columns, column), column),
+        group_b=_worksheet_column_title(column_position(columns, target), target),
         result=result,
         reason="Пустая сравниваемая волна." if result is None else None,
     )
@@ -550,7 +550,7 @@ def _values_equal(left: Any, right: Any) -> bool:
     except (TypeError, ValueError):
         return False
 
-def _pairwise_proportion_entries(
+def pairwise_proportion_entries(
     outcome: pd.Series,
     column: dict[str, Any],
     eligible_mask: pd.Series,
@@ -609,7 +609,7 @@ def _pairwise_proportion_entries(
         column, columns, audit_entries, audit_context, row_label, cache, run_pair
     )
 
-def _pairwise_mean_entries(
+def pairwise_mean_entries(
     series: pd.Series,
     column: dict[str, Any],
     base_mask: pd.Series,
@@ -750,7 +750,7 @@ def cell_note(
     blocks = [note for note in (_format_pairwise_note(pairwise, settings),) if note]
     if settings["show_p_values"]:
         blocks.extend(
-            "\n".join(line.strip() for line in _render_audit_entry(entry))
+            "\n".join(line.strip() for line in render_audit_entry(entry))
             for entry in (*entries, *pairwise)
         )
     elif settings.get("note_skip_reasons"):
@@ -759,7 +759,7 @@ def cell_note(
         # Посчитанные тесты сюда не попадают: иначе примечание стояло бы
         # почти на каждой ячейке, от чего и защищает выключенный p-value.
         blocks.extend(
-            "\n".join(line.strip() for line in _render_audit_entry(entry))
+            "\n".join(line.strip() for line in render_audit_entry(entry))
             for entry in (*entries, *pairwise)
             if entry.result is None or not entry.result.performed
         )
@@ -796,7 +796,7 @@ def _reverse_test_result(
 def _swap_pair(pair: tuple[Any, Any] | None) -> tuple[Any, Any] | None:
     return (pair[1], pair[0]) if pair is not None else None
 
-def _record_total_comparison(
+def record_total_comparison(
     audit_entries: list[StatisticalAuditEntry],
     audit_context: tuple[str, str, str],
     row_label: str,
@@ -811,14 +811,14 @@ def _record_total_comparison(
     """
     if not column.get("compare_to_total"):
         return None
-    position = _column_position(columns, column)
+    position = column_position(columns, column)
     if _compares_with_total(column):
         comparison = "Subgroup/Total (пересекающиеся выборки)"
         group_b = "Total — включая саму подгруппу"
         reason = "Пустая подгруппа или Total."
     else:
         comparison = "Subgroup/Rest"
-        group_b = f"Rest({_excel_column_name(position + 1)}) — Total − {column['label']}"
+        group_b = f"Rest({excel_column_name(position + 1)}) — Total − {column['label']}"
         reason = "Пустая подгруппа или Rest."
     entry = StatisticalAuditEntry(
         sheet=audit_context[0],
@@ -835,15 +835,15 @@ def _record_total_comparison(
     return entry
 
 def _column_title(position: int, column: dict[str, Any]) -> str:
-    return f"{_excel_column_name(position + 1)} — {column['label']}"
+    return f"{excel_column_name(position + 1)} — {column['label']}"
 
 def _worksheet_column_title(position: int, column: dict[str, Any]) -> str:
-    return f"{_excel_column_name(position + 2)} — {column['label']}"
+    return f"{excel_column_name(position + 2)} — {column['label']}"
 
-def _column_position(columns: list[dict[str, Any]], target: dict[str, Any]) -> int:
+def column_position(columns: list[dict[str, Any]], target: dict[str, Any]) -> int:
     return next(index for index, column in enumerate(columns) if column is target)
 
-class _StatisticsAuditWriter:
+class StatisticsAuditWriter:
     def __init__(
         self,
         stream: TextIO,
@@ -857,23 +857,23 @@ class _StatisticsAuditWriter:
         self.current_question: tuple[str, str] | None = None
         self.current_row: str | None = None
         self.entry_count = 0
-        report_filter = _report_filter_line(project, configuration)
+        report_filter = report_filter_line(project, configuration)
         lines = [
             "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
             f"Проект: {project['name']}",
             f"Исходный SAV: {project.get('original_filename', 'source.sav')}",
-            *_source_lines(project, configuration),
+            *source_lines(project, configuration),
             f"Дата расчёта: {datetime.now().astimezone().isoformat(timespec='seconds')}",
             f"Баннер: {banner.get('name', 'Total')}",
             f"Общий фильтр: {report_filter}",
             f"Вес: {settings['weight_label'] or 'не используется'}",
-            f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
+            f"Уровень доверия: {audit_number(settings['confidence_level'] * 100)}%",
             *_secondary_level_lines(settings), *_overall_test_lines(settings),
             f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
             f"Порог малой базы: N < {settings['minimum_base']}",
-            _output_line(settings),
+            output_line(settings),
             "",
-            _comparison_scheme_line(banner),
+            comparison_scheme_line(banner),
             "",
             *_AUDIT_NOTES,
         ]
@@ -895,7 +895,7 @@ class _StatisticsAuditWriter:
             if entry.row_label != self.current_row:
                 lines.append(f"  Строка: {entry.row_label}")
                 self.current_row = entry.row_label
-            lines.extend(_render_audit_entry(entry))
+            lines.extend(render_audit_entry(entry))
             self.stream.write("\n".join(lines) + "\n")
             self.entry_count += 1
 
@@ -922,20 +922,22 @@ def _render_overall(result: Any) -> list[str]:
         "      Базы колонок: " + "; ".join(str(base) for base in result.bases),
     ]
     if result.min_expected is not None:
-        lines.append(f"      Наименьшая ожидаемая частота: {_number(result.min_expected)}")
+        lines.append(f"      Наименьшая ожидаемая частота: {audit_number(result.min_expected)}")
     if getattr(result, "effective_bases", None):
         lines.append(
-            "      Эффективные базы: " + "; ".join(_number(base) for base in result.effective_bases)
+            "      Эффективные базы: "
+            + "; ".join(audit_number(base) for base in result.effective_bases)
         )
         lines.append("      Взвешенный тест: p-value приближённый, размер колонки — n_eff")
     if not result.performed:
         lines.append(f"      Статус: пропущен. Причина: {result.reason}")
         return lines
     statistic = "χ²" if result.method.startswith("Хи") else "F"
-    lines.append(f"      {statistic}={_number(result.statistic)}")
-    lines.append("      df=" + "; ".join(_number(value) for value in result.degrees_of_freedom))
+    lines.append(f"      {statistic}={audit_number(result.statistic)}")
+    degrees = "; ".join(audit_number(value) for value in result.degrees_of_freedom)
+    lines.append(f"      df={degrees}")
     lines.append(f"      p-value={_p_value(result.p_value)}")
-    lines.append(f"      alpha: {_number(result.alpha)}")
+    lines.append(f"      alpha: {audit_number(result.alpha)}")
     lines.append(f"      Решение: {'значимо' if result.significant else 'незначимо'}")
     return lines
 
@@ -959,7 +961,7 @@ def _secondary_level_lines(settings: dict[str, Any]) -> list[str]:
     ]
 
 
-def _source_lines(project: dict[str, Any], configuration: dict[str, Any]) -> list[str]:
+def source_lines(project: dict[str, Any], configuration: dict[str, Any]) -> list[str]:
     """Чем собран файл: исходник, версия настроек и приложения.
 
     Без этих строк книгу и аудит нельзя воспроизвести без доступа к живому
@@ -974,7 +976,7 @@ def _source_lines(project: dict[str, Any], configuration: dict[str, Any]) -> lis
     ]
 
 
-def _output_line(settings: dict[str, Any]) -> str:
+def output_line(settings: dict[str, Any]) -> str:
     """Что выведено в книгу: без этой строки аудит не объясняет отсутствующие строки."""
     scale = settings.get("scale_metrics", ("distribution", "mean", "top2", "bottom2"))
     numeric = settings.get("numeric_metrics", ("mean", "median", "min", "max", "std", "stderr"))
@@ -1000,7 +1002,7 @@ def _output_line(settings: dict[str, Any]) -> str:
     )
 
 
-def _report_filter_line(project: dict[str, Any], configuration: dict[str, Any]) -> str:
+def report_filter_line(project: dict[str, Any], configuration: dict[str, Any]) -> str:
     """Название общего фильтра и его правило тем же текстом, что в редакторе."""
     report_filter_id = configuration.get("report_filter_id")
     if not report_filter_id:
@@ -1020,58 +1022,7 @@ def _report_filter_line(project: dict[str, Any], configuration: dict[str, Any]) 
     return f"{selected_filter['name']} — {rule}"
 
 
-def _render_statistics_txt(
-    project: dict[str, Any],
-    banner: dict[str, Any],
-    configuration: dict[str, Any],
-    settings: dict[str, Any],
-    entries: list[StatisticalAuditEntry],
-) -> str:
-    report_filter = _report_filter_line(project, configuration)
-    lines = [
-        "СТАТИСТИЧЕСКИЙ АУДИТ ТОПЛАЙНА",
-        f"Проект: {project['name']}",
-        f"Исходный SAV: {project.get('original_filename', 'source.sav')}",
-        *_source_lines(project, configuration),
-        f"Дата расчёта: {datetime.now().astimezone().isoformat(timespec='seconds')}",
-        f"Баннер: {banner.get('name', 'Total')}",
-        f"Общий фильтр: {report_filter}",
-        f"Вес: {settings['weight_label'] or 'не используется'}",
-        f"Уровень доверия: {_number(settings['confidence_level'] * 100)}%",
-        *_secondary_level_lines(settings), *_overall_test_lines(settings),
-        f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
-        f"Порог малой базы: N < {settings['minimum_base']}",
-        _output_line(settings),
-        "",
-        _comparison_scheme_line(banner),
-        "",
-        *_AUDIT_NOTES,
-    ]
-    if not entries:
-        lines.extend(["", "Статистические сравнения не включены."])
-        return "\n".join(lines) + "\n"
-
-    current_sheet = None
-    current_question = None
-    current_row = None
-    for entry in entries:
-        if entry.sheet != current_sheet:
-            lines.extend(["", f"=== {entry.sheet} ==="])
-            current_sheet = entry.sheet
-            current_question = None
-            current_row = None
-        question_key = (entry.question_code, entry.question_label)
-        if question_key != current_question:
-            lines.extend(["", f"[{entry.question_code}] {entry.question_label}"])
-            current_question = question_key
-            current_row = None
-        if entry.row_label != current_row:
-            lines.append(f"  Строка: {entry.row_label}")
-            current_row = entry.row_label
-        lines.extend(_render_audit_entry(entry))
-    return "\n".join(lines) + "\n"
-
-def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
+def render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
     if entry.overall is not None:
         return [f"    {entry.comparison}: {entry.group_a}", *_render_overall(entry.overall)]
     lines = [
@@ -1087,18 +1038,18 @@ def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
     if result.group_successes is not None:
         lines.append(
             "      Числители: "
-            f"n1={_number(result.group_successes[0])}; "
-            f"n2={_number(result.group_successes[1])}"
+            f"n1={audit_number(result.group_successes[0])}; "
+            f"n2={audit_number(result.group_successes[1])}"
         )
     if result.group_weight_sums is not None:
         lines.append(
-            f"      Суммы весов: sum_w1={_number(result.group_weight_sums[0])}; "
-            f"sum_w2={_number(result.group_weight_sums[1])}"
+            f"      Суммы весов: sum_w1={audit_number(result.group_weight_sums[0])}; "
+            f"sum_w2={audit_number(result.group_weight_sums[1])}"
         )
     if result.effective_bases is not None:
         lines.append(
-            f"      Эффективные базы: n_eff1={_number(result.effective_bases[0])}; "
-            f"n_eff2={_number(result.effective_bases[1])}"
+            f"      Эффективные базы: n_eff1={audit_number(result.effective_bases[0])}; "
+            f"n_eff2={audit_number(result.effective_bases[1])}"
         )
     if result.group_estimates is not None:
         if result.method == "z-test":
@@ -1109,13 +1060,13 @@ def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
             estimate_label = "Средние"
         estimates = result.group_estimates
         lines.append(
-            f"      {estimate_label}: group1={_number(estimates[0])}; "
-            f"group2={_number(estimates[1])}"
+            f"      {estimate_label}: group1={audit_number(estimates[0])}; "
+            f"group2={audit_number(estimates[1])}"
         )
     if result.group_variances is not None:
         variances = result.group_variances
         lines.append(
-            f"      Дисперсии: var1={_number(variances[0])}; var2={_number(variances[1])}"
+            f"      Дисперсии: var1={audit_number(variances[0])}; var2={audit_number(variances[1])}"
         )
         variance_bases = result.effective_bases or result.group_bases
         if variance_bases is not None:
@@ -1124,42 +1075,42 @@ def _render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
                 math.sqrt(variances[1] / variance_bases[1]),
             )
             lines.append(
-                f"      Стандартные ошибки: se1={_number(standard_errors[0])}; "
-                f"se2={_number(standard_errors[1])}"
+                f"      Стандартные ошибки: se1={audit_number(standard_errors[0])}; "
+                f"se2={audit_number(standard_errors[1])}"
             )
     if result.expected_frequencies is not None:
         lines.append(
             "      Ожидаемые частоты 2×2: "
-            + "; ".join(_number(value) for value in result.expected_frequencies)
+            + "; ".join(audit_number(value) for value in result.expected_frequencies)
         )
     difference = result.difference * 100 if "z-test" in result.method else result.difference
     difference_unit = " п.п." if "z-test" in result.method else ""
-    lines.append(f"      Разница: {_number(difference)}{difference_unit}")
+    lines.append(f"      Разница: {audit_number(difference)}{difference_unit}")
     if result.confidence_interval is not None:
         interval = result.confidence_interval
         if "z-test" in result.method:
             interval = (interval[0] * 100, interval[1] * 100)
         lines.append(
-            f"      Доверительный интервал: [{_number(interval[0])}; "
-            f"{_number(interval[1])}]"
+            f"      Доверительный интервал: [{audit_number(interval[0])}; "
+            f"{audit_number(interval[1])}]"
         )
     if not result.performed:
         lines.append(f"      Статус: пропущен. Причина: {result.reason}")
-        lines.append(f"      Скорректированный alpha: {_number(result.alpha)}")
+        lines.append(f"      Скорректированный alpha: {audit_number(result.alpha)}")
         return lines
     statistic_name = "z" if "z-test" in result.method else "t"
-    lines.append(f"      {statistic_name}={_number(result.statistic)}")
+    lines.append(f"      {statistic_name}={audit_number(result.statistic)}")
     if result.degrees_of_freedom is not None:
-        lines.append(f"      df={_number(result.degrees_of_freedom)}")
+        lines.append(f"      df={audit_number(result.degrees_of_freedom)}")
     lines.append(f"      p-value={_p_value(result.p_value)}")
-    lines.append(f"      Скорректированный alpha: {_number(result.alpha)}")
+    lines.append(f"      Скорректированный alpha: {audit_number(result.alpha)}")
     decision = "значимо" if result.significant else "незначимо"
     lines.append(f"      Решение: {decision}; направление={result.direction}")
     if result.approximate:
         lines.append("      Характер теста: приближённый")
     return lines
 
-def _number(value: float | int | None) -> str:
+def audit_number(value: float | int | None) -> str:
     if value is None:
         return "—"
     return f"{value:.6f}"
@@ -1167,5 +1118,5 @@ def _number(value: float | int | None) -> str:
 def _p_value(value: float | None) -> str:
     if value is None:
         return "—"
-    return "<0.000001" if value < 0.000001 else _number(value)
+    return "<0.000001" if value < 0.000001 else audit_number(value)
 

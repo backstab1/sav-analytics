@@ -280,7 +280,7 @@ class ReportFormats:
         return {"bottom": 2, "bottom_color": RULE} if rule else {}
 
 
-def _formats(workbook: Any, settings: dict[str, Any] | None = None) -> ReportFormats:
+def report_formats(workbook: Any, settings: dict[str, Any] | None = None) -> ReportFormats:
     settings = settings or {}
     return ReportFormats(
         workbook,
@@ -289,7 +289,7 @@ def _formats(workbook: Any, settings: dict[str, Any] | None = None) -> ReportFor
     )
 
 
-def _result_format(
+def result_format(
     formats: ReportFormats,
     family: str,
     base: int,
