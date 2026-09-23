@@ -27,24 +27,24 @@ document.querySelector("#question-formula").addEventListener("click", event => {
   if (button) openFormula(button.dataset.openFormula);
 });
 
-document.querySelector("#new-formula").addEventListener("click", () => openFormula(null));
 
-function openFormula(formulaId) {
+function openFormula(formulaId, options = {}) {
   if (!currentProject || !confirmDiscard(openInspectorPanel())) return;
   const formula = formulaId ? configuredFormulas().find(item => item.id === formulaId) : null;
   currentFormulaId = formula?.id || null;
   currentQuestionCode = null;
   showInspector(formulaEditor);
-  setHeadingText(document.querySelector("#formula-editor-title"), formula ? formula.name : "Новая");
+  setHeadingText(document.querySelector("#formula-editor-title"), formula ? formula.name : "Новая переменная");
   const name = document.querySelector("#formula-name");
   name.value = formula?.name || suggestFormulaName();
   name.readOnly = Boolean(formula);
-  document.querySelector("#formula-label").value = formula?.label || "";
+  document.querySelector("#formula-label").value = formula?.label || options.label || "";
   document.querySelector("#formula-expression").value = formula?.expression || "";
   document.querySelector("#delete-formula").hidden = !formula;
   document.querySelector("#formula-error").hidden = true;
-  document.querySelector("#formula-preview").innerHTML = '<p class="muted">Нажмите «Проверить»: будет видно, у скольких респондентов формула посчиталась и из-за какого поля пусто.</p>';
+  document.querySelector("#formula-preview").innerHTML = '<p class="muted">Покажет, у скольких респондентов формула посчиталась и из-за какого поля пусто.</p>';
   renderFormulaVariables();
+  renderVariableKinds("formula", Boolean(formula));
 }
 
 function suggestFormulaName() {

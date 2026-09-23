@@ -152,7 +152,8 @@ def recoding_columns(recoding: dict[str, Any], project: dict[str, Any]) -> set[s
     if recoding.get("mode") == "conditions":
         columns: set[str] = set()
         for category in recoding["categories"]:
-            columns |= _required_columns(category["rule"], project)
+            if not category.get("otherwise"):
+                columns |= _required_columns(category["rule"], project)
         return columns
     if recoding.get("mode") == "segments":
         from .segmentation import segment_columns
@@ -168,12 +169,16 @@ def conditional_series(
 
     Категории не пересекаются по построению: прошедший правило раньше дальше не
     проверяется. Поэтому такую переменную можно ставить в баннер, не решая, как
-    сравнивать пересекающиеся колонки. Не прошедший ни одно правило — пропуск.
+    сравнивать пересекающиеся колонки. Не прошедший ни одно правило — пропуск,
+    если последней не стоит категория «Иначе»: она забирает всех оставшихся.
     """
     result = pd.Series(pd.NA, index=frame.index, dtype="object")
     assigned = pd.Series(False, index=frame.index)
     for category in recoding["categories"]:
-        mask, _ = _evaluate_group(category["rule"], project, frame)
+        if category.get("otherwise"):
+            mask = pd.Series(True, index=frame.index)
+        else:
+            mask, _ = _evaluate_group(category["rule"], project, frame)
         chosen = mask & ~assigned
         result.loc[chosen] = category["label"]
         assigned |= chosen
@@ -184,7 +189,14 @@ def validate_condition_rules(definition: dict[str, Any], project: dict[str, Any]
     """Правила логической переменной — обычные правила фильтра, но без ссылок на
     другие логические переменные: так исключены циклы и цепочки, которые
     пришлось бы пересчитывать в правильном порядке."""
-    for category in definition["categories"]:
+    categories = definition["categories"]
+    if any(category.get("otherwise") for category in categories[:-1]):
+        raise FilterError("Категория «Иначе» может быть только последней.")
+    if all(category.get("otherwise") for category in categories):
+        raise FilterError("Нужна хотя бы одна категория с условием.")
+    for category in categories:
+        if category.get("otherwise"):
+            continue
         _validate_group(category["rule"], project, depth=1)
         for source in rule_sources(category["rule"]):
             if source["kind"] != "recoding":

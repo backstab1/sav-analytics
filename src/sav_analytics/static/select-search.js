@@ -68,7 +68,10 @@ function enhanceSelect(select) {
 
 function scanSelects() {
   document.querySelectorAll("#workspace select:not(.select-search-ready)").forEach(select => {
-    if (select.options.length >= SEARCH_MIN && !select.multiple && !select.dataset.noSearch) {
+    // В редакторе переменной поле поиска над каждым выбором вопроса удваивало
+    // строки условия и шумело больше, чем помогало (решение 026).
+    if (select.options.length >= SEARCH_MIN && !select.multiple && !select.dataset.noSearch
+      && !select.closest(".variable-editor")) {
       enhanceSelect(select);
     }
   });

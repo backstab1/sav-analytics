@@ -552,6 +552,36 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
   border-left: 1px solid var(--c-border);
 }
 
+/* Редактор — отдельная карточка рядом со списком (решение 027). Панель
+   с открытым редактором перестаёт быть одной карточкой: её ряд действий
+   и список остаются карточкой слева, а док встаёт справа своей, на всю
+   высоту, с зазором между ними. DOM не меняется — тело панели
+   `display: contents`, и док с содержимым становятся ячейками сетки панели.
+   На узком окне правило не действует: там редактор выезжает поверх. */
+@media (min-width: 1081px) {
+  .pane:has(.insp:not([hidden])) {
+    display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 36%, 500px);
+    grid-template-rows: auto minmax(0, 1fr); column-gap: 14px;
+    background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: visible;
+  }
+  .pane:has(.insp:not([hidden])) > .pane-body { display: contents; }
+  .pane:has(.insp:not([hidden])) > .pane-bar {
+    grid-column: 1; grid-row: 1; min-width: 0;
+    background: var(--c-surface); border: 1px solid var(--c-border);
+    border-radius: var(--r-3) var(--r-3) 0 0;
+  }
+  .pane:has(.insp:not([hidden])) .pane-content {
+    grid-column: 1; grid-row: 2;
+    background: var(--c-surface); border: 1px solid var(--c-border); border-top: 0;
+    border-radius: 0 0 var(--r-3) var(--r-3); box-shadow: var(--shadow-card);
+  }
+  .pane:has(.insp:not([hidden])) .insp-dock {
+    grid-column: 2; grid-row: 1 / 3; min-height: 0;
+    background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3);
+    box-shadow: var(--shadow-card); overflow: clip;
+  }
+}
+
 /* Раздел «Отчёт»: пока правят свойство, статистика уступает место
    редактору. Две колонки свойств и редактор рядом не помещаются, а
    статистика — единственное, что здесь можно убрать без потери: она
@@ -1237,7 +1267,14 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .recode-editor #range-editor, .recode-editor #category-editor { display: grid; gap: 10px; min-width: 0; }
 .recode-editor .range-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .recode-editor .range-heading small { text-align: right; }
-.range-suggest { display: grid; grid-template-columns: minmax(0, 1fr) 64px auto; gap: 6px; align-items: center; }
+/* Автоматическое разбиение — тихая строка под списком: это подсказка, а не
+   главный путь, и она не должна стоять над диапазонами тяжёлым тулбаром. */
+.range-suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--c-ink-3); font-size: var(--t-xs); }
+.range-suggest input { width: 52px; }
+.range-suggest select { width: auto; }
+.range-suggest .text-button { padding: 0 4px; }
+.recode-method .seg { display: flex; }
+.recode-method .seg button { flex: 1 1 0; }
 .range-suggest select, .range-suggest input { padding: 6px 8px; font-size: var(--t-xs); min-width: 0; }
 #range-suggest-note { margin: 0; font-size: var(--t-xs); }
 .recode-editor .add-row-button {
@@ -1273,12 +1310,14 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .range-heading { display: grid; gap: 2px; margin-top: var(--s-1); }
 .range-heading strong { font-size: var(--t-sm); font-weight: 600; color: var(--c-ink-2); letter-spacing: -0.005em; }
 .range-heading small { color: var(--c-ink-3); font-size: var(--t-xs); }
-.range-list { display: grid; gap: var(--s-2); }
-.range-row { display: grid; grid-template-columns: minmax(100px, 1fr) 64px 12px 64px 28px; gap: var(--s-1); align-items: center; }
+.range-list { display: grid; gap: 6px; }
+.range-row, .range-columns { display: grid; grid-template-columns: minmax(100px, 1fr) 72px 12px 72px 26px; gap: 6px; align-items: center; }
+.range-columns span { color: var(--c-ink-3); font-size: 11px; font-weight: 600; cursor: default; }
+.range-list:empty + .add-dashed { margin-top: 0; }
 .range-row input { padding: 7px 9px; font-size: var(--t-xs); }
 .range-row > span { color: var(--c-ink-3); text-align: center; }
-.range-row > button { padding: 4px; background: transparent; color: var(--c-danger); border-radius: 8px; font-size: 16px; font-weight: 400; }
-.range-row > button:hover { background: var(--c-danger-tint); }
+.range-row > button { width: 26px; height: 26px; padding: 0; background: transparent; color: var(--c-ink-3); border-radius: 50%; font-size: 15px; font-weight: 400; }
+.range-row > button:hover { background: var(--c-surface-soft); color: var(--c-danger); }
 
 /* Category-group editor */
 .category-group-list { display: grid; gap: var(--s-2); }
@@ -1289,7 +1328,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   background: var(--c-surface-soft);
 }
 .category-group-head input { padding: 6px 9px; font-size: var(--t-xs); }
-.category-group-head button { padding: 4px; background: transparent; color: var(--c-danger); border-radius: 8px; font-size: 16px; font-weight: 400; }
+.category-group-head button { width: 26px; height: 26px; padding: 0; background: transparent; color: var(--c-ink-3); border-radius: 50%; font-size: 15px; font-weight: 400; }
 .source-value-list { display: grid; gap: 4px; max-height: 170px; overflow: auto; padding: var(--s-2); }
 .source-value-list .checkbox { align-items: flex-start; font-size: var(--t-xs); font-weight: 500; padding: 2px 0; }
 .category-pool { display: grid; gap: 6px; margin-bottom: var(--s-2); }
@@ -1318,20 +1357,106 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .value-chip.dragging { opacity: .45; }
 .category-zone.drop-target { outline: 2px solid var(--c-brand); outline-offset: -2px; }
 
-/* Logic variable editor */
-.condition-category-list { display: grid; gap: var(--s-2); }
-.condition-category {
-  display: grid; gap: 6px; padding: 8px;
-  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px;
+/* ================================================================
+   НОВАЯ ПЕРЕМЕННАЯ — редакторы логики, группировки, формулы и сегментов
+   (решения 026 и 027). Сверху способ и одна строка о нём, затем
+   название и имя столбца, затем одна секция самого способа. Секции без
+   рамок: заголовок и отступ, чтобы в редакторе не было коробки в коробке.
+   ================================================================ */
+.variable-kind { display: grid; gap: 6px; }
+.kind-switch { display: flex; }
+.kind-switch button { flex: 1 1 0; }
+.kind-switch button:disabled { opacity: .4; cursor: default; }
+.kind-switch button:disabled:hover { background: transparent; color: var(--c-ink-2); }
+.kind-hint { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.45; }
+.insp .insp-body > label.field-wide { grid-column: 1 / -1; }
+.variable-editor .insp-body > label small { font-weight: 400; }
+.variable-section { display: grid; gap: 8px; min-width: 0; margin-top: 6px; }
+.variable-section h4 {
+  margin: 0; color: var(--c-ink-2); font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.005em;
 }
-.condition-category-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.section-note { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.45; }
+.variable-editor .add-dashed {
+  width: 100%; padding: 8px 14px; border: 1px dashed var(--c-border-strong);
+  border-radius: 10px; background: transparent; color: var(--c-brand); font-size: var(--t-xs); font-weight: 600;
+}
+.variable-editor .add-dashed:hover { border-color: var(--c-brand); background: var(--c-brand-tint); transform: none; }
+
+/* Категория логики — фраза «Если … → категория». Группа условий общего
+   конструктора своей рамки не рисует (`display: contents`): её шапка,
+   строки и кнопка встают прямо в сетку карточки, и вложенных коробок нет. */
+.condition-category-list { display: grid; gap: 8px; }
+.condition-category {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-areas: "num name tools" ". head head" ". items items" ". add add";
+  column-gap: 8px; row-gap: 6px; align-items: center; padding: 10px 10px 12px;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px;
+}
+.condition-category > .filter-group { display: contents; }
 .condition-category-number {
-  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  grid-area: num; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
   background: var(--c-brand-tint); color: var(--c-brand); font-size: 11px; font-weight: 700;
 }
-.condition-category-head input { padding: 6px 9px; font-size: var(--t-xs); }
+.condition-category .filter-group-head { grid-area: head; display: block; }
+.condition-category .filter-group-head label { display: flex; align-items: center; gap: 6px; }
+.condition-category .filter-group-head label > span {
+  flex: 0 0 auto; color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500;
+}
+.insp .condition-category > .condition-category-label {
+  grid-area: name; padding: 6px 9px; font-size: var(--t-sm); font-weight: 600;
+}
+/* «Все условия / хотя бы одно» задаёт связка И/ИЛИ между условиями, поэтому
+   список в шапке не показывается: остаётся фраза «Если» / «Иначе если». */
+.condition-category .filter-group-head select { display: none; }
 /* Группа условий категории удаляется вместе с категорией, а не отдельно. */
 .condition-category .filter-group-head [data-remove-filter-group] { display: none; }
+.condition-category-tools { grid-area: tools; display: flex; gap: 2px; }
+.condition-category-tools .icon-button { width: 26px; height: 26px; color: var(--c-ink-3); font-size: 14px; }
+.condition-category .filter-group-items { grid-area: items; display: grid; gap: 0; }
+.condition-category .filter-group-items .filter-condition {
+  padding: 4px 0; background: transparent; border: 0; border-radius: 0;
+}
+.condition-category .filter-values:empty { display: none; }
+/* Единственное условие удаляется вместе с категорией: второй крестик рядом
+   с крестиком категории только путал, какой из них что удаляет. */
+.condition-category .filter-group-items > .filter-condition:only-of-type > button { visibility: hidden; }
+.condition-category .filter-group-items .filter-condition + .filter-join + .filter-condition { border-top: 0; }
+.condition-category .filter-group-items .filter-condition .filter-source,
+.condition-category .filter-group-items .filter-condition-details select,
+.condition-category .filter-group-items .filter-condition-details input { background: var(--c-surface-soft); }
+.condition-category .filter-join { margin: 2px 0; }
+/* Крестик условия — напротив вопроса, а не посреди списка ответов. */
+.condition-category .filter-group-items .filter-condition > button { grid-row: 1; }
+.condition-category > .filter-group > [data-add-group-condition] {
+  grid-area: add; justify-self: start; width: auto; padding: 2px 0; border: 0;
+  background: transparent; color: var(--c-brand); font-size: var(--t-xs); font-weight: 600;
+}
+.condition-category > .filter-group > [data-add-group-condition]:hover { background: transparent; text-decoration: underline; }
+
+/* Кто не подошёл ни к одной — как «If none of the conditions are met» у
+   Qualtrics: строка всегда на виду, а не кнопка, которую надо найти. */
+.condition-else {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 12px; border: 1px dashed var(--c-border-strong); border-radius: 12px; background: transparent;
+}
+.condition-else-text { color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.condition-else-text::after { content: " →"; color: var(--c-ink-3); font-weight: 400; }
+.condition-else input { flex: 1 1 140px; padding: 6px 9px; font-weight: 600; }
+/* Выбор здесь меняет итог — выбранный вариант виден сразу, а не по оттенку. */
+.condition-else .seg button.on, .condition-else .seg button.on:hover { background: var(--c-brand-tint); color: var(--c-brand); box-shadow: none; }
+
+/* Формула: синтаксис под раскрытием, чтобы справка не стояла стеной. */
+.formula-help summary { color: var(--c-brand); font-size: var(--t-xs); font-weight: 600; cursor: pointer; }
+.formula-help dl {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 8px 0 0;
+  font-size: var(--t-xs);
+}
+.formula-help dt { color: var(--c-ink-3); }
+.formula-help dd { margin: 0; color: var(--c-ink-2); }
+.formula-editor textarea { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-xs); }
+
+/* Список сохранённых логических переменных не нужен, пока их нет. */
+.pill-select.is-empty { display: none; }
 .pill-select { padding-right: 8px; }
 .pill-select select {
   appearance: none; field-sizing: content; width: auto; max-width: 240px; padding: 0 16px 0 0; border: 0;
@@ -1474,7 +1599,8 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Оболочку задаёт .insp — здесь остались только внутренности. */
 .formula-editor textarea { width: 100%; min-height: 88px; resize: vertical; font-family: var(--f-mono, ui-monospace, monospace); font-size: var(--t-sm, 13px); }
 .formula-variables { display: flex; flex-wrap: wrap; gap: 6px; }
-.formula-variables button { border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: transparent; padding: 2px 8px; font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.formula-variables button { border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: transparent; color: var(--c-ink-2); padding: 2px 8px; font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.formula-variables button:hover { background: var(--c-brand-tint); color: var(--c-brand); transform: none; }
 .formula-variables button:hover { border-color: var(--c-brand); }
 .formula-missing { display: grid; gap: 4px; margin-top: 8px; }
 .formula-missing div { display: flex; justify-content: space-between; gap: 10px; font-size: var(--t-xs); }
@@ -1552,12 +1678,9 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .filter-condition button { width: 26px; height: 26px; padding: 0; background: transparent; color: var(--c-ink-3); border-radius: 50%; font-size: 16px; font-weight: 400; }
 .filter-condition > button { grid-column: 2; grid-row: 1 / 3; }
 .filter-condition button:hover { background: var(--c-surface); color: var(--c-ink-2); }
-.filter-join {
-  z-index: 1; justify-self: center; min-width: 38px; margin: -1px 0; padding: 3px 10px;
-  border: 1px solid var(--c-border); border-radius: var(--r-pill); background: var(--c-surface);
-  color: var(--c-ink-3); font-size: 10px; font-weight: 700; line-height: 1.2;
-}
-.filter-join:hover { border-color: var(--c-border-strong); background: var(--c-surface); color: var(--c-ink); transform: none; }
+.filter-join { z-index: 1; justify-self: center; margin: 4px 0; }
+.filter-join button { min-width: 44px; height: 22px; padding: 0 10px; font-size: 11px; font-weight: 600; }
+.filter-join button.on, .filter-join button.on:hover { background: var(--c-brand-tint); color: var(--c-brand); box-shadow: none; }
 .filter-add-actions { display: grid; grid-template-columns: 1fr; gap: var(--s-2); }
 .filter-add-actions button {
   padding: 10px; border: 1.5px dashed var(--c-border-strong); border-radius: 10px;

@@ -497,7 +497,18 @@ class FilterDefinition(BaseModel):
 
 class ConditionCategory(BaseModel):
     label: str = Field(min_length=1, max_length=250)
-    rule: FilterGroup
+    rule: FilterGroup | None = None
+    # «Иначе»: забирает всех, кто не подошёл ни к одной категории выше. Правила
+    # у неё нет — это и есть первая подходящая категория с условием «всегда».
+    otherwise: bool = False
+
+    @model_validator(mode="after")
+    def validate_rule(self) -> ConditionCategory:
+        if self.otherwise and self.rule is not None:
+            raise ValueError("У категории «Иначе» не бывает своего условия.")
+        if not self.otherwise and self.rule is None:
+            raise ValueError("Задайте условие категории.")
+        return self
 
 
 class ConditionalRecodeDefinition(BaseModel):
@@ -507,6 +518,13 @@ class ConditionalRecodeDefinition(BaseModel):
     code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
     name: str = Field(min_length=1, max_length=500)
     categories: list[ConditionCategory] = Field(min_length=2, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_otherwise(self) -> ConditionalRecodeDefinition:
+        flags = [category.otherwise for category in self.categories]
+        if any(flags[:-1]):
+            raise ValueError("Категория «Иначе» может быть только последней.")
+        return self
 
 
 class FormulaDefinition(BaseModel):

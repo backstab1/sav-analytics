@@ -83,6 +83,54 @@ def test_each_respondent_lands_in_the_first_matching_category(tmp_path: Path) ->
     assert preview["out_of_range_count"] == 0
 
 
+OTHERWISE = {
+    "id": "promoters",
+    "mode": "conditions",
+    "code": "PROMO",
+    "name": "Довольные",
+    "categories": [
+        {"label": "Довольные мужчины", "rule": _rule(
+            _condition("Q1", "in", values=[1]), _condition("Q2", "gt", lower=8)
+        )},
+        # «Иначе» забирает всех, кто не подошёл выше, включая пропуск в Q2.
+        {"label": "Остальные", "otherwise": True, "rule": None},
+    ],
+}
+
+
+def test_otherwise_takes_everyone_left(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    project = _project(source)
+    project["configuration"]["recodings"].append(dict(OTHERWISE))
+
+    validate_recode(OTHERWISE, project["inspection"]["variables"], project)
+    preview = calculate_recode_preview(source, OTHERWISE, project)
+    blocks = [{"label": "Довольные", "sources": [{"kind": "recoding", "ref": "promoters"}]}]
+    banner = calculate_banner_preview(source, {"name": "Довольные", "blocks": blocks}, project)
+
+    assert [(row["label"], row["count"]) for row in preview["rows"]] == [
+        ("Довольные мужчины", 1),
+        ("Остальные", 3),
+    ]
+    assert preview["out_of_range_count"] == 0
+    assert [column["base"] for column in banner["columns"]] == [4, 1, 3]
+
+
+def test_otherwise_stands_last_and_not_alone(tmp_path: Path) -> None:
+    source = tmp_path / "fixture.sav"
+    project = _project(source)
+    variables = project["inspection"]["variables"]
+    otherwise = {"label": "Остальные", "otherwise": True, "rule": None}
+
+    first = {**OTHERWISE, "categories": [otherwise, OTHERWISE["categories"][0]]}
+    with pytest.raises(RecodingError, match="только последней"):
+        validate_recode(first, variables, project)
+
+    alone = {**OTHERWISE, "categories": [otherwise, {**otherwise, "label": "Все"}]}
+    with pytest.raises(RecodingError, match="только последней"):
+        validate_recode(alone, variables, project)
+
+
 def test_logic_variable_cuts_a_banner_and_a_table(tmp_path: Path) -> None:
     source = tmp_path / "fixture.sav"
     project = _project(source)
@@ -208,6 +256,27 @@ def test_logic_variable_through_the_api(tmp_path: Path) -> None:
             assert preview.status_code == 200
             assert [row["count"] for row in preview.json()["rows"]] == [2, 1]
             assert preview.json()["out_of_range_count"] == 1
+
+            # «Иначе» без условия: API принимает её только последней.
+            otherwise = {**payload, "code": "REST", "categories": [
+                payload["categories"][0],
+                {"label": "Остальные", "otherwise": True},
+            ]}
+            created = client.post(base, json=otherwise)
+            assert created.status_code == 201
+            rest = next(
+                item
+                for item in created.json()["configuration"]["recodings"]
+                if item["code"] == "REST"
+            )
+            counts = client.get(f"{base}/{rest['id']}/preview").json()
+            assert [row["count"] for row in counts["rows"]] == [2, 2]
+            misplaced = {**otherwise, "code": "BAD", "categories": otherwise["categories"][::-1]}
+            assert client.post(base, json=misplaced).status_code == 422
+            ruleless = {**payload, "code": "BAD", "categories": [
+                payload["categories"][0], {"label": "Без условия"},
+            ]}
+            assert client.post(base, json=ruleless).status_code == 422
 
             # Группировка, на которой стоит правило, не удаляется молча.
             refused = client.delete(f"{base}/{ranges_id}")

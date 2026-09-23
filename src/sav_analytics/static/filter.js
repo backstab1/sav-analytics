@@ -43,7 +43,10 @@ function addFilterCondition(condition = {}, container = document.querySelector("
   const element = document.createElement("div");
   element.className = "filter-condition";
   const sourceValue = condition.source ? `${condition.source.kind}:${condition.source.ref}` : "";
-  element.innerHTML = `<select class="filter-source" aria-label="Вопрос">${filterSourceOptions(sourceValue)}</select><div class="filter-condition-details"><select class="filter-operation" aria-label="Условие"></select><div class="filter-values"></div></div><button type="button" data-remove-filter-condition title="Удалить условие" aria-label="Удалить условие">×</button>`;
+  const placeholder = !sourceValue && container.closest(".condition-category")
+    ? '<option value="" selected>Выберите вопрос…</option>'
+    : "";
+  element.innerHTML = `<select class="filter-source" aria-label="Вопрос">${placeholder}${filterSourceOptions(sourceValue)}</select><div class="filter-condition-details"><select class="filter-operation" aria-label="Условие"></select><div class="filter-values"></div></div><button type="button" data-remove-filter-condition title="Удалить условие" aria-label="Удалить условие">×</button>`;
   container.append(element);
   refreshFilterJoins(container);
   void loadFilterConditionSource(element, condition);
@@ -90,8 +93,11 @@ async function loadFilterConditionSource(element, draft) {
   const box = element.querySelector(".filter-values");
   element.filterOptions = null;
   operation.innerHTML = "";
+  operation.hidden = !sourceValue;
   if (!sourceValue) {
-    box.innerHTML = '<p class="muted">Нет вопросов, по которым можно отбирать.</p>';
+    box.innerHTML = sourceSelect.options.length > 1
+      ? ""
+      : '<p class="muted">Нет вопросов, по которым можно отбирать.</p>';
     return;
   }
   box.innerHTML = '<p class="muted">Загружаем ответы…</p>';
@@ -164,13 +170,15 @@ function refreshFilterJoins(container) {
   const items = [...container.children].filter(item => item.matches(".filter-condition, .filter-group"));
   const group = container.closest(".filter-group");
   const operator = group?.querySelector(".filter-group-operator")?.value || document.querySelector("#filter-operator").value;
+  // Связка между условиями — два варианта рядом, а не одна кнопка, которая
+  // молча переключается щелчком: так видно, что выбор есть и какой он.
   items.slice(1).forEach(item => {
-    const join = document.createElement("button");
-    join.type = "button";
-    join.className = "filter-join";
-    join.dataset.filterJoin = group ? "group" : "root";
-    join.textContent = operator === "or" ? "ИЛИ" : "И";
-    join.title = `Нажмите, чтобы заменить на ${operator === "or" ? "И" : "ИЛИ"}`;
+    const join = document.createElement("span");
+    join.className = "filter-join seg";
+    join.setAttribute("role", "radiogroup");
+    join.setAttribute("aria-label", "Как связаны условия");
+    join.innerHTML = [["and", "И"], ["or", "ИЛИ"]].map(([value, label]) => `<button type="button" role="radio"
+      data-filter-join="${value}" aria-checked="${operator === value}" class="${operator === value ? "on" : ""}">${label}</button>`).join("");
     item.before(join);
   });
 }
@@ -210,6 +218,7 @@ function collectFilterItem(element) {
     if (!nested.length) throw new Error("Добавьте условие во вложенную группу.");
     return { kind: "group", operator: element.querySelector(".filter-group-operator").value, items: nested.map(collectFilterItem) };
   }
+  if (!element.querySelector(".filter-source").value) throw new Error("Выберите вопрос в каждом условии.");
   const source = parseBannerSource(element.querySelector(".filter-source").value);
   if (!element.filterOptions) throw new Error("Дождитесь, пока загрузятся ответы условия.");
   const draft = filterConditionDraft(element);

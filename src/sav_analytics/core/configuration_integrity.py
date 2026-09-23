@@ -42,7 +42,7 @@ def find_references(
             if any(
                 source.get("kind") == target_kind and str(source.get("ref")) == identifier
                 for category in recoding.get("categories", [])
-                for source in _filter_sources(category.get("rule", {}))
+                for source in _filter_sources(category.get("rule") or {})
             ):
                 references.append(
                     ConfigurationReference(
@@ -220,7 +220,7 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
     for recoding in _conditional_recodings(configuration):
         recoding_label = recoding.get("name") or recoding.get("code")
         for category in recoding.get("categories", []):
-            for source in _filter_sources(category.get("rule", {})):
+            for source in _filter_sources(category.get("rule") or {}):
                 kind = source.get("kind")
                 reference = str(source.get("ref"))
                 known = questions if kind == "question" else recodings

@@ -440,7 +440,7 @@ function updateStructureSearchCount(shown, total) {
 function syncDataRowsControls() {
   const rows = structureMode === "rows";
   document.querySelector("#row-view-controls").hidden = !rows;
-  document.querySelector("#new-formula").hidden = rows;
+  document.querySelector("#new-variable").hidden = rows;
   document.querySelector("#structure-search").placeholder = rows
     ? "Столбцы по коду или названию"
     : "Код или название";
@@ -667,7 +667,8 @@ conditionEditorRoots.forEach(root => root.addEventListener("click", event => {
   if (join) {
     const group = join.closest(".filter-group");
     const operator = group?.querySelector(".filter-group-operator") || document.querySelector("#filter-operator");
-    operator.value = operator.value === "and" ? "or" : "and";
+    if (operator.value === join.dataset.filterJoin) return;
+    operator.value = join.dataset.filterJoin;
     refreshFilterJoins(group?.querySelector(".filter-group-items") || document.querySelector("#filter-condition-list"));
     scheduleFilterPreview();
     return;
@@ -1285,7 +1286,7 @@ document.querySelector("#recode-form").addEventListener("submit", async event =>
   } catch (error) {
     showError(recodeError, error);
   } finally {
-    setBusy(saveButton, false, "Сохранить перекодировку");
+    setBusy(saveButton, false, "Сохранить");
   }
 });
 

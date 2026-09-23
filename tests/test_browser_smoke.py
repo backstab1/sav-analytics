@@ -878,27 +878,87 @@ def test_logic_variable_is_built_from_rules(
     _write_survey(source)
     _open_project(page, live_server, source)
 
-    page.select_option("#logic-variables", "new")
+    # Без сохранённых логических переменных их список не показывается.
+    expect(page.locator("#logic-variables")).to_be_hidden()
+    page.click("#new-variable")
     expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#recode-mode")).to_have_value("conditions")
     expect(page.locator("#recode-source-field")).to_be_hidden()
+    expect(page.locator("#recode-mode-field")).to_be_hidden()
+    kinds = page.locator("#recode-editor [data-variable-kind]")
+    expect(kinds).to_have_count(4)
+    expect(page.locator("#recode-editor [data-variable-kind='conditions']")).to_have_class("on")
     page.fill("#recode-code", "SEXSEG")
     page.fill("#recode-name", "Пол по правилу")
 
     categories = page.locator("#condition-category-list .condition-category")
     expect(categories).to_have_count(2)
+    # Вопрос условия не подставляется сам: пустая категория не выглядит заданной.
+    expect(categories.first.locator("select.filter-source")).to_have_value("")
     for index, (label, answer) in enumerate([("Мужчины", "Мужчина"), ("Женщины", "Женщина")]):
         category = categories.nth(index)
         category.locator(".condition-category-label").fill(label)
         category.locator("select.filter-source").select_option("question:SEX")
         category.locator(".filter-option", has_text=answer).locator("input").check()
 
+    # Карточка начинается с названия категории, под ним — кто в неё попадает.
+    expect(categories.nth(1).locator(".filter-group-head label > span")).to_have_text("Попадают, если")
+
+    # Кто не подошёл ни к одной — по умолчанию пропуск; своя категория
+    # включается строкой под списком и уходит на сервер последней.
+    expect(page.locator("#otherwise-label")).to_be_hidden()
+    page.click("#otherwise-mode [data-otherwise='category']")
+    expect(page.locator("#otherwise-label")).to_have_value("Остальные")
+
+    # Копия условий встаёт сразу под исходной категорией с тем же правилом.
+    categories.first.locator("[data-copy-condition-category]").click()
+    expect(categories).to_have_count(3)
+    copied = categories.nth(1)
+    expect(copied.locator("select.filter-source")).to_have_value("question:SEX")
+    expect(
+        copied.locator(".filter-option", has_text="Мужчина").locator("input")
+    ).to_be_checked(timeout=UI_TIMEOUT)
+    copied.locator("[data-remove-condition-category]").click()
+    expect(categories).to_have_count(2)
+
     page.click("#save-recoding")
     expect(page.locator("#toast-container")).to_contain_text(
         "Перекодировка сохранена", timeout=UI_TIMEOUT
     )
     expect(page.locator("#recode-preview")).to_contain_text("120", timeout=UI_TIMEOUT)
+    expect(page.locator("#recode-preview")).to_contain_text("Остальные")
     expect(page.locator("#logic-variables option", has_text="SEXSEG")).to_have_count(1)
+    # У сохранённой переменной способ виден, но сменить его нельзя.
+    expect(page.locator("#recode-editor [data-variable-kind='formula']")).to_be_disabled()
+
+
+def test_new_variable_switches_kind_and_keeps_the_name(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Один вход «+ Переменная»: способ меняется, пока переменная не сохранена."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+
+    page.click("#new-variable")
+    expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.fill("#recode-name", "Индекс")
+
+    page.click("#recode-editor [data-variable-kind='formula']")
+    expect(page.locator("#formula-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#formula-label")).to_have_value("Индекс")
+    expect(page.locator("#formula-editor [data-variable-kind='formula']")).to_have_class("on")
+
+    page.click("#formula-editor [data-variable-kind='grouping']")
+    expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#recode-name")).to_have_value("Индекс")
+    expect(page.locator("#recode-mode")).to_have_value("ranges")
+    expect(page.locator("#recode-mode-field")).to_be_visible()
+    expect(page.locator("#recode-source-field")).to_be_visible()
+    # Диапазоны или объединение — сегменты, а не выпадающий список.
+    page.click("[data-recode-mode='categories']")
+    expect(page.locator("#recode-mode")).to_have_value("categories")
+    expect(page.locator("#category-editor")).to_be_visible()
 
 
 def test_project_library_renames_copies_trashes_and_restores(
@@ -1286,7 +1346,8 @@ def test_formula_is_checked_saved_and_opened_as_a_question(
     _write_survey(source)
     _open_project(page, live_server, source)
 
-    page.click("#new-formula")
+    page.click("#new-variable")
+    page.click("#recode-editor [data-variable-kind='formula']")
     expect(page.locator("#formula-editor")).to_be_visible(timeout=UI_TIMEOUT)
     page.fill("#formula-name", "DOUBLE")
     page.fill("#formula-label", "Двойная оценка")
@@ -1585,7 +1646,8 @@ def test_segmentation_is_suggested_saved_and_profiled(
     _write_survey(source)
     _open_project(page, live_server, source)
 
-    page.select_option("#logic-variables", "new-segments")
+    page.click("#new-variable")
+    page.click("#recode-editor [data-variable-kind='segments']")
     expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#segment-editor")).to_be_visible()
     page.fill("#recode-code", "SEG")

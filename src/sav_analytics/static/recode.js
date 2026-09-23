@@ -13,7 +13,7 @@ function openRecoding(recodingId = null, options = {}) {
   currentQuestionCode = null;
   showInspector(recodeEditor);
   const recoding = recodingId ? configuredRecodings().find(item => item.id === recodingId) : null;
-  setHeadingText(document.querySelector("#recode-editor-title"), recoding ? recoding.code : "Новая");
+  setHeadingText(document.querySelector("#recode-editor-title"), recoding ? recoding.code : "Новая переменная");
   document.querySelector("#recode-code").value = recoding?.code || suggestRecodeCode();
   document.querySelector("#recode-name").value = recoding?.name || options.suggestName || "";
   document.querySelector("#recode-mode").value = recoding?.mode || options.mode || "ranges";
@@ -38,11 +38,13 @@ function openRecoding(recodingId = null, options = {}) {
     addRangeRow({ label: "35 и старше", lower: 35, upper: null });
   }
   renderRecodeMode();
+  renderVariableKinds(variableKindOf(document.querySelector("#recode-mode").value), Boolean(recoding));
   document.querySelector("#delete-recoding").hidden = !recoding;
+  document.querySelector("#refresh-recode-preview").hidden = !recoding;
   document.querySelector("#recode-error").hidden = true;
   document.querySelector("#recode-preview").innerHTML = recoding
     ? '<p class="muted">Считаем…</p>'
-    : '<p class="muted">Сохраните перекодировку для расчёта.</p>';
+    : '<p class="muted">Появится после сохранения.</p>';
   renderTable();
   if (recoding) loadRecodePreview();
 }
@@ -78,7 +80,103 @@ function renderRecodeMode() {
   const sourceless = mode === "conditions" || mode === "segments";
   document.querySelector("#recode-source-field").hidden = sourceless;
   document.querySelector("#recode-source").disabled = sourceless;
+  // Диапазоны и объединение — два вида группировки одной переменной; логику
+  // и сегменты выбирает переключатель способа, а не этот список.
+  document.querySelector("#recode-mode-field").hidden = sourceless;
+  document.querySelectorAll("[data-recode-mode]").forEach(button => {
+    const on = button.dataset.recodeMode === mode;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-checked", String(on));
+  });
 }
+
+// Диапазоны или объединение — сегменты вместо списка: вариантов два, и
+// видеть второй полезнее, чем прятать его за стрелкой.
+document.querySelector("#recode-mode-field").addEventListener("click", event => {
+  const button = event.target.closest("[data-recode-mode]");
+  if (!button || button.classList.contains("on")) return;
+  const select = document.querySelector("#recode-mode");
+  select.value = button.dataset.recodeMode;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  markInspectorDirty(recodeEditor);
+  recodeEditor.dataset.built = "1";
+});
+
+/* Новая переменная (решение 026): один вход и переключатель способа, как
+   Logic · Bucketing · Formula у Qualtrics. Способы сохраняются разными
+   объектами — формула отдельно, остальное перекодировкой, — и друг в друга
+   без потерь не переводятся. Поэтому способ выбирают, пока переменная не
+   сохранена; у сохранённой он виден, но заблокирован. */
+const VARIABLE_KINDS = [
+  { kind: "conditions", label: "Логика", placeholder: "Например, «Частые клиенты»",
+    hint: "Каждая категория — свои условия. Кто подходит под несколько, попадает в первую по порядку." },
+  { kind: "grouping", label: "Группировка", placeholder: "Например, «Возрастные группы»",
+    hint: "Новые категории из одной переменной: диапазоны числа или объединение ответов." },
+  { kind: "formula", label: "Формула", placeholder: "Например, «Индекс удовлетворённости»",
+    hint: "Число, которое считается по выражению из других полей." },
+  { kind: "segments", label: "Сегменты", placeholder: "Например, «Сегменты»",
+    hint: "Похожие респонденты собираются в группы по числовым вопросам (k-means)." },
+];
+
+function variableKindOf(mode) {
+  return mode === "ranges" || mode === "categories" ? "grouping" : mode;
+}
+
+// Переключатель, подсказка под ним и надпись над заголовком. Для новой
+// переменной заголовок — «Новая переменная», и способ называет переключатель;
+// у сохранённой заголовок — её код, а способ стоит надписью над ним.
+function renderVariableKinds(active, locked) {
+  const current = VARIABLE_KINDS.find(item => item.kind === active);
+  document.querySelectorAll("[data-kind-switch]").forEach(box => {
+    box.innerHTML = VARIABLE_KINDS.map(item => {
+      const on = item.kind === active;
+      const blocked = locked && !on;
+      return `<button type="button" role="radio" data-variable-kind="${item.kind}" aria-checked="${on}" class="${on ? "on" : ""}"
+        ${blocked ? 'disabled title="Способ сохранённой переменной не меняется"' : ""}>${escapeHtml(item.label)}</button>`;
+    }).join("");
+  });
+  document.querySelectorAll("[data-kind-hint]").forEach(node => { node.textContent = current?.hint || ""; });
+  document.querySelectorAll("[data-variable-kicker]").forEach(node => {
+    node.textContent = current?.label || "";
+    node.hidden = !locked;
+  });
+  document.querySelector("#recode-name").placeholder = current?.placeholder || "";
+  document.querySelector("#formula-label").placeholder = current?.placeholder || "";
+}
+
+function openNewVariable(kind, carry = {}) {
+  delete recodeEditor.dataset.built;
+  delete formulaEditor.dataset.built;
+  if (kind === "formula") {
+    openFormula(null, { label: carry.name });
+    return;
+  }
+  openRecoding(null, {
+    mode: kind === "grouping" ? "ranges" : kind,
+    suggestName: carry.name || (kind === "segments" ? "Сегменты" : ""),
+  });
+}
+
+// Название переходит в новый способ: его вводят первым, и терять его при
+// переключении обидно. Поэтому ввод одного названия не считается потерей —
+// спрашивают, только если уже собрано то, что при смене способа пропадёт.
+// Код не переходит: у формулы и перекодировки свои подсказки свободного имени.
+const CARRIED_FIELDS = new Set(["recode-name", "formula-label"]);
+[recodeEditor, formulaEditor].forEach(panel => ["input", "change"].forEach(type => {
+  panel.addEventListener(type, event => {
+    if (event.isTrusted && !CARRIED_FIELDS.has(event.target.id)) panel.dataset.built = "1";
+  });
+}));
+
+document.querySelector("#new-variable").addEventListener("click", () => openNewVariable("conditions"));
+document.addEventListener("click", event => {
+  const button = event.target.closest("[data-variable-kind]");
+  if (!button || button.disabled || button.classList.contains("on")) return;
+  const panel = formulaEditor.hidden ? recodeEditor : formulaEditor;
+  const name = document.querySelector(panel === formulaEditor ? "#formula-label" : "#recode-name").value.trim();
+  if (!panel.dataset.built) markInspectorClean(panel);
+  openNewVariable(button.dataset.variableKind, { name });
+});
 
 /* Сегментация (PQ.11): переменные, число сегментов и подписи. Центры
    считает сервер при сохранении, подбор числа сегментов — тоже он. */
@@ -136,9 +234,12 @@ document.querySelector("#segment-options").addEventListener("click", event => {
   markInspectorDirty(recodeEditor);
 });
 
-// Логическая переменная: категория — подпись и группа условий, собранная тем
-// же редактором, что фильтр. Порядок важен: респондент попадает в первую
-// подходящую категорию.
+/* Логическая переменная: категория читается фразой «Если … → категория».
+   Условия собирает тот же конструктор, что фильтр; его группа здесь не
+   рисуется своей рамкой (`display: contents` в styles.css), а её строки
+   встают в сетку карточки категории. Кто не подошёл ни к одной категории,
+   решает строка под списком: пропуск или своя категория «Иначе» — на
+   сервере это последняя категория без условия. */
 function defaultConditionCategories() {
   return [
     { label: "", rule: { operator: "and", items: [] } },
@@ -148,44 +249,113 @@ function defaultConditionCategories() {
 
 function renderConditionCategories(categories) {
   document.querySelector("#condition-category-list").innerHTML = "";
-  categories.forEach(category => addConditionCategory(category));
+  const otherwise = categories.find(category => category.otherwise);
+  categories.filter(category => !category.otherwise).forEach(category => addConditionCategory(category));
+  setOtherwise(otherwise ? otherwise.label : null);
 }
 
-function addConditionCategory(category = { label: "", rule: { operator: "and", items: [] } }) {
+function addConditionCategory(category = { label: "", rule: { operator: "and", items: [] } }, after = null) {
+  const list = document.querySelector("#condition-category-list");
   const element = document.createElement("div");
   element.className = "condition-category";
-  element.innerHTML = `<div class="condition-category-head">
-      <span class="condition-category-number" aria-hidden="true"></span>
-      <input class="condition-category-label" maxlength="250" placeholder="Название категории" aria-label="Название категории" value="${escapeAttribute(category.label || "")}" />
-      <button type="button" class="icon-button" data-remove-condition-category aria-label="Удалить категорию">×</button>
-    </div>`;
-  document.querySelector("#condition-category-list").append(element);
+  element.innerHTML = `
+    <span class="condition-category-number" aria-hidden="true"></span>
+    <input class="condition-category-label" maxlength="250" placeholder="Название категории" aria-label="Название категории" value="${escapeAttribute(category.label || "")}" />
+    <span class="condition-category-tools">
+      <button type="button" class="icon-button" data-copy-condition-category aria-label="Копировать условия в новую категорию" title="Копировать условия в новую категорию ниже">⧉</button>
+      <button type="button" class="icon-button" data-remove-condition-category aria-label="Удалить категорию" title="Удалить категорию">×</button>
+    </span>`;
+  if (after) after.after(element);
+  else list.append(element);
   addFilterGroup(category.rule || {}, element);
+  element.querySelector("[data-add-group-condition]").textContent = "+ Ещё условие";
   numberConditionCategories();
+  return element;
 }
 
 function numberConditionCategories() {
-  document.querySelectorAll("#condition-category-list .condition-category-number").forEach((node, index) => {
-    node.textContent = String(index + 1);
+  document.querySelectorAll("#condition-category-list .condition-category").forEach((element, index) => {
+    element.querySelector(".condition-category-number").textContent = String(index + 1);
+    const lead = element.querySelector(".filter-group-head label > span");
+    if (lead) lead.textContent = "Попадают, если";
   });
+}
+
+function setOtherwise(label) {
+  const own = label != null;
+  document.querySelectorAll("#otherwise-mode [data-otherwise]").forEach(button => {
+    const on = (button.dataset.otherwise === "category") === own;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-checked", String(on));
+  });
+  const input = document.querySelector("#otherwise-label");
+  input.hidden = !own;
+  input.value = own ? label : "";
 }
 
 function collectConditionCategories() {
   const elements = [...document.querySelectorAll("#condition-category-list .condition-category")];
-  if (elements.length < 2) throw new Error("Добавьте минимум две категории.");
-  return elements.map(element => {
+  if (!elements.length) throw new Error("Добавьте хотя бы одну категорию с условием.");
+  const categories = elements.map(element => {
     const label = element.querySelector(".condition-category-label").value.trim();
     if (!label) throw new Error("У каждой категории должно быть название.");
     return { label, rule: collectFilterItem(element.querySelector(".filter-group")) };
   });
+  const input = document.querySelector("#otherwise-label");
+  if (!input.hidden) {
+    const label = input.value.trim();
+    if (!label) throw new Error("Назовите категорию для тех, кто не подошёл ни к одной.");
+    categories.push({ label, otherwise: true });
+  }
+  if (categories.length < 2) {
+    throw new Error("Нужны две категории: добавьте ещё одну или соберите не подошедших в свою.");
+  }
+  return categories;
 }
 
-document.querySelector("#add-condition-category").addEventListener("click", () => addConditionCategory());
+function markConditionsBuilt() {
+  markInspectorDirty(recodeEditor);
+  recodeEditor.dataset.built = "1";
+}
+
+document.querySelector("#add-condition-category").addEventListener("click", () => {
+  addConditionCategory().querySelector(".condition-category-label").focus();
+  markConditionsBuilt();
+});
+document.querySelector("#otherwise-mode").addEventListener("click", event => {
+  const button = event.target.closest("[data-otherwise]");
+  if (!button || button.classList.contains("on")) return;
+  const own = button.dataset.otherwise === "category";
+  setOtherwise(own ? "Остальные" : null);
+  if (own) document.querySelector("#otherwise-label").select();
+  markConditionsBuilt();
+});
 document.querySelector("#condition-category-list").addEventListener("click", event => {
+  // Копия условий — Copy Above Condition Set у Qualtrics: соседние категории
+  // часто отличаются одним условием, и собирать их заново дольше, чем править.
+  const copy = event.target.closest("[data-copy-condition-category]");
+  if (copy) {
+    const source = copy.closest(".condition-category");
+    const error = document.querySelector("#recode-error");
+    let rule;
+    try {
+      rule = collectFilterItem(source.querySelector(".filter-group"));
+    } catch (problem) {
+      error.textContent = problem.message;
+      error.hidden = false;
+      return;
+    }
+    error.hidden = true;
+    addConditionCategory({ label: "", rule }, source).querySelector(".condition-category-label").focus();
+    markConditionsBuilt();
+    return;
+  }
   const remove = event.target.closest("[data-remove-condition-category]");
-  if (!remove) return;
-  remove.closest(".condition-category").remove();
-  numberConditionCategories();
+  if (remove) {
+    remove.closest(".condition-category").remove();
+    numberConditionCategories();
+    markConditionsBuilt();
+  }
 });
 
 // Логические переменные не принадлежат одному вопросу, поэтому открываются
@@ -193,20 +363,18 @@ document.querySelector("#condition-category-list").addEventListener("click", eve
 function renderLogicVariablePicker() {
   const select = document.querySelector("#logic-variables");
   const logic = configuredRecodings().filter(item => item.mode === "conditions" || item.mode === "segments");
-  select.innerHTML = `<option value="">${logic.length ? `Логические переменные · ${logic.length}` : "Логические переменные"}</option>`
-    + logic.map(item => `<option value="${escapeAttribute(item.id)}">${item.mode === "segments" ? "◎ " : ""}${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`).join("")
-    + '<option value="new">+ Новая логическая переменная</option>'
-    + '<option value="new-segments">+ Новая сегментация (k-means)</option>';
+  // Новые переменные заводит «+ Переменная»; здесь только открывают
+  // сохранённые, поэтому без них список не показывается.
+  select.innerHTML = `<option value="">Логические переменные · ${logic.length}</option>`
+    + logic.map(item => `<option value="${escapeAttribute(item.id)}">${item.mode === "segments" ? "◎ " : ""}${escapeHtml(item.code)} — ${escapeHtml(item.name)}</option>`).join("");
   select.value = "";
+  select.closest(".pill-select").classList.toggle("is-empty", !logic.length);
 }
 
 document.querySelector("#logic-variables").addEventListener("change", event => {
   const value = event.target.value;
   event.target.value = "";
-  if (!value) return;
-  if (value === "new") openRecoding(null, { mode: "conditions" });
-  else if (value === "new-segments") openRecoding(null, { mode: "segments", suggestName: "Сегменты" });
-  else openRecoding(value);
+  if (value) openRecoding(value);
 });
 
 function addRangeRow(category = {}) {
@@ -214,10 +382,10 @@ function addRangeRow(category = {}) {
   row.className = "range-row";
   row.innerHTML = `
     <input class="range-label" aria-label="Название категории" placeholder="Название" value="${escapeAttribute(category.label || "")}" required />
-    <input class="range-lower" aria-label="От" type="number" step="any" placeholder="От" value="${category.lower ?? ""}" />
+    <input class="range-lower" aria-label="От" type="number" step="any" placeholder="−∞" value="${category.lower ?? ""}" />
     <span>—</span>
-    <input class="range-upper" aria-label="До" type="number" step="any" placeholder="До" value="${category.upper ?? ""}" />
-    <button type="button" data-remove-range title="Удалить категорию">×</button>`;
+    <input class="range-upper" aria-label="До" type="number" step="any" placeholder="+∞" value="${category.upper ?? ""}" />
+    <button type="button" class="icon-button" data-remove-range aria-label="Удалить диапазон" title="Удалить диапазон">×</button>`;
   document.querySelector("#range-list").append(row);
 }
 
