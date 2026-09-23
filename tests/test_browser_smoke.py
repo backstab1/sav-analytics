@@ -352,8 +352,11 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     page.reload()
     expect(page.locator("#section-tables")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#project-name")).to_have_text("Браузерный сценарий")
-    # Конструктор получает переменные проекта, а не грузит их сам.
+    # Конструктор получает переменные проекта, а не грузит их сам. Список
+    # собирается при открытии поповера — скрытым он не пересобирается.
+    page.click('.bld-param[data-zone="rows"]')
     expect(page.locator("#bld-list .bld-var")).not_to_have_count(0, timeout=UI_TIMEOUT)
+    page.keyboard.press("Escape")
     # Полки стали полосой параметров: список переменных открывается из неё.
     page.click('.bld-param[data-zone="rows"]')
     expect(page.locator("#bld-picker")).to_be_visible(timeout=UI_TIMEOUT)
@@ -1111,6 +1114,44 @@ def test_report_build_is_picked_up_after_reload(
     )
     page.reload()
     expect(status).to_contain_text("не найдена", timeout=UI_TIMEOUT)
+
+
+def test_sections_have_no_serious_accessibility_violations(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """axe-core по всем разделам и открытому редактору: без serious и critical (P2)."""
+    from axe_playwright_python.sync_playwright import Axe
+
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    axe = Axe()
+    problems = []
+
+    def check(where: str) -> None:
+        # Панели въезжают с анимацией прозрачности: до её конца axe видит
+        # полупрозрачный текст и ложно жалуется на контраст.
+        page.wait_for_function(
+            "document.getAnimations().every(item => item.playState !== 'running')"
+        )
+        for violation in axe.run(page).response["violations"]:
+            if violation["impact"] in {"serious", "critical"}:
+                targets = [node["target"][0] for node in violation["nodes"][:3]]
+                problems.append(f"{where}: {violation['id']} {targets}")
+
+    for view in ("data", "tables", "analysis", "text", "reports"):
+        _open_view(page, view)
+        expect(page.locator(f".tabs button[data-view='{view}']")).to_have_attribute(
+            "aria-current", "page", timeout=UI_TIMEOUT
+        )
+        page.wait_for_timeout(300)
+        check(view)
+    _open_view(page, "data")
+    page.click("#table-body tr[data-code='BRAND'] .question-cell")
+    expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    check("question editor")
+
+    assert not problems, "; ".join(problems)
 
 
 def test_several_questions_are_excluded_at_once(
