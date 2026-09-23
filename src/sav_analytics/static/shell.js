@@ -131,7 +131,9 @@
     const sheetSelect = document.querySelector("#bld-sheet");
     const measureSelect = document.querySelector("#bld-measure");
     const boxSelect = document.querySelector("#bld-box");
-    const netButton = document.querySelector("#bld-net");
+    const groupsButton = document.querySelector("#bld-groups");
+    const groupsMenu = document.querySelector("#bld-groups-menu");
+    const netList = document.querySelector("#bld-net-list");
     const nestToggle = document.querySelector("#bld-nest");
     const saveCutButton = document.querySelector("#bld-save-cut");
     const exportButton = document.querySelector("#bld-export");
@@ -139,7 +141,6 @@
     const testsSlot = document.querySelector("#bld-tests");
     const viewButton = document.querySelector("#bld-view");
     const viewMenu = document.querySelector("#bld-view-menu");
-    const netRow = document.querySelector("#bld-net-row");
     const assistantToggle = document.querySelector("#bld-assistant-toggle");
     const assistantBody = document.querySelector("#bld-assistant-body");
     const log = document.querySelector("#bld-log");
@@ -175,6 +176,7 @@
       layout.rows = layout.rows.filter(code => byCode.get(code)?.canRow);
       layout.cols = layout.cols.filter(code => byCode.get(code)?.canCol);
       layout.filter = layout.filter.filter(id => filters.some(item => item.id === id));
+      treesStale = true;
       render();
     }
 
@@ -196,8 +198,9 @@
       // Переменная в колонках и сохранённый баннер — два способа задать один
       // разрез, поэтому выбор одного снимает другой.
       if (zone === "cols") bannerId = null;
-      layout[zone] = layout[zone].filter(item => item !== code);
-      layout[zone].push(code);
+      const order = new Map(variables.map((item, index) => [item.code, index]));
+      layout[zone] = [...layout[zone].filter(item => item !== code), code]
+        .sort((left, right) => order.get(left) - order.get(right));
       render();
     }
 
@@ -271,96 +274,216 @@
     }
 
     function renderPalette() {
-      // Пока в поповере собирают NET, список переменных его не затирает.
+      // Пока в поповере собирают NET, список фильтров его не затирает.
       if (pickerMode === "net") return;
-      const zone = pickerZone || "rows";
-      const query = search.value.trim().toLowerCase();
       list.innerHTML = "";
-      if (zone === "filter") {
-        renderFilterPalette(query);
-        return;
-      }
-      const matched = variables.filter(item =>
-        !query || (item.display || item.code).toLowerCase().includes(query) || item.label.toLowerCase().includes(query));
-      count.textContent = variables.length ? `${matched.length} из ${variables.length}` : "";
-
-      if (!variables.length) {
-        const empty = document.createElement("p");
-        empty.className = "bld-placeholder bld-list-empty";
-        empty.textContent = "Откройте проект — переменные появятся здесь.";
-        list.append(empty);
-        return;
-      }
-
-      matched.forEach(item => {
-        const flat = !usable(item.code, zone);
-        const chosen = layout[zone].includes(item.code);
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = `bld-var${flat ? " bld-var-flat" : ""}${chosen ? " chosen" : ""}`;
-        chip.disabled = flat;
-        chip.draggable = !flat;
-        chip.dataset.code = item.code;
-        chip.title = flat
-          ? `${item.label} — ${zone === "rows" ? "такой вопрос лист книги не раскладывает" : "нет категорий для колонок"}`
-          : item.label;
-        chip.innerHTML =
-          `<span class="bld-var-mark" aria-hidden="true"></span>` +
-          `<span class="bld-var-code"></span><span class="bld-var-name"></span>` +
-          `<span class="bld-var-kind">${KIND_LABEL[item.type] || ""}</span>`;
-        chip.querySelector(".bld-var-code").textContent = item.display || item.code;
-        chip.querySelector(".bld-var-name").textContent = item.label;
-        chip.setAttribute("aria-pressed", String(chosen));
-        chip.addEventListener("click", event => {
-          // Список тут же пересобирается, и щелчок всплыл бы уже от
-          // оторванного узла — обработчик «щёлкнули мимо» принял бы это
-          // за клик вне поповера и закрыл его после каждого выбора.
-          event.stopPropagation();
-          if (chosen) removeFromZone(item.code, zone);
-          else addToZone(item.code, zone);
-          renderPalette();
-        });
-        chip.addEventListener("dragstart", event => {
-          event.dataTransfer.setData("text/plain", item.code);
-          event.dataTransfer.effectAllowed = "copy";
-          chip.classList.add("dragging");
-        });
-        chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
-        list.append(chip);
-      });
-      if (zone === "cols") renderBannerOptions(query);
+      renderFilterPalette(search.value.trim().toLowerCase());
     }
 
-    /* Сохранённый баннер отчёта годится и таблице: колонки те же, что в
-       книге. Идёт после переменных: баннеров в проекте накапливается
-       больше, чем помещается в поповер, и раньше они закрывали собой
-       весь список, ради которого поповер открывают. */
-    function renderBannerOptions(query) {
-      const matched = banners.filter(item => !query || item.name.toLowerCase().includes(query));
-      if (!matched.length) return;
-      const caption = document.createElement("p");
-      caption.className = "bld-list-caption";
-      caption.textContent = "Баннеры отчёта";
-      list.append(caption);
-      matched.forEach(item => {
-        const chosen = bannerId === item.id;
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = `bld-var${chosen ? " chosen" : ""}`;
-        chip.dataset.banner = item.id;
-        chip.setAttribute("aria-pressed", String(chosen));
-        chip.innerHTML = '<span class="bld-var-mark" aria-hidden="true"></span><span class="bld-var-name"></span>';
-        chip.querySelector(".bld-var-name").textContent = item.name;
-        chip.addEventListener("click", event => {
-          event.stopPropagation();
-          bannerId = chosen ? null : item.id;
+    /* ---- Деревья слева: строки и колонки ----
+       Пункт — галочка и стрелка. Галочка кладёт вопрос в таблицу, стрелка
+       раскрывает содержимое: коды, переменные группы, блоки баннера. Так
+       раскладку видно целиком, а не только по подписи пилюли, и выбор не
+       прячется в поповер, который надо открывать ради каждого вопроса.
+       Порядок в таблице — порядок анкеты, а не порядок щелчков. */
+    const trees = {
+      rows: {
+        root: document.querySelector("#bld-rows-tree"),
+        search: document.querySelector("#bld-rows-search"),
+        count: document.querySelector("#bld-rows-count"),
+        clear: document.querySelector('[data-clear-zone="rows"]'),
+      },
+      cols: {
+        root: document.querySelector("#bld-cols-tree"),
+        search: document.querySelector("#bld-cols-search"),
+        count: document.querySelector("#bld-cols-count"),
+        clear: document.querySelector('[data-clear-zone="cols"]'),
+      },
+    };
+    const expanded = { rows: new Set(), cols: new Set() };
+    // Деревья, как и таблица, собираются только на видимом экране: на
+    // массиве в 3 000 переменных пересборка скрытого списка стоила секунды.
+    let treesStale = true;
+
+    // Одноимённые баннеры иначе шли столбиком одинаковых строк.
+    function numberedBanners() {
+      const seen = new Map();
+      return banners.map(item => {
+        const index = (seen.get(item.name) || 0) + 1;
+        seen.set(item.name, index);
+        return { ...item, name: index > 1 ? `${item.name} (${index})` : item.name };
+      });
+    }
+
+    function treeNode({ zone, key, code, label, children, checked, title }) {
+      const kids = children || [];
+      const open = expanded[zone].has(key);
+      const node = document.createElement("div");
+      node.className = "bld-node";
+      node.setAttribute("role", "treeitem");
+      node.dataset.key = key;
+      if (kids.length) node.setAttribute("aria-expanded", String(open));
+      node.innerHTML =
+        '<div class="bld-node-row">' +
+        `<button type="button" class="bld-twist" tabindex="-1" aria-label="Показать содержимое"${kids.length ? "" : " disabled"}></button>` +
+        '<label class="bld-node-main"><input type="checkbox" class="bld-check" /><span class="bld-node-code"></span><span class="bld-node-name"></span></label>' +
+        "</div>";
+      const input = node.querySelector(".bld-check");
+      input.checked = checked;
+      if (code) input.dataset.code = code;
+      node.querySelector(".bld-node-code").textContent = code ? (byCode.get(code)?.display || code) : "";
+      node.querySelector(".bld-node-name").textContent = label;
+      node.querySelector(".bld-node-main").title = title || label;
+      node.kids = kids;
+      if (open) fillKids(node);
+      return node;
+    }
+
+    function fillKids(node) {
+      const box = document.createElement("ul");
+      box.className = "bld-kids";
+      box.setAttribute("role", "group");
+      node.kids.forEach(kid => {
+        const item = document.createElement("li");
+        item.innerHTML = '<span class="bld-kid-code"></span><span class="bld-kid-name"></span>';
+        item.querySelector(".bld-kid-code").textContent = kid.code;
+        item.querySelector(".bld-kid-name").textContent = kid.label;
+        item.title = kid.label;
+        box.append(item);
+      });
+      node.append(box);
+    }
+
+    function treeNote(className, text) {
+      const note = document.createElement("p");
+      note.className = className;
+      note.textContent = text;
+      return note;
+    }
+
+    function itemMatches(item, query) {
+      return !query
+        || (item.display || item.code || "").toLowerCase().includes(query)
+        || (item.label || item.name || "").toLowerCase().includes(query);
+    }
+
+    function kindTitle(item) {
+      return KIND_LABEL[item.type] ? `${item.label} · ${KIND_LABEL[item.type]}` : item.label;
+    }
+
+    function renderTrees() {
+      if (!trees.rows.root.offsetParent) {
+        treesStale = true;
+        return;
+      }
+      treesStale = false;
+
+      const rowsQuery = trees.rows.search.value.trim().toLowerCase();
+      const rowItems = variables.filter(item => item.canRow);
+      const rows = document.createDocumentFragment();
+      rowItems.filter(item => itemMatches(item, rowsQuery)).forEach(item => {
+        rows.append(treeNode({
+          zone: "rows", key: item.code, code: item.code, label: item.label, children: item.children,
+          checked: layout.rows.includes(item.code), title: kindTitle(item),
+        }));
+      });
+      if (!rows.childNodes.length) {
+        rows.append(treeNote("bld-tree-empty", !projectId
+          ? "Откройте проект — вопросы появятся здесь."
+          : rowItems.length ? "Ничего не найдено." : "В отчёте нет вопросов, которые раскладываются в таблицу."));
+      }
+      trees.rows.root.replaceChildren(rows);
+
+      const colsQuery = trees.cols.search.value.trim().toLowerCase();
+      const cols = document.createDocumentFragment();
+      variables.filter(item => item.canCol && itemMatches(item, colsQuery)).forEach(item => {
+        cols.append(treeNode({
+          zone: "cols", key: item.code, code: item.code, label: item.label, children: item.children,
+          checked: !bannerId && layout.cols.includes(item.code), title: kindTitle(item),
+        }));
+      });
+      // Баннеры после переменных: их в проекте накапливается больше, чем
+      // помещается в панель, и сверху они закрыли бы сами разрезы.
+      const bannerItems = numberedBanners().filter(item => itemMatches(item, colsQuery));
+      if (bannerItems.length) {
+        cols.append(treeNote("bld-tree-caption", "Баннеры отчёта"));
+        bannerItems.forEach(item => {
+          const node = treeNode({
+            zone: "cols", key: `banner:${item.id}`, label: item.name, children: item.children,
+            checked: bannerId === item.id, title: `${item.name} — колонки как в книге`,
+          });
+          node.querySelector(".bld-check").dataset.banner = item.id;
+          cols.append(node);
+        });
+      }
+      if (!cols.childNodes.length && projectId) cols.append(treeNote("bld-tree-empty", "Ничего не найдено."));
+      trees.cols.root.replaceChildren(cols);
+      renderTreeCounts();
+    }
+
+    // После галочки дерево не пересобирается: поправить отметки и счётчики
+    // дешевле, и раскрытые пункты со скроллом остаются на месте.
+    function syncTrees() {
+      if (treesStale || !trees.rows.root.offsetParent) {
+        renderTrees();
+        return;
+      }
+      trees.rows.root.querySelectorAll(".bld-check").forEach(input => {
+        input.checked = layout.rows.includes(input.dataset.code);
+      });
+      trees.cols.root.querySelectorAll(".bld-check").forEach(input => {
+        input.checked = input.dataset.banner
+          ? bannerId === input.dataset.banner
+          : !bannerId && layout.cols.includes(input.dataset.code);
+      });
+      renderTreeCounts();
+    }
+
+    function renderTreeCounts() {
+      const rowsCount = layout.rows.length;
+      const colsCount = bannerId ? 1 : layout.cols.length;
+      trees.rows.count.textContent = rowsCount ? String(rowsCount) : "";
+      trees.cols.count.textContent = bannerId ? "баннер" : (colsCount ? String(colsCount) : "только Total");
+      trees.rows.clear.hidden = !rowsCount;
+      trees.cols.clear.hidden = !colsCount;
+    }
+
+    Object.entries(trees).forEach(([zone, tree]) => {
+      tree.root.addEventListener("change", event => {
+        const input = event.target.closest(".bld-check");
+        if (!input) return;
+        if (input.dataset.banner) {
+          notice = "";
+          bannerId = input.checked ? input.dataset.banner : null;
           if (bannerId) layout.cols = [];
-          closePicker();
           render();
-        });
-        list.append(chip);
+          return;
+        }
+        if (input.checked) addToZone(input.dataset.code, zone);
+        else removeFromZone(input.dataset.code, zone);
       });
-    }
+      tree.root.addEventListener("click", event => {
+        const twist = event.target.closest(".bld-twist");
+        if (!twist) return;
+        const node = twist.closest(".bld-node");
+        const open = !expanded[zone].has(node.dataset.key);
+        if (open) {
+          expanded[zone].add(node.dataset.key);
+          fillKids(node);
+        } else {
+          expanded[zone].delete(node.dataset.key);
+          node.querySelector(".bld-kids")?.remove();
+        }
+        node.setAttribute("aria-expanded", String(open));
+      });
+      tree.search.addEventListener("input", renderTrees);
+      tree.clear.addEventListener("click", () => {
+        notice = "";
+        layout[zone] = [];
+        if (zone === "cols") bannerId = null;
+        render();
+      });
+    });
 
     // Фильтр таблицы — сохранённое правило проекта: условие собирается в
     // редакторе фильтра, и текст правила там же, одной строкой для всех мест.
@@ -375,7 +498,7 @@
         chip.className = `bld-var${chosen ? " chosen" : ""}`;
         chip.dataset.filter = item.id || "";
         chip.setAttribute("aria-pressed", String(chosen));
-        chip.innerHTML = `<span class="bld-var-mark" aria-hidden="true"></span><span class="bld-var-name"></span>`;
+        chip.innerHTML = `<span class="bld-var-name"></span><span class="bld-var-mark" aria-hidden="true"></span>`;
         chip.querySelector(".bld-var-name").textContent = item.name;
         chip.addEventListener("click", event => {
           event.stopPropagation();
@@ -408,7 +531,61 @@
       return `${clip(labels[0])} +${labels.length - 1}`;
     }
 
+    /* Переключатели вместо выпадающих списков: вариантов два-четыре, и
+       все видны сразу. Значение по-прежнему живёт в скрытом <select> —
+       на его value и change опираются расчёт и сценарии ассистента, — а
+       кнопки только отражают его и меняют. */
+    function buildSegments() {
+      document.querySelectorAll("#section-tables select.bld-seg-source").forEach(select => {
+        const group = document.createElement("div");
+        group.className = "bld-seg";
+        group.setAttribute("role", "radiogroup");
+        group.setAttribute("aria-labelledby", select.getAttribute("aria-labelledby"));
+        group.dataset.for = select.id;
+        [...select.options].forEach(option => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.setAttribute("role", "radio");
+          button.dataset.value = option.value;
+          button.textContent = option.textContent;
+          if (option.title) button.title = option.title;
+          group.append(button);
+        });
+        group.addEventListener("click", event => {
+          const button = event.target.closest("button[data-value]");
+          if (!button || select.value === button.dataset.value) return;
+          select.value = button.dataset.value;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          syncSegments();
+        });
+        select.after(group);
+      });
+      syncSegments();
+    }
+
+    function syncSegments() {
+      document.querySelectorAll("#section-tables .bld-seg").forEach(group => {
+        const value = document.getElementById(group.dataset.for).value;
+        group.querySelectorAll("button").forEach(button => {
+          button.setAttribute("aria-checked", String(button.dataset.value === value));
+        });
+      });
+    }
+
+    // Пилюля «Вид» называет только отступления от отчёта: пока всё как в
+    // книге, значения нет, и полоса не повторяет очевидное.
+    function renderViewValue() {
+      const slot = document.querySelector("#bld-view-value");
+      const parts = [];
+      if (measureSelect.value === "index") parts.push("индекс");
+      if (sheetSelect.value === "filter") parts.push("от ответивших");
+      slot.textContent = parts.join(" · ");
+      slot.hidden = !parts.length;
+      syncSegments();
+    }
+
     function renderParams() {
+      renderViewValue();
       const values = {
         rows: layout.rows.map(code => byCode.get(code)?.label).filter(Boolean),
         cols: bannerId
@@ -433,8 +610,21 @@
 
     // Смещения ярусов липкой шапки считаются из фактических высот: жёстко
     // прописанные пиксели разъезжаются на другом шрифте и масштабе.
+    // Высота ярусов шапки меняется и после отрисовки: ширина окна, панели
+    // слева, догрузка шрифта переносят подписи. Отступы, посчитанные один
+    // раз, тогда расходятся, и ярусы наезжают друг на друга.
+    const headObserver = new ResizeObserver(entries => {
+      const table = entries[0]?.target.closest("table.bld-grid");
+      if (table) stackStickyHeader(table);
+    });
+
     function stackStickyHeader(table) {
       if (!table || !table.offsetParent) return;
+      if (table.dataset.observed !== "1") {
+        headObserver.disconnect();
+        headObserver.observe(table.tHead);
+        table.dataset.observed = "1";
+      }
       let offset = 0;
       Array.from(table.tHead.rows).forEach(row => {
         Array.from(row.cells).forEach(cell => { cell.style.top = `${offset}px`; });
@@ -461,7 +651,7 @@
         return;
       }
       if (!layout.rows.length) {
-        renderEmpty("Выберите вопросы в «Строках» — таблица соберётся сама.");
+        renderEmpty("Отметьте вопросы в «Строках» слева — таблица соберётся сама.");
         return;
       }
       const token = ++requestToken;
@@ -501,12 +691,16 @@
 
     function overridesPayload() {
       const payload = {};
+      // Группы вопроса, убранного из строк, помнятся до его возвращения,
+      // но в расчёт не идут.
       liveNets.forEach((nets, code) => {
-        if (nets.length) payload[code] = { nets };
+        if (nets.length && layout.rows.includes(code)) payload[code] = { nets };
       });
-      if (boxSelect.value) {
+      // Размер Top/Bottom — настройка отчёта: сервер применяет его ко всем
+      // шкалам таблицы, поэтому передаётся с любым вопросом строк.
+      if (boxSelect.value && layout.rows.length) {
         const code = layout.rows[0];
-        if (code) payload[code] = { ...(payload[code] || {}), scale_box: Number(boxSelect.value) };
+        payload[code] = { ...(payload[code] || {}), scale_box: Number(boxSelect.value) };
       }
       return Object.keys(payload).length ? payload : undefined;
     }
@@ -517,68 +711,136 @@
         question.rows.some(row => row.kind === "value" && !row.derived));
     }
 
-    function renderNetControl() {
-      netRow.hidden = !lastTable || !netableQuestions().length;
-      const total = [...liveNets.values()].reduce((sum, nets) => sum + nets.length, 0);
-      netButton.textContent = total ? `NET · ${total}` : "NET";
-      netButton.setAttribute("aria-pressed", total ? "true" : "false");
+    function netCount() {
+      return layout.rows.reduce((sum, code) => sum + (liveNets.get(code)?.length || 0), 0);
     }
 
-    function openNetPicker() {
+    /* Пилюля «Группировки», как «Вид», называет только отступления от
+       отчёта: число NET-групп и размер Top/Bottom. */
+    function renderNetControl() {
+      const parts = [];
+      const total = netCount();
+      if (total) parts.push(`NET ${total}`);
+      if (boxSelect.value) parts.push(`Top/Bottom ${boxSelect.value}`);
+      const slot = document.querySelector("#bld-groups-value");
+      slot.textContent = parts.join(" · ");
+      slot.hidden = !parts.length;
+      syncSegments();
+      if (!groupsMenu.hidden) renderNetList();
+    }
+
+    // Список вопросов таблицы: у каждого свои группы и своя кнопка «+ NET».
+    function renderNetList() {
       const questions = netableQuestions();
-      if (!questions.length) return;
-      const question = questions[0];
+      if (!questions.length) {
+        netList.innerHTML = `<p class="bld-net-empty">${lastTable
+          ? "В таблице нет вопросов с вариантами ответа."
+          : "Отметьте вопросы в «Строках» — группы собираются из их ответов."}</p>`;
+        return;
+      }
+      netList.innerHTML = questions.map(question => {
+        const nets = liveNets.get(question.code) || [];
+        const chips = nets.map(net =>
+          `<span class="bld-net-chip" title="${escapeHtml(net.values.join(", "))}">${escapeHtml(net.label)}` +
+          `<button type="button" data-drop-net="${escapeHtml(net.label)}" data-net-question="${escapeHtml(question.code)}" aria-label="Убрать группу ${escapeHtml(net.label)}">×</button></span>`).join("");
+        return `<div class="bld-net-q">
+          <div class="bld-net-q-head">
+            <span class="bld-net-q-code">${escapeHtml(question.code)}</span>
+            <span class="bld-net-q-name" title="${escapeHtml(question.label)}">${escapeHtml(question.label)}</span>
+            <button type="button" class="bld-net-open" data-net-open="${escapeHtml(question.code)}">+ NET</button>
+          </div>
+          ${chips ? `<div class="bld-net-chips">${chips}</div>` : ""}
+        </div>`;
+      }).join("");
+    }
+
+    function closeGroupsMenu() {
+      groupsMenu.hidden = true;
+      groupsButton.setAttribute("aria-expanded", "false");
+    }
+
+    function openGroupsMenu() {
+      closePicker();
+      closeViewMenu();
+      closeExportMenu();
+      renderNetList();
+      groupsMenu.hidden = false;
+      groupsButton.setAttribute("aria-expanded", "true");
+      placePopover(groupsMenu, groupsButton);
+    }
+
+    groupsButton.addEventListener("click", event => {
+      event.stopPropagation();
+      if (!groupsMenu.hidden) closeGroupsMenu();
+      else openGroupsMenu();
+    });
+    groupsMenu.addEventListener("click", event => {
+      event.stopPropagation();
+      const open = event.target.closest("[data-net-open]");
+      if (open) {
+        closeGroupsMenu();
+        openNetPicker(open.dataset.netOpen);
+        return;
+      }
+      const drop = event.target.closest("[data-drop-net]");
+      if (!drop) return;
+      const code = drop.dataset.netQuestion;
+      liveNets.set(code, (liveNets.get(code) || []).filter(net => net.label !== drop.dataset.dropNet));
+      renderNetControl();
+      void renderGrid();
+    });
+
+    // Сборка группы — в том же поповере, что фильтр: название и ответы.
+    function openNetPicker(code) {
+      const question = netableQuestions().find(item => item.code === code);
+      if (!question) return;
       netTarget = question.code;
       const rows = question.rows.filter(row => row.kind === "value" && !row.derived);
-      const existing = liveNets.get(question.code) || [];
-      const chosen = existing.map(net => `<div class="bld-net-row"><span>NET: ${escapeHtml(net.label)}</span><button type="button" data-drop-net="${escapeHtml(net.label)}">×</button></div>`).join("");
-      pickerTitle.textContent = `NET для «${question.code}» — только на этом экране`;
+      const taken = new Set((liveNets.get(question.code) || []).map(net => net.label));
+      let name = "Топ";
+      for (let index = 2; taken.has(name); index += 1) name = `Группа ${index}`;
+      pickerTitle.textContent = `NET · ${question.code}`;
+      count.textContent = "";
       list.innerHTML = `<div class="bld-net-panel">
-        ${chosen}
-        <label class="bld-net-label">Название<input id="bld-net-label" value="Топ" maxlength="60" /></label>
-        <div class="bld-net-values">${rows.map(row => `<label><input type="checkbox" value="${escapeHtml(row.label)}" /> ${escapeHtml(row.label)}</label>`).join("")}</div>
-        <button type="button" id="bld-net-add" class="bld-net-add">Добавить группу</button>
+        <p class="bld-net-question" title="${escapeHtml(question.label)}">${escapeHtml(question.label)}</p>
+        <label class="bld-net-label">Название группы<input id="bld-net-label" value="${escapeHtml(name)}" maxlength="60" /></label>
+        <div class="bld-net-values">${rows.map(row => `<label class="bld-net-value"><input type="checkbox" value="${escapeHtml(row.label)}" /><span>${escapeHtml(row.label)}</span></label>`).join("")}</div>
+        <div class="bld-net-actions">
+          <button type="button" class="bld-net-back">← Назад</button>
+          <button type="button" id="bld-net-add" class="bld-net-add">Добавить группу</button>
+        </div>
       </div>`;
       picker.hidden = false;
       picker.dataset.mode = "net";
       pickerMode = "net";
       pickerZone = null;
       params.forEach(item => item.setAttribute("aria-expanded", "false"));
-      placePopover(picker, viewButton);
+      placePopover(picker, groupsButton);
+      document.querySelector("#bld-net-label").select();
     }
 
     list.addEventListener("click", event => {
       if (picker.dataset.mode !== "net") return;
-      const drop = event.target.closest("[data-drop-net]");
-      if (drop) {
-        const nets = (liveNets.get(netTarget) || []).filter(net => net.label !== drop.dataset.dropNet);
-        liveNets.set(netTarget, nets);
-        openNetPicker();
-        renderNetControl();
-        void renderGrid();
+      if (event.target.closest(".bld-net-back")) {
+        event.stopPropagation();
+        closePicker();
+        openGroupsMenu();
         return;
       }
       if (!event.target.closest("#bld-net-add")) return;
+      event.stopPropagation();
       const label = document.querySelector("#bld-net-label").value.trim();
       const values = [...document.querySelectorAll(".bld-net-values input:checked")].map(input => input.value);
       if (!label || !values.length) return;
-      const question = lastTable.questions.find(item => item.code === netTarget);
-      const codes = new Map(question.rows.filter(row => row.kind === "value" && !row.derived)
-        .map(row => [row.label, row.label]));
-      const nets = [...(liveNets.get(netTarget) || []).filter(net => net.label !== label),
-        { label, values: values.map(value => codes.get(value) ?? value) }];
+      const nets = [...(liveNets.get(netTarget) || []).filter(net => net.label !== label), { label, values }];
       liveNets.set(netTarget, nets);
       closePicker();
       renderNetControl();
       void renderGrid();
+      openGroupsMenu();
     });
 
-    netButton.addEventListener("click", event => {
-      event.stopPropagation();
-      closeViewMenu();
-      openNetPicker();
-    });
-    boxSelect.addEventListener("change", () => { void renderGrid(); });
+    boxSelect.addEventListener("change", () => { renderNetControl(); void renderGrid(); });
 
     function tableRequest() {
       const request = { questions: layout.rows, sheet: sheetSelect.value };
@@ -710,12 +972,16 @@
       while (cursor < columns.length) {
         let span = 1;
         while (groups[cursor] && cursor + span < columns.length && groups[cursor + span] === groups[cursor]) span += 1;
-        head += `<th class="bld-grouphead" colspan="${span}">${escapeHtml(groups[cursor]) || "&nbsp;"}</th>`;
+        // Подпись блока — часто весь текст вопроса: в шапке две строки и
+        // многоточие, полностью — в подсказке, иначе шапка съедает экран.
+        const group = escapeHtml(groups[cursor]);
+        head += `<th class="bld-grouphead" colspan="${span}"${group ? ` title="${group}"` : ""}>${group ? `<span class="bld-clamp">${group}</span>` : "&nbsp;"}</th>`;
         cursor += span;
       }
       head += '</tr><tr><th class="bld-rowhead bld-cathead" style="text-align:left">Показатель</th>';
       columns.forEach(column => {
-        head += `<th class="bld-cathead"><span class="bld-letter">${column.letter}</span>${escapeHtml(column.label)}</th>`;
+        const label = escapeHtml(column.label);
+        head += `<th class="bld-cathead" title="${label}"><span class="bld-letter">${column.letter}</span><span class="bld-clamp">${label}</span></th>`;
       });
       head += '</tr><tr class="bld-base"><th class="bld-rowhead">База, N</th>';
       columns.forEach(column => {
@@ -731,17 +997,20 @@
 
       let body = "<tbody>";
       table.questions.forEach(question => {
-        body += `<tr class="bld-qrow"><td class="bld-rowhead" colspan="${width}">${escapeHtml(question.code)} · ${escapeHtml(question.label)}</td></tr>`;
+        body += `<tr class="bld-qrow"><td class="bld-rowhead" colspan="${width}"><span class="bld-rowwrap">${escapeHtml(question.code)} · ${escapeHtml(question.label)}</span></td></tr>`;
         question.rows.forEach(row => {
           if (row.kind === "subquestion") {
-            body += `<tr class="bld-subrow"><td class="bld-rowhead" colspan="${width}">${escapeHtml(row.label)}</td></tr>`;
+            body += `<tr class="bld-subrow"><td class="bld-rowhead" colspan="${width}"><span class="bld-rowwrap">${escapeHtml(row.label)}</span></td></tr>`;
             return;
           }
           const rowClass = row.kind === "base" ? "bld-base" : row.derived ? "bld-derived" : "";
           // Название строки — кнопка графика: те же числа, что в строке.
+          // Длинная подпись обрезается многоточием, полная — в подсказке:
+          // ячейка таблицы не держит max-width, и текст наезжал на числа.
+          const label = escapeHtml(row.label);
           const head = row.kind === "value"
-            ? `<button type="button" class="bld-rowchart" data-chart-row="${row.sheet_row}" title="Показать график строки">${escapeHtml(row.label)}</button>`
-            : escapeHtml(row.label);
+            ? `<button type="button" class="bld-rowchart bld-rowlabel" data-chart-row="${row.sheet_row}" title="${label} — показать график строки">${label}</button>`
+            : `<span class="bld-rowlabel" title="${label}">${label}</span>`;
           body += `<tr class="${rowClass}"><td class="bld-rowhead">${head}</td>`;
           row.cells.forEach((cell, index) => { body += cellHtml(cell, index, row.sheet_row); });
           body += "</tr>";
@@ -842,6 +1111,7 @@
       }
       closePicker();
       closeExportMenu();
+      closeGroupsMenu();
       viewMenu.hidden = false;
       viewButton.setAttribute("aria-expanded", "true");
       placePopover(viewMenu, viewButton);
@@ -895,11 +1165,13 @@
     document.addEventListener("click", event => {
       if (!event.target.closest(".bld-export-wrap")) closeExportMenu();
       if (!event.target.closest("#bld-view-menu") && !event.target.closest("#bld-view")) closeViewMenu();
+      if (!event.target.closest("#bld-groups-menu") && !event.target.closest("#bld-groups")) closeGroupsMenu();
     });
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape") return;
       closeExportMenu();
       closeViewMenu();
+      closeGroupsMenu();
     });
 
     /* Протокол теста по щелчку на ячейке — тот же текст, что примечание
@@ -960,11 +1232,13 @@
       // собирается заново. Пересборка скрытого списка на массиве в 3 000
       // переменных стоила до секунды на каждую правку проекта.
       if (!picker.hidden) renderPalette();
+      syncTrees();
       renderGrid();
     }
 
     // Экран показан — только теперь у шапки таблицы есть настоящие высоты.
     function activate() {
+      if (treesStale) renderTrees();
       if (stale) {
         void renderGrid();
         return;
@@ -972,22 +1246,9 @@
       stackStickyHeader(wrap.querySelector("table.bld-grid"));
     }
 
-    // Пилюля — и кнопка выбора, и зона приёма: перетаскивание из
-    // открытого поповера работает так же, как раньше из палитры.
+    // Пилюля «Фильтр» открывает список сохранённых правил проекта.
     params.forEach(zone => {
       zone.addEventListener("click", () => openPicker(zone.dataset.zone, zone));
-      zone.addEventListener("dragover", event => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "copy";
-        zone.classList.add("over");
-      });
-      zone.addEventListener("dragleave", () => zone.classList.remove("over"));
-      zone.addEventListener("drop", event => {
-        event.preventDefault();
-        zone.classList.remove("over");
-        const code = event.dataTransfer.getData("text/plain");
-        if (byCode.has(code)) addToZone(code, zone.dataset.zone);
-      });
     });
 
     document.addEventListener("click", event => {
@@ -1002,9 +1263,9 @@
     });
 
     search.addEventListener("input", renderPalette);
-    sheetSelect.addEventListener("change", () => { void renderGrid(); });
+    sheetSelect.addEventListener("change", () => { renderViewValue(); void renderGrid(); });
     // Показатель меняет только вид уже посчитанного.
-    measureSelect.addEventListener("change", () => { if (lastTable) renderTable(lastTable); });
+    measureSelect.addEventListener("change", () => { renderViewValue(); if (lastTable) renderTable(lastTable); });
     nestToggle.addEventListener("click", () => {
       nested = !nested;
       notice = "";
@@ -1035,6 +1296,7 @@
         match: /индекс/i,
         run: () => {
           measureSelect.value = "index";
+          renderViewValue();
           if (lastTable) renderTable(lastTable);
           return { reply: "Переключил показатель на индекс к Total: 100 — уровень всей выборки.", did: "Показатель: индекс" };
         },
@@ -1043,6 +1305,7 @@
         match: /ответивш/i,
         run: () => {
           sheetSelect.value = "filter";
+          renderViewValue();
           void renderGrid();
           return { reply: "Доли теперь считаются от ответивших на вопрос, как на листе topline_filter.", did: "Доли: от ответивших" };
         },
@@ -1079,8 +1342,8 @@
       },
     ];
 
-    /* Ассистент открывается по требованию: пока это заглушка, полоса
-       под ним забирала седьмую часть высоты экрана у таблицы. */
+    /* Ассистент — круглая кнопка в углу и окно над ней: пока это заглушка,
+       даже свёрнутая полоса под таблицей отнимала у неё строку. */
     function setAssistantOpen(open) {
       assistantBody.hidden = !open;
       assistantToggle.setAttribute("aria-expanded", String(open));
@@ -1089,6 +1352,16 @@
     assistantToggle.addEventListener("click", () => {
       setAssistantOpen(assistantBody.hidden);
       if (!assistantBody.hidden) input.focus();
+    });
+    document.querySelector("#bld-assistant-close").addEventListener("click", () => {
+      setAssistantOpen(false);
+      assistantToggle.focus();
+    });
+    assistantBody.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setAssistantOpen(false);
+      assistantToggle.focus();
     });
 
     function ask(text) {
@@ -1131,6 +1404,7 @@
     pushMessage("ai", "Здесь можно будет попросить любой расчёт словами. " +
       "Пока ассистент — заглушка: он только меняет раскладку, а таблицу считает то же ядро, что книгу Excel.", null);
 
+    buildSegments();
     render();
     return { setVariables, activate };
   })();

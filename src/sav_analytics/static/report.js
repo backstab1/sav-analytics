@@ -80,7 +80,7 @@ function reportContentRow() {
     key: "content", title: "Состав",
     value: `${plural(included.length, "вопрос", "вопроса", "вопросов")} из ${questions.length}`,
     meta,
-    action: '<button type="button" class="prop-act" data-goto="data">к структуре</button>',
+    action: '<button type="button" class="prop-act" data-goto="data">Открыть</button>',
   });
 }
 
@@ -98,8 +98,8 @@ function reportColumnsRow() {
       : "Разбивки нет, одна колонка",
     hint: blocks,
     action: banner
-      ? `<button type="button" class="prop-act" data-edit="banner" data-id="${escapeAttribute(banner.id)}">править</button>`
-      : '<button type="button" class="prop-act" data-new="banner">новый</button>',
+      ? `<button type="button" class="prop-act" data-edit="banner" data-id="${escapeAttribute(banner.id)}">Изменить</button>`
+      : '<button type="button" class="prop-act" data-new="banner">Создать</button>',
   });
 }
 
@@ -123,8 +123,8 @@ function reportBaseRow() {
       : `Все <b>${total.toLocaleString("ru-RU")}</b> респондентов`,
     hint: preview?.description || "",
     action: filter
-      ? `<button type="button" class="prop-act" data-edit="filter" data-id="${escapeAttribute(filter.id)}">править</button>`
-      : '<button type="button" class="prop-act" data-new="filter">новое</button>',
+      ? `<button type="button" class="prop-act" data-edit="filter" data-id="${escapeAttribute(filter.id)}">Изменить</button>`
+      : '<button type="button" class="prop-act" data-new="filter">Создать</button>',
   });
 }
 
@@ -135,14 +135,14 @@ function reportWeightRow(settings) {
   const ready = settings.weight_variable || null;
   let value = "Без веса";
   let meta = "Показатели и базы невзвешенные";
-  let action = '<button type="button" class="prop-act" data-open-sheet="report-settings">настроить</button>';
+  let action = '<button type="button" class="prop-act" data-open-sheet="report-settings">Настроить</button>';
   if (calculated) {
     value = escapeHtml(calculated.name);
     const bounds = calculated.lower_bound == null
       ? ""
       : ` · границы <b>${formatWeightNumber(calculated.lower_bound)}–${formatWeightNumber(calculated.upper_bound)}</b>`;
     meta = `${calculatedWeightSummary(calculated)}${bounds}`;
-    action = `<button type="button" class="prop-act" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">править</button>`;
+    action = `<button type="button" class="prop-act" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">Изменить</button>`;
   } else if (ready) {
     value = escapeHtml(ready);
     const diagnostics = readyWeightCache.get(ready)?.diagnostics;
@@ -211,6 +211,11 @@ function reportStatisticsColumn(settings) {
   const totalWarning = scheme === "total"
     ? '<p class="stat-hint warning-hint">Total включает саму подгруппу: выборки пересекаются, различия занижаются. Выбирайте, только если этого требует шаблон заказчика.</p>'
     : "";
+  // Строка формы: подпись слева, выбор справа. Раньше подписи стояли то
+  // над блоком, то внутри ряда («второй», «доли», «крайних кодов»), и
+  // колонка читалась одним потоком кнопок.
+  const row = (label, controls, title = "") =>
+    `<div class="sf-row"${title ? ` title="${escapeAttribute(title)}"` : ""}><span class="sf-label">${label}</span><div class="sf-controls">${controls}</div></div>`;
   return `<section class="col stat-col" id="stat-panel">
     <div class="col-head">
       <h3>Статистика</h3>
@@ -219,100 +224,78 @@ function reportStatisticsColumn(settings) {
     </div>
     <div class="stat-stack">
 
-      <div class="stat-block">
-        <p>Сравнение подгрупп</p>
-        <div class="stat-controls">
-          ${statSegment("scheme", [
-            { value: "off", label: "Не считать" },
-            { value: "rest", label: "С остатком (Rest)" },
-            { value: "total", label: "С Total" },
-          ], scheme)}
-          ${statToggle("pairwise", "Попарные внутри блока", settings.compare_pairwise)}
-        </div>
-        ${totalWarning}
+      <div class="sf-group">
+        <p class="sf-cap">Значимость</p>
+        ${row("Сравнение", statSegment("scheme", [
+          { value: "off", label: "Не считать" },
+          { value: "rest", label: "С остатком" },
+          { value: "total", label: "С Total" },
+        ], scheme))}
+        ${totalWarning ? row("", totalWarning) : ""}
+        ${row("", statToggle("pairwise", "Попарные внутри блока", settings.compare_pairwise,
+          "Каждая колонка блока сравнивается с каждой; результат — буквами в ячейке"))}
+        ${row("Уровень доверия", statSegment("confidence", [
+          { value: "0.9", label: "90%" },
+          { value: "0.95", label: "95%" },
+          { value: "0.99", label: "99%" },
+        ], String(settings.confidence_level)))}
+        ${row("Второй уровень", statSegment("secondary", [
+          { value: "", label: "Нет" },
+          { value: "0.9", label: "90%" },
+          { value: "0.8", label: "80%" },
+        ], String(settings.secondary_confidence_level ?? "")), "Более слабые различия отмечаются в книге строчной буквой")}
+        ${row("Малая база", `<label class="stat-number">меньше<input id="stat-minimum-base" type="number" min="1" max="100000" value="${settings.minimum_base}" /></label>`,
+          "Колонки с базой меньше порога не тестируются и приглушаются")}
+        ${row("Поправки",
+          statToggle("bonferroni", "Bonferroni", settings.bonferroni,
+            "Корректирует alpha на число сравнений внутри блока")
+          + statToggle("overall", "Общие тесты", settings.overall_tests,
+            "Хи-квадрат для распределений и Welch ANOVA для средних по каждому блоку баннера"))}
+        ${row("Волны", statSegment("wave", [
+          { value: "none", label: "Не сравнивать" },
+          { value: "previous", label: "С предыдущей" },
+          { value: "control", label: "С контрольной" },
+        ], settings.wave_comparison))}
+        ${settings.wave_comparison === "control"
+          ? row("Контрольная", `<label class="stat-number"><select id="stat-wave-control" aria-label="Контрольная волна">${waveOptions}</select></label>`)
+          : ""}
       </div>
 
-      <div class="stat-block">
-        <p>Уровень доверия и пороги</p>
-        <div class="stat-controls">
-          ${statSegment("confidence", [
-            { value: "0.9", label: "90%" },
-            { value: "0.95", label: "95%" },
-            { value: "0.99", label: "99%" },
-          ], String(settings.confidence_level))}
-          <span class="stat-label-inline">второй</span>
-          ${statSegment("secondary", [
-            { value: "", label: "нет" },
-            { value: "0.9", label: "90%" },
-            { value: "0.8", label: "80%" },
-          ], String(settings.secondary_confidence_level ?? ""))}
-          ${statToggle("counts-sheet", "Лист «Счётчики»", settings.counts_sheet,
-            "Отдельный лист книги: те же строки числами ответивших, без долей и тестов")}
-          ${statToggle("correlations", "Лист Correlations", settings.correlations,
-            "Отдельный лист книги: связи числовых вопросов между собой, с поправкой на множественность")}
-          ${statToggle("overall", "Общие тесты", settings.overall_tests,
-            "Хи-квадрат для распределений и Welch ANOVA для средних по каждому блоку баннера")}
-          ${statToggle("bonferroni", "Поправка Bonferroni", settings.bonferroni,
-            "Корректирует alpha на число сравнений внутри блока")}
-          <label class="stat-number">Малая база &lt;
-            <input id="stat-minimum-base" type="number" min="1" max="100000" value="${settings.minimum_base}" />
-          </label>
-        </div>
+      <div class="sf-group">
+        <p class="sf-cap">Строки в книге</p>
+        ${row("Набор", statSegment("profile", Object.entries(outputProfiles).map(([value, item]) => ({ value, label: item.label })), profile)
+          + (profile === "custom" ? '<span class="stat-custom">свой набор</span>' : ""))}
+        ${row("Шкалы", scaleMetricOptions.map(option => statToggle(`scale:${option.value}`, scaleMetricLabel(option, settings.scale_box), settings.scale_metrics.includes(option.value))).join(""))}
+        ${row("Top / Bottom", statSegment("scale-box", ["1", "2", "3"].map(value => ({ value, label: value })), String(settings.scale_box)),
+          "Сколько крайних кодов шкалы входит в Top и Bottom")}
+        ${row("Числовые", numericMetricOptions.map(option => statToggle(`numeric:${option.value}`, option.label, settings.numeric_metrics.includes(option.value))).join(""))}
+        ${row("Ранжирование", rankingMetricOptions.map(option => statToggle(`ranking:${option.value}`, option.label, settings.ranking_metrics.includes(option.value))).join(""))}
+        ${row("Знаков у долей", statSegment("percent-decimals", ["0", "1", "2"].map(value => ({ value, label: value })), String(settings.percent_decimals)))}
+        ${row("Знаков у средних", statSegment("mean-decimals", ["0", "1", "2", "3"].map(value => ({ value, label: value })), String(settings.mean_decimals)))}
       </div>
 
-      <div class="stat-block">
-        <p>Сравнение волн</p>
-        <div class="stat-controls">
-          ${statSegment("wave", [
-            { value: "none", label: "Не сравнивать" },
-            { value: "previous", label: "С предыдущей" },
-            { value: "control", label: "С контрольной" },
-          ], settings.wave_comparison)}
-          ${settings.wave_comparison === "control"
-            ? `<label class="stat-number">Контрольная
-                <select id="stat-wave-control">${waveOptions}</select></label>`
-            : ""}
-        </div>
-      </div>
-
-      <div class="stat-block">
-        <p>Вывод в книге</p>
-        <div class="stat-controls">
-          ${statSegment("profile", Object.entries(outputProfiles).map(([value, profile]) => ({ value, label: profile.label })), profile)}
-          ${profile === "custom" ? '<span class="stat-custom">свой набор</span>' : ""}
-        </div>
-        <div class="stat-controls stat-row"><span class="stat-label">Шкалы</span>
-          ${scaleMetricOptions.map(option => statToggle(`scale:${option.value}`, scaleMetricLabel(option, settings.scale_box), settings.scale_metrics.includes(option.value))).join("")}
-          <span class="stat-label-inline">крайних кодов</span>
-          ${statSegment("scale-box", ["1", "2", "3"].map(value => ({ value, label: value })), String(settings.scale_box))}
-        </div>
-        <div class="stat-controls stat-row"><span class="stat-label">Числовые</span>
-          ${numericMetricOptions.map(option => statToggle(`numeric:${option.value}`, option.label, settings.numeric_metrics.includes(option.value))).join("")}
-        </div>
-        <div class="stat-controls stat-row"><span class="stat-label">Ранжирование</span>
-          ${rankingMetricOptions.map(option => statToggle(`ranking:${option.value}`, option.label, settings.ranking_metrics.includes(option.value))).join("")}
-        </div>
-        <div class="stat-controls stat-row"><span class="stat-label">Знаков</span>
-          <span class="stat-label-inline">доли</span>
-          ${statSegment("percent-decimals", ["0", "1", "2"].map(value => ({ value, label: value })), String(settings.percent_decimals))}
-          <span class="stat-label-inline">средние</span>
-          ${statSegment("mean-decimals", ["0", "1", "2", "3"].map(value => ({ value, label: value })), String(settings.mean_decimals))}
-        </div>
-        <div class="stat-controls stat-row">
-          ${statToggle("charts", "Графики в книге", settings.show_charts,
-            "Лист «Графики»: распределения вопросов родными графиками Excel, связанными с ячейками")}
-          ${statToggle("counts", "N под долями", settings.show_counts,
-            "Под каждой строкой долей — сколько человек дали этот ответ")}
-          ${statToggle("row-percents", "% по строке", settings.row_percents,
-            "Под долей — какая часть давших ответ приходится на колонку; в Total 100")}
-          ${statToggle("table-percents", "% от общего", settings.table_percents,
-            "Под долей — доля давших ответ и попавших в колонку от всей базы вопроса")}
-          ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
-            "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
-          ${statToggle("skip-reasons", "Причины пропуска в примечании", settings.note_skip_reasons,
-            "Только у ячеек, где тест не выполнялся: почему. Легче полного протокола")}
-        </div>
-        <p class="stat-hint muted">База выводится всегда: без неё значимость в книге не на чем проверить. NPS и CSAT выводятся полностью.</p>
+      <div class="sf-group">
+        <p class="sf-cap">Дополнительно</p>
+        ${row("Под долями",
+          statToggle("counts", "N", settings.show_counts,
+            "Под каждой строкой долей — сколько человек дали этот ответ")
+          + statToggle("row-percents", "% по строке", settings.row_percents,
+            "Под долей — какая часть давших ответ приходится на колонку; в Total 100")
+          + statToggle("table-percents", "% от общего", settings.table_percents,
+            "Под долей — доля давших ответ и попавших в колонку от всей базы вопроса"))}
+        ${row("Примечания",
+          statToggle("pvalues", "p-value", settings.show_p_values,
+            "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")
+          + statToggle("skip-reasons", "Причины пропуска", settings.note_skip_reasons,
+            "Только у ячеек, где тест не выполнялся: почему. Легче полного протокола"))}
+        ${row("Листы",
+          statToggle("charts", "Графики", settings.show_charts,
+            "Лист «Графики»: распределения вопросов родными графиками Excel, связанными с ячейками")
+          + statToggle("counts-sheet", "Счётчики", settings.counts_sheet,
+            "Отдельный лист книги: те же строки числами ответивших, без долей и тестов")
+          + statToggle("correlations", "Correlations", settings.correlations,
+            "Отдельный лист книги: связи числовых вопросов между собой, с поправкой на множественность"))}
+        <p class="stat-hint muted">База выводится всегда. NPS и CSAT — полностью.</p>
       </div>
 
     </div>
@@ -325,7 +308,7 @@ function renderReportBlocks() {
   container.className = "entity-list report-blocks";
   container.innerHTML = `<div class="split">
     <section class="col">
-      <div class="col-head"><h3>Содержимое книги</h3><span class="col-note">что войдёт в Excel</span></div>
+      <div class="col-head"><h3>Книга</h3><span class="col-note">что войдёт в Excel</span></div>
       ${[
         reportContentRow(),
         reportColumnsRow(),
@@ -338,7 +321,7 @@ function renderReportBlocks() {
   </div>
   <details id="header-preview" class="header-preview"><summary>Превью шапки книги</summary><div id="header-preview-body"><p class="analysis-note">Раскройте — посчитаем колонки и базы до сборки.</p></div></details>
   <section class="runs">
-    <div class="col-head"><h3>История запусков</h3><span class="col-note">каждая сборка хранится неизменной и скачивается снова</span></div>
+    <div class="col-head"><h3>История сборок</h3><span class="col-note">каждая скачивается снова</span></div>
     <div id="report-runs" class="runs-list"><p class="runs-empty">Загружаем…</p></div>
   </section>`;
   void loadRunHistory();

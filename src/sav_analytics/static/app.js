@@ -494,6 +494,9 @@ function renderSectionHead(view) {
   document.querySelector("#section-title").textContent = head.title;
   document.querySelector("#section-lead").textContent = head.lead;
   document.querySelector("#find-not-applicable").hidden = view !== "data";
+  // Логические переменные открываются из «Данных»; в других разделах
+  // список над окном был чужим и только добавлял шума.
+  document.querySelector("#logic-variables").closest(".pill-select").hidden = view !== "data";
   // Сводка — фильтр таблицы вопросов, в других разделах ей нечего фильтровать.
   document.querySelector("#summary").hidden = view !== "data";
 }
@@ -1406,17 +1409,31 @@ window.SavApp = {
 const TABLE_ROW_TYPES = ["single_choice", "scale", "numeric", "multiple_choice_dichotomy", "multiple_choice_categorical", "matrix", "ranking"];
 const MULTIPLE_TYPES = ["multiple_choice_dichotomy", "multiple_choice_categorical"];
 
+// Содержимое пункта для раскрытия в дереве «Таблиц»: у одиночного вопроса и
+// шкалы — подписи кодов, у группы (multiple, матрица, ранжирование) — её
+// переменные, у перекодировки — категории. Только показ: список ничего не
+// выбирает, выбирается пункт целиком.
+function tableItemChildren(question, variablesByName) {
+  const sources = question.source_variables || [];
+  if (sources.length > 1) {
+    return sources.map(name => ({ code: name, label: variablesByName.get(name)?.label || name }));
+  }
+  return (variablesByName.get(sources[0])?.value_labels || [])
+    .map(item => ({ code: String(item.value), label: item.label }));
+}
+
 function publishVariablesToShell(inspection, questions) {
+  const variablesByName = new Map(inspection.variables.map(item => [item.name, item]));
   const questionItems = questions
     .filter(question => question.included_in_report)
     .map(question => {
-      const labels = inspection.variables
-        .find(item => item.name === question.source_variables?.[0])?.value_labels || [];
+      const labels = variablesByName.get(question.source_variables?.[0])?.value_labels || [];
       return {
         code: question.code,
         label: question.label,
         type: question.question_type,
         source: { kind: "question", ref: question.code },
+        children: tableItemChildren(question, variablesByName),
         canRow: TABLE_ROW_TYPES.includes(question.question_type),
         canCol: (question.question_type === "single_choice" && labels.length > 0)
           || MULTIPLE_TYPES.includes(question.question_type),
@@ -1428,13 +1445,25 @@ function publishVariablesToShell(inspection, questions) {
     label: recoding.name,
     type: "recoding",
     source: { kind: "recoding", ref: recoding.id },
+    children: (recoding.categories || []).map((category, index) => ({ code: String(index + 1), label: category.label })),
     canRow: false,
     canCol: true,
   }));
+  // Блок баннера раскрывается подписью: своей или именами источников через «×».
+  const sourceName = source => (source.kind === "recoding"
+    ? configuredRecodings().find(item => item.id === source.ref)?.name
+    : questions.find(item => item.code === source.ref)?.label) || source.ref;
   window.Shell.setProjectVariables([...questionItems, ...recodingItems], {
     projectId: currentProject?.id || null,
     filters: configuredFilters().map(item => ({ id: item.id, name: item.name })),
-    banners: configuredBanners().map(item => ({ id: item.id, name: item.name })),
+    banners: configuredBanners().map(item => ({
+      id: item.id,
+      name: item.name,
+      children: (item.blocks || []).map((block, index) => ({
+        code: String(index + 1),
+        label: block.label || block.sources.map(sourceName).join(" × "),
+      })),
+    })),
   });
 }
 

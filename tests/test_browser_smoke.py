@@ -352,20 +352,26 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     page.reload()
     expect(page.locator("#section-tables")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#project-name")).to_have_text("Браузерный сценарий")
-    # Конструктор получает переменные проекта, а не грузит их сам. Список
-    # собирается при открытии поповера — скрытым он не пересобирается.
-    page.click('.bld-param[data-zone="rows"]')
-    expect(page.locator("#bld-list .bld-var")).not_to_have_count(0, timeout=UI_TIMEOUT)
-    page.keyboard.press("Escape")
-    # Полки стали полосой параметров: список переменных открывается из неё.
-    page.click('.bld-param[data-zone="rows"]')
+    # Конструктор получает переменные проекта, а не грузит их сам: вопросы
+    # строк и разрезы колонок стоят деревьями слева от таблицы.
+    expect(page.locator("#bld-rows-tree .bld-node")).not_to_have_count(0, timeout=UI_TIMEOUT)
+    expect(page.locator("#bld-cols-tree .bld-node")).not_to_have_count(0, timeout=UI_TIMEOUT)
+    # Стрелка раскрывает содержимое пункта, не отмечая его.
+    first = page.locator("#bld-rows-tree .bld-node").filter(
+        has=page.locator(".bld-twist:not([disabled])")
+    ).first
+    first.locator(".bld-twist").click()
+    expect(first.locator(".bld-kids li")).not_to_have_count(0)
+    expect(first.locator(".bld-check")).not_to_be_checked()
+    # Поповер остался у пилюли «Фильтр».
+    page.click('.bld-param[data-zone="filter"]')
     expect(page.locator("#bld-picker")).to_be_visible(timeout=UI_TIMEOUT)
     page.keyboard.press("Escape")
     expect(page.locator("#bld-picker")).to_be_hidden(timeout=UI_TIMEOUT)
     # Поповер раскрывается вниз от пилюли и целиком помещается в окно:
     # прежняя версия цеплялась за верх пилюли и уезжала за нижний край,
     # когда раздел не помещался в высоту.
-    page.click('.bld-param[data-zone="rows"]')
+    page.click('.bld-param[data-zone="filter"]')
     picker = page.locator("#bld-picker").bounding_box()
     viewport = page.viewport_size
     assert picker["y"] >= 0 and picker["y"] + picker["height"] <= viewport["height"] + 1, picker
@@ -717,13 +723,11 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     _open_view(page, "tables")
     expect(page.locator(".tabs button[data-view='tables']")).not_to_contain_text("демо")
     grid = page.locator("#bld-grid-wrap")
-    expect(grid).to_contain_text("Выберите вопросы", timeout=UI_TIMEOUT)
+    expect(grid).to_contain_text("Отметьте вопросы", timeout=UI_TIMEOUT)
 
-    page.click('.bld-param[data-zone="rows"]')
-    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.check('#bld-rows-tree .bld-check[data-code="BRAND"]')
     page.keyboard.press("Escape")
-    page.click('.bld-param[data-zone="cols"]')
-    page.click('#bld-list .bld-var[data-code="SEX"]')
+    page.check('#bld-cols-tree .bld-check[data-code="SEX"]')
     page.keyboard.press("Escape")
 
     table = grid.locator("table.bld-grid")
@@ -737,13 +741,17 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     expect(page.locator("#bld-tests")).to_have_text("не считаются")
 
     # Индекс к Total — та же ячейка, поделённая на Total: 100 у самого Total.
-    page.select_option("#bld-measure", "index")
+    # Показатель живёт в меню «Вид», и пилюля называет отступление от отчёта.
+    page.click("#bld-view")
+    page.click('.bld-seg[data-for="bld-measure"] button[data-value="index"]')
     expect(first.first).to_have_text("100")
-    page.select_option("#bld-measure", "value")
+    expect(page.locator("#bld-view-value")).to_have_text("индекс")
+    page.click('.bld-seg[data-for="bld-measure"] button[data-value="value"]')
+    expect(page.locator("#bld-view-value")).to_be_hidden()
+    page.keyboard.press("Escape")
 
     # Вложенный разрез: пол × марка даёт полное пересечение категорий.
-    page.click('.bld-param[data-zone="cols"]')
-    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.check('#bld-cols-tree .bld-check[data-code="BRAND"]')
     page.keyboard.press("Escape")
     nest = page.locator("#bld-nest")
     expect(nest).to_be_visible()
@@ -756,8 +764,7 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     # Мост в отчёт: разрез сохраняется баннером и появляется в выборе колонок.
     page.click("#bld-save-cut")
     expect(page.locator("#bld-stage-note")).to_contain_text("баннером", timeout=UI_TIMEOUT)
-    page.click('.bld-param[data-zone="cols"]')
-    expect(page.locator("#bld-list")).to_contain_text("Баннеры отчёта", timeout=UI_TIMEOUT)
+    expect(page.locator("#bld-cols-tree")).to_contain_text("Баннеры отчёта", timeout=UI_TIMEOUT)
     page.keyboard.press("Escape")
     # Повторное нажатие не копит одинаковые баннеры, а называет сохранённый.
     page.click("#bld-save-cut")
@@ -802,8 +809,7 @@ def test_net_group_set_on_a_question_reaches_the_table(
     )
 
     _open_view(page, "tables")
-    page.click('.bld-param[data-zone="rows"]')
-    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.check('#bld-rows-tree .bld-check[data-code="BRAND"]')
     page.keyboard.press("Escape")
     row = page.locator("#bld-grid-wrap table.bld-grid tbody tr", has_text="NET: Только первая")
     expect(row).to_have_count(1, timeout=UI_TIMEOUT)
@@ -1235,8 +1241,7 @@ def test_ranking_group_preview_and_saved_settings(
 
     page.click("#close-editor")
     _open_view(page, "tables")
-    page.click('.bld-param[data-zone="rows"]')
-    page.click('#bld-list .bld-var[data-code="ALPHA_grp"]')
+    page.check('#bld-rows-tree .bld-check[data-code="ALPHA_grp"]')
     page.keyboard.press("Escape")
     table = page.locator("#bld-grid-wrap table.bld-grid")
     expect(table).to_contain_text("Средний ранг", timeout=UI_TIMEOUT)
@@ -1776,8 +1781,7 @@ def test_table_row_draws_a_chart_of_the_same_numbers(
     _open_project(page, live_server, source)
     _open_view(page, "tables")
 
-    page.click('.bld-param[data-zone="rows"]')
-    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.check('#bld-rows-tree .bld-check[data-code="BRAND"]')
     page.keyboard.press("Escape")
     expect(page.locator("#bld-grid-wrap table.bld-grid")).to_be_visible(timeout=UI_TIMEOUT)
 
@@ -1800,24 +1804,22 @@ def test_net_group_is_built_on_the_table_screen_without_saving(
     _open_project(page, live_server, source)
     _open_view(page, "tables")
 
-    page.click('.bld-param[data-zone="rows"]')
-    page.click('#bld-list .bld-var[data-code="BRAND"]')
+    page.check('#bld-rows-tree .bld-check[data-code="BRAND"]')
     page.keyboard.press("Escape")
     expect(page.locator("#bld-grid-wrap table.bld-grid")).to_be_visible(timeout=UI_TIMEOUT)
 
-    # Доли, Top/Bottom и NET живут в меню «Вид»: полоса параметров держится
-    # в одну строку, а эти три настройки меняют вид уже посчитанного.
-    page.click("#bld-view")
-    expect(page.locator("#bld-net-row")).to_be_visible(timeout=UI_TIMEOUT)
-    page.click("#bld-net")
+    # NET и Top/Bottom — в меню «Группировки»; NET задаётся каждому
+    # вопросу таблицы своей кнопкой, а не только первому.
+    page.click("#bld-groups")
+    page.click('#bld-net-list [data-net-open="BRAND"]')
     expect(page.locator("#bld-net-add")).to_be_visible(timeout=UI_TIMEOUT)
     page.fill("#bld-net-label", "Любая марка")
     page.locator(".bld-net-values input").first.check()
     page.locator(".bld-net-values input").nth(1).check()
     page.click("#bld-net-add")
     expect(page.locator("#bld-grid-wrap")).to_contain_text("NET: Любая марка", timeout=UI_TIMEOUT)
-    page.click("#bld-view")
-    expect(page.locator("#bld-net")).to_have_text("NET · 1")
+    expect(page.locator("#bld-groups-value")).to_have_text("NET 1")
+    expect(page.locator("#bld-net-list")).to_contain_text("Любая марка")
     page.keyboard.press("Escape")
 
     # Вопрос в структуре не изменился: группа живёт только на экране.

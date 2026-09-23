@@ -15,13 +15,16 @@ function updateBulkBar() {
   const known = new Set(configuredQuestions().map(question => question.code));
   [...selectedQuestionCodes].forEach(code => { if (!known.has(code)) selectedQuestionCodes.delete(code); });
   const bar = document.querySelector("#bulk-bar");
-  bar.hidden = selectedQuestionCodes.size === 0 && !lastBulkUndo;
-  // Полоса действий занимает место кнопки формулы: вместе ряд не помещается.
-  document.querySelector("#new-formula").hidden = !bar.hidden;
+  // Полоса живёт, пока что-то выбрано, и на это время заменяет собой ряд
+  // панели: заголовок, поиск и переключатель видов прячет .is-selecting.
+  // Снятый выбор уносит и «Отменить» — общая история (Ctrl+Z) остаётся.
+  bar.hidden = selectedQuestionCodes.size === 0;
+  if (bar.hidden) lastBulkUndo = null;
+  document.querySelector("#structure-toolbar").classList.toggle("is-selecting", !bar.hidden);
   document.querySelector("#bulk-count").textContent = `Выбрано: ${selectedQuestionCodes.size}`;
   document.querySelector("#bulk-undo").hidden = !lastBulkUndo;
   const base = document.querySelector("#bulk-base");
-  base.innerHTML = '<option value="">База…</option><option value="standard">Стандартная база</option>'
+  base.innerHTML = '<option value="">База</option><option value="standard">Стандартная база</option>'
     + configuredFilters().map(filter => `<option value="${escapeAttribute(filter.id)}">${escapeHtml(filter.name)}</option>`).join("");
   // Источник копирования — вопрос того же типа, что все выбранные.
   const selectedTypes = new Set(configuredQuestions()
@@ -30,7 +33,7 @@ function updateBulkBar() {
   const copySources = selectedTypes.size === 1
     ? configuredQuestions().filter(question => selectedTypes.has(question.question_type))
     : [];
-  document.querySelector("#bulk-copy").innerHTML = '<option value="">Настройки из…</option>'
+  document.querySelector("#bulk-copy").innerHTML = '<option value="">Копировать из</option>'
     + copySources.map(question => `<option value="${escapeAttribute(question.code)}">${escapeHtml(question.code)} — ${escapeHtml(question.label)}</option>`).join("");
   document.querySelectorAll("#bulk-bar button:not([data-bulk=undo]):not([data-bulk=clear]), #bulk-bar select")
     .forEach(control => { control.disabled = selectedQuestionCodes.size === 0; });

@@ -42,6 +42,9 @@
   --page-gutter: clamp(20px, 3vw, 56px);
 
   /* Radii */
+  /* Одна стрелка на все компактные селекты: нативная у каждого браузера своя
+     и рядом с треугольником пилюль читалась как другой элемент. */
+  --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0h8L4 5z' fill='%236e6e73'/%3E%3C/svg%3E");
   --r-1: 8px;  --r-2: 12px; --r-3: 18px; --r-pill: 100px;
 
   /* Type — на два шага мельче прежнего. Таблица структуры и инспектор
@@ -495,7 +498,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .pill:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
 .pill svg { width: 13px; height: 13px; flex: 0 0 auto; }
 .pill[hidden] { display: none !important; }
-#find-not-applicable svg { color: var(--c-warn-ink); }
+#find-not-applicable svg { color: var(--c-ink-3); }
 .stat b { font-weight: 600; color: var(--c-ink); font-variant-numeric: tabular-nums; }
 .stat .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-ink-4); flex: 0 0 auto; }
 .stat:hover { background: var(--c-surface); border-color: var(--c-border-strong); transform: none; }
@@ -649,9 +652,9 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
    же кнопка выбора: щёлкать по названию естественнее, чем искать
    отдельную пилюлю. */
 .prop {
-  display: grid; grid-template-columns: 74px minmax(0, 1fr) auto;
-  gap: 10px; align-items: center;
-  padding: 8px 14px; border-top: 1px solid rgba(0, 0, 0, .05);
+  display: grid; grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 12px; align-items: center;
+  padding: 11px 16px; border-top: 1px solid rgba(0, 0, 0, .05);
 }
 .prop:hover { background: #fcfcfd; }
 .prop-key { font-size: var(--t-xs); color: var(--c-ink-3); }
@@ -661,32 +664,34 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 }
 .prop-val strong {
   display: block; min-width: 0;
-  font-family: var(--font-display); font-size: var(--t-sm); font-weight: 700;
-  letter-spacing: -0.02em; color: var(--c-ink);
+  font-size: var(--t-sm); font-weight: 600; color: var(--c-ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.prop-val strong.off { font-family: var(--font-body); font-weight: 500; color: var(--c-ink-3); }
+.prop-val strong.off { font-weight: 500; color: var(--c-ink-2); }
 .prop-val small {
-  display: block; min-width: 0; font-size: var(--t-micro); color: var(--c-ink-3);
+  display: block; min-width: 0; margin-top: 2px; font-size: var(--t-xs); color: var(--c-ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.prop-val small b { color: var(--c-ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.prop-val small b { color: var(--c-ink-3); font-weight: 500; font-variant-numeric: tabular-nums; }
 button.prop-val:hover strong { color: var(--c-brand); }
 button.prop-val:hover { background: transparent; transform: none; }
 /* Действие видно всегда, но не спорит со значением: цвет набирается
    при наведении на строку. */
 .prop-act {
-  flex: 0 0 auto; padding: 2px 9px; border-radius: var(--r-pill);
-  border: 1px solid transparent; background: transparent; color: var(--c-ink-3);
-  font-size: var(--t-micro);
+  flex: 0 0 auto; height: 26px; padding: 0 10px; border-radius: 7px;
+  border: 0; background: transparent; color: var(--c-ink-3);
+  font-size: var(--t-xs); font-weight: 600;
 }
-.prop:hover .prop-act { color: var(--c-brand); border-color: var(--c-border); background: var(--c-surface); }
-.prop-act:hover { background: var(--c-brand-tint); border-color: transparent; color: var(--c-brand); transform: none; }
+.prop:hover .prop-act { color: var(--c-ink-2); }
+.prop-act:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
 
 /* На узком окне две колонки не читаются: они складываются в одну, и
    статистика встаёт под свойствами — как было до этой раскладки. */
 @media (max-width: 1080px) {
   .split { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .sf-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 
 /* ================================================================
@@ -705,27 +710,25 @@ button.prop-val:hover { background: transparent; transform: none; }
   font-size: var(--t-micro); font-weight: 600;
   animation: drawer-rise 160ms var(--ease);
 }
-.stat-stack { padding: 0 14px 12px; }
-.stat-block { padding: 9px 0; border-top: 1px solid rgba(0, 0, 0, .05); }
-.stat-block:first-child { border-top: 0; padding-top: 4px; }
-.stat-block > p {
-  margin: 0 0 6px; font-size: var(--t-xs); color: var(--c-ink-3);
-}
-.stat-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
-.stat-hint { margin: 7px 0 0; font-size: var(--t-xs); }
-.stat-row { margin-top: 7px; }
-.stat-label { flex: 0 0 64px; color: var(--c-ink-3); font-size: var(--t-xs); }
-.stat-label-inline { color: var(--c-ink-3); font-size: var(--t-xs); }
-.stat-custom { color: var(--c-ink-3); font-size: var(--t-xs); font-style: italic; }
+/* Форма: подпись слева, выбор справа, три смысловых группы. */
+.stat-stack { padding: 0 16px 14px; }
+.sf-group { display: grid; gap: 9px; padding: 12px 0 14px; border-top: 1px solid rgba(0, 0, 0, .06); }
+.sf-group:first-child { border-top: 0; padding-top: 4px; }
+.sf-cap { margin: 0 0 2px; color: var(--c-ink); font-size: var(--t-xs); font-weight: 700; }
+.sf-row { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 28px; }
+.sf-label { color: var(--c-ink-3); font-size: var(--t-xs); }
+.sf-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; }
+.stat-hint { margin: 2px 0 0; font-size: var(--t-xs); line-height: 1.45; }
+.stat-custom { color: var(--c-ink-3); font-size: var(--t-xs); }
 
 /* Сегменты: варианты одного вопроса стоят рядом, выбранный залит.
    Радиогруппа читается быстрее селекта — видно и выбор, и альтернативы. */
 .seg {
   display: inline-flex; padding: 2px; gap: 2px;
-  background: var(--c-surface-soft); border-radius: var(--r-pill);
+  background: var(--c-surface-soft); border-radius: 8px;
 }
 .seg button {
-  padding: 4px 12px; border: 0; border-radius: var(--r-pill);
+  min-width: 34px; height: 26px; padding: 0 11px; border: 0; border-radius: 6px;
   background: transparent; color: var(--c-ink-2);
   font-size: var(--t-xs); font-weight: 500; white-space: nowrap;
 }
@@ -736,19 +739,21 @@ button.prop-val:hover { background: transparent; transform: none; }
 }
 .seg button.on:hover { background: var(--c-surface); }
 
-/* Независимые переключатели: не сегмент, а флажок-пилюля. */
+/* Независимые переключатели — обычная галочка с подписью. Зелёные
+   таблетки на каждом флажке превращали колонку в пёстрый ковёр. */
 .opt {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 4px 12px 4px 8px; border-radius: var(--r-pill);
-  border: 1px solid var(--c-border); background: var(--c-surface);
-  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px; height: 26px;
+  padding: 0; border: 0; border-radius: 0; background: transparent;
+  color: var(--c-ink); font-size: var(--t-xs); font-weight: 500; white-space: nowrap;
 }
-.opt:hover { border-color: var(--c-border-strong); color: var(--c-ink); background: var(--c-surface); transform: none; }
+.opt:hover { background: transparent; color: var(--c-ink); transform: none; }
+.opt:hover .opt-mark { border-color: var(--c-ink-3); }
+.opt:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 2px; border-radius: 4px; }
 .opt-mark {
-  width: 13px; height: 13px; flex: 0 0 auto; border-radius: 4px;
+  width: 15px; height: 15px; flex: 0 0 auto; border-radius: 4px;
   border: 1.5px solid var(--c-ink-4); background: var(--c-surface);
+  transition: background .12s var(--ease), border-color .12s var(--ease);
 }
-.opt.on { border-color: transparent; background: var(--c-brand-tint); color: var(--c-brand); font-weight: 600; }
 .opt.on .opt-mark {
   border-color: var(--c-brand); background: var(--c-brand);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6.4 4.8 8.7 9.5 3.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
@@ -757,17 +762,15 @@ button.prop-val:hover { background: transparent; transform: none; }
 
 /* Число и выбор волны: те же пилюли, но с полем внутри. */
 .stat-number {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 6px 3px 12px; border-radius: var(--r-pill);
-  border: 1px solid var(--c-border); background: var(--c-surface);
+  display: inline-flex; align-items: center; gap: 8px;
   font-size: var(--t-xs); color: var(--c-ink-3); white-space: nowrap;
 }
 .stat-number input, .stat-number select {
-  height: 22px; padding: 0 6px; border: 0; border-radius: var(--r-1);
-  background: var(--c-surface-soft); color: var(--c-ink);
+  height: 28px; padding: 0 8px; border: 1px solid var(--c-border); border-radius: 7px;
+  background: var(--c-surface); color: var(--c-ink);
   font-size: var(--t-xs); font-weight: 600; font-variant-numeric: tabular-nums;
 }
-.stat-number input { width: 58px; }
+.stat-number input { width: 70px; }
 .stat-number input:focus-visible, .stat-number select:focus-visible {
   outline: none; box-shadow: var(--focus-ring);
 }
@@ -1329,7 +1332,13 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .condition-category-head input { padding: 6px 9px; font-size: var(--t-xs); }
 /* Группа условий категории удаляется вместе с категорией, а не отдельно. */
 .condition-category .filter-group-head [data-remove-filter-group] { display: none; }
-.pill-select select { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.pill-select { padding-right: 8px; }
+.pill-select select {
+  appearance: none; field-sizing: content; width: auto; max-width: 240px; padding: 0 16px 0 0; border: 0;
+  background: transparent var(--caret) no-repeat right 2px center; color: inherit; font: inherit; cursor: pointer;
+}
+.pill-select select:focus { box-shadow: none; background-color: transparent; }
+.pill-select:focus-within { border-color: var(--c-brand); box-shadow: var(--focus-ring); }
 
 /* Banner editor */
 .banner-block-list { display: grid; gap: var(--s-2); }
@@ -2040,7 +2049,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .bld {
   height: calc(100dvh - var(--bars));
   min-height: 320px;
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  display: grid; grid-template-rows: auto minmax(0, 1fr);
   gap: 8px; padding: 10px var(--canvas-pad) 12px;
   background: var(--c-bg);
 }
@@ -2074,12 +2083,14 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   border-left: 3.5px solid transparent; border-right: 3.5px solid transparent;
   border-top: 4px solid currentColor; opacity: .45;
 }
-.bld-param-field { padding: 0 4px 0 7px; cursor: default; }
-.bld-param-field select {
-  height: 22px; padding: 0 2px; border: 0; background: transparent;
-  color: inherit; font-size: var(--t-xs); font-weight: 600; cursor: pointer;
+/* Действия справа — не параметры таблицы, поэтому без рамки пилюли. */
+.bld-action {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px;
+  border: 0; border-radius: var(--r-1); background: transparent;
+  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
 }
-.bld-param-sep { width: 1px; height: 16px; background: var(--c-border); margin: 0 2px; }
+.bld-action:hover, .bld-action[aria-expanded="true"] { background: var(--c-surface); color: var(--c-ink); transform: none; }
+.bld-action[hidden] { display: none; }
 .bld-toggle { cursor: pointer; font-weight: 600; }
 .bld-toggle[aria-pressed="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
 
@@ -2106,15 +2117,23 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   border-radius: var(--r-2); box-shadow: var(--shadow-drawer);
 }
 .bld-menu[hidden] { display: none !important; }
-.bld-menu-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  color: var(--c-ink-2); font-size: var(--t-xs);
+/* Строка меню: подпись над переключателем, а не рядом — варианты пишутся
+   словами и в ряд с подписью не помещаются. */
+.bld-menu-row { display: grid; gap: 5px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.bld-menu { width: 280px; gap: 12px; padding: 12px; }
+/* Сегментный переключатель в стиле «Вопросы / Столбцы SAV» раздела «Данные». */
+.bld-seg { display: flex; padding: 2px; gap: 2px; background: var(--c-surface-soft); border-radius: 8px; }
+.bld-seg button {
+  flex: 1 1 0; min-width: 0; height: 26px; padding: 0 8px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.bld-menu-row select {
-  max-width: 156px; height: 24px; padding: 0 4px;
-  border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-surface);
-  font-size: var(--t-xs); font-weight: 600;
+.bld-seg button:hover { background: transparent; color: var(--c-ink); transform: none; }
+.bld-seg button[aria-checked="true"] {
+  background: var(--c-surface); color: var(--c-ink); font-weight: 600;
+  box-shadow: 0 1px 1px rgba(0,0,0,.06), 0 2px 6px rgba(0,0,0,.08);
 }
+.bld-seg button:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 1px; }
 .bld-menu-button {
   height: 24px; padding: 0 10px; border: 1px solid var(--c-border); border-radius: 6px;
   background: var(--c-surface); color: var(--c-ink); font-size: var(--t-xs); font-weight: 600;
@@ -2122,6 +2141,88 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .bld-menu-button:hover { background: var(--c-surface-soft); transform: none; }
 .bld-menu-button[aria-pressed="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
 .bld-menu-note { margin: 1px 0 0; color: var(--c-ink-3); font-size: var(--t-micro); line-height: 1.45; }
+
+/* ---- Состав таблицы: два дерева слева ----
+   Строки выше и длиннее — вопросов в анкете больше, чем разрезов. Панели
+   набраны той же карточкой, что таблица, и читаются как её часть. */
+/* Ряд задан явно: иначе он растёт по высоте таблицы, прокручивается весь
+   раздел вместо окна таблицы, и липкая шапка уезжает вместе с ним. */
+.bld-main { min-height: 0; display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 8px; }
+.bld-side { min-height: 0; display: grid; grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; }
+.bld-panel {
+  min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--r-2); box-shadow: var(--shadow-card);
+}
+.bld-panel-head { display: flex; align-items: baseline; gap: 7px; padding: 10px 12px 7px; }
+.bld-panel-head strong { font-size: var(--t-xs); font-weight: 700; }
+.bld-panel-head .bld-dim { font-variant-numeric: tabular-nums; }
+.bld-panel-clear {
+  margin-left: auto; padding: 0 2px; border: 0; background: transparent;
+  color: var(--c-brand); font-size: var(--t-xs); font-weight: 600;
+}
+.bld-panel-clear:hover { background: transparent; color: var(--c-brand-hover); text-decoration: underline; transform: none; }
+.bld-panel-clear[hidden] { display: none; }
+.bld-panel-search {
+  flex: 0 0 auto; width: auto; height: 28px; margin: 0 10px 6px; padding: 0 9px;
+  border: 1px solid var(--c-border); border-radius: var(--r-1);
+  background: var(--c-surface-soft); font-size: var(--t-xs);
+}
+.bld-tree { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 8px; }
+.bld-tree-caption {
+  margin: 10px 0 3px; padding: 0 8px; color: var(--c-ink-3);
+  font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+}
+.bld-tree-empty { margin: 0; padding: 12px 8px; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
+
+/* Строка пункта: стрелка — отдельная кнопка, всё остальное — подпись
+   галочки, поэтому щелчок по названию отмечает пункт. */
+.bld-node-row { display: flex; align-items: center; gap: 2px; min-height: 28px; border-radius: 7px; }
+.bld-node-row:hover { background: var(--c-surface-soft); }
+.bld-twist {
+  flex: 0 0 auto; width: 20px; height: 22px; padding: 0; border: 0; border-radius: 5px;
+  background: transparent; color: var(--c-ink-3); display: grid; place-items: center;
+}
+.bld-twist::before {
+  content: ""; width: 0; height: 0;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor; transition: transform .12s var(--ease);
+}
+.bld-twist:hover { background: var(--c-border); color: var(--c-ink); transform: none; }
+.bld-twist:disabled { visibility: hidden; }
+.bld-node[aria-expanded="true"] > .bld-node-row .bld-twist::before { transform: rotate(90deg); }
+.bld-node-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  padding: 3px 6px 3px 2px; cursor: pointer;
+}
+.bld-check { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; padding: 0; accent-color: var(--c-brand); cursor: pointer; }
+.bld-node-code {
+  flex: 0 0 auto; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-ink-3); font: 500 11px/1.4 "SF Mono", Menlo, Consolas, monospace;
+}
+.bld-node-code:empty { display: none; }
+.bld-node-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-ink); font-size: var(--t-xs);
+}
+.bld-check:checked ~ .bld-node-name { color: var(--c-brand); font-weight: 600; }
+
+/* Содержимое пункта — справка, а не выбор: без галочек, тоньше и серее. */
+.bld-kids { margin: 0 0 4px 30px; padding: 2px 0 2px 10px; list-style: none; border-left: 1px solid var(--c-border); }
+.bld-kids li { display: flex; align-items: baseline; gap: 8px; min-height: 21px; padding: 2px 4px; font-size: 11.5px; color: var(--c-ink-2); }
+.bld-kid-code {
+  flex: 0 0 auto; min-width: 20px; color: var(--c-ink-3);
+  font: 500 10.5px/1.4 "SF Mono", Menlo, Consolas, monospace; text-align: right;
+}
+.bld-kid-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .bld-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(320px, 1fr); }
+  .bld-side { grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 280px; }
+}
+@media (max-width: 560px) {
+  .bld-side { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, 220px); max-height: none; }
+}
 
 /* ---- Карточка таблицы ---- */
 .bld-table {
@@ -2135,7 +2236,8 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Строка состояния: что посчитано, а не чем управлять. */
 .bld-status {
   display: flex; align-items: center; gap: 12px; min-height: 22px;
-  padding: 3px 10px; border-top: 1px solid var(--c-border);
+  /* Справа место под круглую кнопку ассистента в углу экрана. */
+  padding: 3px 64px 3px 10px; border-top: 1px solid var(--c-border);
   background: var(--c-surface-soft); color: var(--c-ink-3); font-size: var(--t-micro);
 }
 .bld-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2158,10 +2260,22 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   text-transform: none; letter-spacing: normal; backdrop-filter: none;
 }
 .bld-grid tbody tr:last-child td { border-bottom: 1px solid var(--c-border); }
-.bld-grid thead th { position: sticky; top: 0; z-index: 3; }
+/* Слои: тело — подписи строк, закреплённые слева (2), выше них шапка (4),
+   выше всего угол шапки (5). Раньше подписи тела стояли выше шапки, и при
+   прокрутке строка вопроса закрывала «Базу» вместе с числами. */
+.bld-grid thead th { position: sticky; top: 0; z-index: 4; }
+.bld-grid thead th.bld-rowhead { z-index: 5; }
+.bld-grid .bld-clamp {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.bld-grid .bld-cathead .bld-clamp { -webkit-line-clamp: 3; line-clamp: 3; }
+/* Столбец «Показатель» — постоянной ширины: по нему выравниваются и
+   подписи строк с многоточием, и перенос заголовков вопросов. */
+.bld-grid { --bld-head-w: 324px; }
 .bld-grid .bld-rowhead {
-  position: sticky; left: 0; z-index: 4; text-align: left;
-  min-width: 180px; max-width: 280px; white-space: normal;
+  position: sticky; left: 0; z-index: 2; text-align: left;
+  width: var(--bld-head-w); min-width: var(--bld-head-w); white-space: normal;
   color: var(--c-ink-2); vertical-align: top;
   border-right: 1px solid var(--c-border-strong);
 }
@@ -2192,6 +2306,13 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   padding: 5px 9px; background: var(--c-surface-soft); font-weight: 600;
   font-size: var(--t-xs); color: var(--c-ink);
   font-family: var(--font-display); text-align: left;
+}
+.bld-grid tbody td.bld-rowhead { white-space: nowrap; }
+/* Заголовок вопроса и подвопроса занимает всю строку, но текст переносится
+   в пределах столбца «Показатель», а не тянется над числами. */
+.bld-grid .bld-rowwrap { display: block; max-width: calc(var(--bld-head-w) - 18px); white-space: normal; line-height: 1.35; }
+.bld-grid .bld-rowlabel {
+  display: block; max-width: calc(var(--bld-head-w) - 18px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .bld-grid tr.bld-derived td { background: var(--c-surface-soft); }
 .bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-brand); font-weight: 600; }
@@ -2286,72 +2407,115 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Строка списка — переключатель: поповер знает свою зону, поэтому
    щелчок кладёт переменную туда, а повторный забирает. */
 .bld-var {
-  display: flex; align-items: center; gap: 7px; width: 100%;
-  padding: 4px 7px; border: 0; border-radius: var(--r-1);
-  background: transparent; text-align: left; cursor: grab;
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px;
+  padding: 3px 8px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--c-ink); text-align: left; cursor: grab;
 }
-.bld-var:hover { background: var(--c-surface-soft); transform: none; }
+.bld-var:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
 .bld-var.dragging { opacity: .4; }
-.bld-var-mark {
-  width: 13px; height: 13px; flex: 0 0 auto; border-radius: 4px;
-  border: 1.5px solid var(--c-ink-4); background: var(--c-surface);
-}
-.bld-var.chosen .bld-var-mark {
-  border-color: var(--c-brand); background: var(--c-brand);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6.4 4.8 8.7 9.5 3.6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-size: 10px 10px; background-position: center; background-repeat: no-repeat;
-}
-.bld-var.chosen { background: var(--c-brand-tint); }
-.bld-var-flat { cursor: default; color: var(--c-ink-3); }
-.bld-var-flat:hover { background: transparent; }
-.bld-var-flat .bld-var-code { background: var(--c-surface-soft); color: var(--c-ink-3); }
-.bld-var-flat .bld-var-name { color: var(--c-ink-3); }
+/* Код — приглушённая колонка слева, название — главное, отметка — галочка
+   справа только у выбранного. Раньше каждая строка несла пустой квадрат,
+   зелёную плашку кода и сокращение типа — три сигнала вместо одного. */
 .bld-var-code {
-  flex-shrink: 0; padding: 1px 5px; border-radius: 5px;
-  background: var(--c-brand-tint); color: var(--c-brand);
-  font: 600 10px/1.5 "SF Mono", Menlo, Consolas, monospace;
+  flex: 0 0 auto; min-width: 52px; max-width: 110px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-ink-3); font: 500 11px/1.5 "SF Mono", Menlo, Consolas, monospace;
 }
-.bld-var-name { flex: 1; min-width: 0; font-size: var(--t-xs); color: var(--c-ink-2);
+.bld-var-name { flex: 1; min-width: 0; font-size: var(--t-xs); color: var(--c-ink);
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bld-var-kind { flex-shrink: 0; color: var(--c-ink-3); font-size: 10px; font-weight: 600; }
+.bld-var-mark { width: 12px; height: 12px; flex: 0 0 auto; }
+.bld-var.chosen { background: var(--c-brand-tint); }
+.bld-var.chosen .bld-var-name { color: var(--c-brand); font-weight: 600; }
+.bld-var.chosen .bld-var-mark {
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2 6.4 4.6 9 10 3.2' stroke='%231d7a4f' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/></svg>") center / 12px no-repeat;
+}
+.bld-var-flat { cursor: default; }
+.bld-var-flat:hover { background: transparent; }
+.bld-var-flat .bld-var-code, .bld-var-flat .bld-var-name { color: var(--c-ink-4); }
 .bld-placeholder { padding: 0 var(--s-2); color: var(--c-ink-3); font-size: var(--t-sm); }
 
 /* NET-группы собираются в том же поповере: это тот же выбор строк. */
-.bld-net-panel { display: grid; gap: 8px; padding: 8px 4px; }
-.bld-net-row { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-xs); }
-.bld-net-row button { background: transparent; border: 0; color: var(--c-danger, #b3261e); cursor: pointer; }
-.bld-net-label { display: grid; gap: 4px; font-size: var(--t-xs); font-weight: 600; }
-.bld-net-label input { padding: 5px 8px; font: inherit; }
-.bld-net-values { display: grid; gap: 4px; max-height: 240px; overflow: auto; font-size: var(--t-xs); }
-.bld-net-add { padding: 6px 10px; border-radius: 8px; border: 0; background: var(--c-brand, #2eae68); color: #fff; cursor: pointer; font: inherit; font-size: var(--t-xs); }
+.bld-net-panel { display: grid; gap: 10px; padding: 4px 5px 8px; }
+.bld-net-question { margin: 0; color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.4;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.bld-net-label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.bld-net-label input { height: 30px; padding: 0 9px; border: 1px solid var(--c-border); font-size: var(--t-xs); font-weight: 600; }
+/* Галочка и подпись в одну строку: общее правило полей даёт инпуту
+   ширину 100%, и галочка уезжала над подписью с горизонтальной прокруткой. */
+.bld-net-values { display: grid; gap: 1px; max-height: 260px; overflow-y: auto; overflow-x: hidden; }
+.bld-net-value { display: flex; align-items: center; gap: 9px; min-height: 28px; padding: 3px 6px; border-radius: 7px; font-size: var(--t-xs); cursor: pointer; }
+.bld-net-value:hover { background: var(--c-surface-soft); }
+.bld-net-value input { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; padding: 0; accent-color: var(--c-brand); }
+.bld-net-value span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-net-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bld-net-back { padding: 0 4px; border: 0; background: transparent; color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 600; }
+.bld-net-back:hover { background: transparent; color: var(--c-ink); transform: none; }
+.bld-net-add { height: 30px; padding: 0 14px; border-radius: 8px; border: 0; background: var(--c-brand); color: #fff; font-size: var(--t-xs); font-weight: 600; }
+
+/* ---- Меню «Группировки» ---- */
+.bld-groups-menu { width: 340px; max-height: min(70vh, 560px); overflow-y: auto; }
+.bld-groups-sep { height: 1px; margin: 2px 0; background: var(--c-border); }
+.bld-groups-cap { margin: 0; color: var(--c-ink-3); font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.bld-net-list { display: grid; gap: 2px; }
+.bld-net-empty { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
+.bld-net-q { display: grid; gap: 4px; padding: 5px 6px; border-radius: 8px; }
+.bld-net-q:hover { background: var(--c-surface-soft); }
+.bld-net-q-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bld-net-q-code { flex: 0 0 auto; color: var(--c-ink-3); font: 500 11px/1.4 "SF Mono", Menlo, Consolas, monospace; }
+.bld-net-q-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); color: var(--c-ink); }
+.bld-net-open { flex: 0 0 auto; height: 24px; padding: 0 8px; border: 1px solid var(--c-border); border-radius: 6px;
+  background: var(--c-surface); color: var(--c-brand); font-size: var(--t-xs); font-weight: 600; }
+.bld-net-open:hover { background: var(--c-brand-tint); border-color: var(--c-brand); transform: none; }
+.bld-net-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.bld-net-chip { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px 0 8px; border-radius: 999px;
+  background: var(--c-brand-tint); color: var(--c-brand); font-size: 11px; font-weight: 600; }
+.bld-net-chip button { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 13px; line-height: 1; }
+.bld-net-chip button:hover { background: rgba(29,122,79,.15); transform: none; }
 
 /* ---- Ассистент ----
-   Решение 002: тонкий слой над расчётом, а не сам продукт. Пока это
-   заглушка, полоса свёрнута в строку — честная подпись стоит прямо
-   в ней, а место забирает только раскрытый ассистент. */
-.bld-assistant {
-  background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: var(--r-2); overflow: hidden;
-}
+   Решение 002: тонкий слой над расчётом, а не сам продукт. Поэтому он не
+   ярус экрана, а круглая кнопка в правом нижнем углу, как чат поддержки,
+   и окно над ней. Кнопка живёт внутри раздела и уходит вместе с ним. */
+.bld-assistant { position: fixed; right: 22px; bottom: 22px; z-index: 110; display: grid; justify-items: end; gap: 12px; }
 .bld-assistant-toggle {
-  display: flex; align-items: center; gap: 7px; width: 100%; height: 28px;
-  padding: 0 10px; border: 0; border-radius: 0; background: transparent;
-  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600;
-  text-align: left; cursor: pointer;
+  position: relative; width: 50px; height: 50px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--c-brand); color: #fff; font-size: 20px; line-height: 1;
+  box-shadow: 0 6px 18px rgba(29,122,79,.32), 0 2px 5px rgba(0,0,0,.12);
+  transition: transform .15s var(--ease), box-shadow .15s var(--ease), background .15s var(--ease);
 }
-.bld-assistant-toggle:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
+.bld-assistant-toggle:hover { background: var(--c-brand-hover); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(29,122,79,.38), 0 2px 6px rgba(0,0,0,.14); }
+.bld-assistant-toggle:active { transform: scale(.96); }
+.bld-assistant-toggle:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 3px; }
+.bld-fab-open, .bld-fab-close { grid-area: 1 / 1; transition: opacity .15s, transform .2s var(--ease); }
+.bld-fab-close { font-size: 26px; font-weight: 300; opacity: 0; transform: rotate(-90deg); }
+.bld-assistant-toggle[aria-expanded="true"] .bld-fab-open { opacity: 0; transform: rotate(90deg); }
+.bld-assistant-toggle[aria-expanded="true"] .bld-fab-close { opacity: 1; transform: none; }
 .bld-assistant-mark { flex: 0 0 auto; color: var(--c-brand); }
-.bld-assistant-toggle em {
-  flex: 1; min-width: 0; font-style: normal; font-weight: 400; color: var(--c-ink-3);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+
+.bld-assistant-body {
+  width: min(380px, calc(100vw - 32px)); max-height: min(520px, calc(100dvh - 120px));
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: 16px; box-shadow: var(--shadow-drawer);
+  transform-origin: bottom right; animation: bld-pop .16s var(--ease);
 }
-.bld-assistant-toggle .bld-caret { opacity: .5; transition: transform .15s var(--ease); }
-.bld-assistant-toggle[aria-expanded="true"] .bld-caret { transform: rotate(180deg); }
-.bld-assistant-body { border-top: 1px solid var(--c-border); }
-.bld-log {
-  display: none; max-height: 150px; overflow-y: auto;
-  padding: 10px 12px; gap: var(--s-3); align-content: start;
+.bld-assistant-body[hidden] { display: none; }
+@keyframes bld-pop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+.bld-assistant-head {
+  display: flex; align-items: center; gap: 8px; padding: 12px 10px 12px 14px;
   border-bottom: 1px solid var(--c-border);
+}
+.bld-assistant-head strong { font-size: var(--t-sm); }
+.bld-assistant-head em { font-style: normal; color: var(--c-ink-3); font-size: var(--t-xs); }
+.bld-assistant-close {
+  margin-left: auto; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px;
+  background: transparent; color: var(--c-ink-3); font-size: 18px; line-height: 1;
+}
+.bld-assistant-close:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
+.bld-log {
+  display: none; flex: 1; min-height: 0; overflow-y: auto;
+  padding: 12px 14px; gap: var(--s-3); align-content: start;
 }
 .bld-log.has-messages { display: grid; }
 .bld-msg { display: grid; gap: 4px; }
@@ -2365,14 +2529,14 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   background: var(--c-brand-tint); border-radius: 0 6px 6px 0;
   color: var(--c-ink-2); font-size: var(--t-micro); line-height: 1.5;
 }
-.bld-ask { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.bld-ask { display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--c-border); }
 .bld-suggest { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .bld-suggest button {
   padding: 4px 9px; border: 1px solid var(--c-border); border-radius: var(--r-1);
   background: var(--c-surface); color: var(--c-ink-2); font-size: var(--t-micro); font-weight: 500;
 }
 .bld-suggest button:hover { border-color: var(--c-brand); color: var(--c-brand); background: var(--c-surface); transform: none; }
-.bld-form { flex: 1 1 240px; min-width: 180px; display: flex; gap: 7px; align-items: center; }
+.bld-form { display: flex; gap: 7px; align-items: center; }
 .bld-form textarea {
   flex: 1; min-height: 28px; max-height: 80px; padding: 5px 10px; resize: none;
   border: 1px solid var(--c-border-strong); border-radius: var(--r-1);
@@ -2388,7 +2552,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
      было бы прятать, здесь больше нет. */
   .bld { padding: 8px; gap: 6px; }
   .bld-param { max-width: 190px; }
-  .bld-ask { flex-wrap: wrap; }
+  .bld-assistant { right: 14px; bottom: 14px; }
 }
 
 /* ---------- «Новый проект» в верхнем ряду ----------
@@ -2437,13 +2601,34 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Массовые операции над вопросами */
 .select-cell { width: 30px; text-align: center; }
 .select-cell input { margin: 0; cursor: pointer; }
-.bulk-bar { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 10px; }
-.bulk-bar[hidden] { display: none; }
-.bulk-bar b { color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
 .banner-overlap { margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--c-warn-tint, #fff6e0); color: var(--c-ink-2, inherit); font-size: var(--t-xs); }
-/* Ширина по подписи «Тип…», а не по самому длинному пункту списка:
-   с четырьмя выборами полоса иначе не помещается в строку. */
-.bulk-select { field-sizing: content; width: auto; height: 28px; max-width: 170px; padding: 0 8px; border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: var(--c-surface, #fff); color: inherit; font: inherit; font-size: var(--t-xs); }
+/* Режим выбора. Полоса не втискивается в ряд заголовка, а на время выбора
+   заменяет его целиком: заголовок, поиск и виды прячутся, ряд подкрашен —
+   видно, что действия сейчас относятся к выделенным строкам. Кнопки без
+   рамок, группы разделены тонкой чертой: состав отчёта, порядок, свойства. */
+#structure-toolbar.is-selecting { background: var(--c-brand-tint); }
+#structure-toolbar.is-selecting > :not(#bulk-bar) { display: none !important; }
+.bulk-bar { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 4px 2px; min-width: 0; }
+.bulk-bar[hidden] { display: none; }
+#bulk-count { margin: 0 6px 0 2px; color: var(--c-ink); font-size: var(--t-xs); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bulk-group { display: inline-flex; align-items: center; gap: 2px; padding-left: 6px; margin-left: 4px; border-left: 1px solid rgba(0,0,0,.1); }
+.bulk-btn, .bulk-clear {
+  height: 28px; padding: 0 10px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--c-ink); font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
+}
+.bulk-btn:hover, .bulk-clear:hover { background: rgba(255,255,255,.75); color: var(--c-ink); transform: none; }
+.bulk-icon { width: 28px; padding: 0; font-size: 14px; }
+.bulk-clear { width: 28px; padding: 0; color: var(--c-ink-3); font-size: 17px; font-weight: 400; line-height: 1; }
+.bulk-undo { margin-left: auto; color: var(--c-brand); }
+/* Селект читается как соседняя кнопка: без рамки, ширина по подписи. */
+.bulk-select {
+  appearance: none; field-sizing: content; width: auto; max-width: 160px; height: 28px;
+  padding: 0 22px 0 10px; border: 0; border-radius: 7px;
+  background: transparent var(--caret) no-repeat right 9px center;
+  color: var(--c-ink); font-size: var(--t-xs); font-weight: 600; cursor: pointer;
+}
+.bulk-select:hover { background-color: rgba(255,255,255,.75); }
+.bulk-select:focus { background-color: var(--c-surface); border: 0; box-shadow: var(--focus-ring); }
 
 /* Взвешивание по ячейкам: цели категорий не нужны, их задаёт сетка ячеек. */
 .weight-dimension-list.cells-mode .weight-target .t-track,
