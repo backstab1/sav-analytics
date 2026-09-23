@@ -21,125 +21,46 @@ def find_references(
 ) -> list[ConfigurationReference]:
     """Find user-facing locations that reference one configuration object."""
     identifier = str(target_id)
-    references: list[ConfigurationReference] = []
+    locations: list[str] = []
     if target_kind in {"question", "recoding"}:
-        for banner in configuration.get("banners", []):
-            for block in banner.get("blocks", []):
-                for source in block.get("sources", []):
-                    if (
-                        source.get("kind") == target_kind
-                        and str(source.get("ref")) == identifier
-                    ):
-                        references.append(
-                            ConfigurationReference(
-                                target_kind,
-                                identifier,
-                                f"баннер «{banner.get('name') or banner.get('id')}»",
-                            )
-                        )
-
-        for recoding in _conditional_recodings(configuration):
+        for holder in _source_holders(configuration):
             if any(
                 source.get("kind") == target_kind and str(source.get("ref")) == identifier
-                for category in recoding.get("categories", [])
-                for source in _filter_sources(category.get("rule") or {})
+                for source in holder.sources
             ):
-                references.append(
-                    ConfigurationReference(
-                        target_kind,
-                        identifier,
-                        f"логическая переменная «{recoding.get('name') or recoding.get('code')}»",
-                    )
-                )
-
+                locations.append(holder.location)
         if target_kind == "question":
-            for recoding in configuration.get("recodings", []):
-                if recoding.get("mode") == "segments" and identifier in recoding.get(
-                    "variables", []
-                ):
-                    references.append(
-                        ConfigurationReference(
-                            target_kind,
-                            identifier,
-                            f"сегментация «{recoding.get('name') or recoding.get('code')}»",
-                        )
-                    )
-
-        for model in configuration.get("analysis_models", []):
-            if any(
-                source.get("kind") == target_kind and str(source.get("ref")) == identifier
-                for source in (model.get("dependent", {}), *model.get("predictors", []))
-            ):
-                references.append(
-                    ConfigurationReference(target_kind, identifier, "модель «Анализа»")
-                )
-
-        for card in configuration.get("analysis_cards", []):
-            if any(
-                source.get("kind") == target_kind and str(source.get("ref")) == identifier
-                for source in (card.get("a", {}), card.get("b", {}))
-            ):
-                references.append(
-                    ConfigurationReference(target_kind, identifier, "карточка «Анализа»")
-                )
-
+            locations.extend(
+                f"сегментация «{_recoding_label(recoding)}»"
+                for recoding in _segmentations(configuration)
+                if identifier in recoding.get("variables", [])
+            )
         if target_kind == "recoding":
-            for weight in configuration.get("calculated_weights", []):
+            locations.extend(
+                f"рассчитанный вес «{weight.get('name') or weight.get('id')}»"
+                for weight in configuration.get("calculated_weights", [])
                 if any(
                     str(dimension.get("recoding_id") or "") == identifier
                     for dimension in weight.get("dimensions", [])
-                ):
-                    references.append(
-                        ConfigurationReference(
-                            target_kind,
-                            identifier,
-                            f"рассчитанный вес «{weight.get('name') or weight.get('id')}»",
-                        )
-                    )
-
-        for definition in configuration.get("filters", []):
-            if any(
-                source.get("kind") == target_kind
-                and str(source.get("ref")) == identifier
-                for source in _filter_sources(definition.get("rule", {}))
-            ):
-                references.append(
-                    ConfigurationReference(
-                        target_kind,
-                        identifier,
-                        f"фильтр «{definition.get('name') or definition.get('id')}»",
-                    )
-                )
-    if target_kind == "filter":
-        for question in configuration.get("questions", []):
-            if question.get("base_filter_id") == identifier:
-                references.append(
-                    ConfigurationReference(
-                        target_kind,
-                        identifier,
-                        f"база вопроса {question.get('code')}",
-                    )
-                )
-        if configuration.get("report_filter_id") == identifier:
-            references.append(
-                ConfigurationReference(
-                    target_kind, identifier, "общий фильтр отчёта"
                 )
             )
+    if target_kind == "filter":
+        locations.extend(
+            f"база вопроса {question.get('code')}"
+            for question in configuration.get("questions", [])
+            if question.get("base_filter_id") == identifier
+        )
+        if configuration.get("report_filter_id") == identifier:
+            locations.append("общий фильтр отчёта")
     if target_kind == "calculated_weight":
         # Вес выбирается только в настройках отчёта. Копия на баннере осталась бы
         # от схемы 1 и блокировала удаление веса, который ни на что не влияет.
         if str(
             (configuration.get("report_settings") or {}).get("calculated_weight_id") or ""
         ) == identifier:
-            references.append(
-                ConfigurationReference(
-                    target_kind,
-                    identifier,
-                    "настройка отчёта",
-                )
-            )
-    return _unique_references(references)
+            locations.append("настройка отчёта")
+    unique = dict.fromkeys(locations)
+    return [ConfigurationReference(target_kind, identifier, location) for location in unique]
 
 
 def ensure_not_referenced(
@@ -164,50 +85,26 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
     weights = {
         str(item.get("id")) for item in configuration.get("calculated_weights", [])
     }
+    known = {"question": questions, "recoding": recodings}
     problems: list[str] = []
 
-    for banner in configuration.get("banners", []):
-        banner_label = banner.get("name") or banner.get("id")
-        for block in banner.get("blocks", []):
-            for source in block.get("sources", []):
-                kind = source.get("kind")
-                reference = str(source.get("ref"))
-                known = questions if kind == "question" else recodings
-                if kind not in {"question", "recoding"} or reference not in known:
-                    problems.append(
-                        f"баннер «{banner_label}» ссылается на отсутствующий источник "
-                        f"{kind}:{reference}"
-                    )
-    for definition in configuration.get("filters", []):
-        filter_label = definition.get("name") or definition.get("id")
-        for source in _filter_sources(definition.get("rule", {})):
+    for holder in _source_holders(configuration):
+        if not holder.validated:
+            continue
+        for source in holder.sources:
             kind = source.get("kind")
             reference = str(source.get("ref"))
-            known = questions if kind == "question" else recodings
-            if kind not in {"question", "recoding"} or reference not in known:
+            if reference not in known.get(kind, ()):
                 problems.append(
-                    f"фильтр «{filter_label}» ссылается на отсутствующий источник "
-                    f"{kind}:{reference}"
+                    f"{holder.location} ссылается на отсутствующий источник {kind}:{reference}"
                 )
-
-    for recoding in configuration.get("recodings", []):
-        if recoding.get("mode") != "segments":
-            continue
+    for recoding in _segmentations(configuration):
         missing = [code for code in recoding.get("variables", []) if code not in questions]
         if missing:
             problems.append(
-                f"сегментация «{recoding.get('name') or recoding.get('code')}» ссылается на "
+                f"сегментация «{_recoding_label(recoding)}» ссылается на "
                 f"отсутствующие вопросы {', '.join(missing)}"
             )
-    for model in configuration.get("analysis_models", []):
-        for source in (model.get("dependent", {}), *model.get("predictors", [])):
-            kind = source.get("kind")
-            reference = str(source.get("ref"))
-            known = questions if kind == "question" else recodings
-            if kind not in {"question", "recoding"} or reference not in known:
-                problems.append(
-                    f"модель «Анализа» ссылается на отсутствующий источник {kind}:{reference}"
-                )
     for weight in configuration.get("calculated_weights", []):
         for dimension in weight.get("dimensions", []):
             recoding_id = dimension.get("recoding_id")
@@ -216,19 +113,6 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
                     f"рассчитанный вес «{weight.get('name') or weight.get('id')}» ссылается "
                     f"на отсутствующую перекодировку {recoding_id}"
                 )
-
-    for recoding in _conditional_recodings(configuration):
-        recoding_label = recoding.get("name") or recoding.get("code")
-        for category in recoding.get("categories", []):
-            for source in _filter_sources(category.get("rule") or {}):
-                kind = source.get("kind")
-                reference = str(source.get("ref"))
-                known = questions if kind == "question" else recodings
-                if kind not in {"question", "recoding"} or reference not in known:
-                    problems.append(
-                        f"логическая переменная «{recoding_label}» ссылается на отсутствующий "
-                        f"источник {kind}:{reference}"
-                    )
 
     for question in configuration.get("questions", []):
         filter_id = question.get("base_filter_id")
@@ -254,6 +138,56 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _SourceHolder:
+    """Объект конфигурации, чьи источники — пары `{kind, ref}` на вопрос или
+    перекодировку. Поиск ссылок и проверка целостности обходят один список."""
+
+    location: str
+    sources: list[dict[str, Any]]
+    # Карточки «Анализа» учитываются при поиске ссылок, но при проверке
+    # целостности не проверялись и до выноса этого списка.
+    validated: bool = True
+
+
+def _source_holders(configuration: dict[str, Any]) -> Iterator[_SourceHolder]:
+    for banner in configuration.get("banners", []):
+        yield _SourceHolder(
+            f"баннер «{banner.get('name') or banner.get('id')}»",
+            [source for block in banner.get("blocks", []) for source in block.get("sources", [])],
+        )
+    for definition in configuration.get("filters", []):
+        yield _SourceHolder(
+            f"фильтр «{definition.get('name') or definition.get('id')}»",
+            list(_filter_sources(definition.get("rule", {}))),
+        )
+    for recoding in _conditional_recodings(configuration):
+        yield _SourceHolder(
+            f"логическая переменная «{_recoding_label(recoding)}»",
+            [
+                source
+                for category in recoding.get("categories", [])
+                for source in _filter_sources(category.get("rule") or {})
+            ],
+        )
+    for model in configuration.get("analysis_models", []):
+        yield _SourceHolder(
+            "модель «Анализа»", [model.get("dependent", {}), *model.get("predictors", [])]
+        )
+    for card in configuration.get("analysis_cards", []):
+        yield _SourceHolder(
+            "карточка «Анализа»", [card.get("a", {}), card.get("b", {})], validated=False
+        )
+
+
+def _recoding_label(recoding: dict[str, Any]) -> str:
+    return str(recoding.get("name") or recoding.get("code"))
+
+
+def _segmentations(configuration: dict[str, Any]) -> list[dict[str, Any]]:
+    return [item for item in configuration.get("recodings", []) if item.get("mode") == "segments"]
+
+
 def _conditional_recodings(configuration: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         item for item in configuration.get("recodings", []) if item.get("mode") == "conditions"
@@ -266,16 +200,3 @@ def _filter_sources(group: dict[str, Any]) -> Iterator[dict[str, Any]]:
             yield from _filter_sources(item)
         elif isinstance(item.get("source"), dict):
             yield item["source"]
-
-
-def _unique_references(
-    references: list[ConfigurationReference],
-) -> list[ConfigurationReference]:
-    result: list[ConfigurationReference] = []
-    seen: set[tuple[str, str, str]] = set()
-    for reference in references:
-        key = (reference.target_kind, reference.target_id, reference.location)
-        if key not in seen:
-            seen.add(key)
-            result.append(reference)
-    return result

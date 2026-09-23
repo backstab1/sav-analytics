@@ -136,31 +136,74 @@ def _build_questions(
     explicit_sets: list[dict[str, Any]],
     metadata: Any,
 ) -> tuple[list[QuestionInspection], list[str]]:
+    """Вопросы массива: сначала наборы из метаданных SPSS, затем группы по
+    именам переменных, затем по вопросу на каждую оставшуюся переменную."""
     by_name = {variable.name: variable for variable in variables}
-    grouped: dict[str, dict[str, Any]] = {}
-    consumed: set[str] = set()
     warnings: list[str] = []
+    grouped = _metadata_groups(explicit_sets, by_name)
+    consumed = {member for definition in grouped.values() for member in definition["members"]}
+    grouped.update(_pattern_groups(frame, variables, by_name, consumed, metadata, warnings))
 
+    questions: list[QuestionInspection] = []
+    emitted_groups: set[str] = set()
+    group_by_member = {
+        member: (code, definition)
+        for code, definition in grouped.items()
+        for member in definition["members"]
+    }
+    for variable in variables:
+        group = group_by_member.get(variable.name)
+        if not group:
+            questions.append(_single_question(variable))
+            continue
+        code, definition = group
+        if code in emitted_groups:
+            continue
+        emitted_groups.add(code)
+        questions.append(_group_question(frame, code, definition, by_name, metadata))
+    return questions, warnings
+
+
+def _metadata_groups(
+    explicit_sets: list[dict[str, Any]], by_name: dict[str, VariableInspection]
+) -> dict[str, dict[str, Any]]:
+    """Наборы multiple-response, объявленные в самом SAV."""
+    grouped: dict[str, dict[str, Any]] = {}
     for response_set in explicit_sets:
         members = [name for name in response_set["variables"] if name in by_name]
-        if len(members) >= 2:
-            dichotomy_set = response_set["encoding"] == "dichotomy"
-            grouped[response_set["name"].lstrip("$")] = {
-                "members": members,
-                "source": "metadata",
-                "question_type": (
-                    QuestionType.MULTIPLE_DICHOTOMY
-                    if dichotomy_set
-                    else QuestionType.MULTIPLE_CATEGORICAL
-                ),
-                "multiple_response": {
-                    "encoding": response_set["encoding"],
-                    "counted_value": response_set["counted_value"],
-                    "source": "spss_metadata",
-                },
-            }
-            consumed.update(members)
+        if len(members) < 2:
+            continue
+        dichotomy_set = response_set["encoding"] == "dichotomy"
+        grouped[response_set["name"].lstrip("$")] = {
+            "members": members,
+            "source": "metadata",
+            "question_type": (
+                QuestionType.MULTIPLE_DICHOTOMY
+                if dichotomy_set
+                else QuestionType.MULTIPLE_CATEGORICAL
+            ),
+            "multiple_response": {
+                "encoding": response_set["encoding"],
+                "counted_value": response_set["counted_value"],
+                "source": "spss_metadata",
+            },
+        }
+    return grouped
 
+
+def _pattern_groups(
+    frame: pd.DataFrame,
+    variables: list[VariableInspection],
+    by_name: dict[str, VariableInspection],
+    consumed: set[str],
+    metadata: Any,
+    warnings: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Группы по общему префиксу имени: multiple из дихотомий или матрица.
+
+    Последовательность позиционных категорий группой не становится: её
+    переменные остаются одиночными вопросами и помечаются здесь же.
+    """
     candidates: dict[str, list[str]] = defaultdict(list)
     for variable in variables:
         if variable.name in consumed or variable.role is not VariableRole.QUESTION:
@@ -169,7 +212,10 @@ def _build_questions(
         if prefix:
             candidates[prefix].append(variable.name)
 
+    grouped: dict[str, dict[str, Any]] = {}
     for prefix, members in candidates.items():
+        if len(members) < 2:
+            continue
         all_dichotomies = all(
             is_dichotomy(
                 frame[name]
@@ -179,23 +225,10 @@ def _build_questions(
             )
             for name in members
         )
-        if len(members) < 2:
-            continue
         if all_dichotomies:
             group_type = QuestionType.MULTIPLE_DICHOTOMY
         elif _looks_like_positional_categories(frame, members, by_name):
-            for name in members:
-                variable = by_name[name]
-                variable.question_type = QuestionType.SINGLE_CHOICE
-                variable.warnings = [
-                    warning
-                    for warning in variable.warnings
-                    if "Тип шкалы определён по диапазону значений" not in warning
-                ]
-                variable.warnings.append(
-                    "Переменная распознана как позиционная категория внутри "
-                    "последовательного блока; будут показаны исходные коды."
-                )
+            _mark_positional_categories(members, by_name)
             warnings.append(
                 f"Группа {prefix} распознана как последовательность позиционных "
                 "категорий по структуре заполнения; проверьте подписи кодов."
@@ -219,96 +252,90 @@ def _build_questions(
                 else None
             ),
         }
-        consumed.update(members)
         group_label = "множественный вопрос" if all_dichotomies else "матрица"
         warnings.append(
             f"Группа {prefix} распознана как {group_label} по именам и структуре; "
             "проверьте её состав."
         )
+    return grouped
 
-    questions: list[QuestionInspection] = []
-    emitted_groups: set[str] = set()
-    group_by_member = {
-        member: (code, definition)
-        for code, definition in grouped.items()
-        for member in definition["members"]
-    }
-    for variable in variables:
-        group = group_by_member.get(variable.name)
-        if group:
-            code, definition = group
-            members = definition["members"]
-            source = definition["source"]
-            group_type = definition["question_type"]
-            if code in emitted_groups:
-                continue
-            emitted_groups.add(code)
-            valid_rows = pd.concat(
-                [
-                    ~spss_missing_mask(frame[name], name, metadata)
-                    for name in members
-                ],
-                axis=1,
-            ).any(axis=1)
-            missing_counted_value = (
-                group_type is QuestionType.MULTIPLE_DICHOTOMY
-                and definition["multiple_response"].get("counted_value") is None
-            )
-            group_warnings = (
-                [] if source == "metadata" else ["Автоматически собранная группа."]
-            )
-            if missing_counted_value:
-                group_warnings.append(
-                    "В metadata multiple-response не задан код выбранного ответа."
-                )
-            questions.append(
-                QuestionInspection(
-                    code=code,
-                    label=_common_label([by_name[name].label for name in members]) or code,
-                    question_type=group_type,
-                    role=VariableRole.QUESTION,
-                    source_variables=members,
-                    valid_count=int(valid_rows.sum()),
-                    missing_count=int((~valid_rows).sum()),
-                    included_in_report=not missing_counted_value,
-                    recognition="metadata" if source == "metadata" else "auto_review",
-                    warnings=group_warnings,
-                    items=[
-                        {"variable": name, "label": by_name[name].label} for name in members
-                    ],
-                    special_values=_special_values(members, by_name),
-                    special_items=[
-                        name for name in members if is_special_label(by_name[name].label)
-                    ],
-                    multiple_response=definition.get("multiple_response"),
-                )
-            )
-            continue
 
-        included = variable.role is VariableRole.QUESTION and variable.question_type not in {
-            QuestionType.OPEN_TEXT,
-            QuestionType.TECHNICAL,
-        }
-        questions.append(
-            QuestionInspection(
-                code=variable.name,
-                label=variable.label,
-                question_type=variable.question_type,
-                role=variable.role,
-                source_variables=[variable.name],
-                valid_count=variable.valid_count,
-                missing_count=variable.missing_count,
-                included_in_report=included,
-                warnings=list(variable.warnings),
-                items=[{"variable": variable.name, "label": variable.label}],
-                special_values=[
-                    label.value
-                    for label in variable.value_labels
-                    if is_special_label(label.label)
-                ],
-            )
+def _mark_positional_categories(
+    members: list[str], by_name: dict[str, VariableInspection]
+) -> None:
+    for name in members:
+        variable = by_name[name]
+        variable.question_type = QuestionType.SINGLE_CHOICE
+        variable.warnings = [
+            warning
+            for warning in variable.warnings
+            if "Тип шкалы определён по диапазону значений" not in warning
+        ]
+        variable.warnings.append(
+            "Переменная распознана как позиционная категория внутри "
+            "последовательного блока; будут показаны исходные коды."
         )
-    return questions, warnings
+
+
+def _group_question(
+    frame: pd.DataFrame,
+    code: str,
+    definition: dict[str, Any],
+    by_name: dict[str, VariableInspection],
+    metadata: Any,
+) -> QuestionInspection:
+    members = definition["members"]
+    source = definition["source"]
+    group_type = definition["question_type"]
+    valid_rows = pd.concat(
+        [~spss_missing_mask(frame[name], name, metadata) for name in members],
+        axis=1,
+    ).any(axis=1)
+    missing_counted_value = (
+        group_type is QuestionType.MULTIPLE_DICHOTOMY
+        and definition["multiple_response"].get("counted_value") is None
+    )
+    group_warnings = [] if source == "metadata" else ["Автоматически собранная группа."]
+    if missing_counted_value:
+        group_warnings.append("В metadata multiple-response не задан код выбранного ответа.")
+    return QuestionInspection(
+        code=code,
+        label=_common_label([by_name[name].label for name in members]) or code,
+        question_type=group_type,
+        role=VariableRole.QUESTION,
+        source_variables=members,
+        valid_count=int(valid_rows.sum()),
+        missing_count=int((~valid_rows).sum()),
+        included_in_report=not missing_counted_value,
+        recognition="metadata" if source == "metadata" else "auto_review",
+        warnings=group_warnings,
+        items=[{"variable": name, "label": by_name[name].label} for name in members],
+        special_values=_special_values(members, by_name),
+        special_items=[name for name in members if is_special_label(by_name[name].label)],
+        multiple_response=definition.get("multiple_response"),
+    )
+
+
+def _single_question(variable: VariableInspection) -> QuestionInspection:
+    included = variable.role is VariableRole.QUESTION and variable.question_type not in {
+        QuestionType.OPEN_TEXT,
+        QuestionType.TECHNICAL,
+    }
+    return QuestionInspection(
+        code=variable.name,
+        label=variable.label,
+        question_type=variable.question_type,
+        role=variable.role,
+        source_variables=[variable.name],
+        valid_count=variable.valid_count,
+        missing_count=variable.missing_count,
+        included_in_report=included,
+        warnings=list(variable.warnings),
+        items=[{"variable": variable.name, "label": variable.label}],
+        special_values=[
+            label.value for label in variable.value_labels if is_special_label(label.label)
+        ],
+    )
 
 
 def spss_missing_mask(

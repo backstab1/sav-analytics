@@ -57,6 +57,53 @@ def prepare_report_data(
         validate_configuration_references(configuration)
     except ConfigurationIntegrityError as exc:
         raise ReportError(str(exc)) from exc
+    global_mask = _report_filter_mask(frame, project)
+
+    active_banner = _active_banner(configuration)
+    report_settings = resolved_report_settings(configuration, active_banner)
+    if active_banner:
+        # Comparison metadata belongs to the report, but banner-column building
+        # still needs it to annotate each generated subgroup.
+        active_banner = {**active_banner, **report_settings}
+    report_columns, empty_columns = _report_columns(frame, active_banner, project, global_mask)
+
+    questions = [
+        question for question in configuration["questions"] if question["included_in_report"]
+    ]
+    variables = {item["name"]: item for item in project["inspection"]["variables"]}
+    _check_report_questions(frame, questions, variables)
+    filters = {item["id"]: item for item in configuration.get("filters", [])}
+    # «Задавался не всем» — это и объявленный пропуск SPSS, и код, который
+    # пользователь пометил как «не применимо»: для отчёта они равнозначны.
+    filter_questions = [
+        question
+        for question in questions
+        if question["missing_count"] > 0 or not_applicable_values(question)
+    ]
+    weights, weight_label = report_weights(
+        frame,
+        report_settings.get("weight_variable"),
+        report_settings.get("calculated_weight_id"),
+        project,
+    )
+    return ReportData(
+        frame=frame,
+        configuration=configuration,
+        active_banner=active_banner,
+        columns=report_columns,
+        questions=questions,
+        variables=variables,
+        filters=filters,
+        filter_questions=filter_questions,
+        statistical_settings=_statistical_settings(
+            report_settings, questions, weights, weight_label
+        ),
+        empty_columns=empty_columns,
+    )
+
+
+def _report_filter_mask(frame: pd.DataFrame, project: dict[str, Any]) -> pd.Series:
+    configuration = project["configuration"]
     global_mask = pd.Series(True, index=frame.index)
     report_filter_id = configuration.get("report_filter_id")
     if report_filter_id:
@@ -64,22 +111,30 @@ def prepare_report_data(
         global_mask &= evaluate_filter_frame(definition, project, frame)
         if not global_mask.any():
             raise ReportError("Общий фильтр отчёта даёт пустую выборку.")
+    return global_mask
 
+
+def _active_banner(configuration: dict[str, Any]) -> dict[str, Any]:
+    """Баннер отчёта; проект без явного выбора берёт последний сохранённый."""
     banners = configuration.get("banners", [])
     active_banner_id = configuration.get("report_banner_id")
     if "report_banner_id" not in configuration and banners:
-        active_banner = banners[-1]
-    elif active_banner_id and banners:
-        active_banner = next(
+        return banners[-1]
+    if active_banner_id and banners:
+        return next(
             (banner for banner in banners if banner.get("id") == active_banner_id), banners[-1]
         )
-    else:
-        active_banner = {}
-    report_settings = resolved_report_settings(configuration, active_banner)
+    return {}
+
+
+def _report_columns(
+    frame: pd.DataFrame,
+    active_banner: dict[str, Any],
+    project: dict[str, Any],
+    global_mask: pd.Series,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Колонки под общим фильтром и подписи тех, что остались без базы."""
     if active_banner:
-        # Comparison metadata belongs to the report, but banner-column building
-        # still needs it to annotate each generated subgroup.
-        active_banner = {**active_banner, **report_settings}
         try:
             columns = build_banner_columns(frame, active_banner, project)
         except BannerError as exc:
@@ -102,11 +157,14 @@ def prepare_report_data(
         column["label"] for index, column in enumerate(columns) if index and not column["base"]
     ]
     columns = [column for index, column in enumerate(columns) if index == 0 or column["base"]]
+    return columns, empty_columns
 
-    questions = [
-        question for question in configuration["questions"] if question["included_in_report"]
-    ]
-    variables = {item["name"]: item for item in project["inspection"]["variables"]}
+
+def _check_report_questions(
+    frame: pd.DataFrame,
+    questions: list[dict[str, Any]],
+    variables: dict[str, dict[str, Any]],
+) -> None:
     for question in questions:
         if question["question_type"] == "ranking":
             try:
@@ -128,21 +186,15 @@ def prepare_report_data(
             + ", ".join(invalid_multiple)
             + "."
         )
-    filters = {item["id"]: item for item in configuration.get("filters", [])}
-    # «Задавался не всем» — это и объявленный пропуск SPSS, и код, который
-    # пользователь пометил как «не применимо»: для отчёта они равнозначны.
-    filter_questions = [
-        question
-        for question in questions
-        if question["missing_count"] > 0 or not_applicable_values(question)
-    ]
-    weights, weight_label = report_weights(
-        frame,
-        report_settings.get("weight_variable"),
-        report_settings.get("calculated_weight_id"),
-        project,
-    )
-    statistical_settings = {
+
+
+def _statistical_settings(
+    report_settings: dict[str, Any],
+    questions: list[dict[str, Any]],
+    weights: pd.Series | None,
+    weight_label: str | None,
+) -> dict[str, Any]:
+    return {
         "confidence_level": report_settings["confidence_level"],
         "bonferroni": report_settings["bonferroni"],
         "show_p_values": report_settings["show_p_values"],
@@ -168,18 +220,6 @@ def prepare_report_data(
         "correlations": report_settings["correlations"],
         "counts_sheet": report_settings["counts_sheet"],
     }
-    return ReportData(
-        frame=frame,
-        configuration=configuration,
-        active_banner=active_banner,
-        columns=columns,
-        questions=questions,
-        variables=variables,
-        filters=filters,
-        filter_questions=filter_questions,
-        statistical_settings=statistical_settings,
-        empty_columns=empty_columns,
-    )
 
 
 def _find_by_id(items: list[dict[str, Any]], identifier: str, label: str) -> dict[str, Any]:

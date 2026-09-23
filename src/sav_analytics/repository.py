@@ -394,8 +394,6 @@ class ProjectRepository:
         Сохранение карточки вопроса подтверждает распознавание; массовое
         включение и исключение — нет, для этого есть отдельное действие.
         """
-        questions = project["configuration"]["questions"]
-        code = question["code"]
         confirm_substantive = bool(changes.pop("confirm_substantive", False))
         final_role = changes.get("role", question["role"])
         final_type = changes.get("question_type", question["question_type"])
@@ -405,21 +403,7 @@ class ProjectRepository:
                 "Категориальный multiple собирается из двух и более переменных-слотов."
             )
         if final_type == "ranking":
-            if changes.get("nets"):
-                raise InvalidUploadError("NET-группы для ранжирования не поддерживаются.")
-            candidate = {**question, **changes}
-            frame = read_project_frame(self.source_path(project_id), project, sources)
-            variables = {item["name"]: item for item in project["inspection"]["variables"]}
-            try:
-                items = ranking_items(frame, candidate, variables)
-            except RankingError as exc:
-                raise InvalidUploadError(str(exc)) from exc
-            changes["valid_count"] = int(items[0]["ranks"].notna().sum())
-            changes["missing_count"] = len(frame) - changes["valid_count"]
-            changes["special_values"] = []
-            changes["nets"] = []
-            if question["question_type"] != "ranking":
-                changes.setdefault("output_metrics", [])
+            self._apply_ranking_changes(project_id, project, question, changes, sources)
         if changes.get("not_applicable_values") and final_type == "multiple_choice_dichotomy":
             # У дихотомии выбор описывается counted_value, а не распределением
             # значений, поэтому пометка кода здесь ничего бы не изменила.
@@ -427,6 +411,60 @@ class ProjectRepository:
                 "Для multiple-response пропуск задаётся кодом выбранного ответа, "
                 "а не пометкой «не применимо»."
             )
+        self._check_role_change(project, question, changes, final_role, final_type)
+        special_metric = changes.get("special_metric", question.get("special_metric", "none"))
+        if special_metric in {"nps", "csat"}:
+            self._check_special_metric(project_id, project, question, final_type, special_metric)
+        if "nets" in changes:
+            changes["nets"] = _validated_nets(question, final_type, changes["nets"])
+        if "output_metrics" in changes:
+            changes["output_metrics"] = _validated_output(final_type, changes["output_metrics"])
+        if changes.get("not_applicable_values"):
+            self._require_not_applicable_confirmation(
+                project_id,
+                project,
+                [(question, changes["not_applicable_values"])],
+                confirmed=confirm_substantive,
+            )
+        # Сохранение вопроса и есть проверка: пользователь открыл карточку,
+        # увидел предупреждения распознавания — эвристический тип или состав
+        # автоматически собранной группы — и подтвердил настройки.
+        # Подтверждать нечего, если предупреждений нет: тогда распознавание
+        # не трогаем, как и метаданные SPSS.
+        if confirm_recognition and (
+            question.get("recognition", "auto") not in CONFIRMED_RECOGNITIONS
+            and question.get("warnings")
+        ):
+            question["recognition"] = "manual"
+        question.update(changes)
+
+    def _apply_ranking_changes(
+        self, project_id: UUID, project: dict, question: dict, changes: dict, sources: list[str]
+    ) -> None:
+        """Ранжирование проверяется по данным: базу и пропуски даёт разбор мест."""
+        if changes.get("nets"):
+            raise InvalidUploadError("NET-группы для ранжирования не поддерживаются.")
+        candidate = {**question, **changes}
+        frame = read_project_frame(self.source_path(project_id), project, sources)
+        variables = {item["name"]: item for item in project["inspection"]["variables"]}
+        try:
+            items = ranking_items(frame, candidate, variables)
+        except RankingError as exc:
+            raise InvalidUploadError(str(exc)) from exc
+        changes["valid_count"] = int(items[0]["ranks"].notna().sum())
+        changes["missing_count"] = len(frame) - changes["valid_count"]
+        changes["special_values"] = []
+        changes["nets"] = []
+        if question["question_type"] != "ranking":
+            changes.setdefault("output_metrics", [])
+
+    @staticmethod
+    def _check_role_change(
+        project: dict, question: dict, changes: dict, final_role: str, final_type: str
+    ) -> None:
+        """Волна и вес — служебные роли: у них свои условия, и в отчёт они не идут."""
+        code = question["code"]
+        questions = project["configuration"]["questions"]
         if final_role == "wave":
             if final_type != "single_choice" or len(question["source_variables"]) != 1:
                 raise InvalidUploadError("Переменная волны должна быть одиночным single choice.")
@@ -461,64 +499,50 @@ class ProjectRepository:
             raise InvalidUploadError(
                 "Эта переменная выбрана весом отчёта. Сначала смените вес в настройках отчёта."
             )
-        special_metric = changes.get("special_metric", question.get("special_metric", "none"))
-        if special_metric in {"nps", "csat"}:
-            if final_type != "scale" or len(question["source_variables"]) != 1:
-                raise InvalidUploadError("NPS и CSAT можно назначить только одиночной шкале.")
-            variable_name = question["source_variables"][0]
-            variable = next(
-                item for item in project["inspection"]["variables"] if item["name"] == variable_name
-            )
-            labelled = [item["value"] for item in variable.get("value_labels", [])]
-            frame, metadata = pyreadstat.read_sav(
-                self.source_path(project_id),
-                usecols=[variable_name],
-                apply_value_formats=False,
-                user_missing=True,
-                dates_as_pandas_datetime=False,
-            )
-            observed_series = frame[variable_name]
-            observed = observed_series.mask(
-                spss_missing_mask(observed_series, variable_name, metadata)
+
+    def _check_special_metric(
+        self,
+        project_id: UUID,
+        project: dict,
+        question: dict,
+        final_type: str,
+        special_metric: str,
+    ) -> None:
+        """NPS и CSAT фиксируют границы групп, поэтому шкала должна в них укладываться."""
+        if final_type != "scale" or len(question["source_variables"]) != 1:
+            raise InvalidUploadError("NPS и CSAT можно назначить только одиночной шкале.")
+        variable_name = question["source_variables"][0]
+        variable = next(
+            item for item in project["inspection"]["variables"] if item["name"] == variable_name
+        )
+        labelled = [item["value"] for item in variable.get("value_labels", [])]
+        frame, metadata = pyreadstat.read_sav(
+            self.source_path(project_id),
+            usecols=[variable_name],
+            apply_value_formats=False,
+            user_missing=True,
+            dates_as_pandas_datetime=False,
+        )
+        observed_series = frame[variable_name]
+        observed = observed_series.mask(
+            spss_missing_mask(observed_series, variable_name, metadata)
+        ).dropna().tolist()
+        if labelled:
+            labelled_series = pd.Series(labelled)
+            labelled = labelled_series.mask(
+                spss_missing_mask(labelled_series, variable_name, metadata)
             ).dropna().tolist()
-            if labelled:
-                labelled_series = pd.Series(labelled)
-                labelled = labelled_series.mask(
-                    spss_missing_mask(labelled_series, variable_name, metadata)
-                ).dropna().tolist()
-            try:
-                values = {float(value) for value in [*labelled, *observed]}
-            except (TypeError, ValueError) as exc:
-                raise InvalidUploadError(
-                    "Шкала NPS/CSAT должна содержать числовые значения."
-                ) from exc
-            expected = set(range(11)) if special_metric == "nps" else set(range(1, 6))
-            label = "NPS" if special_metric == "nps" else "CSAT"
-            if not values or not values <= expected:
-                bounds = "0–10" if special_metric == "nps" else "1–5"
-                raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
-        if "nets" in changes:
-            changes["nets"] = _validated_nets(question, final_type, changes["nets"])
-        if "output_metrics" in changes:
-            changes["output_metrics"] = _validated_output(final_type, changes["output_metrics"])
-        if changes.get("not_applicable_values"):
-            self._require_not_applicable_confirmation(
-                project_id,
-                project,
-                [(question, changes["not_applicable_values"])],
-                confirmed=confirm_substantive,
-            )
-        # Сохранение вопроса и есть проверка: пользователь открыл карточку,
-        # увидел предупреждения распознавания — эвристический тип или состав
-        # автоматически собранной группы — и подтвердил настройки.
-        # Подтверждать нечего, если предупреждений нет: тогда распознавание
-        # не трогаем, как и метаданные SPSS.
-        if confirm_recognition and (
-            question.get("recognition", "auto") not in CONFIRMED_RECOGNITIONS
-            and question.get("warnings")
-        ):
-            question["recognition"] = "manual"
-        question.update(changes)
+        try:
+            values = {float(value) for value in [*labelled, *observed]}
+        except (TypeError, ValueError) as exc:
+            raise InvalidUploadError(
+                "Шкала NPS/CSAT должна содержать числовые значения."
+            ) from exc
+        expected = set(range(11)) if special_metric == "nps" else set(range(1, 6))
+        label = "NPS" if special_metric == "nps" else "CSAT"
+        if not values or not values <= expected:
+            bounds = "0–10" if special_metric == "nps" else "1–5"
+            raise InvalidUploadError(f"{label} можно назначить только шкале {bounds}.")
 
     def mark_not_applicable(
         self, project_id: UUID, marks: list[dict], *, confirm_substantive: bool = False
