@@ -29,6 +29,8 @@
     Object.keys(SCREENS).forEach(key => {
       document.querySelector(`#screen-${key}`).hidden = key !== name;
     });
+    // Лендинг живёт без шапки приложения: проекта и разделов на нём нет.
+    document.body.classList.toggle("is-landing", name === "home");
     window.scrollTo(0, 0);
     // Адрес экрана пишет app.js: у проекта и раздела он свой.
     document.dispatchEvent(new CustomEvent("shell:screen", { detail: name }));
@@ -80,10 +82,14 @@
     });
   }
 
-  document.querySelectorAll(".lp-demo").forEach(button => {
-    button.addEventListener("click", () => {
-      window.alert("Форма заявки ещё не подключена.");
-    });
+  // Основной CTA лендинга ведёт в существующий сценарий загрузки массива:
+  // отдельной регистрации у приложения пока нет, и лендинг её не обещает.
+  document.querySelectorAll(".lp-start").forEach(button => {
+    button.addEventListener("click", () => showScreen("manual"));
+  });
+
+  document.querySelector(".lp-tour")?.addEventListener("click", () => {
+    document.querySelector("#how-it-works")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   /* ================= Раздел «Таблицы» =================

@@ -391,8 +391,12 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     page.click("#screen-nav button[data-screen='home']")
     expect(page.locator("#screen-home")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page).to_have_url(re.compile(r"#/home$"))
+    # Лендинг живёт без шапки приложения; в приложение ведёт его CTA.
+    expect(page.locator("header.bar")).to_be_hidden()
+    page.click(".lp-hero .lp-start")
+    expect(page.locator("header.bar")).to_be_visible(timeout=UI_TIMEOUT)
 
-    # «Новый проект» из другого экрана возвращает на ручной режим, а не молчит.
+    # «Новый проект» возвращает на ручной режим, а не молчит.
     page.click("#new-project")
     expect(page.locator("#screen-manual")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#start")).to_be_visible(timeout=UI_TIMEOUT)

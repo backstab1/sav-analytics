@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260923-select-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260923-landing" />
   </head>
   <body>
     <!-- ================================================================
@@ -49,7 +49,7 @@
       <div class="bar-grow"></div>
 
       <nav id="screen-nav" class="screens" aria-label="Экраны">
-        <button type="button" data-screen="home" title="Главная — страница в разработке">Главная</button>
+        <button type="button" data-screen="home" title="О продукте">Главная</button>
         <button id="new-project" class="nav-action" type="button">Новый проект</button>
         <button type="button" data-screen="manual" aria-current="page">Проект</button>
       </nav>
@@ -60,23 +60,87 @@
     </header>
 
     <main>
-      <!-- ================= Экран «Главная» — заглушка под лендинг ================= -->
-      <section id="screen-home" class="screen screen-pad" hidden>
+      <!-- ================= Экран «Главная» — лендинг =================
+           Шапки приложения здесь нет: её прячет Shell.showScreen, потому что
+           проекта и разделов на лендинге нет. В приложение ведут кнопки .lp-start. -->
+      <section id="screen-home" class="screen lp" hidden>
         <div class="lp-hero">
-          <span class="lp-badge">Страница в разработке</span>
-          <h1>Топлайны из SPSS без ручной сборки</h1>
-          <p class="lp-lead">Загрузите массив <code>.sav</code> — приложение прочитает метаданные, предложит типы вопросов, соберёт баннеры и выгрузит готовый Excel со статистическими тестами.</p>
-          <div class="lp-cta">
-            <button type="button" class="lp-demo">Получить демо</button>
-            <button type="button" class="secondary lp-demo">Получить консультацию</button>
+          <img class="lp-hero-image" src="/hero-data-landscape.jpg" alt="Исследователь превращает массив данных в ясную картину" />
+          <div class="lp-hero-copy">
+            <span class="lp-badge"><i></i> Аналитика без ручной рутины</span>
+            <h1>Из массива SPSS —<br /><span>в ясные выводы.</span></h1>
+            <p class="lp-lead">SAV Analytics распознаёт структуру исследования, считает статистику и собирает аккуратный Excel-топлайн. Вам остаётся проверить логику и интерпретировать результат.</p>
+            <div class="lp-cta">
+              <button type="button" class="lp-start">Начать с массива <span aria-hidden="true">↗</span></button>
+              <button type="button" class="lp-tour">Посмотреть, как это работает <span aria-hidden="true">↓</span></button>
+            </div>
+            <div class="lp-trust">
+              <span>Работает с</span>
+              <b>.SAV</b><b>.CSV</b><b>.TSV</b>
+              <span class="lp-trust-sep"></span>
+              <span>Данные остаются на вашем сервере</span>
+            </div>
           </div>
-          <p class="lp-cta-note">Здесь же будет вход в приложение, когда появится авторизация.</p>
         </div>
-        <div class="lp-features">
-          <article class="lp-card"><h3>Структура за минуту</h3><p>Variable и value labels, multiple-response sets, дихотомии и матрицы шкал распознаются автоматически. Ручная правка — там, где она нужна.</p></article>
-          <article class="lp-card"><h3>Статистика как в SPSS</h3><p>Subgroup/Rest, попарные сравнения, Bonferroni, сравнение волн, NPS и CSAT. Полный аудит тестов выгружается отдельным файлом.</p></article>
-          <article class="lp-card"><h3>Веса и raking</h3><p>Готовый вес из массива или расчёт методом IPF по нескольким целевым распределениям с диагностикой сходимости.</p></article>
+
+        <div class="lp-marquee" aria-label="Возможности">
+          <div><span>SPSS metadata</span><i>✦</i><span>Баннеры</span><i>✦</i><span>Raking / IPF</span><i>✦</i><span>Subgroup / Rest</span><i>✦</i><span>NPS &amp; CSAT</span><i>✦</i><span>Сравнение волн</span></div>
         </div>
+
+        <section class="lp-section lp-how" id="how-it-works">
+          <div class="lp-section-head">
+            <p class="lp-kicker">Один понятный процесс</p>
+            <h2>От файла до готового топлайна<br />без десятка промежуточных таблиц</h2>
+          </div>
+          <div class="lp-steps">
+            <article><span>01</span><div class="lp-step-icon">↑</div><h3>Загрузите массив</h3><p>SAV Analytics прочитает labels, типы переменных, missing values и наборы multiple response.</p></article>
+            <article><span>02</span><div class="lp-step-icon">⌁</div><h3>Проверьте структуру</h3><p>Настройте вопросы, баннеры, фильтры и веса в одном последовательном интерфейсе.</p></article>
+            <article><span>03</span><div class="lp-step-icon">↗</div><h3>Заберите результат</h3><p>Скачайте Excel с базами, долями, средними, значимостью и полным аудитом расчётов.</p></article>
+          </div>
+        </section>
+
+        <section class="lp-section lp-feature">
+          <div class="lp-feature-copy">
+            <p class="lp-kicker">Умная структура</p>
+            <h2>Понимает анкету,<br />а не просто столбцы</h2>
+            <p>Связывает дихотомии в multiple choice, собирает матрицы, отличает технические переменные и показывает спорные места до расчёта.</p>
+            <ul><li>Variable и value labels</li><li>Multiple-response sets</li><li>Шкалы, NPS и CSAT</li></ul>
+          </div>
+          <div class="lp-structure-demo" aria-hidden="true">
+            <div class="lp-demo-top"><span>Структура массива</span><b>48 вопросов</b></div>
+            <div class="lp-question"><code>Q1</code><span><b>Знание брендов</b><small>Multiple choice · 8 вариантов</small></span><em>Готово</em></div>
+            <div class="lp-question"><code>Q4</code><span><b>Оценка характеристик</b><small>Matrix · шкала 1–5</small></span><em>Готово</em></div>
+            <div class="lp-question selected"><code>Q7</code><span><b>Готовность рекомендовать</b><small>NPS · шкала 0–10</small></span><em>−12 NPS</em></div>
+            <div class="lp-question"><code>Q12</code><span><b>Возраст, полных лет</b><small>Numeric · перекодировка</small></span><em>Готово</em></div>
+          </div>
+        </section>
+
+        <section class="lp-section lp-feature lp-feature-reverse">
+          <div class="lp-feature-copy">
+            <p class="lp-kicker">Статистика без чёрного ящика</p>
+            <h2>Каждое число<br />можно объяснить</h2>
+            <p>Приложение сохраняет базы, параметры и причины пропуска тестов. Результат можно проверить и спокойно передать заказчику.</p>
+            <ul><li>Попарные сравнения и Bonferroni</li><li>Эффективная база Киша</li><li>Отдельный statistics.txt с аудитом</li></ul>
+          </div>
+          <div class="lp-audit-demo" aria-hidden="true">
+            <div class="lp-audit-head"><span>Протокол ячейки</span><i>Проверено</i></div>
+            <div class="lp-audit-title">Женщины · «Скорее куплю»</div>
+            <div class="lp-audit-value"><strong>64%</strong><span>+8 п.п.</span></div>
+            <div class="lp-audit-rule"><span>Subgroup / Rest</span><b>p = 0,012</b></div>
+            <div class="lp-audit-rule"><span>95% доверительный интервал</span><b>59,1–68,7%</b></div>
+            <div class="lp-audit-rule"><span>Невзвешенная база</span><b>n = 624</b></div>
+            <p>Различие статистически значимо. Ячейка отмечена зелёным в готовой книге.</p>
+          </div>
+        </section>
+
+        <section class="lp-final">
+          <div>
+            <p class="lp-kicker">Меньше сборки. Больше анализа.</p>
+            <h2>Ваш следующий топлайн<br />может быть готов сегодня.</h2>
+          </div>
+          <button type="button" class="lp-start">Начать новый проект <span aria-hidden="true">↗</span></button>
+          <svg class="lp-final-mark" viewBox="0 0 180 180" fill="none" aria-hidden="true"><path d="M28 111C55 28 101 24 153 68" stroke="currentColor" stroke-width="22" stroke-linecap="round"/><path d="m113 43 42 25-24 43" stroke="currentColor" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </section>
       </section>
 
       <!-- ================= Экран «Ручной режим» ================= -->
@@ -891,23 +955,23 @@
         </div>
       </form>
     </dialog>
-    <script src="/shell.js?v=20260923-select-3" defer></script>
-    <script src="/app.js?v=20260923-select-3" defer></script>
-    <script src="/library.js?v=20260923-select-3" defer></script>
-    <script src="/bulk.js?v=20260923-select-3" defer></script>
-    <script src="/question.js?v=20260923-select-3" defer></script>
-    <script src="/recode.js?v=20260923-select-3" defer></script>
-    <script src="/weight.js?v=20260923-select-3" defer></script>
-    <script src="/filter.js?v=20260923-select-3" defer></script>
-    <script src="/report.js?v=20260923-select-3" defer></script>
-    <script src="/launch.js?v=20260923-select-3" defer></script>
-    <script src="/picker.js?v=20260923-select-3" defer></script>
-    <script src="/banner.js?v=20260923-select-3" defer></script>
-    <script src="/formulas.js?v=20260923-select-3" defer></script>
-    <script src="/analysis.js?v=20260923-select-3" defer></script>
-    <script src="/coding.js?v=20260923-select-3" defer></script>
-    <script src="/select-search.js?v=20260923-select-3" defer></script>
-    <script src="/history.js?v=20260923-select-3" defer></script>
-    <script src="/boot.js?v=20260923-select-3" defer></script>
+    <script src="/shell.js?v=20260923-landing" defer></script>
+    <script src="/app.js?v=20260923-landing" defer></script>
+    <script src="/library.js?v=20260923-landing" defer></script>
+    <script src="/bulk.js?v=20260923-landing" defer></script>
+    <script src="/question.js?v=20260923-landing" defer></script>
+    <script src="/recode.js?v=20260923-landing" defer></script>
+    <script src="/weight.js?v=20260923-landing" defer></script>
+    <script src="/filter.js?v=20260923-landing" defer></script>
+    <script src="/report.js?v=20260923-landing" defer></script>
+    <script src="/launch.js?v=20260923-landing" defer></script>
+    <script src="/picker.js?v=20260923-landing" defer></script>
+    <script src="/banner.js?v=20260923-landing" defer></script>
+    <script src="/formulas.js?v=20260923-landing" defer></script>
+    <script src="/analysis.js?v=20260923-landing" defer></script>
+    <script src="/coding.js?v=20260923-landing" defer></script>
+    <script src="/select-search.js?v=20260923-landing" defer></script>
+    <script src="/history.js?v=20260923-landing" defer></script>
+    <script src="/boot.js?v=20260923-landing" defer></script>
   </body>
 </html>
