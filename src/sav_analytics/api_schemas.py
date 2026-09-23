@@ -309,6 +309,8 @@ class ReportSettingsDefinition(BaseModel):
     # Выключен по умолчанию: примечание с полными деталями теста ставится на
     # каждую посчитанную ячейку и заметно утяжеляет книгу.
     show_p_values: bool = False
+    # Только причины пропуска теста — без полного протокола (requirements §9.1).
+    note_skip_reasons: bool = False
     minimum_base: int = Field(default=30, ge=1, le=100_000)
     weight_variable: str | None = Field(default=None, max_length=64)
     calculated_weight_id: UUID | None = None

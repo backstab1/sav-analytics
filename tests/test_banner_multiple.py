@@ -107,3 +107,20 @@ def test_multiple_without_counted_value_is_refused(tmp_path: Path) -> None:
         assert "код выбранного ответа" in str(exc)
     else:
         raise AssertionError("баннер без кода выбранного ответа должен отклоняться")
+
+
+def test_skip_reasons_mode_notes_only_the_tests_that_were_not_run(tmp_path: Path) -> None:
+    """«Причины пропуска в примечании» — без полного протокола (§9.1)."""
+    from tests.test_overall_tests import _cell_comment
+
+    source = tmp_path / "multiple.sav"
+    quiet = build_topline_xlsx(source, _project(source, show_p_values=False))
+    reasons = build_topline_xlsx(
+        source, _project(source, show_p_values=False, note_skip_reasons=True)
+    )
+
+    assert "пересекаются" not in (_cell_comment(quiet, "Да", "C") or "")
+    note = _cell_comment(reasons, "Да", "C") or ""
+    assert "пересекаются" in note
+    # Выполненный тест с остатком в режим причин не попадает.
+    assert "p-value=" not in note

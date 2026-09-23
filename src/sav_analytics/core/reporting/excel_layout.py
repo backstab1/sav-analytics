@@ -455,7 +455,8 @@ def _write_cell_note(
     )
     if not note:
         return
-    box = COMMENT_BOX_DETAILED if context.settings["show_p_values"] else COMMENT_BOX
+    detailed = context.settings["show_p_values"] or context.settings.get("note_skip_reasons")
+    box = COMMENT_BOX_DETAILED if detailed else COMMENT_BOX
     context.sheet.write_comment(row, index, note, box)
 
 

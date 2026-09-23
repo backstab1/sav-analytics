@@ -309,6 +309,8 @@ function reportStatisticsColumn(settings) {
             "Под долей — доля давших ответ и попавших в колонку от всей базы вопроса")}
           ${statToggle("pvalues", "p-value в примечании", settings.show_p_values,
             "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")}
+          ${statToggle("skip-reasons", "Причины пропуска в примечании", settings.note_skip_reasons,
+            "Только у ячеек, где тест не выполнялся: почему. Легче полного протокола")}
         </div>
         <p class="stat-hint muted">База выводится всегда: без неё значимость в книге не на чем проверить. NPS и CSAT выводятся полностью.</p>
       </div>
@@ -377,6 +379,7 @@ function reportSettingsPayload(settings) {
     confidence_level: settings.confidence_level,
     bonferroni: settings.bonferroni,
     show_p_values: settings.show_p_values,
+    note_skip_reasons: Boolean(settings.note_skip_reasons),
     minimum_base: settings.minimum_base,
     weight_variable: settings.weight_variable || null,
     calculated_weight_id: settings.calculated_weight_id || null,
@@ -439,6 +442,7 @@ function statPatch(name, value) {
   if (name === "pairwise") return { compare_pairwise: value === "on" };
   if (name === "bonferroni") return { bonferroni: value === "on" };
   if (name === "pvalues") return { show_p_values: value === "on" };
+  if (name === "skip-reasons") return { note_skip_reasons: value === "on" };
   if (name === "profile") return { ...outputProfiles[value].settings };
   if (name === "percent-decimals") return { percent_decimals: Number(value) };
   if (name === "mean-decimals") return { mean_decimals: Number(value) };

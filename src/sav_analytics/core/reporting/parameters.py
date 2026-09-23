@@ -76,11 +76,18 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
             ", ".join(item["code"] for item in data.questions if item.get("output_metrics"))
             or "нет",
         ),
-        ("p-value в примечаниях", "включён" if settings["show_p_values"] else "выключен"),
+        (
+            "Примечания к ячейкам",
+            "полный протокол тестов"
+            if settings["show_p_values"]
+            else "причины пропуска тестов"
+            if settings.get("note_skip_reasons")
+            else "только значимые попарные различия",
+        ),
         ("Графики", "лист «Графики»" if settings.get("show_charts") else "не выводятся"),
         (
             "Общие тесты",
-            "хи-квадрат и Welch ANOVA, без взвешивания"
+            "хи-квадрат (на весе не выполняется) и Welch ANOVA (на весе — по n_eff)"
             if settings.get("overall_tests")
             else "не выполняются",
         ),

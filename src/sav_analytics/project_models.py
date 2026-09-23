@@ -56,6 +56,7 @@ class StoredReportSettings(_StoredModel):
     # до появления настройки, обязаны открываться без миграции и без бампа
     # `schema_version` — форма файла не менялась, к ней добавился ключ.
     show_p_values: bool = False
+    note_skip_reasons: bool = False
     minimum_base: int = Field(ge=1, le=100_000)
     weight_variable: str | None
     calculated_weight_id: UUID | None

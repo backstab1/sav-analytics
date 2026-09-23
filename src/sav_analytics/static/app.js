@@ -43,6 +43,7 @@ const defaultReportSettings = Object.freeze({
   confidence_level: 0.95,
   bonferroni: false,
   show_p_values: false,
+  note_skip_reasons: false,
   minimum_base: 30,
   weight_variable: null,
   calculated_weight_id: null,

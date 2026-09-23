@@ -753,6 +753,16 @@ def cell_note(
             "\n".join(line.strip() for line in _render_audit_entry(entry))
             for entry in (*entries, *pairwise)
         )
+    elif settings.get("note_skip_reasons"):
+        # Режим «только причины пропуска»: протокол тех тестов этой ячейки,
+        # которые не выполнялись, — тем же текстом, что в statistics.txt.
+        # Посчитанные тесты сюда не попадают: иначе примечание стояло бы
+        # почти на каждой ячейке, от чего и защищает выключенный p-value.
+        blocks.extend(
+            "\n".join(line.strip() for line in _render_audit_entry(entry))
+            for entry in (*entries, *pairwise)
+            if entry.result is None or not entry.result.performed
+        )
     return "\n\n".join(blocks) or None
 
 def _reverse_test_result(

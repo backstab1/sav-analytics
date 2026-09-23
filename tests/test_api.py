@@ -50,6 +50,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
                 "confidence_level": 0.95,
                 "bonferroni": False,
                 "show_p_values": False,
+                "note_skip_reasons": False,
                 "minimum_base": 30,
                 "weight_variable": None,
                 "calculated_weight_id": None,

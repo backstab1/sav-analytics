@@ -146,6 +146,7 @@ def prepare_report_data(
         "confidence_level": report_settings["confidence_level"],
         "bonferroni": report_settings["bonferroni"],
         "show_p_values": report_settings["show_p_values"],
+        "note_skip_reasons": report_settings.get("note_skip_reasons", False),
         "minimum_base": report_settings["minimum_base"],
         "weight_label": weight_label,
         "weights": weights,
