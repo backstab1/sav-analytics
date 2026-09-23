@@ -902,7 +902,8 @@ def test_logic_variable_is_built_from_rules(
         category.locator(".filter-option", has_text=answer).locator("input").check()
 
     # Карточка начинается с названия категории, под ним — кто в неё попадает.
-    expect(categories.nth(1).locator(".filter-group-head label > span")).to_have_text("Попадают, если")
+    lead = categories.nth(1).locator(".filter-group-head label > span")
+    expect(lead).to_have_text("Попадают, если")
 
     # Кто не подошёл ни к одной — по умолчанию пропуск; своя категория
     # включается строкой под списком и уходит на сервер последней.
