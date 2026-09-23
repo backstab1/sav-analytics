@@ -112,6 +112,17 @@ async function undoBulk(snapshot) {
   }
 }
 
+// Выбор вопросов — отдельный режим: полоса массовых действий заменяет ряд
+// панели, и редактор справа ему только мешает. Он закрывается, как только
+// что-то отмечено; несохранённое в нём спрашивают, как при любом закрытии.
+function closeInspectorForSelection() {
+  if (!selectedQuestionCodes.size) return;
+  const panel = openInspectorPanel();
+  if (!panel || !confirmDiscard(panel)) return;
+  closeAllInspectors();
+  renderTable();
+}
+
 // Флажок строки не должен открывать карточку вопроса: щелчок останавливается
 // на фазе перехвата, до обработчиков строки.
 document.querySelector("#table-body").addEventListener("click", event => {
@@ -128,6 +139,7 @@ document.querySelector("#table-body").addEventListener("change", event => {
     all.checked = boxes.length > 0 && boxes.every(item => item.checked);
   }
   updateBulkBar();
+  closeInspectorForSelection();
 });
 document.querySelector("#table-head").addEventListener("change", event => {
   if (event.target.id !== "select-all-questions") return;
@@ -137,6 +149,7 @@ document.querySelector("#table-head").addEventListener("change", event => {
     else selectedQuestionCodes.delete(box.dataset.selectCode);
   });
   updateBulkBar();
+  closeInspectorForSelection();
 });
 document.querySelector("#bulk-bar").addEventListener("click", async event => {
   const button = event.target.closest("[data-bulk]");

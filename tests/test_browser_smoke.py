@@ -1219,7 +1219,11 @@ def test_several_questions_are_excluded_at_once(
     _write_survey(source)
     _open_project(page, live_server, source)
 
+    # Отмеченный вопрос переводит список в режим выбора: редактор справа закрывается.
+    page.click("#new-variable")
+    expect(page.locator("#recode-editor")).to_be_visible(timeout=UI_TIMEOUT)
     page.check("#table-body tr[data-code='BRAND'] .select-question")
+    expect(page.locator("#recode-editor")).to_be_hidden()
     page.check("#table-body tr[data-code='SEX'] .select-question")
     expect(page.locator("#bulk-bar")).to_be_visible()
     expect(page.locator("#bulk-count")).to_have_text("Выбрано: 2")

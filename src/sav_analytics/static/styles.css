@@ -237,8 +237,10 @@ input, select, textarea {
   color: var(--c-ink); font-size: var(--t-sm); outline: none;
   transition: background 140ms var(--ease), border-color 140ms var(--ease), box-shadow 140ms var(--ease);
 }
+/* Только цвет фона: сокращённая запись `background` стирала стрелку-картинку
+   у компактных селектов, и их подпись сдвигалась при открытии. */
 input:focus, select:focus, textarea:focus {
-  background: var(--c-surface); border-color: var(--c-brand); box-shadow: var(--focus-ring);
+  background-color: var(--c-surface); border-color: var(--c-brand); box-shadow: var(--focus-ring);
 }
 
 /* убрать нативные стрелки-спиннеры у number-инпутов */
@@ -2751,7 +2753,14 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   color: var(--c-ink); font-size: var(--t-xs); font-weight: 600; cursor: pointer;
 }
 .bulk-select:hover { background-color: rgba(255,255,255,.75); }
-.bulk-select:focus { background-color: var(--c-surface); border: 0; box-shadow: var(--focus-ring); }
+/* Открытый список выглядит как наведённый, а не как поле ввода: общее
+   `select:focus` задаёт фон сокращённой записью и стирало стрелку, из-за
+   чего подпись сдвигалась. Обводка — только при переходе с клавиатуры. */
+.bulk-select:focus {
+  background: rgba(255,255,255,.75) var(--caret) no-repeat right 9px center;
+  border: 0; box-shadow: none;
+}
+.bulk-select:focus-visible { box-shadow: 0 0 0 2px var(--c-brand); }
 
 /* Взвешивание по ячейкам: цели категорий не нужны, их задаёт сетка ячеек. */
 .weight-dimension-list.cells-mode .weight-target .t-track,
