@@ -4,7 +4,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from statistics import NormalDist
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from scipy.stats import chi2, studentized_range
@@ -66,63 +66,12 @@ def proportion_z_test(
         )
 
     pooled = (successes_a + successes_b) / (base_a + base_b)
-    expected = (
-        base_a * pooled,
-        base_a * (1 - pooled),
-        base_b * pooled,
-        base_b * (1 - pooled),
-    )
-    if any(value < 5 for value in expected):
-        return _skipped_result(
-            "z-test",
-            alpha,
-            difference,
-            estimates,
-            "Хотя бы одна ожидаемая частота таблицы 2×2 меньше 5.",
-            expected_frequencies=expected,
-            group_bases=(base_a, base_b),
-            group_successes=(successes_a, successes_b),
-        )
-
-    pooled_standard_error = math.sqrt(
-        pooled * (1 - pooled) * (1 / base_a + 1 / base_b)
-    )
-    if pooled_standard_error == 0:
-        return _skipped_result(
-            "z-test",
-            alpha,
-            difference,
-            estimates,
-            "Нулевая дисперсия не позволяет выполнить z-test.",
-            expected_frequencies=expected,
-            group_bases=(base_a, base_b),
-            group_successes=(successes_a, successes_b),
-        )
-
-    statistic = difference / pooled_standard_error
-    p_value = math.erfc(abs(statistic) / math.sqrt(2))
-    interval_standard_error = math.sqrt(
-        estimates[0] * (1 - estimates[0]) / base_a
-        + estimates[1] * (1 - estimates[1]) / base_b
-    )
-    critical = NormalDist().inv_cdf(1 - alpha / 2)
-    interval = (
-        difference - critical * interval_standard_error,
-        difference + critical * interval_standard_error,
-    )
-    significant = p_value < alpha
-    return StatisticalTestResult(
-        method="z-test",
-        performed=True,
-        significant=significant,
-        direction=_direction(difference, significant),
-        alpha=alpha,
-        statistic=statistic,
-        p_value=p_value,
-        difference=difference,
-        confidence_interval=interval,
-        expected_frequencies=expected,
-        group_estimates=estimates,
+    return _pooled_proportion_test(
+        alpha,
+        difference,
+        estimates,
+        (base_a, base_b),
+        pooled,
         group_bases=(base_a, base_b),
         group_successes=(successes_a, successes_b),
     )
@@ -349,45 +298,7 @@ def weighted_proportion_z_test(
     pooled = (
         estimates[0] * effective_bases[0] + estimates[1] * effective_bases[1]
     ) / sum(effective_bases)
-    expected = (
-        effective_bases[0] * pooled,
-        effective_bases[0] * (1 - pooled),
-        effective_bases[1] * pooled,
-        effective_bases[1] * (1 - pooled),
-    )
-    if any(value < 5 for value in expected):
-        return _skipped_result(
-            "z-test", alpha, difference, estimates,
-            "Хотя бы одна ожидаемая частота таблицы 2×2 меньше 5.",
-            expected_frequencies=expected,
-            **common,
-        )
-    pooled_se = math.sqrt(
-        pooled * (1 - pooled) * (1 / effective_bases[0] + 1 / effective_bases[1])
-    )
-    if pooled_se == 0:
-        return _skipped_result(
-            "z-test", alpha, difference, estimates,
-            "Нулевая дисперсия не позволяет выполнить z-test.",
-            expected_frequencies=expected,
-            **common,
-        )
-    statistic = difference / pooled_se
-    p_value = math.erfc(abs(statistic) / math.sqrt(2))
-    interval_se = math.sqrt(
-        estimates[0] * (1 - estimates[0]) / effective_bases[0]
-        + estimates[1] * (1 - estimates[1]) / effective_bases[1]
-    )
-    critical = NormalDist().inv_cdf(1 - alpha / 2)
-    interval = (difference - critical * interval_se, difference + critical * interval_se)
-    significant = p_value < alpha
-    return StatisticalTestResult(
-        method="z-test", performed=True, significant=significant,
-        direction=_direction(difference, significant), alpha=alpha,
-        statistic=statistic, p_value=p_value, difference=difference,
-        confidence_interval=interval, expected_frequencies=expected,
-        group_estimates=estimates, **common,
-    )
+    return _pooled_proportion_test(alpha, difference, estimates, effective_bases, pooled, **common)
 
 
 def weighted_welch_t_test(
@@ -547,12 +458,74 @@ def balance_z_test(
             **common,
         )
     standard_error = math.sqrt(variance)
-    statistic = difference / standard_error
+    return _normal_test_result(method, alpha, difference, standard_error, standard_error, **common)
+
+
+def _pooled_proportion_test(
+    alpha: float,
+    difference: float,
+    estimates: tuple[float, float],
+    sizes: tuple[float, float],
+    pooled: float,
+    **fields: Any,
+) -> StatisticalTestResult:
+    """Общая часть z-test двух долей: объединённая доля, ожидаемые частоты 2×2,
+    объединённая ошибка для теста и раздельная — для интервала.
+
+    `sizes` — невзвешенные базы или эффективные, если данные взвешены.
+    """
+    expected = (
+        sizes[0] * pooled,
+        sizes[0] * (1 - pooled),
+        sizes[1] * pooled,
+        sizes[1] * (1 - pooled),
+    )
+    if any(value < 5 for value in expected):
+        return _skipped_result(
+            "z-test", alpha, difference, estimates,
+            "Хотя бы одна ожидаемая частота таблицы 2×2 меньше 5.",
+            expected_frequencies=expected,
+            **fields,
+        )
+    pooled_standard_error = math.sqrt(pooled * (1 - pooled) * (1 / sizes[0] + 1 / sizes[1]))
+    if pooled_standard_error == 0:
+        return _skipped_result(
+            "z-test", alpha, difference, estimates,
+            "Нулевая дисперсия не позволяет выполнить z-test.",
+            expected_frequencies=expected,
+            **fields,
+        )
+    interval_standard_error = math.sqrt(
+        estimates[0] * (1 - estimates[0]) / sizes[0]
+        + estimates[1] * (1 - estimates[1]) / sizes[1]
+    )
+    return _normal_test_result(
+        "z-test",
+        alpha,
+        difference,
+        pooled_standard_error,
+        interval_standard_error,
+        expected_frequencies=expected,
+        group_estimates=estimates,
+        **fields,
+    )
+
+
+def _normal_test_result(
+    method: str,
+    alpha: float,
+    difference: float,
+    test_standard_error: float,
+    interval_standard_error: float,
+    **fields: Any,
+) -> StatisticalTestResult:
+    """Двусторонний тест по нормальному распределению и интервал разности."""
+    statistic = difference / test_standard_error
     p_value = math.erfc(abs(statistic) / math.sqrt(2))
     critical = NormalDist().inv_cdf(1 - alpha / 2)
     interval = (
-        difference - critical * standard_error,
-        difference + critical * standard_error,
+        difference - critical * interval_standard_error,
+        difference + critical * interval_standard_error,
     )
     significant = p_value < alpha
     return StatisticalTestResult(
@@ -565,7 +538,7 @@ def balance_z_test(
         p_value=p_value,
         difference=difference,
         confidence_interval=interval,
-        **common,
+        **fields,
     )
 
 
