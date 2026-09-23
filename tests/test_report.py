@@ -601,6 +601,51 @@ def test_topline_applies_ready_weight_and_audits_effective_bases(tmp_path: Path)
     assert "Характер теста: приближённый" in audit
 
 
+def test_nps_topline_builds_with_a_column_below_minimum_base(tmp_path: Path) -> None:
+    """Колонка баннера меньше порога не роняет книгу с NPS: тест баланса у неё
+    пропускается с причиной, как у долей и средних."""
+    source = tmp_path / "nps_small_column.sav"
+    frame = pd.DataFrame(
+        {"GROUP": [1] * 90 + [2] * 10, "NPS_Q": [0] * 20 + [7] * 30 + [10] * 50}
+    )
+    pyreadstat.write_sav(
+        frame,
+        source,
+        variable_value_labels={
+            "GROUP": {1: "Большая", 2: "Малая"},
+            "NPS_Q": {value: str(value) for value in range(11)},
+        },
+        variable_measure={"NPS_Q": "scale"},
+    )
+    inspection = inspect_sav(source).to_dict()
+    questions = inspection["questions"]
+    next(item for item in questions if item["code"] == "NPS_Q")["special_metric"] = "nps"
+    project = {
+        "name": "NPS и малая колонка",
+        "inspection": inspection,
+        "configuration": {
+            "questions": questions,
+            "recodings": [],
+            "filters": [],
+            "banners": [
+                {
+                    "name": "Группы",
+                    "compare_to_total": True,
+                    "compare_pairwise": True,
+                    "minimum_base": 30,
+                    "blocks": [{"sources": [{"kind": "question", "ref": "GROUP"}]}],
+                }
+            ],
+            "report_filter_id": None,
+        },
+    }
+
+    build_topline_xlsx(source, project)
+    audit = build_statistics_txt(source, project)
+
+    assert "ниже установленного порога" in audit
+
+
 def test_topline_writes_nps_and_csat_rows_without_scale_mean(tmp_path: Path) -> None:
     source = tmp_path / "special_metrics.sav"
     frame = pd.DataFrame(

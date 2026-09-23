@@ -418,8 +418,9 @@ def balance_z_test(
     )
     difference = estimates[0] - estimates[1]
     alpha = _adjusted_alpha(confidence_level, comparisons)
+    # Оценки групп `_skipped_result` принимает отдельным аргументом, поэтому
+    # в общие поля они не входят: иначе пропуск теста падал с TypeError.
     common = {
-        "group_estimates": estimates,
         "group_variances": variances,
         "group_bases": bases,
         "group_weight_sums": (
@@ -458,7 +459,10 @@ def balance_z_test(
             **common,
         )
     standard_error = math.sqrt(variance)
-    return _normal_test_result(method, alpha, difference, standard_error, standard_error, **common)
+    return _normal_test_result(
+        method, alpha, difference, standard_error, standard_error,
+        group_estimates=estimates, **common,
+    )
 
 
 def _pooled_proportion_test(

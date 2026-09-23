@@ -45,6 +45,29 @@ def test_weighted_balance_uses_kish_effective_base() -> None:
     assert result.group_estimates == pytest.approx((-1 / 3, 0.0))
 
 
+@pytest.mark.parametrize("weighted", [False, True])
+def test_balance_below_minimum_base_is_skipped_with_a_reason(weighted: bool) -> None:
+    """Малая колонка — обычная ситуация: тест баланса пропускается с причиной,
+    а не роняет сборку книги."""
+    scores_a = [-1] * 5 + [1] * 5
+    scores_b = [-1] * 20 + [0] * 10 + [1] * 20
+    weights = {"weights_a": [1.0] * 10, "weights_b": [1.0] * 50} if weighted else {}
+
+    result = balance_z_test(scores_a, scores_b, minimum_base=30, **weights)
+
+    assert result.performed is False
+    assert "ниже установленного порога" in (result.reason or "")
+    assert result.group_estimates == pytest.approx((0.0, 0.0))
+    assert result.group_bases == (10, 50)
+
+
+def test_balance_with_zero_variance_is_skipped_with_a_reason() -> None:
+    result = balance_z_test([0] * 40, [0] * 40)
+
+    assert result.performed is False
+    assert "Нулевая дисперсия" in (result.reason or "")
+
+
 def test_proportion_z_test_matches_reference_result() -> None:
     result = proportion_z_test(70, 100, 50, 100)
 
