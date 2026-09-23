@@ -239,3 +239,64 @@ def test_methods_run_through_the_api(tmp_path: Path) -> None:
             assert "несколькими ответами" in refused.json()["detail"]
     finally:
         app.dependency_overrides.clear()
+
+
+def _maxdiff_file(path: Path) -> None:
+    """40 одинаковых респондентов, варианты A–D, два задания по три варианта.
+
+    Первое задание показывает A, B, C: лучший A, худший C. Второе — B, C, D:
+    лучший B, худший D.
+    """
+    size = 40
+    items = {1: "A", 2: "B", 3: "C", 4: "D"}
+    frame = pd.DataFrame(
+        {
+            "FIRSTBEST": [1] * size, "FIRSTWORST": [3] * size,
+            "SECONDBEST": [2] * size, "SECONDWORST": [4] * size,
+            "FIRSTSHOWA": [1] * size, "FIRSTSHOWB": [2] * size, "FIRSTSHOWC": [3] * size,
+            "SECONDSHOWA": [2] * size, "SECONDSHOWB": [3] * size, "SECONDSHOWC": [4] * size,
+        }
+    )
+    pyreadstat.write_sav(
+        frame,
+        path,
+        variable_value_labels={name: items for name in frame.columns},
+        variable_measure={name: "nominal" for name in frame.columns},
+    )
+
+
+def test_maxdiff_counts_match_the_hand_calculation(tmp_path: Path) -> None:
+    from sav_analytics.core.research_methods import maxdiff_counts
+
+    source = tmp_path / "maxdiff.sav"
+    _maxdiff_file(source)
+    inspection = inspect_sav(source).to_dict()
+    project = {
+        "inspection": inspection,
+        "configuration": {
+            "questions": inspection["questions"], "recodings": [], "filters": [],
+            "report_settings": {},
+        },
+    }
+    tasks = [
+        {"best": "FIRSTBEST", "worst": "FIRSTWORST",
+         "shown": ["FIRSTSHOWA", "FIRSTSHOWB", "FIRSTSHOWC"]},
+        {"best": "SECONDBEST", "worst": "SECONDWORST",
+         "shown": ["SECONDSHOWA", "SECONDSHOWB", "SECONDSHOWC"]},
+    ]
+
+    exact = maxdiff_counts(source, project, tasks)
+
+    scores = {item["label"]: item["score"] for item in exact["items"]}
+    # A: лучший 1 раз из 1 показа; B: 1 из 2; C: худший 1 из 2; D: худший 1 из 1.
+    assert scores == pytest.approx({"A": 1.0, "B": 0.5, "C": -0.5, "D": -1.0})
+    assert exact["exposures"] == "по переменным показа"
+    assert [item["label"] for item in exact["items"]] == ["A", "B", "C", "D"]
+
+    balanced = maxdiff_counts(
+        source, project, [{**task, "shown": []} for task in tasks], items_per_task=3
+    )
+    # Сбалансированный дизайн: 2 задания × 3 варианта / 4 = 1,5 показа на вариант.
+    by_label = {item["label"]: item["score"] for item in balanced["items"]}
+    assert by_label["A"] == pytest.approx(1 / 1.5)
+    assert balanced["exposures"] == "сбалансированный дизайн"

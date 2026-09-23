@@ -13,6 +13,12 @@
   линейной интерполяцией между соседними ценами.
 - Gabor–Granger: вопросы «купите ли по цене P». Спрос — доля ответивших
   «куплю» на каждой цене, выручка — цена × спрос, оптимум — максимум выручки.
+- MaxDiff, счётная оценка: для каждого варианта — сколько раз его выбрали
+  лучшим и худшим, делённое на число его показов. Показы считаются по
+  переменным «показанные варианты», если они есть; иначе берётся
+  сбалансированный дизайн (задания × вариантов на экране / всего вариантов),
+  и результат об этом говорит. Иерархическая байесовская оценка — отдельный
+  метод, здесь её нет.
 """
 
 from __future__ import annotations
@@ -326,3 +332,95 @@ def _code(value: Any) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
+
+
+# --- MaxDiff (счётная оценка) -----------------------------------------------------
+
+
+def maxdiff_counts(
+    path: str | Path,
+    project: dict[str, Any],
+    tasks: list[dict[str, Any]],
+    items_per_task: int | None = None,
+) -> dict[str, Any]:
+    """Счётные оценки MaxDiff по заданиям «лучший / худший (/ показанные)»."""
+    if not tasks:
+        raise MethodError("Добавьте хотя бы одно задание.")
+    codes: list[str] = []
+    for task in tasks:
+        codes.extend([task["best"], task["worst"], *task.get("shown", [])])
+    questions = {code: _question(project, code) for code in dict.fromkeys(codes)}
+    try:
+        frame, rows, weights = _context(path, project, list(questions))
+    except AssociationError as exc:
+        raise MethodError(str(exc)) from exc
+    variables = {item["name"]: item for item in project["inspection"]["variables"]}
+    labels: dict[str, str] = {}
+    for question in questions.values():
+        name = (question.get("source_variables") or [None])[0]
+        for item in (variables.get(name) or {}).get("value_labels", []):
+            labels.setdefault(_code(item["value"]), item["label"])
+    if len(labels) < 2:
+        raise MethodError("У вопросов «лучший/худший» нет подписанных вариантов.")
+
+    def codes_of(code: str) -> pd.Series:
+        question = questions[code]
+        series = applicable_series(frame[question["source_variables"][0]], question)
+        return series.map(lambda value: None if pd.isna(value) else _code(value))
+
+    w = pd.Series(1.0 if weights is None else weights, index=frame.index)
+    answered = rows.copy()
+    for task in tasks:
+        answered &= codes_of(task["best"]).notna() & codes_of(task["worst"]).notna()
+    base = int(answered.sum())
+    if base < 30:
+        raise MethodError(f"Ответивших на все задания {base} — меньше 30.")
+    weight_total = float(w[answered].sum())
+    best = dict.fromkeys(labels, 0.0)
+    worst = dict.fromkeys(labels, 0.0)
+    shown = dict.fromkeys(labels, 0.0)
+    exact = all(task.get("shown") for task in tasks)
+    for task in tasks:
+        best_codes = codes_of(task["best"])[answered]
+        worst_codes = codes_of(task["worst"])[answered]
+        if (best_codes == worst_codes).any():
+            raise MethodError(
+                f"В задании {task['best']}/{task['worst']} один вариант выбран и лучшим, и худшим."
+            )
+        for code in labels:
+            best[code] += float(w[answered][best_codes == code].sum())
+            worst[code] += float(w[answered][worst_codes == code].sum())
+            if exact:
+                seen = pd.Series(False, index=best_codes.index)
+                for column in task["shown"]:
+                    seen |= codes_of(column)[answered] == code
+                shown[code] += float(w[answered][seen].sum())
+    if not exact:
+        if not items_per_task or items_per_task < 2:
+            raise MethodError(
+                "Без переменных показа укажите, сколько вариантов было на экране задания."
+            )
+        per_respondent = len(tasks) * items_per_task / len(labels)
+        shown = {code: per_respondent * weight_total for code in labels}
+    items = []
+    for code, label in labels.items():
+        exposures = shown[code]
+        items.append(
+            {
+                "code": code,
+                "label": label,
+                "best": best[code] / weight_total,
+                "worst": worst[code] / weight_total,
+                "shown": exposures / weight_total,
+                "score": (best[code] - worst[code]) / exposures if exposures else None,
+            }
+        )
+    items.sort(key=lambda item: -(item["score"] if item["score"] is not None else -9))
+    return {
+        "method": "MaxDiff, счётная оценка",
+        "base": base,
+        "weighted": weights is not None,
+        "exposures": "по переменным показа" if exact else "сбалансированный дизайн",
+        "tasks": len(tasks),
+        "items": items,
+    }

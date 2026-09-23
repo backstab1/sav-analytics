@@ -92,6 +92,19 @@ class VanWestendorpRequest(BaseModel):
     too_expensive: str = Field(min_length=1, max_length=64)
 
 
+class MaxDiffTask(BaseModel):
+    best: str = Field(min_length=1, max_length=64)
+    worst: str = Field(min_length=1, max_length=64)
+    # Переменные с кодами показанных в задании вариантов; пусто — дизайн
+    # считается сбалансированным.
+    shown: list[str] = Field(default_factory=list, max_length=20)
+
+
+class MaxDiffRequest(BaseModel):
+    tasks: list[MaxDiffTask] = Field(min_length=1, max_length=40)
+    items_per_task: int | None = Field(default=None, ge=2, le=20)
+
+
 class GaborGrangerStep(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     price: float = Field(gt=0)

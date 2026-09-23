@@ -1656,6 +1656,31 @@ def test_price_methods_are_run_from_the_analysis_section(
     expect(result).to_contain_text("Цена наибольшей выручки", timeout=UI_TIMEOUT)
 
 
+def test_maxdiff_counts_are_run_from_the_analysis_section(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """MaxDiff по переменным «лучший/худший» с показанными вариантами (PQ.15)."""
+    from tests.test_research_methods import _maxdiff_file
+
+    source = tmp_path / "maxdiff.sav"
+    _maxdiff_file(source)
+    _open_project(page, live_server, source)
+    page.click(".tabs button[data-view='analysis']")
+    page.select_option("#method-kind", "maxdiff")
+    tasks = page.locator("#md-tasks .md-task")
+    tasks.nth(0).locator(".md-best").select_option("FIRSTBEST")
+    tasks.nth(0).locator(".md-worst").select_option("FIRSTWORST")
+    tasks.nth(0).locator(".md-shown").select_option(["FIRSTSHOWA", "FIRSTSHOWB", "FIRSTSHOWC"])
+    page.click("#add-md-task")
+    tasks.nth(1).locator(".md-best").select_option("SECONDBEST")
+    tasks.nth(1).locator(".md-worst").select_option("SECONDWORST")
+    tasks.nth(1).locator(".md-shown").select_option(["SECONDSHOWA", "SECONDSHOWB", "SECONDSHOWC"])
+    page.click("#run-method")
+    result = page.locator("#method-result")
+    expect(result).to_contain_text("по переменным показа", timeout=UI_TIMEOUT)
+    expect(result.locator("tr").nth(1)).to_contain_text("A")
+
+
 def test_open_answers_are_coded_by_query_and_by_hand(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

@@ -11,6 +11,7 @@ from ..api_schemas import (
     AnalysisCardCreate,
     AnalysisModelCreate,
     GaborGrangerRequest,
+    MaxDiffRequest,
     TurfRequest,
     VanWestendorpRequest,
 )
@@ -182,3 +183,20 @@ def run_gabor_granger(
     return _method(
         project_id, repository, lambda path, project: gabor_granger(path, project, steps)
     )
+
+
+@router.post("/methods/maxdiff")
+def run_maxdiff(
+    project_id: UUID,
+    request: MaxDiffRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """MaxDiff: счётные оценки «лучший − худший» на показ (PQ.15)."""
+    from ..core.research_methods import maxdiff_counts
+
+    tasks = [task.model_dump() for task in request.tasks]
+
+    def run(path, project):  # type: ignore[no-untyped-def]
+        return maxdiff_counts(path, project, tasks, request.items_per_task)
+
+    return _method(project_id, repository, run)
