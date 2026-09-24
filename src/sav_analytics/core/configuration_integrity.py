@@ -89,8 +89,6 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
     problems: list[str] = []
 
     for holder in _source_holders(configuration):
-        if not holder.validated:
-            continue
         for source in holder.sources:
             kind = source.get("kind")
             reference = str(source.get("ref"))
@@ -145,9 +143,6 @@ class _SourceHolder:
 
     location: str
     sources: list[dict[str, Any]]
-    # Карточки «Анализа» учитываются при поиске ссылок, но при проверке
-    # целостности не проверялись и до выноса этого списка.
-    validated: bool = True
 
 
 def _source_holders(configuration: dict[str, Any]) -> Iterator[_SourceHolder]:
@@ -175,9 +170,7 @@ def _source_holders(configuration: dict[str, Any]) -> Iterator[_SourceHolder]:
             "модель «Анализа»", [model.get("dependent", {}), *model.get("predictors", [])]
         )
     for card in configuration.get("analysis_cards", []):
-        yield _SourceHolder(
-            "карточка «Анализа»", [card.get("a", {}), card.get("b", {})], validated=False
-        )
+        yield _SourceHolder("карточка «Анализа»", [card.get("a", {}), card.get("b", {})])
 
 
 def _recoding_label(recoding: dict[str, Any]) -> str:

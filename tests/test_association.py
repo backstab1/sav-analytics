@@ -11,6 +11,10 @@ from scipy import stats
 
 from sav_analytics.api import app, get_repository
 from sav_analytics.core.association import analyse_cards
+from sav_analytics.core.configuration_integrity import (
+    ConfigurationIntegrityError,
+    validate_configuration_references,
+)
 from sav_analytics.core.sav_reader import inspect_sav
 from sav_analytics.repository import ProjectRepository
 
@@ -199,6 +203,22 @@ def test_cards_are_stored_and_block_deleting_what_they_use(tmp_path: Path) -> No
             assert client.delete(f"{base}/formulas/{formula['id']}").status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+def test_card_with_missing_source_fails_integrity_check() -> None:
+    configuration = {
+        "questions": [{"code": "SEX"}],
+        "analysis_cards": [
+            {
+                "id": "card",
+                "a": {"kind": "question", "ref": "SEX"},
+                "b": {"kind": "recoding", "ref": "missing-recoding"},
+            }
+        ],
+    }
+
+    with pytest.raises(ConfigurationIntegrityError, match="карточка «Анализа»"):
+        validate_configuration_references(configuration)
 
 
 def test_variable_profile_describes_categories_and_numbers(tmp_path: Path) -> None:
