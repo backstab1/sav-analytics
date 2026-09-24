@@ -17,6 +17,7 @@ from .store import (
     ProjectNotFoundError,
     ProjectStore,
 )
+from .tables import TableReports
 from .variables import DerivedVariables
 
 __all__ = [
@@ -34,6 +35,7 @@ class ProjectRepository(
     DerivedVariables,
     ReportSetup,
     AnalysisItems,
+    TableReports,
     ProjectStore,
 ):
     """Проекты на диске: папка на проект с `project.json` и исходным SAV."""

@@ -308,6 +308,42 @@ class TableExportRequest(TablePreviewRequest):
     scope: Literal["table", "report"] = "table"
 
 
+class TableReportLayout(BaseModel):
+    """Сохранённая таблица раздела «Таблицы»: раскладка и вид экрана.
+
+    Разрез хранится так, как его выбирают на экране: сохранённым баннером
+    или переменными колонок с флагом вложенности, а не готовыми блоками —
+    иначе таблица не открылась бы с теми же галочками в дереве.
+    """
+
+    rows: list[str] = Field(default_factory=list, max_length=50)
+    banner_id: UUID | None = None
+    cols: list[AnalysisSource] = Field(default_factory=list, max_length=20)
+    nested: bool = False
+    filter_id: UUID | None = None
+    sheet: Literal["main", "filter"] = "main"
+    measure: Literal["value", "index"] = "value"
+    scale_box: int | None = Field(default=None, ge=1, le=3)
+    nets: dict[str, list[NetDefinition]] = Field(default_factory=dict, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_single_cut(self) -> Self:
+        if self.banner_id and self.cols:
+            raise ValueError("Задайте разрез баннером или переменными, но не тем и другим сразу.")
+        if len(set(self.rows)) != len(self.rows):
+            raise ValueError("Вопрос указан в строках дважды.")
+        return self
+
+
+class TableReportCreate(TableReportLayout):
+    # Без названия сервер даёт следующее свободное «Таблица N».
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class TableReportRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class ReportSettingsDefinition(BaseModel):
     ranking_metrics: list[Literal["distribution", "mean"]] = Field(
         default_factory=lambda: ["distribution", "mean"], min_length=1, max_length=2

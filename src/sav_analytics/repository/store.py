@@ -256,13 +256,24 @@ class ProjectStore:
             recoding.setdefault("mode", "ranges")
 
     def _write_project(
-        self, project_id: UUID, project: dict, *, history: str = "record"
+        self,
+        project_id: UUID,
+        project: dict,
+        *,
+        history: str = "record",
+        coalesce: str | None = None,
     ) -> None:
         """Записать проект, проверив ревизию, и вести историю отмены.
 
         `history`: `record` — обычная правка, прежнее состояние уходит в
         отмену, возврат очищается; `undo` и `redo` — шаг по истории;
         `reset` — история начинается заново (новые данные, миграция).
+
+        `coalesce` склеивает серию однородных правок в один шаг: если
+        последний шаг отмены записан с тем же ключом, новый не добавляется,
+        и отмена возвращает состояние до начала серии. Так раскладка таблицы,
+        которая сохраняется на каждый щелчок, не вытесняет из двадцати шагов
+        истории всё остальное.
         """
         project_dir = self.root / str(project_id)
         target = project_dir / "project.json"
@@ -287,10 +298,16 @@ class ProjectStore:
                 json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             replace_file(temporary, target)
-            self._record_history(project_dir, current, project, history)
+            self._record_history(project_dir, current, project, history, coalesce)
 
     @staticmethod
-    def _record_history(project_dir: Path, before: dict, after: dict, history: str) -> None:
+    def _record_history(
+        project_dir: Path,
+        before: dict,
+        after: dict,
+        history: str,
+        coalesce: str | None = None,
+    ) -> None:
         if history == "reset":
             project_history.reset(project_dir)
             return
@@ -299,8 +316,14 @@ class ProjectStore:
         if history == "record":
             if step is None:
                 return
-            stacks["undo"].append(step)
-            stacks["redo"] = []
+            if coalesce and stacks["undo"] and stacks["undo"][-1].get("coalesce") == coalesce:
+                # Серия продолжается: шаг до её начала уже лежит в отмене.
+                stacks["redo"] = []
+            else:
+                if coalesce:
+                    step["coalesce"] = coalesce
+                stacks["undo"].append(step)
+                stacks["redo"] = []
         else:
             back = "redo" if history == "undo" else "undo"
             if stacks[history]:

@@ -52,6 +52,11 @@ def find_references(
         )
         if configuration.get("report_filter_id") == identifier:
             locations.append("общий фильтр отчёта")
+        locations.extend(
+            f"таблица «{report.get('name')}»"
+            for report in configuration.get("table_reports", [])
+            if report.get("filter_id") == identifier
+        )
     if target_kind == "calculated_weight":
         # Вес выбирается только в настройках отчёта. Копия на баннере осталась бы
         # от схемы 1 и блокировала удаление веса, который ни на что не влияет.
@@ -129,6 +134,11 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
     )
     if report_weight_id and str(report_weight_id) not in weights:
         problems.append("рассчитанный вес в настройках отчёта не найден")
+    for report in configuration.get("table_reports", []):
+        if report.get("banner_id") and str(report["banner_id"]) not in banners:
+            problems.append(f"баннер таблицы «{report.get('name')}» не найден")
+        if report.get("filter_id") and str(report["filter_id"]) not in filters:
+            problems.append(f"фильтр таблицы «{report.get('name')}» не найден")
 
     if problems:
         raise ConfigurationIntegrityError(
@@ -171,6 +181,15 @@ def _source_holders(configuration: dict[str, Any]) -> Iterator[_SourceHolder]:
         )
     for card in configuration.get("analysis_cards", []):
         yield _SourceHolder("карточка «Анализа»", [card.get("a", {}), card.get("b", {})])
+    for report in configuration.get("table_reports", []):
+        rows = [*report.get("rows", []), *report.get("nets", {})]
+        yield _SourceHolder(
+            f"таблица «{report.get('name')}»",
+            [
+                *({"kind": "question", "ref": code} for code in dict.fromkeys(rows)),
+                *report.get("cols", []),
+            ],
+        )
 
 
 def _recoding_label(recoding: dict[str, Any]) -> str:

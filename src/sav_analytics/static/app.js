@@ -914,6 +914,14 @@ window.SavApp = {
   banners() {
     return currentProject?.configuration?.banners || [];
   },
+  /* Запись таблицы «Таблиц». Раскладка сохраняется на каждую правку, и
+     перерисовывать ради неё весь проект незачем: достаточно принять новую
+     ревизию, иначе следующая запись из любого раздела упадёт конфликтом. */
+  async saveTables(url, options) {
+    const project = await api(url, options);
+    currentProject = project;
+    return project;
+  },
 };
 
 // Раздел «Таблицы» берёт список переменных отсюда: своей загрузки у него
@@ -970,6 +978,7 @@ function publishVariablesToShell(inspection, questions) {
   window.Shell.setProjectVariables([...questionItems, ...recodingItems], {
     projectId: currentProject?.id || null,
     filters: configuredFilters().map(item => ({ id: item.id, name: item.name })),
+    tableReports: currentProject?.configuration?.table_reports || [],
     banners: configuredBanners().map(item => ({
       id: item.id,
       name: item.name,

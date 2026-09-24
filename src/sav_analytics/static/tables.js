@@ -8,6 +8,10 @@
  * (`core/reporting/live.py`). Своих формул у экрана нет: число здесь
  * равно числу в выгрузке, и цвет значимости, стрелка волны и число
  * знаков тоже берутся из книги.
+ *
+ * Таблица сохраняется в проект сама: строки, разрез, фильтр, вид и NET
+ * пишутся в `configuration.table_reports` через полсекунды после правки.
+ * Таблиц в проекте несколько, текущая выбирается в меню «Таблица».
  */
 const TablesSection = (() => {
   "use strict";
@@ -64,6 +68,13 @@ const TablesSection = (() => {
   const log = document.querySelector("#bld-log");
   const form = document.querySelector("#bld-form");
   const input = document.querySelector("#bld-input");
+  const reportButton = document.querySelector("#bld-report");
+  const reportName = document.querySelector("#bld-report-name");
+  const reportState = document.querySelector("#bld-report-state");
+  const reportMenu = document.querySelector("#bld-report-menu");
+  const reportList = document.querySelector("#bld-report-list");
+  const renameForm = document.querySelector("#bld-report-rename");
+  const renameInput = document.querySelector("#bld-report-rename-input");
 
   let variables = [];
   let byCode = new Map();
@@ -84,19 +95,346 @@ const TablesSection = (() => {
   let nested = false;
   const layout = { rows: [], cols: [], filter: [] };
 
+  /* Сохранённые таблицы проекта. `loadedKey` — таблица в том виде, в каком
+     её последний раз прочитали или записали: если в проекте она стала
+     другой (отмена, вторая вкладка), экран перечитывает раскладку.
+     `savedLayout` — раскладка экрана на момент последней записи: пока
+     текущая с ней совпадает, писать нечего. */
+  let reports = [];
+  let currentReportId = null;
+  let loadedKey = null;
+  let savedLayout = null;
+  let saveTimer = null;
+  let saving = null;
+  const SAVE_DELAY = 500;
+
   function setVariables(next, context = {}) {
     variables = next;
     byCode = new Map(next.map(item => [item.code, item]));
-    projectId = context.projectId || null;
+    const nextProject = context.projectId || null;
+    if (nextProject !== projectId) {
+      // Другой проект: недописанная правка прежнего уже не его.
+      window.clearTimeout(saveTimer);
+      saveTimer = null;
+      currentReportId = null;
+      loadedKey = null;
+    }
+    projectId = nextProject;
     filters = context.filters || [];
     banners = context.banners || [];
-    if (bannerId && !banners.some(item => item.id === bannerId)) bannerId = null;
-    layout.rows = layout.rows.filter(code => byCode.get(code)?.canRow);
-    layout.cols = layout.cols.filter(code => byCode.get(code)?.canCol);
-    layout.filter = layout.filter.filter(id => filters.some(item => item.id === id));
+    reports = context.tableReports || [];
+    // Пока правка ждёт записи, раскладку экрана не трогаем: иначе ответ,
+    // пришедший из другого раздела, стёр бы только что отмеченное.
+    const pending = saveTimer !== null || saving !== null;
+    const report = reports.find(item => item.id === currentReportId) || null;
+    if (!pending && !report) {
+      const chosen = reports.find(item => item.id === rememberedReport()) || reports[0] || null;
+      currentReportId = chosen?.id || null;
+      applyLayout(chosen);
+    } else if (!pending && JSON.stringify(storedPayload(report)) !== loadedKey) {
+      applyLayout(report);
+    } else {
+      if (bannerId && !banners.some(item => item.id === bannerId)) bannerId = null;
+      layout.rows = layout.rows.filter(code => byCode.get(code)?.canRow);
+      layout.cols = layout.cols.filter(code => byCode.get(code)?.canCol);
+      layout.filter = layout.filter.filter(id => filters.some(item => item.id === id));
+    }
     treesStale = true;
+    renderReportControl();
     render();
   }
+
+  /* ---- Сохранённые таблицы ----
+     Разрез хранится так, как его выбирают на экране: баннером или
+     источниками колонок с флагом вложенности. Строки — коды вопросов. */
+  function sourceCode(source) {
+    return source.kind === "recoding" ? `recoding:${source.ref}` : source.ref;
+  }
+
+  function storedPayload(report) {
+    return {
+      rows: [...(report?.rows || [])],
+      banner_id: report?.banner_id || null,
+      cols: (report?.cols || []).map(source => ({ kind: source.kind, ref: source.ref })),
+      nested: Boolean(report?.nested),
+      filter_id: report?.filter_id || null,
+      sheet: report?.sheet || "main",
+      measure: report?.measure || "value",
+      scale_box: report?.scale_box ?? null,
+      nets: report?.nets || {},
+    };
+  }
+
+  function layoutPayload() {
+    const nets = {};
+    liveNets.forEach((items, code) => {
+      if (items.length) nets[code] = items.map(net => ({ label: net.label, values: net.values }));
+    });
+    return {
+      rows: [...layout.rows],
+      banner_id: bannerId,
+      cols: bannerId ? [] : layout.cols
+        .map(code => byCode.get(code)?.source)
+        .filter(Boolean)
+        .map(source => ({ kind: source.kind, ref: source.ref })),
+      nested,
+      filter_id: layout.filter[0] || null,
+      sheet: sheetSelect.value,
+      measure: measureSelect.value,
+      scale_box: boxSelect.value ? Number(boxSelect.value) : null,
+      nets,
+    };
+  }
+
+  function isEmptyLayout(payload) {
+    return !payload.rows.length && !payload.cols.length && !payload.banner_id && !payload.filter_id;
+  }
+
+  // Переменные, которых в отчёте больше нет, не показываются, но из
+  // сохранённой таблицы не вычёркиваются, пока её не поправят.
+  function applyLayout(report) {
+    const stored = storedPayload(report);
+    layout.rows = stored.rows.filter(code => byCode.get(code)?.canRow);
+    layout.cols = stored.cols.map(sourceCode).filter(code => byCode.get(code)?.canCol);
+    bannerId = stored.banner_id && banners.some(item => item.id === stored.banner_id) ? stored.banner_id : null;
+    nested = stored.nested;
+    layout.filter = stored.filter_id && filters.some(item => item.id === stored.filter_id) ? [stored.filter_id] : [];
+    sheetSelect.value = stored.sheet;
+    measureSelect.value = stored.measure;
+    boxSelect.value = stored.scale_box ? String(stored.scale_box) : "";
+    liveNets.clear();
+    Object.entries(stored.nets).forEach(([code, nets]) => liveNets.set(code, nets));
+    chartRow = null;
+    notice = "";
+    lastTable = null;
+    loadedKey = report ? JSON.stringify(stored) : null;
+    savedLayout = JSON.stringify(layoutPayload());
+  }
+
+  function reportKey() {
+    return `sav-analytics:table-report:${projectId}`;
+  }
+
+  function rememberedReport() {
+    try {
+      return localStorage.getItem(reportKey());
+    } catch {
+      return null;
+    }
+  }
+
+  function rememberReport() {
+    try {
+      if (currentReportId) localStorage.setItem(reportKey(), currentReportId);
+    } catch {
+      // Без хранилища откроется первая таблица проекта.
+    }
+  }
+
+  function scheduleSave() {
+    if (!projectId || JSON.stringify(layoutPayload()) === savedLayout) return;
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => { void flushSave(); }, SAVE_DELAY);
+  }
+
+  function setReportState(text, title = "") {
+    reportState.textContent = text;
+    reportState.title = title;
+    reportState.classList.toggle("error", Boolean(title));
+  }
+
+  function tablesRequest(url, method, body) {
+    return window.SavApp.saveTables(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  }
+
+  function acceptReports(project) {
+    reports = project.configuration.table_reports || [];
+  }
+
+  // Записать раскладку сейчас. Первая содержательная правка в проекте без
+  // таблиц заводит «Таблицу 1»: работа не пропадает при перезагрузке.
+  async function flushSave() {
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+    if (saving) await saving;
+    const payload = layoutPayload();
+    const key = JSON.stringify(payload);
+    if (!projectId || key === savedLayout) return;
+    if (!currentReportId && isEmptyLayout(payload)) {
+      savedLayout = key;
+      return;
+    }
+    let saved = false;
+    const base = `/api/projects/${projectId}/tables/reports`;
+    saving = (async () => {
+      setReportState("Сохраняем…");
+      try {
+        const project = currentReportId
+          ? await tablesRequest(`${base}/${currentReportId}`, "PUT", payload)
+          : await tablesRequest(base, "POST", payload);
+        acceptReports(project);
+        if (!currentReportId) currentReportId = reports.at(-1)?.id || null;
+        rememberReport();
+        loadedKey = JSON.stringify(storedPayload(reports.find(item => item.id === currentReportId)));
+        savedLayout = key;
+        saved = true;
+        setReportState("");
+      } catch (error) {
+        setReportState("Не сохранено", error.message);
+      } finally {
+        saving = null;
+        renderReportControl();
+      }
+    })();
+    await saving;
+    // Правки, сделанные во время записи, уходят следующей.
+    if (saved) scheduleSave();
+  }
+
+  async function reportAction(run) {
+    closeReportMenu();
+    await flushSave();
+    try {
+      await run();
+    } catch (error) {
+      setReportState("Не выполнено", error.message);
+    }
+    renderReportControl();
+    render();
+  }
+
+  function openReport(id) {
+    const report = reports.find(item => item.id === id) || null;
+    currentReportId = report?.id || null;
+    rememberReport();
+    applyLayout(report);
+    treesStale = true;
+  }
+
+  const REPORT_ACTIONS = {
+    async new() {
+      acceptReports(await tablesRequest(`/api/projects/${projectId}/tables/reports`, "POST", {}));
+      openReport(reports.at(-1).id);
+    },
+    async copy() {
+      const index = reports.findIndex(item => item.id === currentReportId);
+      acceptReports(await tablesRequest(`/api/projects/${projectId}/tables/reports/${currentReportId}/copy`, "POST"));
+      openReport(reports[index + 1].id);
+    },
+    // Очистка — обычная правка раскладки: название остаётся, а вернуть
+    // прежнее можно кнопкой «Отменить».
+    async clear() {
+      layout.rows = [];
+      layout.cols = [];
+      layout.filter = [];
+      bannerId = null;
+      nested = false;
+      liveNets.clear();
+      treesStale = true;
+    },
+    async delete() {
+      const report = reports.find(item => item.id === currentReportId);
+      if (!report || !confirm(`Удалить таблицу «${report.name}»? Вернуть её можно кнопкой «Отменить».`)) return;
+      const index = reports.indexOf(report);
+      acceptReports(await tablesRequest(`/api/projects/${projectId}/tables/reports/${report.id}`, "DELETE"));
+      openReport((reports[index] || reports[index - 1])?.id);
+    },
+  };
+
+  function describeReport(report) {
+    const rows = (report.rows || []).length;
+    const parts = [rows ? `${rows} ${plural(rows, "вопрос", "вопроса", "вопросов")}` : "пустая"];
+    if (report.banner_id) parts.push("баннер");
+    else if ((report.cols || []).length) parts.push(`колонок: ${report.cols.length}`);
+    if (report.filter_id) parts.push("фильтр");
+    return parts.join(" · ");
+  }
+
+  function renderReportControl() {
+    const current = reports.find(item => item.id === currentReportId);
+    reportName.textContent = current?.name || "не сохранена";
+    reportButton.classList.toggle("off", !current);
+    reportButton.title = current ? `Таблица «${current.name}» — сохранённые таблицы проекта` : "Сохранённые таблицы проекта";
+    reportButton.disabled = !projectId;
+    if (reportMenu.hidden) return;
+    reportList.innerHTML = reports.length
+      ? reports.map(item => `<button type="button" role="option" class="bld-report-item" data-report="${escapeHtml(item.id)}" aria-selected="${item.id === currentReportId}">` +
+        `<span>${escapeHtml(item.name)}</span><small>${escapeHtml(describeReport(item))}</small></button>`).join("")
+      : '<p class="bld-report-empty">Сохранённых таблиц нет. Первая сохранится сама, как только вы отметите строки.</p>';
+    reportMenu.querySelectorAll("[data-report-action]").forEach(button => {
+      button.disabled = button.dataset.reportAction !== "new" && !current;
+    });
+  }
+
+  function openReportMenu() {
+    closePicker();
+    closeViewMenu();
+    closeGroupsMenu();
+    closeExportMenu();
+    renameForm.hidden = true;
+    reportMenu.hidden = false;
+    reportButton.setAttribute("aria-expanded", "true");
+    renderReportControl();
+    placePopover(reportMenu, reportButton);
+  }
+
+  function closeReportMenu() {
+    if (reportMenu.hidden) return;
+    reportMenu.hidden = true;
+    renameForm.hidden = true;
+    reportButton.setAttribute("aria-expanded", "false");
+  }
+
+  reportButton.addEventListener("click", event => {
+    event.stopPropagation();
+    if (reportMenu.hidden) openReportMenu();
+    else closeReportMenu();
+  });
+  reportMenu.addEventListener("click", event => {
+    event.stopPropagation();
+    const item = event.target.closest("[data-report]");
+    if (item) {
+      if (item.dataset.report === currentReportId) closeReportMenu();
+      else void reportAction(async () => openReport(item.dataset.report));
+      return;
+    }
+    const action = event.target.closest("[data-report-action]")?.dataset.reportAction;
+    if (!action) return;
+    if (action === "rename") {
+      renameInput.value = reports.find(report => report.id === currentReportId)?.name || "";
+      renameForm.hidden = false;
+      renameInput.select();
+      return;
+    }
+    void reportAction(REPORT_ACTIONS[action]);
+  });
+  renameForm.addEventListener("submit", event => {
+    event.preventDefault();
+    const name = renameInput.value.trim();
+    if (!name || !currentReportId) return;
+    void reportAction(async () => {
+      acceptReports(await tablesRequest(
+        `/api/projects/${projectId}/tables/reports/${currentReportId}`, "PATCH", { name },
+      ));
+    });
+  });
+  renameInput.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    renameForm.hidden = true;
+  });
+  document.addEventListener("click", event => {
+    if (!event.target.closest("#bld-report-menu") && !event.target.closest("#bld-report")) closeReportMenu();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeReportMenu();
+  });
+  // Уходя со страницы, недописанную правку отправляем сразу.
+  window.addEventListener("pagehide", () => { if (saveTimer) void flushSave(); });
 
   // Строкой может стать вопрос, который умеет лист книги; колонкой — то,
   // у чего есть категории: одиночный выбор с подписями или группировка.
@@ -170,6 +508,7 @@ const TablesSection = (() => {
       return;
     }
     closeViewMenu();
+    closeReportMenu();
     pickerMode = "zone";
     pickerZone = zone;
     delete picker.dataset.mode;
@@ -500,6 +839,7 @@ const TablesSection = (() => {
     slot.textContent = parts.join(" · ");
     slot.hidden = !parts.length;
     syncSegments();
+    scheduleSave();
   }
 
   function renderParams() {
@@ -601,9 +941,9 @@ const TablesSection = (() => {
 
   // Раскладка для сервера: её же выгружает кнопка «Excel», поэтому книга
   // собирается по тому, что стоит на экране, а не по чему-то похожему.
-  /* NET и Top/Bottom «на лету»: считаются сервером как настройки вопроса,
-     но в проект не сохраняются — экран показывает «что было бы».
-     Набор NET хранится по коду вопроса, пока открыт раздел. */
+  /* NET и Top/Bottom «на лету»: считаются сервером как настройки вопроса
+     и сохраняются с таблицей, но не в вопросах проекта — книга отчёта их
+     не видит. Набор NET хранится по коду вопроса. */
   const liveNets = new Map();
   let netTarget = null;
 
@@ -645,6 +985,7 @@ const TablesSection = (() => {
     slot.hidden = !parts.length;
     syncSegments();
     if (!groupsMenu.hidden) renderNetList();
+    scheduleSave();
   }
 
   // Список вопросов таблицы: у каждого свои группы и своя кнопка «+ NET».
@@ -679,6 +1020,7 @@ const TablesSection = (() => {
 
   function openGroupsMenu() {
     closePicker();
+    closeReportMenu();
     closeViewMenu();
     closeExportMenu();
     renderNetList();
@@ -1030,6 +1372,7 @@ const TablesSection = (() => {
     closePicker();
     closeExportMenu();
     closeGroupsMenu();
+    closeReportMenu();
     viewMenu.hidden = false;
     viewButton.setAttribute("aria-expanded", "true");
     placePopover(viewMenu, viewButton);
@@ -1055,7 +1398,8 @@ const TablesSection = (() => {
       const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = scope === "report" ? "report_by_cut.xlsx" : "table.xlsx";
+      const current = reports.find(item => item.id === currentReportId)?.name;
+      link.download = scope === "report" ? "report_by_cut.xlsx" : `${current || "table"}.xlsx`;
       document.body.append(link);
       link.click();
       link.remove();
@@ -1152,6 +1496,7 @@ const TablesSection = (() => {
     if (!picker.hidden) renderPalette();
     syncTrees();
     renderGrid();
+    scheduleSave();
   }
 
   // Экран показан — только теперь у шапки таблицы есть настоящие высоты.

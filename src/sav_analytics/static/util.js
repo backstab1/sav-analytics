@@ -49,6 +49,7 @@ const CONFLICT_SECTIONS = {
   codeframes: "кодификаторы открытых ответов",
   analysis_cards: "карточки анализа",
   analysis_models: "модели анализа",
+  table_reports: "таблицы",
 };
 
 function changedConfigurationSections(before, after) {

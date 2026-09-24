@@ -37,6 +37,7 @@ from .routers import (
     recodings,
     report_settings,
     reports,
+    table_reports,
     tables,
     weights,
 )
@@ -213,6 +214,7 @@ for router in (
     weights.router,
     report_settings.router,
     reports.router,
+    table_reports.router,
     tables.router,
 ):
     app.include_router(router)

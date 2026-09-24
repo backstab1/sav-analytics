@@ -59,6 +59,11 @@ class ReportSetup(ProjectStore):
             project["configuration"]["report_banner_id"] = (
                 filtered[-1]["id"] if filtered else None
             )
+        # Таблица с удалённым баннером остаётся, как отчёт: без разреза,
+        # только с колонкой Total.
+        for report in project["configuration"].get("table_reports", []):
+            if report.get("banner_id") == str(banner_id):
+                report["banner_id"] = None
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project

@@ -1899,11 +1899,73 @@ def test_net_group_is_built_on_the_table_screen_without_saving(
     expect(page.locator("#bld-net-list")).to_contain_text("Любая марка")
     page.keyboard.press("Escape")
 
-    # Вопрос в структуре не изменился: группа живёт только на экране.
+    # Вопрос в структуре не изменился: группа живёт в таблице, а не в вопросе.
     _open_view(page, "data")
     page.click("#table-body tr[data-code='BRAND'] .question-cell")
     expect(page.locator("#question-editor")).to_be_visible(timeout=UI_TIMEOUT)
     expect(page.locator("#net-list")).not_to_contain_text("Любая марка")
+
+
+def test_tables_are_saved_switched_and_survive_reload(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Несколько сохранённых таблиц в «Таблицах» (PQ.7 для экрана кросстаба)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "tables")
+    report_name = page.locator("#bld-report-name")
+    expect(report_name).to_have_text("не сохранена", timeout=UI_TIMEOUT)
+
+    def checked(tree: str) -> list[str]:
+        return page.locator(f"#{tree} .bld-check:checked").evaluate_all(
+            "items => items.map(item => item.dataset.code)"
+        )
+
+    # Первая содержательная правка заводит «Таблицу 1» — сохранять руками нечего.
+    page.check('#bld-rows-tree .bld-check[data-code="BRAND"]')
+    page.check('#bld-cols-tree .bld-check[data-code="SEX"]')
+    expect(report_name).to_have_text("Таблица 1", timeout=UI_TIMEOUT)
+
+    # Вторая таблица — со своей раскладкой и своим видом.
+    page.click("#bld-report")
+    page.click('[data-report-action="new"]')
+    expect(report_name).to_have_text("Таблица 2", timeout=UI_TIMEOUT)
+    assert checked("bld-rows-tree") == []
+    page.check('#bld-rows-tree .bld-check[data-code="SCORE"]')
+    page.click("#bld-view")
+    page.click('.bld-seg[data-for="bld-measure"] button[data-value="index"]')
+    page.keyboard.press("Escape")
+    expect(page.locator("#bld-view-value")).to_have_text("индекс")
+
+    page.click("#bld-report")
+    page.click('[data-report-action="rename"]')
+    page.fill("#bld-report-rename-input", "Рекомендация")
+    page.press("#bld-report-rename-input", "Enter")
+    expect(report_name).to_have_text("Рекомендация", timeout=UI_TIMEOUT)
+    expect(page.locator("#bld-report-state")).to_have_text("", timeout=UI_TIMEOUT)
+
+    # Переключение возвращает раскладку и вид первой таблицы.
+    page.click("#bld-report")
+    page.click('.bld-report-item:has-text("Таблица 1")')
+    expect(report_name).to_have_text("Таблица 1", timeout=UI_TIMEOUT)
+    expect(page.locator("#bld-grid-wrap table.bld-grid")).to_contain_text(
+        "Мужчина", timeout=UI_TIMEOUT
+    )
+    assert checked("bld-rows-tree") == ["BRAND"]
+    assert checked("bld-cols-tree") == ["SEX"]
+    expect(page.locator("#bld-view-value")).to_be_hidden()
+
+    # После перезагрузки открывается та же таблица, список — оба названия.
+    page.reload()
+    expect(report_name).to_have_text("Таблица 1", timeout=UI_TIMEOUT)
+    page.click("#bld-report")
+    expect(page.locator(".bld-report-item")).to_have_text(
+        [re.compile("Таблица 1"), re.compile("Рекомендация")]
+    )
+    page.click('.bld-report-item:has-text("Рекомендация")')
+    expect(page.locator("#bld-view-value")).to_have_text("индекс", timeout=UI_TIMEOUT)
+    assert checked("bld-rows-tree") == ["SCORE"]
 
 
 def test_new_wave_shows_the_diff_and_replaces_data(

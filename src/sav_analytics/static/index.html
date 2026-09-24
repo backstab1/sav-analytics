@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260924-models-label" />
+    <link rel="stylesheet" href="/styles.css?v=20260924-table-reports-2" />
   </head>
   <body>
     <!-- ================================================================
@@ -637,6 +637,11 @@
                    Значение в пилюле короткое («первое +2»), полный список —
                    в подсказке: иначе пилюля растягивается на пол-полосы. -->
               <div class="bld-params">
+                <!-- Сохранённая таблица: раскладка и вид пишутся в проект сами,
+                     в меню — список таблиц проекта и действия над текущей. -->
+                <button type="button" id="bld-report" class="bld-param bld-report" aria-haspopup="dialog" aria-expanded="false"
+                        aria-controls="bld-report-menu" title="Сохранённые таблицы проекта"><em>Таблица</em><b id="bld-report-name">не сохранена</b><span class="bld-caret" aria-hidden="true"></span></button>
+                <span id="bld-report-state" class="bld-report-state" role="status" aria-live="polite"></span>
                 <button type="button" id="bld-nest" class="bld-param bld-toggle" aria-pressed="false" hidden
                         title="Полное пересечение разрезов, как вложенный блок баннера в книге">Вложить</button>
                 <button type="button" class="bld-param bld-zone" data-zone="filter" aria-haspopup="dialog" aria-expanded="false">
@@ -737,7 +742,7 @@
                 <div class="bld-menu-row"><span id="bld-sheet-cap">Доли от</span>
                   <select id="bld-sheet" class="bld-seg-source" aria-labelledby="bld-sheet-cap" hidden><option value="main" title="От всех респондентов, как лист topline_main">Всех</option><option value="filter" title="От ответивших на вопрос, как лист topline_filter">Ответивших</option></select>
                 </div>
-                <p class="bld-menu-note">Настройки этого экрана: в проект не сохраняются.</p>
+                <p class="bld-menu-note">Сохраняется вместе с таблицей; на книгу отчёта не влияет.</p>
               </div>
 
               <!-- Меню «Группировки»: то, что собирает строки в группы, — размер
@@ -750,7 +755,25 @@
                 <div class="bld-groups-sep" role="separator"></div>
                 <p class="bld-groups-cap">NET-группы</p>
                 <div id="bld-net-list" class="bld-net-list"></div>
-                <p class="bld-menu-note">Только на этом экране: в проект не сохраняются. Постоянные NET — в карточке вопроса в «Данных».</p>
+                <p class="bld-menu-note">Сохраняются вместе с таблицей, книгу отчёта не меняют. Постоянные NET — в карточке вопроса в «Данных».</p>
+              </div>
+
+              <!-- Меню «Таблица»: сохранённые таблицы проекта и действия над
+                   текущей. У каждой свои строки, разрез, фильтр и вид. -->
+              <div id="bld-report-menu" class="bld-menu bld-report-menu" role="dialog" aria-label="Таблицы проекта" hidden>
+                <div id="bld-report-list" class="bld-report-list" role="listbox" aria-label="Сохранённые таблицы"></div>
+                <form id="bld-report-rename" class="bld-report-rename" hidden>
+                  <input id="bld-report-rename-input" maxlength="120" aria-label="Название таблицы" data-no-search="1" />
+                  <button type="submit">Сохранить</button>
+                </form>
+                <div class="bld-report-actions">
+                  <button type="button" data-report-action="new">Новая таблица</button>
+                  <button type="button" data-report-action="copy">Копировать</button>
+                  <button type="button" data-report-action="rename">Переименовать</button>
+                  <button type="button" data-report-action="clear">Очистить</button>
+                  <button type="button" data-report-action="delete" class="bld-report-danger">Удалить</button>
+                </div>
+                <p class="bld-menu-note">Раскладка сохраняется сама. Книгу отчёта таблицы не меняют.</p>
               </div>
 
               <!-- Поповер пилюли «Фильтр» и сборки NET: список с поиском. -->
@@ -949,28 +972,28 @@
         </div>
       </form>
     </dialog>
-    <script src="/util.js?v=20260924-models-label" defer></script>
-    <script src="/tables.js?v=20260924-models-label" defer></script>
-    <script src="/shell.js?v=20260924-models-label" defer></script>
-    <script src="/app.js?v=20260924-models-label" defer></script>
-    <script src="/route.js?v=20260924-models-label" defer></script>
-    <script src="/source.js?v=20260924-models-label" defer></script>
-    <script src="/library.js?v=20260924-models-label" defer></script>
-    <script src="/bulk.js?v=20260924-models-label" defer></script>
-    <script src="/question.js?v=20260924-models-label" defer></script>
-    <script src="/recode.js?v=20260924-models-label" defer></script>
-    <script src="/weight.js?v=20260924-models-label" defer></script>
-    <script src="/filter.js?v=20260924-models-label" defer></script>
-    <script src="/report.js?v=20260924-models-label" defer></script>
-    <script src="/launch.js?v=20260924-models-label" defer></script>
-    <script src="/picker.js?v=20260924-models-label" defer></script>
-    <script src="/banner.js?v=20260924-models-label" defer></script>
-    <script src="/formulas.js?v=20260924-models-label" defer></script>
-    <script src="/analysis.js?v=20260924-models-label" defer></script>
-    <script src="/coding.js?v=20260924-models-label" defer></script>
-    <script src="/select-search.js?v=20260924-models-label" defer></script>
-    <script src="/history.js?v=20260924-models-label" defer></script>
-    <script src="/landing.js?v=20260924-models-label" defer></script>
-    <script src="/boot.js?v=20260924-models-label" defer></script>
+    <script src="/util.js?v=20260924-table-reports-2" defer></script>
+    <script src="/tables.js?v=20260924-table-reports-2" defer></script>
+    <script src="/shell.js?v=20260924-table-reports-2" defer></script>
+    <script src="/app.js?v=20260924-table-reports-2" defer></script>
+    <script src="/route.js?v=20260924-table-reports-2" defer></script>
+    <script src="/source.js?v=20260924-table-reports-2" defer></script>
+    <script src="/library.js?v=20260924-table-reports-2" defer></script>
+    <script src="/bulk.js?v=20260924-table-reports-2" defer></script>
+    <script src="/question.js?v=20260924-table-reports-2" defer></script>
+    <script src="/recode.js?v=20260924-table-reports-2" defer></script>
+    <script src="/weight.js?v=20260924-table-reports-2" defer></script>
+    <script src="/filter.js?v=20260924-table-reports-2" defer></script>
+    <script src="/report.js?v=20260924-table-reports-2" defer></script>
+    <script src="/launch.js?v=20260924-table-reports-2" defer></script>
+    <script src="/picker.js?v=20260924-table-reports-2" defer></script>
+    <script src="/banner.js?v=20260924-table-reports-2" defer></script>
+    <script src="/formulas.js?v=20260924-table-reports-2" defer></script>
+    <script src="/analysis.js?v=20260924-table-reports-2" defer></script>
+    <script src="/coding.js?v=20260924-table-reports-2" defer></script>
+    <script src="/select-search.js?v=20260924-table-reports-2" defer></script>
+    <script src="/history.js?v=20260924-table-reports-2" defer></script>
+    <script src="/landing.js?v=20260924-table-reports-2" defer></script>
+    <script src="/boot.js?v=20260924-table-reports-2" defer></script>
   </body>
 </html>
