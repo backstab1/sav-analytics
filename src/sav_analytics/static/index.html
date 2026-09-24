@@ -6,8 +6,8 @@
     <title>sav-analytics</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260923-refactor-3" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=20260924-landing-8" />
   </head>
   <body>
     <!-- ================================================================
@@ -62,17 +62,19 @@
     <main>
       <!-- ================= Экран «Главная» — лендинг =================
            Шапки приложения здесь нет: её прячет Shell.showScreen, потому что
-           проекта и разделов на лендинге нет. В приложение ведут кнопки .lp-start. -->
+           проекта и разделов на лендинге нет. В приложение ведут кнопки .lp-start.
+           Табло справа от заголовка рисует landing.js на .lp-board; .lp-slot
+           только отводит ему место в сетке героя. -->
       <section id="screen-home" class="screen lp" hidden>
         <div class="lp-hero">
-          <img class="lp-hero-image" src="/hero-data-landscape.jpg" alt="Исследователь превращает массив данных в ясную картину" />
+          <canvas class="lp-board" aria-hidden="true"></canvas>
           <div class="lp-hero-copy">
-            <span class="lp-badge"><i></i> Аналитика без ручной рутины</span>
-            <h1>Из массива SPSS —<br /><span>в ясные выводы.</span></h1>
+            <span class="lp-badge"><i></i> SPSS&nbsp;.sav → Excel-топлайн</span>
+            <h1>Из массива SPSS&nbsp;— <span>в&nbsp;ясные выводы.</span></h1>
             <p class="lp-lead">SAV Analytics распознаёт структуру исследования, считает статистику и собирает аккуратный Excel-топлайн. Вам остаётся проверить логику и интерпретировать результат.</p>
             <div class="lp-cta">
               <button type="button" class="lp-start">Начать с массива <span aria-hidden="true">↗</span></button>
-              <button type="button" class="lp-tour">Посмотреть, как это работает <span aria-hidden="true">↓</span></button>
+              <button type="button" class="lp-tour">Как это работает <span aria-hidden="true">↓</span></button>
             </div>
             <div class="lp-trust">
               <span>Работает с</span>
@@ -81,16 +83,20 @@
               <span>Данные остаются на вашем сервере</span>
             </div>
           </div>
+          <div class="lp-slot" aria-hidden="true"></div>
         </div>
 
         <div class="lp-marquee" aria-label="Возможности">
-          <div><span>SPSS metadata</span><i>✦</i><span>Баннеры</span><i>✦</i><span>Raking / IPF</span><i>✦</i><span>Subgroup / Rest</span><i>✦</i><span>NPS &amp; CSAT</span><i>✦</i><span>Сравнение волн</span></div>
+          <div>
+            <p><span>SPSS metadata</span><i>//</i><span>Баннеры</span><i>//</i><span>Raking / IPF</span><i>//</i><span>Subgroup / Rest</span><i>//</i><span>NPS &amp; CSAT</span><i>//</i><span>Сравнение волн</span><i>//</i></p>
+            <p aria-hidden="true"><span>SPSS metadata</span><i>//</i><span>Баннеры</span><i>//</i><span>Raking / IPF</span><i>//</i><span>Subgroup / Rest</span><i>//</i><span>NPS &amp; CSAT</span><i>//</i><span>Сравнение волн</span><i>//</i></p>
+          </div>
         </div>
 
         <section class="lp-section lp-how" id="how-it-works">
           <div class="lp-section-head">
             <p class="lp-kicker">Один понятный процесс</p>
-            <h2>От файла до готового топлайна<br />без десятка промежуточных таблиц</h2>
+            <h2>От файла до готового топлайна без десятка промежуточных таблиц</h2>
           </div>
           <div class="lp-steps">
             <article><span>01</span><div class="lp-step-icon">↑</div><h3>Загрузите массив</h3><p>SAV Analytics прочитает labels, типы переменных, missing values и наборы multiple response.</p></article>
@@ -102,7 +108,7 @@
         <section class="lp-section lp-feature">
           <div class="lp-feature-copy">
             <p class="lp-kicker">Умная структура</p>
-            <h2>Понимает анкету,<br />а не просто столбцы</h2>
+            <h2>Понимает анкету, а&nbsp;не&nbsp;просто столбцы</h2>
             <p>Связывает дихотомии в multiple choice, собирает матрицы, отличает технические переменные и показывает спорные места до расчёта.</p>
             <ul><li>Variable и value labels</li><li>Multiple-response sets</li><li>Шкалы, NPS и CSAT</li></ul>
           </div>
@@ -118,7 +124,7 @@
         <section class="lp-section lp-feature lp-feature-reverse">
           <div class="lp-feature-copy">
             <p class="lp-kicker">Статистика без чёрного ящика</p>
-            <h2>Каждое число<br />можно объяснить</h2>
+            <h2>Каждое число можно объяснить</h2>
             <p>Приложение сохраняет базы, параметры и причины пропуска тестов. Результат можно проверить и спокойно передать заказчику.</p>
             <ul><li>Попарные сравнения и Bonferroni</li><li>Эффективная база Киша</li><li>Отдельный statistics.txt с аудитом</li></ul>
           </div>
@@ -136,10 +142,9 @@
         <section class="lp-final">
           <div>
             <p class="lp-kicker">Меньше сборки. Больше анализа.</p>
-            <h2>Ваш следующий топлайн<br />может быть готов сегодня.</h2>
+            <h2>Ваш следующий топлайн может быть готов сегодня.</h2>
           </div>
           <button type="button" class="lp-start">Начать новый проект <span aria-hidden="true">↗</span></button>
-          <svg class="lp-final-mark" viewBox="0 0 180 180" fill="none" aria-hidden="true"><path d="M28 111C55 28 101 24 153 68" stroke="currentColor" stroke-width="22" stroke-linecap="round"/><path d="m113 43 42 25-24 43" stroke="currentColor" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </section>
       </section>
 
@@ -955,24 +960,25 @@
         </div>
       </form>
     </dialog>
-    <script src="/tables.js?v=20260923-refactor-3" defer></script>
-    <script src="/shell.js?v=20260923-refactor-3" defer></script>
-    <script src="/app.js?v=20260923-refactor-3" defer></script>
-    <script src="/library.js?v=20260923-refactor-3" defer></script>
-    <script src="/bulk.js?v=20260923-refactor-3" defer></script>
-    <script src="/question.js?v=20260923-refactor-3" defer></script>
-    <script src="/recode.js?v=20260923-refactor-3" defer></script>
-    <script src="/weight.js?v=20260923-refactor-3" defer></script>
-    <script src="/filter.js?v=20260923-refactor-3" defer></script>
-    <script src="/report.js?v=20260923-refactor-3" defer></script>
-    <script src="/launch.js?v=20260923-refactor-3" defer></script>
-    <script src="/picker.js?v=20260923-refactor-3" defer></script>
-    <script src="/banner.js?v=20260923-refactor-3" defer></script>
-    <script src="/formulas.js?v=20260923-refactor-3" defer></script>
-    <script src="/analysis.js?v=20260923-refactor-3" defer></script>
-    <script src="/coding.js?v=20260923-refactor-3" defer></script>
-    <script src="/select-search.js?v=20260923-refactor-3" defer></script>
-    <script src="/history.js?v=20260923-refactor-3" defer></script>
-    <script src="/boot.js?v=20260923-refactor-3" defer></script>
+    <script src="/tables.js?v=20260924-landing-8" defer></script>
+    <script src="/shell.js?v=20260924-landing-8" defer></script>
+    <script src="/app.js?v=20260924-landing-8" defer></script>
+    <script src="/library.js?v=20260924-landing-8" defer></script>
+    <script src="/bulk.js?v=20260924-landing-8" defer></script>
+    <script src="/question.js?v=20260924-landing-8" defer></script>
+    <script src="/recode.js?v=20260924-landing-8" defer></script>
+    <script src="/weight.js?v=20260924-landing-8" defer></script>
+    <script src="/filter.js?v=20260924-landing-8" defer></script>
+    <script src="/report.js?v=20260924-landing-8" defer></script>
+    <script src="/launch.js?v=20260924-landing-8" defer></script>
+    <script src="/picker.js?v=20260924-landing-8" defer></script>
+    <script src="/banner.js?v=20260924-landing-8" defer></script>
+    <script src="/formulas.js?v=20260924-landing-8" defer></script>
+    <script src="/analysis.js?v=20260924-landing-8" defer></script>
+    <script src="/coding.js?v=20260924-landing-8" defer></script>
+    <script src="/select-search.js?v=20260924-landing-8" defer></script>
+    <script src="/history.js?v=20260924-landing-8" defer></script>
+    <script src="/landing.js?v=20260924-landing-8" defer></script>
+    <script src="/boot.js?v=20260924-landing-8" defer></script>
   </body>
 </html>
