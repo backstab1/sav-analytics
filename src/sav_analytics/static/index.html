@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260924-save-race" />
+    <link rel="stylesheet" href="/styles.css?v=20260924-refactor-8" />
   </head>
   <body>
     <!-- ================================================================
@@ -764,8 +764,6 @@
 
             </section>
 
-            <!-- Раздел, который ещё не построен. Текст и счётчики заполняет
-                 app.js (renderSoonSection). -->
             <!-- Анализ: карточки связи двух переменных. Числа считает ядро
                  (core/association.py), экран только показывает их. -->
             <section id="section-analysis" class="soon analysis" hidden>
@@ -854,15 +852,6 @@
               </div>
             </section>
 
-            <section id="section-soon" class="soon" hidden>
-              <div class="soon-card">
-                <p class="eyebrow" id="soon-eyebrow"></p>
-                <h1 id="soon-title"></h1>
-                <p class="lead" id="soon-lead"></p>
-                <ul class="soon-list" id="soon-list"></ul>
-                <p class="soon-note" id="soon-note"></p>
-              </div>
-            </section>
 
           </div>
         </section>
@@ -960,25 +949,28 @@
         </div>
       </form>
     </dialog>
-    <script src="/tables.js?v=20260924-save-race" defer></script>
-    <script src="/shell.js?v=20260924-save-race" defer></script>
-    <script src="/app.js?v=20260924-save-race" defer></script>
-    <script src="/library.js?v=20260924-save-race" defer></script>
-    <script src="/bulk.js?v=20260924-save-race" defer></script>
-    <script src="/question.js?v=20260924-save-race" defer></script>
-    <script src="/recode.js?v=20260924-save-race" defer></script>
-    <script src="/weight.js?v=20260924-save-race" defer></script>
-    <script src="/filter.js?v=20260924-save-race" defer></script>
-    <script src="/report.js?v=20260924-save-race" defer></script>
-    <script src="/launch.js?v=20260924-save-race" defer></script>
-    <script src="/picker.js?v=20260924-save-race" defer></script>
-    <script src="/banner.js?v=20260924-save-race" defer></script>
-    <script src="/formulas.js?v=20260924-save-race" defer></script>
-    <script src="/analysis.js?v=20260924-save-race" defer></script>
-    <script src="/coding.js?v=20260924-save-race" defer></script>
-    <script src="/select-search.js?v=20260924-save-race" defer></script>
-    <script src="/history.js?v=20260924-save-race" defer></script>
-    <script src="/landing.js?v=20260924-save-race" defer></script>
-    <script src="/boot.js?v=20260924-save-race" defer></script>
+    <script src="/util.js?v=20260924-refactor-8" defer></script>
+    <script src="/tables.js?v=20260924-refactor-8" defer></script>
+    <script src="/shell.js?v=20260924-refactor-8" defer></script>
+    <script src="/app.js?v=20260924-refactor-8" defer></script>
+    <script src="/route.js?v=20260924-refactor-8" defer></script>
+    <script src="/source.js?v=20260924-refactor-8" defer></script>
+    <script src="/library.js?v=20260924-refactor-8" defer></script>
+    <script src="/bulk.js?v=20260924-refactor-8" defer></script>
+    <script src="/question.js?v=20260924-refactor-8" defer></script>
+    <script src="/recode.js?v=20260924-refactor-8" defer></script>
+    <script src="/weight.js?v=20260924-refactor-8" defer></script>
+    <script src="/filter.js?v=20260924-refactor-8" defer></script>
+    <script src="/report.js?v=20260924-refactor-8" defer></script>
+    <script src="/launch.js?v=20260924-refactor-8" defer></script>
+    <script src="/picker.js?v=20260924-refactor-8" defer></script>
+    <script src="/banner.js?v=20260924-refactor-8" defer></script>
+    <script src="/formulas.js?v=20260924-refactor-8" defer></script>
+    <script src="/analysis.js?v=20260924-refactor-8" defer></script>
+    <script src="/coding.js?v=20260924-refactor-8" defer></script>
+    <script src="/select-search.js?v=20260924-refactor-8" defer></script>
+    <script src="/history.js?v=20260924-refactor-8" defer></script>
+    <script src="/landing.js?v=20260924-refactor-8" defer></script>
+    <script src="/boot.js?v=20260924-refactor-8" defer></script>
   </body>
 </html>

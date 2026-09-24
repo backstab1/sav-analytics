@@ -380,12 +380,10 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     # «Анализ» — свой раздел с карточками связи.
     _open_view(page, "analysis")
     expect(page.locator("#section-analysis")).to_be_visible(timeout=UI_TIMEOUT)
-    expect(page.locator("#section-soon")).to_be_hidden()
     expect(page.locator("#section-tables")).to_be_hidden()
     # «Открытые ответы» — кодификатор; заглушек у разделов больше нет.
     _open_view(page, "text")
     expect(page.locator("#section-text")).to_be_visible(timeout=UI_TIMEOUT)
-    expect(page.locator("#section-soon")).to_be_hidden()
     expect(page.locator("#section-analysis")).to_be_hidden()
 
     page.click("#screen-nav button[data-screen='home']")
