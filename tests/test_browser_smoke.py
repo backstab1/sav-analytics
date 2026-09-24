@@ -235,6 +235,11 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
         "120", timeout=UI_TIMEOUT
     )
     page.click("#save-filter")
+    # Поповер строится из конфигурации при открытии: открытый до ответа
+    # сервера, он показал бы прежний список. Под нагрузкой так и падало.
+    expect(page.locator("#toast-container")).to_contain_text(
+        "Правило сохранено", timeout=UI_TIMEOUT
+    )
     # Сохранённое правило попадает в поповер выбора базы — бывший экран целиком.
     page.click('[data-picker="filter"]')
     expect(page.locator("#picker")).to_contain_text("Только женщины", timeout=UI_TIMEOUT)
