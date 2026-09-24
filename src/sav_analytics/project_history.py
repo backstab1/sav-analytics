@@ -36,6 +36,7 @@ SECTION_LABELS = {
     "formulas": "формулы",
     "codeframes": "кодификаторы открытых ответов",
     "analysis_cards": "карточки анализа",
+    "analysis_models": "модели анализа",
     "inspection": "описание переменных",
 }
 _IGNORED = {"revision", "updated_at"}

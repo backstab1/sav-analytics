@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from sav_analytics.api import app, get_repository
+from sav_analytics.project_history import changed_sections
 from sav_analytics.repository import ProjectRepository
 from tests.test_sav_reader import write_fixture
 
@@ -110,3 +111,10 @@ def test_new_wave_starts_the_history_again(tmp_path: Path) -> None:
         assert (history["undo"], history["redo"]) == (0, 0)
     finally:
         app.dependency_overrides.clear()
+
+
+def test_every_analysis_section_has_its_own_name() -> None:
+    before = {"configuration": {"analysis_cards": [], "analysis_models": []}}
+    after = {"configuration": {"analysis_cards": [{}], "analysis_models": [{}]}}
+
+    assert changed_sections(before, after) == ["карточки анализа", "модели анализа"]
