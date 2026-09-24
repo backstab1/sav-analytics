@@ -316,7 +316,14 @@ src/sav_analytics/
 ├── project_models.py  # версионированный контракт сохраняемого проекта
 ├── routers/           # projects, questions, recodings, formulas, banners, filters, weights,
 │                      # reports, report_settings, tables, analysis, codeframes
-├── repository.py      # локальное хранилище проектов и конфигураций
+├── repository/        # локальное хранилище проектов: ProjectRepository из частей
+│   ├── store.py       # чтение, миграция, запись ревизией, блокировки, структура
+│   ├── lifecycle.py   # создание, новая волна, библиотека проектов, отмена
+│   ├── questions.py   # правка вопросов, роли, «Не применимо», порядок и группы
+│   ├── variables.py   # перекодировки, кодификаторы и формулы
+│   ├── report_setup.py # баннеры, настройки отчёта, веса, фильтры и базы
+│   └── analysis.py    # карточки и модели «Анализа»
+├── atomic_file.py     # замена файла, переживающая параллельного читателя в Windows
 ├── report_cache.py    # immutable-артефакты отчёта по cache key
 ├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту
 ├── settings.py        # переменные окружения
