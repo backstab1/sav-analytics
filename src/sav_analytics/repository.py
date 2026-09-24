@@ -16,6 +16,7 @@ import pandas as pd
 import pyreadstat
 
 from . import project_history
+from .atomic_file import replace_file
 from .configuration_revision import (
     ConfigurationConflictError,
     current_expected_revision,
@@ -1696,7 +1697,7 @@ class ProjectRepository:
             temporary.write_text(
                 json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
             )
-            os.replace(temporary, target)
+            replace_file(temporary, target)
             self._record_history(project_dir, current, project, history)
 
     @staticmethod

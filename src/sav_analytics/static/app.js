@@ -876,10 +876,13 @@ document.querySelector("#question-form").addEventListener("submit", async event 
         }),
       },
     );
+    // Сохранено: дальше только перерисовка. Пока идёт превью, аналитик уже
+    // видит новую таблицу и может открыть другой вопрос — без вопроса о
+    // «несохранённых изменениях».
+    markInspectorClean(editor);
     renderProject();
     fillEditor(findQuestion(currentQuestionCode));
     await loadPreview();
-    markInspectorClean(editor);
     showToast("Настройки вопроса сохранены");
   } catch (error) {
     showError(editorError, error);
@@ -1393,12 +1396,18 @@ async function loadPreview() {
   renderQuestionOutput(findQuestion(currentQuestionCode));
   const container = document.querySelector("#preview-content");
   container.innerHTML = '<p class="muted">Считаем…</p>';
+  const projectId = currentProject.id;
+  const code = currentQuestionCode;
+  // Ответ для вопроса, который уже закрыли, не должен лечь в редактор следующего.
+  const stale = () => currentProject?.id !== projectId || currentQuestionCode !== code;
   try {
-    const preview = await api(`/api/projects/${currentProject.id}/questions/${encodeURIComponent(currentQuestionCode)}/preview`);
+    const preview = await api(`/api/projects/${projectId}/questions/${encodeURIComponent(code)}/preview`);
+    if (stale()) return;
     container.innerHTML = renderPreview(preview);
     renderNotApplicable(findQuestion(currentQuestionCode), preview);
     renderNets(findQuestion(currentQuestionCode), preview);
   } catch (error) {
+    if (stale()) return;
     container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
     document.querySelector("#not-applicable").hidden = true;
     document.querySelector("#question-nets").hidden = true;

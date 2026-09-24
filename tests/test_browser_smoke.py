@@ -1193,7 +1193,10 @@ def test_sections_have_no_serious_accessibility_violations(
 
     def check(where: str) -> None:
         # Панели въезжают с анимацией прозрачности: до её конца axe видит
-        # полупрозрачный текст и ложно жалуется на контраст.
+        # полупрозрачный текст и ложно жалуется на контраст. Раздел может
+        # дорисоваться после ответа сервера и только тогда начать анимацию,
+        # поэтому сначала ждём, пока затихнет сеть.
+        page.wait_for_load_state("networkidle")
         page.wait_for_function(
             "document.getAnimations().every(item => item.playState !== 'running')"
         )

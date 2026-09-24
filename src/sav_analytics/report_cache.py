@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import threading
 from collections.abc import Callable
@@ -12,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from .atomic_file import replace_file
 from .core.report import build_topline_artifacts
 from .repository import ProjectRepository
 
@@ -97,10 +97,10 @@ def prepare_report(
                 json.dumps(manifest, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            os.replace(topline_temporary, topline_path)
-            os.replace(statistics_temporary, statistics_path)
+            replace_file(topline_temporary, topline_path)
+            replace_file(statistics_temporary, statistics_path)
             # The manifest is the commit marker and is always installed last.
-            os.replace(manifest_temporary, manifest_path)
+            replace_file(manifest_temporary, manifest_path)
         finally:
             topline_temporary.unlink(missing_ok=True)
             statistics_temporary.unlink(missing_ok=True)

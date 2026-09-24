@@ -16,9 +16,10 @@ optimistic locking, проверка целостности и кэш отчёт
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
+
+from .atomic_file import replace_file
 
 HISTORY_FILE = "history.json"
 MAX_STEPS = 20
@@ -62,7 +63,7 @@ def save(project_dir: Path, stacks: dict[str, list[dict[str, Any]]]) -> None:
         ),
         encoding="utf-8",
     )
-    os.replace(temporary, path)
+    replace_file(temporary, path)
 
 
 def reset(project_dir: Path) -> None:
