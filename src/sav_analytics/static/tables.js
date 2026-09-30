@@ -1487,18 +1487,12 @@ const TablesSection = (() => {
     let body = "<tbody>";
     table.questions.forEach(question => {
       body += `<tr class="bld-qrow"><td class="bld-rowhead" colspan="${width}"><span class="bld-rowwrap">${escapeHtml(question.code)} · ${escapeHtml(question.label)}</span></td></tr>`;
-      // Итоги (среднее, Top/Bottom, NET) отделены чертой над первым из них,
-      // как сумма в бухгалтерской таблице; счёт идёт заново в каждом подвопросе.
-      let afterDerived = false;
       question.rows.forEach(row => {
         if (row.kind === "subquestion") {
           body += `<tr class="bld-subrow"><td class="bld-rowhead" colspan="${width}"><span class="bld-rowwrap">${escapeHtml(row.label)}</span></td></tr>`;
-          afterDerived = false;
           return;
         }
-        const rowClass = row.kind === "base" ? "bld-base"
-          : row.derived ? `bld-derived${afterDerived ? "" : " bld-derived-first"}` : "";
-        afterDerived = Boolean(row.derived);
+        const rowClass = row.kind === "base" ? "bld-base" : row.derived ? "bld-derived" : "";
         // Длинная подпись обрезается многоточием, полная — в подсказке:
         // ячейка таблицы не держит max-width, и текст наезжал на числа.
         const label = escapeHtml(row.label);
