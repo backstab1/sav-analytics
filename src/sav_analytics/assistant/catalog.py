@@ -118,7 +118,6 @@ def _layout(report: dict) -> dict:
         for key in (
             "rows",
             "cols",
-            "nested",
             "banner_id",
             "filter_id",
             "sheet",

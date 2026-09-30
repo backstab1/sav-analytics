@@ -62,16 +62,30 @@ PROPOSE_TOOL = ToolSpec(
                         "codes": {"type": "array", "items": {"type": "string"}},
                         "cols": {
                             "type": "array",
+                            "description": "Блоки колонок; в блоке одна или две переменные.",
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "kind": {"type": "string", "enum": ["question", "recoding"]},
-                                    "ref": {"type": "string"},
+                                    "sources": {
+                                        "type": "array",
+                                        "minItems": 1,
+                                        "maxItems": 2,
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "kind": {
+                                                    "type": "string",
+                                                    "enum": ["question", "recoding"],
+                                                },
+                                                "ref": {"type": "string"},
+                                            },
+                                            "required": ["kind", "ref"],
+                                        },
+                                    },
                                 },
-                                "required": ["kind", "ref"],
+                                "required": ["sources"],
                             },
                         },
-                        "nested": {"type": "boolean"},
                         "banner_id": {"type": "string"},
                         "filter_id": {"type": "string"},
                         "base": {"type": "string", "enum": ["main", "filter"]},

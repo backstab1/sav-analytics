@@ -187,7 +187,11 @@ def _source_holders(configuration: dict[str, Any]) -> Iterator[_SourceHolder]:
             f"таблица «{report.get('name')}»",
             [
                 *({"kind": "question", "ref": code} for code in dict.fromkeys(rows)),
-                *report.get("cols", []),
+                *(
+                    source
+                    for block in report.get("cols", [])
+                    for source in block.get("sources", [])
+                ),
             ],
         )
 

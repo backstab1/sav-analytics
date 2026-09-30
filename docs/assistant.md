@@ -121,7 +121,7 @@ Ollama. Провайдер выбирается переменными окру�
 | `op` | Параметры | Трогает книгу отчёта |
 | --- | --- | --- |
 | `table.set_rows` / `add_rows` / `remove_rows` | `rows` или `codes` | Нет |
-| `table.set_columns` | `cols: [{kind, ref}]`, `nested` | Нет |
+| `table.set_columns` | `cols: [{sources: [{kind, ref}]}]` — блоки, в блоке 1–2 переменные | Нет |
 | `table.use_banner` / `clear_columns` | `banner_id` / — | Нет |
 | `table.set_filter` | `filter_id` или `null` | Нет |
 | `table.set_base` | `base: main \| filter` | Нет |

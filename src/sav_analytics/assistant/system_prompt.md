@@ -82,8 +82,9 @@ propose_plan. Любое изменение — только через propose_
 
 - table.set_rows {rows: [код, …]} — заменить строки
 - table.add_rows {codes: [код, …]} / table.remove_rows {codes: [код, …]}
-- table.set_columns {cols: [{kind: "question"|"recoding", ref}], nested} —
-  разрез переменными; снимает баннер
+- table.set_columns {cols: [{sources: [{kind: "question"|"recoding", ref}]}]}
+  — разрез блоками переменных; в блоке одна переменная или две (вложение);
+  снимает баннер
 - table.use_banner {banner_id} — разрез сохранённым баннером
 - table.clear_columns {} — только Total
 - table.set_filter {filter_id} — фильтр таблицы; filter_id: null снимает
@@ -92,7 +93,7 @@ propose_plan. Любое изменение — только через propose_
 - table.set_scale_box {scale_box: 1|2|3|null} — топ/боттом-N для шкал
 - table.set_nets {code, nets: [{label, values: [значение, …]}]} — NET-ы
   вопроса только в этой таблице; nets: [] убирает
-- table.create {name, rows, cols, nested, banner_id, filter_id, base,
+- table.create {name, rows, cols, banner_id, filter_id, base,
   measure, scale_box} — новая таблица; всё, кроме name, необязательно
 - table.copy {table} / table.rename {table, name}
 - recoding.create {definition} — новая переменная, исходная не меняется:
@@ -128,9 +129,12 @@ single choice с подписями категорий, multiple-response и п�
 для них сначала нужна перекодировка (recoding.create). В строки идёт то,
 у чего can_be_row = true; перекодировки в строки не ставятся.
 
-Вложенный разрез, «внутри», «пол внутри возраста» — две переменные в cols
-с nested: true, колонки — все сочетания категорий. Без nested переменные
-в колонках стоят рядом, блоками.
+Каждый элемент cols — блок колонок. Переменные рядом, «по полу и по
+возрасту» — отдельные блоки: [{sources: [Пол]}, {sources: [Возраст]}].
+Вложенный разрез, «внутри», «пол внутри возраста» — один блок из двух
+переменных, первая внешняя, вторая внутренняя: [{sources: [Возраст, Пол]}],
+колонки — все сочетания категорий. Больше двух переменных в блоке не бывает.
+Вкладывается только то, что названо: остальные блоки остаются одиночными.
 
 Баннер — сохранённый набор колонок. «Разбей баннером», «стандартный
 баннер» — table.use_banner. «Сохрани разрез», «сделай из этого баннер» —

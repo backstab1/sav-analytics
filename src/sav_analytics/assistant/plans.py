@@ -20,7 +20,6 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from ..api_schemas import (
-    AnalysisSource,
     BannerBlock,
     BannerDefinition,
     CategoricalRecodeDefinition,
@@ -30,6 +29,7 @@ from ..api_schemas import (
     FormulaDefinition,
     NetDefinition,
     NumericRecodeDefinition,
+    TableColumnBlock,
     TableReportLayout,
 )
 from ..core.banner import validate_banner
@@ -80,8 +80,7 @@ class RemoveRows(_TableStep):
 
 class SetColumns(_TableStep):
     op: Literal["table.set_columns"]
-    cols: list[AnalysisSource] = Field(min_length=1, max_length=20)
-    nested: bool = False
+    cols: list[TableColumnBlock] = Field(min_length=1, max_length=20)
 
 
 class UseBanner(_TableStep):
@@ -123,8 +122,7 @@ class CreateTable(_Step):
     op: Literal["table.create"]
     name: str | None = Field(default=None, min_length=1, max_length=120)
     rows: list[str] = Field(default_factory=list, max_length=50)
-    cols: list[AnalysisSource] = Field(default_factory=list, max_length=20)
-    nested: bool = False
+    cols: list[TableColumnBlock] = Field(default_factory=list, max_length=20)
     banner_id: str | None = None
     filter_id: str | None = None
     base: Literal["main", "filter"] = "main"
@@ -266,6 +264,12 @@ class _Run:
             return f"{recoding['code']} «{recoding['name']}»" if recoding else source["ref"]
         return self._question(source["ref"])
 
+    def _blocks(self, blocks: list[dict]) -> str:
+        # Блоки — через запятую, вложенная переменная — через «×» внутри блока.
+        return ", ".join(
+            " × ".join(map(self._source, block["sources"])) for block in blocks
+        )
+
     def _named(self, section: str, identifier: str | None) -> str:
         item = next(
             (
@@ -296,7 +300,7 @@ class _Run:
                 raise PlanError(f"Вопроса {code} нет. Найдите код через list_questions.")
             if not can_be_row(question):
                 raise PlanError(f"{code} нельзя поставить в строки (can_be_row = false).")
-        for source in layout["cols"]:
+        for source in (source for block in layout["cols"] for source in block["sources"]):
             if source["kind"] == "recoding":
                 continue
             question = question_by_code(project, source["ref"])
@@ -307,8 +311,6 @@ class _Run:
                     f"{source['ref']} нельзя поставить в колонки: сначала перекодировка "
                     "(recoding.create)."
                 )
-        if layout["nested"] and len(layout["cols"]) % 2:
-            raise PlanError("Вложенный разрез собирается парами: нужно чётное число колонок.")
 
     def _write_layout(self, report: dict, change: Callable[[dict], None]) -> None:
         layout = {key: report[key] for key in _LAYOUT_KEYS if key in report}
@@ -364,21 +366,17 @@ class _Run:
             cols = self._resolve_sources([item.model_dump() for item in step.cols])
             self._write_layout(
                 report,
-                lambda layout: layout.update(cols=cols, nested=step.nested, banner_id=None),
+                lambda layout: layout.update(cols=cols, banner_id=None),
             )
-            joiner = " × " if step.nested else ", "
-            kind = "вложенный разрез" if step.nested else "колонки"
-            text = f"{kind} — " + joiner.join(map(self._source, cols))
+            text = "колонки — " + self._blocks(cols)
         elif isinstance(step, UseBanner):
             self._write_layout(
                 report,
-                lambda layout: layout.update(banner_id=step.banner_id, cols=[], nested=False),
+                lambda layout: layout.update(banner_id=step.banner_id, cols=[]),
             )
             text = f"колонки — баннер {self._named('banners', step.banner_id)}"
         elif isinstance(step, ClearColumns):
-            self._write_layout(
-                report, lambda layout: layout.update(banner_id=None, cols=[], nested=False)
-            )
+            self._write_layout(report, lambda layout: layout.update(banner_id=None, cols=[]))
             text = "уберу разрез, останется только Total"
         elif isinstance(step, SetFilter):
             self._write_layout(report, lambda layout: layout.update(filter_id=step.filter_id))
@@ -437,7 +435,6 @@ class _Run:
         layout = {
             "rows": list(dict.fromkeys(step.rows)),
             "cols": self._resolve_sources([item.model_dump() for item in step.cols]),
-            "nested": step.nested,
             "banner_id": step.banner_id,
             "filter_id": step.filter_id,
             "sheet": step.base,
@@ -460,8 +457,7 @@ class _Run:
         if validated["rows"]:
             parts.append("строки — " + ", ".join(map(self._question, validated["rows"])))
         if validated["cols"]:
-            joiner = " × " if validated["nested"] else ", "
-            parts.append("колонки — " + joiner.join(map(self._source, validated["cols"])))
+            parts.append("колонки — " + self._blocks(validated["cols"]))
         self.outcome.description.append(
             f"Создам таблицу «{name}»" + (": " + "; ".join(parts) if parts else "")
         )

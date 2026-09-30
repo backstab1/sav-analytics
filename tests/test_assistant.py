@@ -37,7 +37,11 @@ RECODING_PLAN = {
             },
         },
         {"op": "table.set_rows", "rows": ["Q1"]},
-        {"op": "table.set_columns", "cols": [{"kind": "recoding", "ref": "SCORE_GROUP"}]},
+        {"op": "table.set_columns", "cols": [
+            {"sources": [
+                {"kind": "question", "ref": "Q1"}, {"kind": "recoding", "ref": "SCORE_GROUP"}
+            ]}
+        ]},
     ],
 }
 
@@ -146,7 +150,8 @@ def test_proposal_changes_nothing_and_describes_steps_itself(project) -> None:
     plan = _propose(project)
     assert plan["status"] == "pending"
     assert plan["description"][0].startswith("Создам перекодировку SCORE_GROUP «Группы оценки»")
-    assert "колонки — SCORE_GROUP «Группы оценки»" in plan["description"][2]
+    assert "колонки — Q1 «" in plan["description"][2]
+    assert "× SCORE_GROUP «Группы оценки»" in plan["description"][2]
     configuration = _project(project)["configuration"]
     assert configuration["revision"] == revision
     assert configuration["recodings"] == []
@@ -164,7 +169,9 @@ def test_invalid_plan_goes_back_to_the_model_as_an_error(project) -> None:
         project,
         [
             _call("propose_plan", {"summary": "Кросс", "steps": [
-                {"op": "table.set_columns", "cols": [{"kind": "question", "ref": "Q2"}]}
+                {"op": "table.set_columns", "cols": [
+                    {"sources": [{"kind": "question", "ref": "Q2"}]}
+                ]}
             ]}),
             _text("Q2 числовой, сначала нужна перекодировка. Сделать 2 группы?"),
         ],
@@ -185,7 +192,9 @@ def test_apply_writes_one_revision_and_undo_restores_everything(project) -> None
     assert configuration["revision"] == revision + 1
     recoding = configuration["recodings"][0]
     table = configuration["table_reports"][0]
-    assert table["cols"] == [{"kind": "recoding", "ref": recoding["id"]}]
+    assert table["cols"] == [{"sources": [
+        {"kind": "question", "ref": "Q1"}, {"kind": "recoding", "ref": recoding["id"]}
+    ]}]
     assert applied.json()["plan"]["status"] == "applied"
     assert applied.json()["plan"]["sections"] == ["перекодировки", "таблицы"]
 

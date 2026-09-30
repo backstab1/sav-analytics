@@ -103,7 +103,8 @@ class ProjectStore:
 
         `_ensure_configuration` уже собрал `report_settings` — из нового поля или,
         для схемы 1, с активного баннера. Здесь остаётся убрать прежние копии,
-        чтобы у настройки было одно место, и зафиксировать версию.
+        чтобы у настройки было одно место, перевести колонки таблиц в блоки
+        (схема 3) и зафиксировать версию.
 
         Перед первой перезаписью рядом кладётся копия исходного файла: если
         приложение придётся откатить на версию, которая новую схему не читает,
@@ -115,6 +116,9 @@ class ProjectStore:
         for banner in project["configuration"]["banners"]:
             for key in REPORT_SETTING_KEYS:
                 banner.pop(key, None)
+        if stored_schema < 3:
+            for report in project["configuration"].get("table_reports", []):
+                report["cols"] = _column_blocks(report.get("cols", []), report.pop("nested", False))
         project["configuration"]["schema_version"] = CONFIGURATION_SCHEMA_VERSION
         # Снимки прежней схемы отменой возвращать нельзя: история начинается заново.
         self._write_project(project_id, project, history="reset")
@@ -373,3 +377,13 @@ class ProjectStore:
         identifier = str(project_id)
         with self._project_locks_guard:
             return self._project_locks.setdefault(identifier, Lock())
+
+
+def _column_blocks(cols: list[dict], nested: bool) -> list[dict]:
+    """Колонки таблицы схемы 2 — блоками схемы 3, с тем же разрезом.
+
+    Флаг вложенности делил список на пары по порядку, непарный хвост шёл
+    отдельным блоком; без флага каждая переменная — свой блок.
+    """
+    size = 2 if nested else 1
+    return [{"sources": cols[index : index + size]} for index in range(0, len(cols), size)]

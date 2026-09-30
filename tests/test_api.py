@@ -41,7 +41,7 @@ def test_create_project_keeps_source_and_returns_inspection(tmp_path: Path) -> N
             project = response.json()
             assert project["name"] == "Тестовый проект"
             assert project["inspection"]["row_count"] == 4
-            assert project["configuration"]["schema_version"] == 2
+            assert project["configuration"]["schema_version"] == 3
             assert project["configuration"]["report_settings"] == {
                 "ranking_metrics": ["distribution", "mean"],
                 "compare_to_total": False,
@@ -515,7 +515,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
 
     migrated = repository.get(project_id)
 
-    assert migrated["configuration"]["schema_version"] == 2
+    assert migrated["configuration"]["schema_version"] == 3
     assert migrated["configuration"]["report_settings"]["confidence_level"] == 0.95
     matrix = next(
         question
@@ -808,7 +808,7 @@ def test_schema_1_settings_move_off_the_banner_and_leave_a_backup(
     migrated = repository.get(project_id)
     configuration = migrated["configuration"]
 
-    assert configuration["schema_version"] == 2
+    assert configuration["schema_version"] == 3
     # Источник — активный баннер: именно его значения применял расчёт до схемы 2.
     assert configuration["report_settings"]["confidence_level"] == 0.9
     assert configuration["report_settings"]["minimum_base"] == 50
@@ -825,7 +825,7 @@ def test_schema_1_settings_move_off_the_banner_and_leave_a_backup(
 
     # Файл на диске переписан, повторное открытие ничего не меняет и копию не трогает.
     stored = json.loads(metadata_path.read_text(encoding="utf-8"))
-    assert stored["configuration"]["schema_version"] == 2
+    assert stored["configuration"]["schema_version"] == 3
     revision = stored["configuration"]["revision"]
     assert repository.get(project_id)["configuration"]["revision"] == revision
 

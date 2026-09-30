@@ -773,16 +773,28 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     expect(page.locator("#bld-view-value")).to_be_hidden()
     page.keyboard.press("Escape")
 
-    # Вложенный разрез: пол × марка даёт полное пересечение категорий.
+    # Вторая галочка — второй блок рядом, а не пара: вложение задаётся явно.
     page.check('#bld-cols-tree .bld-check[data-code="BRAND"]')
     page.keyboard.press("Escape")
-    nest = page.locator("#bld-nest")
-    expect(nest).to_be_visible()
-    nest.click()
+    blocks = page.locator("#bld-blocks .bld-block")
+    expect(blocks).to_have_count(2)
+    # Вложенный разрез: марка внутри пола даёт полное пересечение категорий.
+    page.locator('#bld-blocks .bld-block[data-block="SEX"] [data-block-action="nest"]').click()
+    page.locator('#bld-list [data-nest="BRAND"]').click()
+    expect(blocks).to_have_count(1)
+    expect(blocks.first).to_contain_text("2 × 2 = 4")
     expect(table.locator("thead tr.bld-base").first.locator("th.bld-basecell")).to_have_count(
         5, timeout=UI_TIMEOUT
     )
     expect(table).to_contain_text("Ваш пол × Какой маркой пользуетесь")
+    # «⇄» меняет уровни, «Разделить» возвращает два блока — и обратно.
+    page.locator('#bld-blocks [data-block-action="swap"]').click()
+    expect(blocks.first).to_have_attribute("data-block", "BRAND")
+    page.locator('#bld-blocks [data-block-action="split"]').click()
+    expect(blocks).to_have_count(2)
+    page.locator('#bld-blocks .bld-block[data-block="SEX"] [data-block-action="nest"]').click()
+    page.locator('#bld-list [data-nest="BRAND"]').click()
+    expect(table).to_contain_text("Ваш пол × Какой маркой пользуетесь", timeout=UI_TIMEOUT)
 
     # Мост в отчёт: разрез сохраняется баннером и появляется в выборе колонок.
     page.click("#bld-save-cut")

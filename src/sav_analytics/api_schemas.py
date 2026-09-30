@@ -308,18 +308,27 @@ class TableExportRequest(TablePreviewRequest):
     scope: Literal["table", "report"] = "table"
 
 
+class TableColumnBlock(BaseModel):
+    """Блок колонок таблицы: одна переменная или вложение второй в первую.
+
+    Первая переменная внешняя, вторая — внутренняя: колонки блока — все
+    сочетания их категорий, как у двухуровневого блока баннера.
+    """
+
+    sources: list[AnalysisSource] = Field(min_length=1, max_length=2)
+
+
 class TableReportLayout(BaseModel):
     """Сохранённая таблица раздела «Таблицы»: раскладка и вид экрана.
 
-    Разрез хранится так, как его выбирают на экране: сохранённым баннером
-    или переменными колонок с флагом вложенности, а не готовыми блоками —
+    Разрез хранится так, как его собирают на экране: сохранённым баннером
+    или блоками колонок. Блок хранит переменные, а не готовые категории —
     иначе таблица не открылась бы с теми же галочками в дереве.
     """
 
     rows: list[str] = Field(default_factory=list, max_length=50)
     banner_id: UUID | None = None
-    cols: list[AnalysisSource] = Field(default_factory=list, max_length=20)
-    nested: bool = False
+    cols: list[TableColumnBlock] = Field(default_factory=list, max_length=20)
     filter_id: UUID | None = None
     sheet: Literal["main", "filter"] = "main"
     measure: Literal["value", "index"] = "value"

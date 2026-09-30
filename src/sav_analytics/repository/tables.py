@@ -92,7 +92,8 @@ class TableReports(ProjectStore):
         missing += [code for code in layout["nets"] if code not in questions]
         missing += [
             source["ref"]
-            for source in layout["cols"]
+            for block in layout["cols"]
+            for source in block["sources"]
             if source["ref"] not in (questions if source["kind"] == "question" else recodings)
         ]
         if missing:

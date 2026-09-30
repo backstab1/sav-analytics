@@ -642,8 +642,6 @@
                 <button type="button" id="bld-report" class="bld-param bld-report" aria-haspopup="dialog" aria-expanded="false"
                         aria-controls="bld-report-menu" title="Сохранённые таблицы проекта"><em>Таблица</em><b id="bld-report-name">не сохранена</b><span class="bld-caret" aria-hidden="true"></span></button>
                 <span id="bld-report-state" class="bld-report-state" role="status" aria-live="polite"></span>
-                <button type="button" id="bld-nest" class="bld-param bld-toggle" aria-pressed="false" hidden
-                        title="Полное пересечение разрезов, как вложенный блок баннера в книге">Вложить</button>
                 <button type="button" class="bld-param bld-zone" data-zone="filter" aria-haspopup="dialog" aria-expanded="false">
                   <em>Фильтр</em><b data-slot="filter">вся выборка</b><span class="bld-caret" aria-hidden="true"></span>
                 </button>
@@ -685,6 +683,9 @@
                     <strong id="bld-cols-title">Колонки</strong><span id="bld-cols-count" class="bld-dim"></span>
                     <button type="button" class="bld-panel-clear" data-clear-zone="cols" hidden>Снять</button>
                   </header>
+                  <!-- Разрез блоками: так он встанет в шапку таблицы. Вложение —
+                       действие над блоком, а не порядок галочек в дереве. -->
+                  <ol id="bld-blocks" class="bld-blocks" aria-label="Блоки колонок" hidden></ol>
                   <input id="bld-cols-search" class="bld-panel-search" type="search" placeholder="Поиск разреза или баннера" autocomplete="off" aria-label="Поиск по разрезам колонок" data-no-search="1" />
                   <div id="bld-cols-tree" class="bld-tree" role="tree" aria-label="Разрез колонок" aria-multiselectable="true"></div>
                 </section>

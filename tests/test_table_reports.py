@@ -1,7 +1,9 @@
 """Несколько сохранённых таблиц в разделе «Таблицы» (PQ.7 для экрана кросстаба)."""
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -62,10 +64,10 @@ def test_tables_are_created_renamed_copied_cleared_and_deleted(project) -> None:
     assert first["sheet"] == "main" and first["measure"] == "value"
 
     reports = _reports(client.post(base, json={"rows": ["Q2"], "cols": [
-        {"kind": "question", "ref": "Q1"}], "measure": "index"}))
+        {"sources": [{"kind": "question", "ref": "Q1"}]}], "measure": "index"}))
     assert [item["name"] for item in reports] == ["Таблица 1", "Таблица 2"]
     second = reports[1]
-    assert second["cols"] == [{"kind": "question", "ref": "Q1"}]
+    assert second["cols"] == [{"sources": [{"kind": "question", "ref": "Q1"}]}]
 
     renamed = _reports(client.patch(f"{base}/{first['id']}", json={"name": "  Пол  "}))
     assert renamed[0]["name"] == "Пол"
@@ -92,14 +94,17 @@ def test_layout_keeps_view_and_nets(project) -> None:
     report = _reports(client.post(base, json={}))[0]
     layout = {
         "rows": ["Q1", "Q2"],
-        "cols": [{"kind": "question", "ref": "Q1"}, {"kind": "question", "ref": "Q1"}],
-        "nested": True,
+        "cols": [
+            {"sources": [{"kind": "question", "ref": "Q1"}, {"kind": "question", "ref": "Q2"}]},
+            {"sources": [{"kind": "question", "ref": "Q1"}]},
+        ],
         "sheet": "filter",
         "scale_box": 3,
         "nets": {"Q1": [{"label": "Все", "values": ["Мужчина", "Женщина"]}]},
     }
     saved = _reports(client.put(f"{base}/{report['id']}", json=layout))[0]
-    assert saved["nested"] is True and saved["sheet"] == "filter"
+    assert [len(block["sources"]) for block in saved["cols"]] == [2, 1]
+    assert saved["cols"][0]["sources"][1]["ref"] == "Q2" and saved["sheet"] == "filter"
     assert saved["scale_box"] == 3
     assert saved["nets"]["Q1"][0]["label"] == "Все"
     assert saved["name"] == "Таблица 1"
@@ -114,9 +119,13 @@ def test_layout_is_checked_against_the_project(project) -> None:
     assert "NOPE" in missing.json()["detail"]
     both = client.post(base, json={
         "banner_id": "00000000-0000-0000-0000-000000000001",
-        "cols": [{"kind": "question", "ref": "Q1"}],
+        "cols": [{"sources": [{"kind": "question", "ref": "Q1"}]}],
     })
     assert both.status_code == 422
+    # В блоке одна или две переменные: третий уровень не собирается.
+    three = client.post(base, json={"cols": [{"sources": [
+        {"kind": "question", "ref": "Q1"}] * 3}]})
+    assert three.status_code == 422
     unknown_banner = client.post(base, json={"banner_id": "00000000-0000-0000-0000-000000000001"})
     assert unknown_banner.status_code == 422
     assert client.put(f"{base}/00000000-0000-0000-0000-000000000002", json={}).status_code == 404
@@ -134,7 +143,9 @@ def test_saved_tables_protect_what_they_use(project) -> None:
     _reports(client.post(base, json={
         "name": "По оценке",
         "rows": ["Q1"],
-        "cols": [{"kind": "recoding", "ref": recoding_id}],
+        "cols": [{"sources": [
+            {"kind": "question", "ref": "Q1"}, {"kind": "recoding", "ref": recoding_id}
+        ]}],
         "filter_id": filter_id,
     }))
 
@@ -181,3 +192,32 @@ def test_a_series_of_layout_edits_is_one_undo_step(project) -> None:
     _reports(client.put(f"{base}/{other['id']}", json={"rows": ["Q1"]}))
     _reports(client.put(f"{base}/{report['id']}", json={"rows": ["Q1"]}))
     assert client.get(f"/api/projects/{project_id}/history").json()["undo"] == 5
+
+
+def test_schema_2_columns_become_explicit_blocks(tmp_path: Path) -> None:
+    """Флаг вложенности схемы 2 делил колонки на пары по порядку: миграция
+    сохраняет ровно этот разрез, но уже явными блоками."""
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    source = tmp_path / "fixture.sav"
+    write_fixture(source)
+    with source.open("rb") as stream:
+        created = repository.create("Схема 2", "fixture.sav", stream)
+    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
+    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy["configuration"]["schema_version"] = 2
+    q1, q2 = ({"kind": "question", "ref": code} for code in ("Q1", "Q2"))
+    legacy["configuration"]["table_reports"] = [
+        {"id": str(uuid4()), "name": "Рядом", "rows": [], "cols": [q1, q2], "nested": False},
+        {"id": str(uuid4()), "name": "Пары", "rows": [], "cols": [q1, q2, q1], "nested": True},
+        {"id": str(uuid4()), "name": "Пустая", "rows": []},
+    ]
+    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+
+    reports = repository.get(UUID(created["id"]))["configuration"]["table_reports"]
+
+    assert reports[0]["cols"] == [{"sources": [q1]}, {"sources": [q2]}]
+    # Непарный хвост и раньше шёл отдельным блоком.
+    assert reports[1]["cols"] == [{"sources": [q1, q2]}, {"sources": [q1]}]
+    assert reports[2]["cols"] == []
+    assert all("nested" not in report for report in reports)
+    assert metadata_path.with_suffix(".v2.bak").is_file()

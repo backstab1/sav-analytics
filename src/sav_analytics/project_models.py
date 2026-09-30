@@ -10,7 +10,9 @@ from .core.models import QuestionType, VariableRole
 
 # 1 — настройки расчёта хранились на каждом баннере.
 # 2 — они живут только в configuration.report_settings, баннер несёт название и блоки.
-CONFIGURATION_SCHEMA_VERSION = 2
+# 3 — колонки сохранённой таблицы — явные блоки вместо списка переменных с флагом
+#     вложенности, который делил список на пары по порядку.
+CONFIGURATION_SCHEMA_VERSION = 3
 
 
 class InvalidStoredProjectError(ValueError):
