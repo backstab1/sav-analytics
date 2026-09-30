@@ -2584,18 +2584,22 @@ body.is-landing { background: #050807; }
 .bld-grid tr.bld-base td, .bld-grid tr.bld-base .bld-rowhead { color: var(--c-ink-3); font-size: var(--t-xs); }
 .bld-grid tr.bld-qrow td, .bld-grid tr.bld-qrow .bld-rowhead {
   padding: 5px 9px; background: var(--c-surface-soft); font-weight: 600;
-  font-size: var(--t-xs); color: var(--c-ink);
+  font-size: var(--t-xs); color: var(--c-brand);
   font-family: var(--font-display); text-align: left;
 }
 .bld-grid tbody td.bld-rowhead { white-space: nowrap; }
 /* Заголовок вопроса и подвопроса занимает всю строку, но текст переносится
    в пределах столбца «Показатель», а не тянется над числами. */
 .bld-grid .bld-rowwrap { display: block; max-width: calc(var(--bld-head-w) - 18px); white-space: normal; line-height: 1.35; }
+/* Ячейка заголовка растянута на всю ширину таблицы, и закрепить её слева
+   нельзя — ей некуда сдвигаться. Поэтому липкий сам текст: при прокрутке
+   вправо подпись вопроса остаётся у левого края. */
+.bld-grid tr.bld-qrow .bld-rowwrap, .bld-grid tr.bld-subrow .bld-rowwrap { position: sticky; left: 9px; }
 .bld-grid .bld-rowlabel {
   display: block; max-width: calc(var(--bld-head-w) - 18px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .bld-grid tr.bld-derived td { background: var(--c-surface-soft); }
-.bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-brand); font-weight: 600; }
+.bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-ink); font-weight: 600; }
 .bld-grid tbody tr:hover td { background: #f7fbf9; }
 
 /* Живая таблица: цвет, стрелка и знаки приходят с сервера из формата книги. */
