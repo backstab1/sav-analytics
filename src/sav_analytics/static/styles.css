@@ -2571,8 +2571,10 @@ body.is-landing { background: #050807; }
 .bld-grid .bld-rowlabel {
   display: block; max-width: calc(var(--bld-head-w) - 18px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.bld-grid tr.bld-derived td { background: var(--c-surface-soft); }
-.bld-grid tr.bld-subrow td { background: var(--c-surface-soft); color: var(--c-ink); font-weight: 600; }
+.bld-grid tr.bld-subrow td { color: var(--c-ink); font-weight: 600; }
+/* Итоговые строки: черта над блоком и подпись курсивом, без заливки. */
+.bld-grid tr.bld-derived-first td { border-top: 1px solid var(--c-ink-3); }
+.bld-grid tr.bld-derived .bld-rowlabel { font-style: italic; }
 .bld-grid tbody tr:hover td { background: #f7fbf9; }
 
 /* Живая таблица: цвет, стрелка и знаки приходят с сервера из формата книги. */
