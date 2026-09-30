@@ -295,6 +295,9 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
   all: unset; box-sizing: border-box; flex: 1 1 auto; min-width: 0; cursor: pointer;
   display: flex; justify-content: space-between; align-items: center; gap: var(--s-4);
 }
+/* all: unset проигрывает общему button:hover по специфичности — фон
+   карточки при наведении держим явно. */
+.project-open:hover { background: transparent; }
 .project-card.trashed { opacity: .85; }
 .project-card.trashed .project-open { cursor: default; }
 .project-actions { display: flex; flex: 0 0 auto; gap: 10px; }
@@ -356,6 +359,7 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .answer-row p { margin: 0; font-size: var(--t-sm); overflow-wrap: anywhere; }
 .answer-marks { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .answer-chip { display: inline-flex; gap: 4px; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--c-brand-tint, #e8f5ee); color: var(--c-ink); font-size: var(--t-xs); border: 0; cursor: pointer; }
+.answer-chip:hover { background: color-mix(in srgb, var(--c-brand) 18%, transparent); color: var(--c-ink); transform: none; }
 .answer-chip small { color: var(--c-ink-3); font-size: 10px; }
 .answer-add { padding: 2px 6px; font-size: var(--t-xs); max-width: 180px; }
 @media (max-width: 860px) { .coding-body { grid-template-columns: 1fr; } }
@@ -2474,8 +2478,11 @@ body.is-landing { background: #050807; }
   border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--c-ink-3);
 }
 .bld-q-invert svg { width: 14px; height: 14px; }
-.bld-q-invert:hover { border-color: var(--c-border); color: var(--c-brand); transform: none; }
-.bld-q-invert[aria-pressed="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
+/* Свой фон при наведении: общее button:hover заливает кнопку фирменным
+   цветом, и тёмный значок на нём не читается. */
+.bld-q-invert:hover { border-color: var(--c-border); background: var(--c-surface-soft); color: var(--c-brand); transform: none; }
+.bld-q-invert[aria-pressed="true"],
+.bld-q-invert[aria-pressed="true"]:hover { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
 .bld-q-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; }
 .bld-q-head .bld-net-q-name { font-weight: 600; }
 
@@ -2607,7 +2614,7 @@ body.is-landing { background: #050807; }
 /* Название строки — кнопка графика, но подчёркивание появляется только
    под курсором: иначе подчёркнут весь первый столбец. */
 .bld-rowchart { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-.bld-rowchart:hover { text-decoration: underline; }
+.bld-rowchart:hover { background: transparent; text-decoration: underline; }
 
 /* У каждого посчитанного числа есть протокол, поэтому пунктир появляется
    только под числом, над которым курсор. Общие стили кнопок заливают фон
@@ -2647,6 +2654,7 @@ body.is-landing { background: #050807; }
 }
 .bld-protocol-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: var(--t-xs); }
 .bld-protocol-close { padding: 0 6px; background: transparent; color: var(--c-ink-3); font-size: 16px; }
+.bld-protocol-close:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
 .bld-protocol pre { margin: 0 0 6px; white-space: pre-wrap; color: var(--c-ink-2); font: 11px/1.5 "SF Mono", Menlo, Consolas, monospace; }
 
 /* ---- Поповер переменных ----
