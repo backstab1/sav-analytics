@@ -152,6 +152,20 @@ function formatRecodeCategory(recoding, category) {
   return formatRange(category);
 }
 
+// Подписи пунктов блока без общего начала: «Что вы обычно заказываете:
+// эспрессо» → «эспрессо». Режется только начало, которое кончается
+// разделителем (двоеточие, тире, косая черта): у «Очень доволен» и «Очень
+// недоволен» общее «Очень» — часть ответа, а не вопрос.
+function stripCommonPrefix(labels) {
+  if (labels.length < 2) return labels;
+  const words = labels.map(label => String(label).split(/\s+/));
+  let common = 0;
+  while (words.every(parts => parts.length > common + 1 && parts[common] === words[0][common])) common += 1;
+  while (common > 0 && !/[:—–\-/]$/.test(words[0][common - 1])) common -= 1;
+  if (!common) return labels;
+  return words.map(parts => parts.slice(common).join(" "));
+}
+
 function escapeHtml(value) {
   const element = document.createElement("span");
   element.textContent = String(value ?? "");

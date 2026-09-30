@@ -1197,20 +1197,25 @@ function bannerSourceCategoryCount(source) {
 }
 
 
+// Уровень измерения SPSS — по-русски, как остальной интерфейс.
+const measurementLabels = { nominal: "номинальная", ordinal: "порядковая", scale: "количественная", unknown: "—" };
+
 function renderPhysicalVariables() {
     const allVariables = currentProject.inspection.variables;
     const variables = allVariables.filter(variable => matchesStructureSearch(variable.name, variable.label));
     updateStructureSearchCount(variables.length, allVariables.length);
-    document.querySelector("#table-head").innerHTML = "<th>Имя</th><th>Логический вопрос</th><th>Метка столбца</th><th>Формат</th><th>Measurement</th><th>Уникальных</th><th>Валидная база</th><th>Пропуски</th>";
+    // Числа — вправо и моноширинными цифрами: их сравнивают столбиком.
+    // Заголовки в одну строку: «Валидная база» в две строки поднимала шапку.
+    document.querySelector("#table-head").innerHTML = "<th>Имя</th><th class=\"nowrap\">Вопрос</th><th class=\"question-cell\">Метка столбца</th><th>Формат</th><th>Шкала</th><th class=\"num\">Уникальных</th><th class=\"num\">Валидных</th><th class=\"num\">Пропуски</th>";
     if (!variables.length) {
       document.querySelector("#table-body").innerHTML = emptySearchRow(8, "Столбцы не найдены.");
       return;
     }
     document.querySelector("#table-body").innerHTML = variables.map(variable => `
       <tr>
-        <td><code>${escapeHtml(variable.name)}</code></td><td>${logicalOwnerButton(variable.name)}</td><td><strong title="${escapeAttribute(variable.label)}">${escapeHtml(variable.label)}</strong></td>
-        <td>${escapeHtml(variable.original_format || variable.storage_type)}</td><td>${escapeHtml(variable.measurement_level || "—")}</td>
-        <td>${variable.unique_count.toLocaleString("ru-RU")}</td><td>${variable.valid_count.toLocaleString("ru-RU")}</td><td>${variable.missing_count.toLocaleString("ru-RU")}</td>
+        <td><code>${escapeHtml(variable.name)}</code></td><td>${logicalOwnerButton(variable.name)}</td><td class="question-cell"><strong title="${escapeAttribute(variable.label)}">${escapeHtml(variable.label)}</strong></td>
+        <td>${escapeHtml(variable.original_format || variable.storage_type)}</td><td class="nowrap">${escapeHtml(measurementLabels[variable.measurement_level] || variable.measurement_level || "—")}</td>
+        <td class="num">${variable.unique_count.toLocaleString("ru-RU")}</td><td class="num">${variable.valid_count.toLocaleString("ru-RU")}</td><td class="num ${variable.missing_count ? "" : "zero"}">${variable.missing_count.toLocaleString("ru-RU")}</td>
       </tr>`).join("");
 }
 
@@ -1373,7 +1378,7 @@ async function loadPreview() {
   try {
     const preview = await api(`/api/projects/${projectId}/questions/${encodeURIComponent(code)}/preview`);
     if (stale()) return;
-    container.innerHTML = renderPreview(preview);
+    container.innerHTML = renderPreview(preview, findQuestion(code));
     renderNotApplicable(findQuestion(currentQuestionCode), preview);
     renderNets(findQuestion(currentQuestionCode), preview);
   } catch (error) {
@@ -1384,13 +1389,19 @@ async function loadPreview() {
   }
 }
 
-function renderPreview(preview) {
+// У блока из нескольких переменных строки — это его пункты, и начало
+// «Что вы обычно заказываете: …» в каждой повторяет заголовок редактора.
+// У одиночного выбора строки — ответы, их не трогаем.
+function renderPreview(preview, question = null) {
+  const itemised = question && (question.source_variables?.length || 0) > 1;
+  const rowLabels = itemised && preview.rows?.length ? stripCommonPrefix(preview.rows.map(row => row.label)) : null;
+  const itemLabels = preview.items?.length ? stripCommonPrefix(preview.items.map(item => item.label)) : null;
   const base = `<div class="base-line"><span>Total <strong>${preview.total_base.toLocaleString("ru-RU")}</strong></span><span>Валидная база <strong>${preview.valid_base.toLocaleString("ru-RU")}</strong></span></div>`;
   if (preview.items?.length) {
-    return base + `<div class="matrix-preview">${preview.items.map(item => `<details><summary><span><code>${escapeHtml(item.variable)}</code> ${escapeHtml(item.label)}</span><strong>Среднее ${item.statistics.mean == null ? "—" : Number(item.statistics.mean).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</strong></summary><div class="preview-rows">${item.rows.map(row => `<div class="${row.is_special ? "special-row" : ""}"><span>${escapeHtml(row.label)}${row.is_special ? " · спецответ" : ""}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_main)}</em><em>${formatPercent(row.percent_filter)}</em></div>`).join("")}</div></details>`).join("")}</div>`;
+    return base + `<div class="matrix-preview">${preview.items.map((item, index) => `<details><summary><span title="${escapeAttribute(item.label)}"><code>${escapeHtml(item.variable)}</code> ${escapeHtml(itemLabels[index])}</span><strong>Среднее ${item.statistics.mean == null ? "—" : Number(item.statistics.mean).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</strong></summary><div class="preview-rows">${item.rows.map(row => `<div class="${row.is_special ? "special-row" : ""}"><span>${escapeHtml(row.label)}${row.is_special ? " · спецответ" : ""}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_main)}</em><em>${formatPercent(row.percent_filter)}</em></div>`).join("")}</div></details>`).join("")}</div>`;
   }
-  const rows = preview.rows?.length ? `<div class="preview-rows"><div class="preview-row-head"><span>Ответ</span><strong>N</strong><em>Total</em><em>Valid</em></div>${preview.rows.map(row => `
-    <div class="${row.is_special ? "special-row" : ""}"><span>${escapeHtml(row.label)}${row.is_special ? " · спецответ" : ""}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_main)}</em><em>${formatPercent(row.percent_filter)}</em></div>`).join("")}</div>` : "";
+  const rows = preview.rows?.length ? `<div class="preview-rows"><div class="preview-row-head"><span>Ответ</span><strong>N</strong><em>Total</em><em>Valid</em></div>${preview.rows.map((row, index) => `
+    <div class="${row.is_special ? "special-row" : ""}"><span title="${escapeAttribute(row.label)}">${escapeHtml(rowLabels ? rowLabels[index] : row.label)}${row.is_special ? " · спецответ" : ""}</span><strong>${row.count}</strong><em>${formatPercent(row.percent_main)}</em><em>${formatPercent(row.percent_filter)}</em></div>`).join("")}</div>` : "";
   const statistics = preview.statistics ? `<dl class="stats">
     ${stat("Среднее", preview.statistics.mean)}${stat("Медиана", preview.statistics.median)}
     ${stat("Минимум", preview.statistics.minimum)}${stat("Максимум", preview.statistics.maximum)}
