@@ -2612,11 +2612,6 @@ body.is-landing { background: #050807; }
 .bld-grid td.bld-val .bld-sig.bld-sig-weak { color: var(--c-ink-3); font-weight: 600; }
 .bld-grid td.bld-val .bld-wave { margin-right: 3px; color: var(--c-ink-3); font-size: 10px; }
 
-/* Название строки — кнопка графика, но подчёркивание появляется только
-   под курсором: иначе подчёркнут весь первый столбец. */
-.bld-rowchart { background: transparent; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-.bld-rowchart:hover { background: transparent; text-decoration: underline; }
-
 /* У каждого посчитанного числа есть протокол, поэтому пунктир появляется
    только под числом, над которым курсор. Общие стили кнопок заливают фон
    при наведении и фокусе; ячейке это не нужно. */
@@ -2635,17 +2630,6 @@ body.is-landing { background: #050807; }
   gap: var(--s-3); padding: var(--s-6); text-align: center;
 }
 .bld-empty p { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); max-width: 320px; line-height: 1.55; }
-
-/* ---- График строки: ярус внутри карточки таблицы ---- */
-.bld-chart { flex: 0 0 auto; margin: 0; padding: 8px 10px; border-top: 1px solid var(--c-border); background: var(--c-surface); }
-.bld-chart[hidden] { display: none; }
-.bld-chart figcaption { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: var(--t-xs); font-weight: 600; color: var(--c-ink-2); }
-.bld-chart svg { width: 100%; height: auto; margin-top: 6px; max-height: 220px; }
-.bld-chart-label, .bld-chart-value { font-size: 11px; fill: var(--c-ink-2, #4a544f); }
-.bld-chart-bar { fill: var(--c-brand, #2eae68); opacity: .85; }
-.bld-chart-up { fill: var(--c-positive, #2eae68); }
-.bld-chart-down { fill: var(--c-negative, #b3261e); }
-.bld-chart-faint { fill: var(--c-ink-4, #9aa5a0); }
 
 /* ---- Протокол теста ---- */
 .bld-protocol {

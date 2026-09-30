@@ -1880,29 +1880,6 @@ def test_header_preview_shows_columns_and_bases_before_building(
     expect(page.locator(".header-preview-row").first).to_contain_text("Total")
 
 
-def test_table_row_draws_a_chart_of_the_same_numbers(
-    page: Page, live_server: str, tmp_path: Path
-) -> None:
-    source = tmp_path / "survey.sav"
-    _write_survey(source)
-    _open_project(page, live_server, source)
-    _open_view(page, "tables")
-
-    page.check('#bld-rows-tree .bld-check[data-code="BRAND"]')
-    page.keyboard.press("Escape")
-    expect(page.locator("#bld-grid-wrap table.bld-grid")).to_be_visible(timeout=UI_TIMEOUT)
-
-    page.locator("#bld-grid-wrap .bld-rowchart").first.click()
-    chart = page.locator("#bld-chart")
-    expect(chart).to_be_visible(timeout=UI_TIMEOUT)
-    expect(chart.locator("svg rect")).to_have_count(1)
-    expect(chart.locator("svg text").nth(1)).to_have_text(
-        page.locator("#bld-grid-wrap tbody .bld-val").first.inner_text()
-    )
-    page.click("#bld-chart-close")
-    expect(chart).to_be_hidden()
-
-
 def test_net_group_is_built_on_the_table_screen_without_saving(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
