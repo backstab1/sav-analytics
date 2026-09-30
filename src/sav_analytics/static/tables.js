@@ -57,7 +57,6 @@ const TablesSection = (() => {
   const invertButton = document.querySelector("#bld-q-invert");
   const groupsMenu = document.querySelector("#bld-groups-menu");
   const netList = document.querySelector("#bld-net-list");
-  const blockList = document.querySelector("#bld-blocks");
   const saveCutButton = document.querySelector("#bld-save-cut");
   const exportButton = document.querySelector("#bld-export");
   const exportMenu = document.querySelector("#bld-export-menu");
@@ -158,18 +157,38 @@ const TablesSection = (() => {
     return layout.cols.flat();
   }
 
-  // Переменная, которой больше нет, уходит из своего блока; внешний уровень
-  // без внутреннего остаётся одиночным блоком.
-  function usableBlocks(blocks) {
-    return blocks
-      .map(block => block.filter(code => byCode.get(code)?.canCol))
-      .filter(block => block.length);
+  // Отдельная колонка переменной — блок из неё одной; галочка в дереве
+  // «Колонки» отвечает только за него. Пара — блок из двух, внешняя
+  // переменная первая; у переменной не больше одной пары, где она внешняя.
+  // Одна переменная может стоять и отдельно, и в паре: «Возраст › Доход»
+  // рядом с «Доходом» — обычный баннер.
+  function isSingle(code) {
+    return layout.cols.some(block => block.length === 1 && block[0] === code);
   }
 
-  // Блоки идут в порядке анкеты по внешней переменной, а не в порядке щелчков.
+  function pairOf(outer) {
+    return layout.cols.find(block => block.length === 2 && block[0] === outer);
+  }
+
+  // Переменная, которой больше нет, уходит из своего блока; внешний уровень
+  // без внутреннего остаётся одиночным блоком. Одинаковые блоки не копятся.
+  function usableBlocks(blocks) {
+    const seen = new Set();
+    return blocks
+      .map(block => block.filter(code => byCode.get(code)?.canCol))
+      .filter(block => {
+        const key = block.join("\n");
+        if (!block.length || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  // Блоки идут в порядке анкеты по внешней переменной, а не в порядке
+  // щелчков; отдельная колонка — перед парой той же переменной.
   function sortBlocks() {
     const order = new Map(variables.map((item, index) => [item.code, index]));
-    layout.cols.sort((left, right) => order.get(left[0]) - order.get(right[0]));
+    layout.cols.sort((left, right) => order.get(left[0]) - order.get(right[0]) || left.length - right.length);
   }
 
   function storedPayload(report) {
@@ -487,9 +506,8 @@ const TablesSection = (() => {
     // разрез, поэтому выбор одного снимает другой.
     if (zone === "cols") {
       bannerId = null;
-      // Отмеченная переменная встаёт отдельным блоком; вложить её — действие
-      // над блоком, а не порядок галочек.
-      if (!colCodes().includes(code)) layout.cols.push([code]);
+      // Галочка — отдельная колонка переменной; пары она не трогает.
+      if (!isSingle(code)) layout.cols.push([code]);
       sortBlocks();
       render();
       return;
@@ -502,7 +520,7 @@ const TablesSection = (() => {
 
   function removeFromZone(code, zone) {
     notice = "";
-    if (zone === "cols") layout.cols = layout.cols.map(block => block.filter(item => item !== code)).filter(block => block.length);
+    if (zone === "cols") layout.cols = layout.cols.filter(block => !(block.length === 1 && block[0] === code));
     else layout[zone] = layout[zone].filter(item => item !== code);
     render();
   }
@@ -570,6 +588,7 @@ const TablesSection = (() => {
     pickerZone = null;
     nestOuter = null;
     picker.hidden = true;
+    syncNestButtons();
     delete picker.dataset.mode;
     params.forEach(item => item.setAttribute("aria-expanded", "false"));
   }
@@ -631,11 +650,14 @@ const TablesSection = (() => {
       `<button type="button" class="bld-twist" tabindex="-1" aria-label="Показать содержимое"${kids.length ? "" : " disabled"}></button>` +
       '<label class="bld-node-main"><input type="checkbox" class="bld-check" /><span class="bld-node-code"></span><span class="bld-node-name"></span></label>' +
       (zone === "rows" && code ? '<button type="button" class="bld-node-tune" hidden></button>' : "") +
+      (zone === "cols" && code ? '<button type="button" class="bld-node-tune bld-node-nest" aria-haspopup="dialog" hidden></button>' : "") +
       "</div>";
     const input = node.querySelector(".bld-check");
     input.checked = checked;
     if (code) input.dataset.code = code;
-    const tune = node.querySelector(".bld-node-tune");
+    const nest = node.querySelector(".bld-node-nest");
+    if (nest) nest.dataset.nestFor = code;
+    const tune = node.querySelector(".bld-node-tune:not(.bld-node-nest)");
     if (tune) {
       tune.dataset.tune = code;
       tune.title = "Top/Bottom и NET-группы этого вопроса";
@@ -708,7 +730,7 @@ const TablesSection = (() => {
     variables.filter(item => item.canCol && itemMatches(item, colsQuery)).forEach(item => {
       cols.append(treeNode({
         zone: "cols", key: item.code, code: item.code, label: item.label, children: item.children,
-        checked: !bannerId && colCodes().includes(item.code), title: kindTitle(item),
+        checked: !bannerId && isSingle(item.code), title: kindTitle(item),
       }));
     });
     // Баннеры после переменных: их в проекте накапливается больше, чем
@@ -729,6 +751,7 @@ const TablesSection = (() => {
     trees.cols.root.replaceChildren(cols);
     renderTreeCounts();
     syncTuneButtons();
+    syncNestButtons();
   }
 
   // После галочки дерево не пересобирается: поправить отметки и счётчики
@@ -745,8 +768,9 @@ const TablesSection = (() => {
     trees.cols.root.querySelectorAll(".bld-check").forEach(input => {
       input.checked = input.dataset.banner
         ? bannerId === input.dataset.banner
-        : !bannerId && colCodes().includes(input.dataset.code);
+        : !bannerId && isSingle(input.dataset.code);
     });
+    syncNestButtons();
     renderTreeCounts();
   }
 
@@ -796,130 +820,102 @@ const TablesSection = (() => {
     });
   });
 
-  /* ---- Блоки колонок ----
-     Над деревом «Колонки» — сам разрез: блок за блоком, как он встанет в
-     шапку таблицы. Вложение — явное действие над блоком: «Вложить…» или
-     перетаскивание одного блока на другой. Внешняя переменная — первая,
-     «⇄» меняет уровни местами, «Разделить» возвращает два блока. */
-  function blockOf(outer) {
-    return layout.cols.find(block => block[0] === outer);
-  }
-
+  /* ---- Вложение колонок ----
+     Галочка в дереве «Колонки» — отдельная колонка переменной, кнопка
+     рядом с ней — пара, как Σ у строк. «↳» — пары нет, в переменную можно
+     вложить другую; «↳ X» — внутри неё X; «в Y» — переменная стоит только
+     внутри пары Y. Вложение забирает отдельные колонки обеих переменных в
+     пару; вернуть любую из них рядом с парой — снова отметить галочкой.
+     Поповер кнопки выбирает внутреннюю переменную, там же «Поменять
+     уровни» и «Без вложения». Отдельного списка блоков нет: разрез видно
+     в самом дереве. */
   function categoryCount(code) {
     return byCode.get(code)?.children?.length || 0;
   }
 
-  function renderBlocks() {
-    const show = !bannerId && layout.cols.length > 0;
-    blockList.hidden = !show;
-    if (!show) {
-      blockList.replaceChildren();
-      return;
-    }
-    blockList.innerHTML = layout.cols.map(block => {
-      const [outer, inner] = block.map(code => byCode.get(code));
-      const counts = block.map(categoryCount);
-      const total = counts.reduce((left, right) => left * right, 1);
-      const size = counts.every(Boolean)
-        ? `${inner ? `${counts[0]} × ${counts[1]} = ` : ""}${total} ${plural(total, "колонка", "колонки", "колонок")}`
-        : "";
-      const name = inner
-        ? `${escapeHtml(outer.label)}<span class="bld-block-in" aria-label="внутри"> › </span>${escapeHtml(inner.label)}`
-        : escapeHtml(outer.label);
-      const title = inner ? `${outer.label}, внутри — ${inner.label}` : outer.label;
-      const actions = inner
-        ? '<button type="button" data-block-action="swap" title="Поменять внешний и внутренний уровни">⇄</button>' +
-          '<button type="button" data-block-action="split" title="Разложить на два блока рядом">Разделить</button>'
-        : '<button type="button" data-block-action="nest" aria-haspopup="dialog" title="Вложить другую переменную внутрь этого блока">Вложить…</button>';
-      return `<li class="bld-block${inner ? " nested" : ""}" data-block="${escapeHtml(outer.code)}" draggable="${inner ? "false" : "true"}">` +
-        `<span class="bld-block-name" title="${escapeHtml(title)}">${name}</span>` +
-        `<span class="bld-block-meta">${size ? `<span class="bld-block-size">${size}</span>` : ""}${actions}` +
-        '<button type="button" class="bld-block-remove" data-block-action="remove" aria-label="Убрать блок" title="Убрать блок">×</button></span>' +
-        "</li>";
-    }).join("");
+  function shortCode(code) {
+    return byCode.get(code)?.display || code;
   }
 
-  // Вложить `code` внутрь блока `outer`. Переменная, стоявшая отдельным
-  // блоком, переезжает внутрь: одна переменная — одно место в разрезе.
-  function nestInto(outer, code) {
-    const target = blockOf(outer);
-    if (!target || target.length > 1 || code === outer || !usable(code, "cols")) return;
-    notice = "";
+  function pairTitle(pair) {
+    const [outer, inner] = pair.map(code => byCode.get(code));
+    const counts = pair.map(categoryCount);
+    const size = counts.every(Boolean)
+      ? ` · ${counts[0]} × ${counts[1]} = ${counts[0] * counts[1]} ${plural(counts[0] * counts[1], "колонка", "колонки", "колонок")}`
+      : "";
+    return `«${inner.label}» внутри «${outer.label}»${size}`;
+  }
+
+  // Во что вложена переменная, если отдельной колонки и своей пары у неё нет.
+  function hostOf(code) {
+    return layout.cols.find(block => block.length === 2 && block[1] === code)?.[0] || null;
+  }
+
+  function syncNestButtons() {
+    trees.cols.root.querySelectorAll(".bld-node-nest").forEach(button => {
+      const code = button.dataset.nestFor;
+      const pair = pairOf(code);
+      const host = bannerId || pair || isSingle(code) ? null : hostOf(code);
+      button.hidden = Boolean(bannerId) || (!pair && !isSingle(code) && !host);
+      if (button.hidden) return;
+      button.textContent = pair ? `↳ ${shortCode(pair[1])}` : host ? `в ${shortCode(host)}` : "↳";
+      button.classList.toggle("on", Boolean(pair || host));
+      button.title = pair ? pairTitle(pair) : host ? pairTitle(pairOf(host)) : `Вложить другую переменную в «${byCode.get(code)?.label}»`;
+      button.setAttribute("aria-expanded", String(pickerMode === "nest" && nestOuter === (host || code)));
+    });
+  }
+
+  function dropSingle(code) {
     layout.cols = layout.cols.filter(block => !(block.length === 1 && block[0] === code));
-    target.push(code);
+  }
+
+  // Вложить `code` в `outer`: новая пара или замена внутренней в прежней.
+  function nestInto(outer, code) {
+    if (code === outer || !usable(outer, "cols") || !usable(code, "cols")) return;
+    notice = "";
+    const pair = pairOf(outer);
+    if (pair) pair[1] = code;
+    else {
+      dropSingle(outer);
+      layout.cols.push([outer, code]);
+    }
+    dropSingle(code);
+    bannerId = null;
+    layout.cols = usableBlocks(layout.cols);
+    sortBlocks();
     render();
   }
 
-  const BLOCK_ACTIONS = {
-    swap(block) {
-      block.reverse();
-      sortBlocks();
+  const NEST_ACTIONS = {
+    swap(pair) {
+      if (!pairOf(pair[1])) pair.reverse();
     },
-    split(block) {
-      layout.cols.splice(layout.cols.indexOf(block), 1, [block[0]], [block[1]]);
-      sortBlocks();
-    },
-    remove(block) {
-      layout.cols.splice(layout.cols.indexOf(block), 1);
+    // Пара распадается на две отдельные колонки.
+    split(pair) {
+      layout.cols.splice(layout.cols.indexOf(pair), 1);
+      pair.forEach(code => { if (!isSingle(code)) layout.cols.push([code]); });
     },
   };
 
-  blockList.addEventListener("click", event => {
-    const button = event.target.closest("[data-block-action]");
+  trees.cols.root.addEventListener("click", event => {
+    const button = event.target.closest(".bld-node-nest");
     if (!button) return;
-    const outer = button.closest(".bld-block").dataset.block;
-    const action = button.dataset.blockAction;
-    if (action === "nest") {
-      event.stopPropagation();
-      openNestPicker(outer, button);
-      return;
-    }
-    const block = blockOf(outer);
-    if (!block) return;
-    notice = "";
-    BLOCK_ACTIONS[action](block);
-    render();
-  });
-
-  // Перетаскивание одиночного блока на другой одиночный вкладывает его внутрь.
-  let draggedBlock = null;
-  blockList.addEventListener("dragstart", event => {
-    const item = event.target.closest(".bld-block");
-    if (!item || item.classList.contains("nested")) return;
-    draggedBlock = item.dataset.block;
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", draggedBlock);
-    item.classList.add("dragging");
-  });
-  blockList.addEventListener("dragend", () => {
-    draggedBlock = null;
-    blockList.querySelectorAll(".dragging, .drop").forEach(item => item.classList.remove("dragging", "drop"));
-  });
-  blockList.addEventListener("dragover", event => {
-    const item = event.target.closest(".bld-block");
-    const droppable = draggedBlock && item && !item.classList.contains("nested") && item.dataset.block !== draggedBlock;
-    blockList.querySelectorAll(".drop").forEach(other => { if (other !== item) other.classList.remove("drop"); });
-    if (!droppable) return;
-    event.preventDefault();
-    item.classList.add("drop");
-  });
-  blockList.addEventListener("drop", event => {
-    const item = event.target.closest(".bld-block");
-    if (!draggedBlock || !item) return;
-    event.preventDefault();
-    const code = draggedBlock;
-    draggedBlock = null;
-    nestInto(item.dataset.block, code);
+    event.stopPropagation();
+    const code = button.dataset.nestFor;
+    const outer = pairOf(code) || isSingle(code) ? code : hostOf(code);
+    if (!outer) return;
+    if (pickerMode === "nest" && nestOuter === outer) closePicker();
+    else openNestPicker(outer, button);
   });
 
   /* Выбор вложенной переменной — тот же поповер, что у фильтра, с поиском:
      переменных с категориями в массиве бывают сотни. Сверху — отдельные
-     блоки этой таблицы, их вкладывают чаще всего. Переменная из чужой пары
-     не предлагается: забрать её значило бы молча разобрать ту пару. */
+     колонки этой таблицы, их вкладывают чаще всего. */
 
   function openNestPicker(outer, anchor) {
     closeViewMenu();
     closeReportMenu();
+    closeGroupsMenu();
     pickerMode = "nest";
     pickerZone = null;
     nestOuter = outer;
@@ -930,17 +926,35 @@ const TablesSection = (() => {
     renderPalette();
     placePopover(picker, anchor);
     params.forEach(item => item.setAttribute("aria-expanded", "false"));
+    syncNestButtons();
     search.focus();
   }
 
+  function nestActionButton(action, text) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "bld-var bld-nest-action";
+    button.dataset.nestAction = action;
+    button.innerHTML = '<span class="bld-var-name"></span>';
+    button.querySelector(".bld-var-name").textContent = text;
+    return button;
+  }
+
   function renderNestPalette(query) {
-    const paired = new Set(layout.cols.filter(block => block.length > 1).flat());
-    const single = new Set(layout.cols.filter(block => block.length === 1).map(block => block[0]));
+    const current = pairOf(nestOuter);
+    if (current) {
+      // Поменять нельзя, если у внутренней уже есть своя пара: у переменной
+      // одна пара, где она внешняя.
+      if (!pairOf(current[1])) {
+        list.append(nestActionButton("swap", `⇄ Поменять уровни: снаружи «${byCode.get(current[1])?.label}»`));
+      }
+      list.append(nestActionButton("split", "Без вложения — две колонки рядом"));
+    }
     const candidates = variables.filter(item => item.canCol && item.code !== nestOuter
-      && !paired.has(item.code) && itemMatches(item, query));
+      && item.code !== current?.[1] && itemMatches(item, query));
     const groups = [
-      ["Колонки этой таблицы", candidates.filter(item => single.has(item.code))],
-      ["Другие переменные", candidates.filter(item => !single.has(item.code))],
+      [current ? "Заменить внутреннюю: колонки таблицы" : "Колонки этой таблицы", candidates.filter(item => isSingle(item.code))],
+      ["Другие переменные", candidates.filter(item => !isSingle(item.code))],
     ];
     count.textContent = String(candidates.length);
     groups.forEach(([caption, items]) => {
@@ -962,12 +976,22 @@ const TablesSection = (() => {
 
   list.addEventListener("click", event => {
     if (pickerMode !== "nest") return;
+    const action = event.target.closest("[data-nest-action]");
     const chip = event.target.closest("[data-nest]");
-    if (!chip) return;
+    if (!action && !chip) return;
     event.stopPropagation();
     const outer = nestOuter;
     closePicker();
-    nestInto(outer, chip.dataset.nest);
+    if (chip) {
+      nestInto(outer, chip.dataset.nest);
+      return;
+    }
+    const pair = pairOf(outer);
+    if (!pair) return;
+    notice = "";
+    NEST_ACTIONS[action.dataset.nestAction](pair);
+    sortBlocks();
+    render();
   });
 
   // Фильтр таблицы — сохранённое правило проекта: условие собирается в
@@ -1691,7 +1715,6 @@ const TablesSection = (() => {
 
   function render() {
     renderParams();
-    renderBlocks();
     // Список нужен только в открытом поповере: при открытии он и так
     // собирается заново. Пересборка скрытого списка на массиве в 3 000
     // переменных стоила до секунды на каждую правку проекта.

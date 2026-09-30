@@ -2368,8 +2368,7 @@ body.is-landing { background: #050807; }
 .bld-report-actions .bld-report-danger:hover:not(:disabled) { color: var(--c-danger); }
 
 /* ---- Состав таблицы: два дерева слева ----
-   Панели одной высоты: над деревом колонок стоит ещё и список блоков
-   разреза, и в меньшей панели самим разрезам оставалось две-три строки.
+   Панели одной высоты: разрезов в массиве бывает не меньше, чем вопросов.
    Панели набраны той же карточкой, что таблица, и читаются как её часть. */
 /* Ряд задан явно: иначе он растёт по высоте таблицы, прокручивается весь
    раздел вместо окна таблицы, и липкая шапка уезжает вместе с ним. */
@@ -2394,36 +2393,6 @@ body.is-landing { background: #050807; }
   border: 1px solid var(--c-border); border-radius: var(--r-1);
   background: var(--c-surface-soft); font-size: var(--t-xs);
 }
-/* Блоки колонок: разрез в том виде, в каком он встанет в шапку. Две
-   строки на блок — имя и действия: в панели шириной 240px одна строка
-   обрезала бы вложенную пару до первых букв. */
-.bld-blocks {
-  flex: 0 1 auto; max-height: 45%; overflow-y: auto; margin: 0 10px 8px; padding: 0;
-  list-style: none; display: grid; gap: 4px;
-}
-.bld-blocks[hidden] { display: none; }
-.bld-block {
-  display: grid; gap: 2px; padding: 5px 6px 4px 9px;
-  border: 1px solid var(--c-border); border-radius: var(--r-1);
-  background: var(--c-surface-soft); cursor: grab;
-}
-.bld-block.nested { cursor: default; border-left: 3px solid var(--c-brand); padding-left: 7px; }
-.bld-block.dragging { opacity: .4; }
-.bld-block.drop { border-color: var(--c-brand); background: var(--c-brand-tint); }
-.bld-block-name {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--c-ink); font-size: var(--t-xs); font-weight: 600;
-}
-.bld-block-in { color: var(--c-brand); font-weight: 700; }
-.bld-block-meta { display: flex; align-items: center; gap: 2px; min-height: 20px; }
-.bld-block-size { margin-right: auto; color: var(--c-ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
-.bld-block-meta button {
-  height: 20px; padding: 0 5px; border: 0; border-radius: 5px; background: transparent;
-  color: var(--c-brand); font-size: 11px; font-weight: 600;
-}
-.bld-block-meta button:first-child { margin-left: auto; }
-.bld-block-meta button:hover { background: var(--c-border); color: var(--c-brand-hover); transform: none; }
-.bld-block-meta .bld-block-remove { color: var(--c-ink-3); font-size: 14px; line-height: 1; }
 .bld-tree { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 8px; }
 .bld-tree-caption {
   margin: 10px 0 3px; padding: 0 8px; color: var(--c-ink-3);
@@ -2471,6 +2440,10 @@ body.is-landing { background: #050807; }
 }
 .bld-node-tune:hover, .bld-node-tune[aria-expanded="true"] { border-color: var(--c-border); background: var(--c-surface); color: var(--c-brand); transform: none; }
 .bld-node-tune.on { background: var(--c-brand-tint); color: var(--c-brand); }
+/* Кнопка вложения несёт код соседней переменной: длинный код не
+   должен выдавливать подпись самого пункта. */
+.bld-node-nest { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+.bld-nest-action .bld-var-name { color: var(--c-brand); font-weight: 600; }
 /* Инверсия — значок рядом с подписью «Top/Bottom»: включённый
    подсвечен, как отмеченный сегмент. */
 .bld-q-box-cap { display: flex; align-items: center; justify-content: space-between; gap: 6px; }

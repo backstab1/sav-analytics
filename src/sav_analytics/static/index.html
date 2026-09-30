@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260930-equal-panels" />
+    <link rel="stylesheet" href="/styles.css?v=20260930-nest-button" />
   </head>
   <body>
     <!-- ================================================================
@@ -681,9 +681,6 @@
                     <strong id="bld-cols-title">Колонки</strong><span id="bld-cols-count" class="bld-dim"></span>
                     <button type="button" class="bld-panel-clear" data-clear-zone="cols" hidden>Снять</button>
                   </header>
-                  <!-- Разрез блоками: так он встанет в шапку таблицы. Вложение —
-                       действие над блоком, а не порядок галочек в дереве. -->
-                  <ol id="bld-blocks" class="bld-blocks" aria-label="Блоки колонок" hidden></ol>
                   <input id="bld-cols-search" class="bld-panel-search" type="search" placeholder="Поиск разреза или баннера" autocomplete="off" aria-label="Поиск по разрезам колонок" data-no-search="1" />
                   <div id="bld-cols-tree" class="bld-tree" role="tree" aria-label="Разрез колонок" aria-multiselectable="true"></div>
                 </section>
@@ -1044,7 +1041,7 @@
       </form>
     </dialog>
     <script src="/util.js?v=20260930-question-tune" defer></script>
-    <script src="/tables.js?v=20260930-question-tune" defer></script>
+    <script src="/tables.js?v=20260930-nest-button" defer></script>
     <script src="/shell.js?v=20260930-question-tune" defer></script>
     <script src="/app.js?v=20260930-question-tune" defer></script>
     <script src="/route.js?v=20260930-question-tune" defer></script>
