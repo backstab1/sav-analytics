@@ -1614,7 +1614,9 @@ const TablesSection = (() => {
 
   assistantToggle.addEventListener("click", () => {
     setAssistantOpen(assistantBody.hidden);
-    if (!assistantBody.hidden) input.focus();
+    if (assistantBody.hidden) return;
+    input.focus();
+    if (assistantEnabled === null || assistantProject !== projectId) void loadAssistant();
   });
   document.querySelector("#bld-assistant-close").addEventListener("click", () => {
     setAssistantOpen(false);
@@ -1627,10 +1629,176 @@ const TablesSection = (() => {
     assistantToggle.focus();
   });
 
-  function ask(text) {
+  /* Настоящий ассистент (docs/assistant.md). Модель только предлагает план,
+     карточка показывает описание шагов, собранное сервером, а применяет,
+     отклоняет и откатывает план пользователь — модель в этом не участвует.
+     Пока провайдер не настроен, работает прежняя заглушка. */
+  const assistantMark = document.querySelector(".bld-assistant-head em");
+  let assistantEnabled = null;
+  let assistantProject = null;
+  let assistantBusy = false;
+  const planCards = new Map();
+
+  function assistantBase() {
+    return `/api/projects/${projectId}/assistant`;
+  }
+
+  function textHtml(text) {
+    return escapeHtml(text || "").replace(/\n/g, "<br>");
+  }
+
+  async function loadAssistant() {
+    if (!projectId) {
+      assistantEnabled = false;
+      return;
+    }
+    const requested = projectId;
+    let state;
+    try {
+      state = await api(assistantBase());
+    } catch {
+      assistantEnabled = false;
+      return;
+    }
+    if (requested !== projectId) return;
+    assistantProject = requested;
+    assistantEnabled = state.enabled;
+    if (!state.enabled) return;
+    assistantMark.textContent = "бета";
+    assistantMark.title = "Подписи вопросов отправляются провайдеру модели, ответы " +
+      "респондентов — нет. Изменения вносятся только кнопкой «Применить».";
+    log.replaceChildren();
+    log.classList.remove("has-messages");
+    planCards.clear();
+    const plans = new Map(state.plans.map(plan => [plan.id, plan]));
+    if (!state.messages.length) {
+      pushMessage("ai", "Опишите, какую таблицу собрать: например, «сделай кросс Q5 по возрасту». " +
+        "Я предложу план, а изменения внесёте вы кнопкой «Применить». Подписи вопросов " +
+        "уходят провайдеру модели, ответы респондентов — нет.", null);
+    }
+    state.messages.forEach(message => {
+      if (message.role === "event") {
+        pushNote(message.text);
+        return;
+      }
+      pushMessage(message.role === "user" ? "user" : "ai", textHtml(message.text), null);
+      if (message.plan_id && plans.has(message.plan_id)) showPlan(plans.get(message.plan_id));
+    });
+  }
+
+  function pushNote(text) {
+    const note = document.createElement("div");
+    note.className = "bld-note";
+    note.textContent = text;
+    log.append(note);
+    log.classList.add("has-messages");
+    log.scrollTop = log.scrollHeight;
+  }
+
+  const PLAN_STATUS = {
+    pending: "Ждёт решения",
+    applied: "Применено",
+    declined: "Отклонено",
+    reverted: "Откачено",
+    superseded: "Заменён новым планом",
+    failed: "Не применился",
+  };
+
+  function showPlan(plan) {
+    let card = planCards.get(plan.id);
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "bld-plan";
+      planCards.set(plan.id, card);
+      log.append(card);
+      log.classList.add("has-messages");
+    }
+    const warnings = (plan.warnings || [])
+      .map(text => `<li class="warn">${escapeHtml(text)}</li>`).join("");
+    const steps = (plan.description || []).map(text => `<li>${escapeHtml(text)}</li>`).join("");
+    const buttons = plan.status === "pending"
+      ? '<button type="button" data-plan-action="apply">Применить</button>' +
+        '<button type="button" class="secondary" data-plan-action="decline">Не надо</button>'
+      : plan.status === "applied"
+        ? '<button type="button" class="secondary" data-plan-action="revert">Откатить</button>'
+        : "";
+    card.dataset.status = plan.status;
+    card.innerHTML =
+      `<div class="bld-plan-head"><span>План</span><em>${PLAN_STATUS[plan.status] || plan.status}</em></div>` +
+      `<ol>${steps}</ol>` +
+      (warnings ? `<ul>${warnings}</ul>` : "") +
+      (plan.error ? `<p class="bld-plan-error">${escapeHtml(plan.error)}</p>` : "") +
+      (buttons ? `<div class="bld-plan-actions">${buttons}</div>` : "");
+    card.querySelectorAll("[data-plan-action]").forEach(button => {
+      button.addEventListener("click", () => { void planAction(plan, button.dataset.planAction); });
+    });
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function planAction(plan, action) {
+    const card = planCards.get(plan.id);
+    card?.querySelectorAll("button").forEach(button => { button.disabled = true; });
+    const url = `${assistantBase()}/plans/${plan.id}/${action}`;
+    try {
+      // Раскладка, ждущая записи, должна лечь раньше плана: иначе ревизия устареет.
+      await flushSave();
+      let result;
+      try {
+        result = await api(url, { method: "POST" });
+      } catch (error) {
+        if (action !== "revert" || error.code !== "ASSISTANT_REVERT_CONFLICT" || !confirm(error.message)) {
+          throw error;
+        }
+        result = await api(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cascade: true }),
+        });
+      }
+      showPlan(result.plan);
+      if (result.project) await window.SavApp.refreshProject();
+    } catch (error) {
+      pushNote(error.message);
+      showPlan(plan);
+    }
+  }
+
+  async function askModel(text) {
+    if (assistantBusy) return;
+    assistantBusy = true;
+    const waiting = document.createElement("div");
+    waiting.className = "bld-note";
+    waiting.textContent = "Ассистент думает…";
+    log.append(waiting);
+    log.scrollTop = log.scrollHeight;
+    try {
+      await flushSave();
+      const result = await api(`${assistantBase()}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, table_id: currentReportId }),
+      });
+      waiting.remove();
+      pushMessage("ai", textHtml(result.reply), null);
+      if (result.plan) showPlan(result.plan);
+    } catch (error) {
+      waiting.remove();
+      pushNote(error.message);
+    } finally {
+      assistantBusy = false;
+    }
+  }
+
+  async function ask(text) {
     if (!text.trim()) return;
     setAssistantOpen(true);
+    if (assistantEnabled === null || assistantProject !== projectId) await loadAssistant();
     pushMessage("user", escapeHtml(text), null);
+    if (assistantEnabled) await askModel(text.trim());
+    else askStub(text);
+  }
+
+  function askStub(text) {
     const scenario = SCENARIOS.find(item => item.match.test(text));
     window.setTimeout(() => {
       if (!scenario) {
@@ -1645,7 +1813,7 @@ const TablesSection = (() => {
 
   form.addEventListener("submit", event => {
     event.preventDefault();
-    ask(input.value);
+    void ask(input.value);
     input.value = "";
   });
   input.addEventListener("keydown", event => {
@@ -1660,7 +1828,7 @@ const TablesSection = (() => {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = text;
-    button.addEventListener("click", () => ask(text));
+    button.addEventListener("click", () => { void ask(text); });
     suggestBox.append(button);
   });
 

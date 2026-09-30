@@ -250,7 +250,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py
 ```
 
 На 18 сентября в ветке `Codex_Savanalytics` набор содержит 308 non-browser pytest-кейсов
@@ -322,15 +322,23 @@ src/sav_analytics/
 ├── api_schemas.py     # Pydantic-модели запросов
 ├── project_models.py  # версионированный контракт сохраняемого проекта
 ├── routers/           # projects, questions, recodings, formulas, banners, filters, weights,
-│                      # reports, report_settings, tables, table_reports, analysis, codeframes
+│                      # reports, report_settings, tables, table_reports, analysis, codeframes,
+│                      # assistant
 ├── repository/        # локальное хранилище проектов: ProjectRepository из частей
-│   ├── store.py       # чтение, миграция, запись ревизией, блокировки, структура
+│   ├── store.py       # чтение, миграция, запись ревизией, черновик, блокировки, структура
 │   ├── lifecycle.py   # создание, новая волна, библиотека проектов, отмена
 │   ├── questions.py   # правка вопросов, роли, «Не применимо», порядок и группы
 │   ├── variables.py   # перекодировки, кодификаторы и формулы
 │   ├── report_setup.py # баннеры, настройки отчёта, веса, фильтры и базы
 │   ├── analysis.py    # карточки и модели «Анализа»
 │   └── tables.py      # сохранённые таблицы раздела «Таблицы»
+├── assistant/         # ассистент «Таблиц» (docs/assistant.md): модель предлагает, бэкенд применяет
+│   ├── models.py      # протокол модели и OpenAI-совместимый адаптер — единственное место провайдера
+│   ├── catalog.py     # инструменты чтения: только метаданные анкеты
+│   ├── plans.py       # шаги плана, проверка в черновике, описание, применение одной ревизией
+│   ├── changes.py     # что изменил план и выборочный откат
+│   ├── service.py     # разговор, журнал assistant.json, применение, отказ и откат
+│   └── system_prompt.md # системный промпт
 ├── atomic_file.py     # замена файла, переживающая параллельного читателя в Windows
 ├── report_cache.py    # immutable-артефакты отчёта по cache key
 ├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту

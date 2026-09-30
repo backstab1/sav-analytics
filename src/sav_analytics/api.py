@@ -27,6 +27,7 @@ from .core.weight_validation import WeightNotUsableError
 from .project_models import InvalidStoredProjectError
 from .routers import (
     analysis,
+    assistant,
     banners,
     codeframes,
     data_rows,
@@ -216,6 +217,7 @@ for router in (
     reports.router,
     table_reports.router,
     tables.router,
+    assistant.router,
 ):
     app.include_router(router)
 

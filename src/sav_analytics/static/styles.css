@@ -2740,6 +2740,23 @@ body.is-landing { background: #050807; }
   background: var(--c-brand-tint); border-radius: 0 6px 6px 0;
   color: var(--c-ink-2); font-size: var(--t-micro); line-height: 1.5;
 }
+/* Служебная строка лога и карточка плана ассистента: описание шагов собирает
+   сервер, кнопки решают, применять ли. */
+.bld-note { color: var(--c-ink-3); font-size: var(--t-micro); line-height: 1.5; text-align: center; }
+.bld-plan {
+  display: grid; gap: 6px; padding: 9px 11px;
+  border: 1px solid var(--c-border); border-left: 3px solid var(--c-brand); border-radius: var(--r-1);
+  background: var(--c-surface); font-size: var(--t-xs); line-height: 1.5;
+}
+.bld-plan:not([data-status="pending"]):not([data-status="applied"]) { opacity: .7; border-left-color: var(--c-border-strong); }
+.bld-plan-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.bld-plan-head span { color: var(--c-ink-3); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.bld-plan-head em { font-style: normal; color: var(--c-ink-3); font-size: var(--t-micro); }
+.bld-plan ol, .bld-plan ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; color: var(--c-ink-2); }
+.bld-plan li.warn { color: var(--c-warn-ink); }
+.bld-plan-error { margin: 0; color: var(--c-danger); font-size: var(--t-micro); }
+.bld-plan-actions { display: flex; gap: 6px; }
+.bld-plan-actions button { padding: 4px 11px; font-size: var(--t-micro); }
 .bld-ask { display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--c-border); }
 .bld-suggest { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .bld-suggest button {

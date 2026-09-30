@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 import shutil
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
@@ -47,7 +50,25 @@ class ProjectStore:
         self.max_upload_bytes = max_upload_bytes
         self._project_locks: dict[str, Lock] = {}
         self._project_locks_guard = Lock()
+        self._drafts: dict[str, dict] = {}
         self.root.mkdir(parents=True, exist_ok=True)
+
+    @contextmanager
+    def draft(self, project_id: UUID) -> Iterator[Callable[[], dict]]:
+        """Черновик проекта: записи копятся в памяти, а не на диске.
+
+        Внутри блока `get` отдаёт черновик, а `_write_project` кладёт в него
+        результат без проверки ревизии и без истории. Так несколько правок
+        проходят через обычные методы репозитория со всеми их проверками и
+        потом пишутся одной ревизией — или не пишутся вовсе (проверка плана
+        ассистента). Возвращает функцию, читающую текущий черновик.
+        """
+        identifier = str(project_id)
+        self._drafts[identifier] = copy.deepcopy(self.get(project_id))
+        try:
+            yield lambda: copy.deepcopy(self._drafts[identifier])
+        finally:
+            self._drafts.pop(identifier, None)
 
     def list(self) -> list[dict]:
         projects = []
@@ -58,6 +79,8 @@ class ProjectStore:
         return sorted(projects, key=lambda item: item["created_at"], reverse=True)
 
     def get(self, project_id: UUID) -> dict:
+        if str(project_id) in self._drafts:
+            return copy.deepcopy(self._drafts[str(project_id)])
         metadata_path = self.root / str(project_id) / "project.json"
         if not metadata_path.is_file():
             raise ProjectNotFoundError(str(project_id))
@@ -255,6 +278,16 @@ class ProjectStore:
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")
 
+    def save_project(
+        self, project_id: UUID, project: dict, *, coalesce: str | None = None
+    ) -> None:
+        """Записать проект, собранный вне обычных методов, — например из черновика.
+
+        Та же запись, что у любой правки: проверка ревизии, история отмены,
+        склейка серии по `coalesce`.
+        """
+        self._write_project(project_id, project, coalesce=coalesce)
+
     def _write_project(
         self,
         project_id: UUID,
@@ -275,6 +308,10 @@ class ProjectStore:
         которая сохраняется на каждый щелчок, не вытесняет из двадцати шагов
         истории всё остальное.
         """
+        if str(project_id) in self._drafts:
+            validate_stored_project(project)
+            self._drafts[str(project_id)] = copy.deepcopy(project)
+            return
         project_dir = self.root / str(project_id)
         target = project_dir / "project.json"
         temporary = project_dir / ".project.json.tmp"

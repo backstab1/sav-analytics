@@ -22,7 +22,12 @@ async function api(url, options = {}, retried = false) {
   if (response.status === 409 && payload.error_code === "CONFIGURATION_CONFLICT" && currentProject && !retried) {
     return resolveRevisionConflict(url, options, payload);
   }
-  if (!response.ok) throw new Error(payload.detail || "Запрос не выполнен.");
+  if (!response.ok) {
+    // Код ошибки нужен тем, кто предлагает следующий шаг по её виду.
+    const error = new Error(payload.detail || "Запрос не выполнен.");
+    error.code = payload.error_code;
+    throw error;
+  }
   // Любая правка проекта — новый шаг истории: кнопки отмены узнают об этом сразу.
   if (projectPrefix && url.startsWith(projectPrefix) && method !== "GET") {
     window.setTimeout(() => refreshProjectHistory(), 0);
