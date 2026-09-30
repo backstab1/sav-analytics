@@ -90,6 +90,8 @@ class TableReports(ProjectStore):
         recodings = {item["id"] for item in configuration["recodings"]}
         missing = [code for code in layout["rows"] if code not in questions]
         missing += [code for code in layout["nets"] if code not in questions]
+        missing += [code for code in layout["boxes"] if code not in questions]
+        missing += [code for code in layout["inverted"] if code not in questions]
         missing += [
             source["ref"]
             for block in layout["cols"]

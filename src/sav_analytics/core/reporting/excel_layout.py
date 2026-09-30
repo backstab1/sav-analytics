@@ -435,6 +435,8 @@ def _write_scale_rows(
         special_values,
         top="top2" in chosen,
         bottom="bottom2" in chosen,
+        size=question.get("scale_box"),
+        inverted=bool(question.get("scale_inverted")),
     )
 
 def _write_cell_note(
@@ -514,17 +516,22 @@ def _write_scale_aggregates(
     *,
     top: bool = True,
     bottom: bool = True,
+    size: int | None = None,
+    inverted: bool = False,
 ) -> int:
     """Строки Top-N и Bottom-N под шкалой — те, что отмечены.
 
-    N — настройка отчёта: сколько крайних кодов шкалы входит в агрегат.
+    N — сколько крайних кодов шкалы входит в агрегат: свой размер вопроса,
+    если задан (так его передаёт экран «Таблицы»), иначе настройка отчёта.
+    `inverted` меняет концы местами — для шкал, где 1 значит «лучше»:
+    Top берёт младшие коды, Bottom — старшие.
     """
-    size = int(context.settings.get("scale_box", 2))
+    size = int(size or context.settings.get("scale_box", 2))
     for label, take_highest in ((f"Top-{size}", True), (f"Bottom-{size}", False)):
         if not (top if take_highest else bottom):
             continue
         selected = _scale_aggregate(
-            working, variable, special_values, take_highest=take_highest, size=size
+            working, variable, special_values, take_highest=take_highest != inverted, size=size
         )
         row = _write_metric_row(
             context,

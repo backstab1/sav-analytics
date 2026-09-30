@@ -2457,6 +2457,27 @@ body.is-landing { background: #050807; }
   color: var(--c-ink); font-size: var(--t-xs);
 }
 .bld-check:checked ~ .bld-node-name { color: var(--c-brand); font-weight: 600; }
+/* Настройки вопроса строк — Top/Bottom и NET. Кнопка видна только у
+   отмеченного вопроса и называет его отступления от таблицы. */
+.bld-node-tune {
+  flex: 0 0 auto; height: 20px; min-width: 22px; padding: 0 5px; border: 1px solid transparent;
+  border-radius: 5px; background: transparent; color: var(--c-ink-3);
+  font-size: 11px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.bld-node-tune:hover, .bld-node-tune[aria-expanded="true"] { border-color: var(--c-border); background: var(--c-surface); color: var(--c-brand); transform: none; }
+.bld-node-tune.on { background: var(--c-brand-tint); color: var(--c-brand); }
+/* Инверсия — значок рядом с подписью «Top/Bottom»: включённый
+   подсвечен, как отмеченный сегмент. */
+.bld-q-box-cap { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.bld-q-invert {
+  width: 22px; height: 22px; padding: 0; display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--c-ink-3);
+}
+.bld-q-invert svg { width: 14px; height: 14px; }
+.bld-q-invert:hover { border-color: var(--c-border); color: var(--c-brand); transform: none; }
+.bld-q-invert[aria-pressed="true"] { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
+.bld-q-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; }
+.bld-q-head .bld-net-q-name { font-weight: 600; }
 
 /* Содержимое пункта — справка, а не выбор: без галочек, тоньше и серее. */
 .bld-kids { margin: 0 0 4px 30px; padding: 2px 0 2px 10px; list-style: none; border-left: 1px solid var(--c-border); }
@@ -2694,12 +2715,10 @@ body.is-landing { background: #050807; }
 /* ---- Меню «Группировки» ---- */
 .bld-groups-menu { width: 340px; max-height: min(70vh, 560px); overflow-y: auto; }
 .bld-groups-sep { height: 1px; margin: 2px 0; background: var(--c-border); }
-.bld-groups-cap { margin: 0; color: var(--c-ink-3); font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.bld-net-list { display: grid; gap: 2px; }
+/* Подпись раздела окна — как подпись «Top/Bottom» над сегментами. */
+.bld-groups-cap { margin: 0; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.bld-net-list { display: grid; gap: 6px; justify-items: start; }
 .bld-net-empty { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
-.bld-net-q { display: grid; gap: 4px; padding: 5px 6px; border-radius: 8px; }
-.bld-net-q:hover { background: var(--c-surface-soft); }
-.bld-net-q-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bld-net-q-code { flex: 0 0 auto; color: var(--c-ink-3); font: 500 11px/1.4 "SF Mono", Menlo, Consolas, monospace; }
 .bld-net-q-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); color: var(--c-ink); }
 .bld-net-open { flex: 0 0 auto; height: 24px; padding: 0 8px; border: 1px solid var(--c-border); border-radius: 6px;

@@ -53,7 +53,8 @@ const TablesSection = (() => {
   const sheetSelect = document.querySelector("#bld-sheet");
   const measureSelect = document.querySelector("#bld-measure");
   const boxSelect = document.querySelector("#bld-box");
-  const groupsButton = document.querySelector("#bld-groups");
+  const questionBoxSelect = document.querySelector("#bld-qbox");
+  const invertButton = document.querySelector("#bld-q-invert");
   const groupsMenu = document.querySelector("#bld-groups-menu");
   const netList = document.querySelector("#bld-net-list");
   const blockList = document.querySelector("#bld-blocks");
@@ -182,6 +183,8 @@ const TablesSection = (() => {
       sheet: report?.sheet || "main",
       measure: report?.measure || "value",
       scale_box: report?.scale_box ?? null,
+      boxes: report?.boxes || {},
+      inverted: [...(report?.inverted || [])],
       nets: report?.nets || {},
     };
   }
@@ -206,6 +209,8 @@ const TablesSection = (() => {
       sheet: sheetSelect.value,
       measure: measureSelect.value,
       scale_box: boxSelect.value ? Number(boxSelect.value) : null,
+      boxes: Object.fromEntries(liveBoxes),
+      inverted: [...liveInverted],
       nets,
     };
   }
@@ -227,6 +232,10 @@ const TablesSection = (() => {
     boxSelect.value = stored.scale_box ? String(stored.scale_box) : "";
     liveNets.clear();
     Object.entries(stored.nets).forEach(([code, nets]) => liveNets.set(code, nets));
+    liveBoxes.clear();
+    Object.entries(stored.boxes).forEach(([code, size]) => liveBoxes.set(code, size));
+    liveInverted.clear();
+    stored.inverted.forEach(code => liveInverted.add(code));
     chartRow = null;
     notice = "";
     lastTable = null;
@@ -356,6 +365,8 @@ const TablesSection = (() => {
       layout.filter = [];
       bannerId = null;
       liveNets.clear();
+      liveBoxes.clear();
+      liveInverted.clear();
       treesStale = true;
     },
     async delete() {
@@ -620,10 +631,16 @@ const TablesSection = (() => {
       '<div class="bld-node-row">' +
       `<button type="button" class="bld-twist" tabindex="-1" aria-label="Показать содержимое"${kids.length ? "" : " disabled"}></button>` +
       '<label class="bld-node-main"><input type="checkbox" class="bld-check" /><span class="bld-node-code"></span><span class="bld-node-name"></span></label>' +
+      (zone === "rows" && code ? '<button type="button" class="bld-node-tune" hidden></button>' : "") +
       "</div>";
     const input = node.querySelector(".bld-check");
     input.checked = checked;
     if (code) input.dataset.code = code;
+    const tune = node.querySelector(".bld-node-tune");
+    if (tune) {
+      tune.dataset.tune = code;
+      tune.title = "Top/Bottom и NET-группы этого вопроса";
+    }
     node.querySelector(".bld-node-code").textContent = code ? (byCode.get(code)?.display || code) : "";
     node.querySelector(".bld-node-name").textContent = label;
     node.querySelector(".bld-node-main").title = title || label;
@@ -712,6 +729,7 @@ const TablesSection = (() => {
     if (!cols.childNodes.length && projectId) cols.append(treeNote("bld-tree-empty", "Ничего не найдено."));
     trees.cols.root.replaceChildren(cols);
     renderTreeCounts();
+    syncTuneButtons();
   }
 
   // После галочки дерево не пересобирается: поправить отметки и счётчики
@@ -724,6 +742,7 @@ const TablesSection = (() => {
     trees.rows.root.querySelectorAll(".bld-check").forEach(input => {
       input.checked = layout.rows.includes(input.dataset.code);
     });
+    syncTuneButtons();
     trees.cols.root.querySelectorAll(".bld-check").forEach(input => {
       input.checked = input.dataset.banner
         ? bannerId === input.dataset.banner
@@ -1045,6 +1064,7 @@ const TablesSection = (() => {
     const parts = [];
     if (measureSelect.value === "index") parts.push("индекс");
     if (sheetSelect.value === "filter") parts.push("от ответивших");
+    if (boxSelect.value) parts.push(`Top/Bottom ${boxSelect.value}`);
     slot.textContent = parts.join(" · ");
     slot.hidden = !parts.length;
     syncSegments();
@@ -1149,23 +1169,33 @@ const TablesSection = (() => {
   // собирается по тому, что стоит на экране, а не по чему-то похожему.
   /* NET и Top/Bottom «на лету»: считаются сервером как настройки вопроса
      и сохраняются с таблицей, но не в вопросах проекта — книга отчёта их
-     не видит. Набор NET хранится по коду вопроса. */
+     не видит. NET-группы и свой размер Top/Bottom хранятся по коду
+     вопроса и правятся кнопкой на вопросе в дереве «Строки»; общий
+     размер всей таблицы — в меню «Вид». */
   const liveNets = new Map();
+  const liveBoxes = new Map();
+  // Вопросы, у которых Top — младшие коды шкалы, а Bottom — старшие.
+  const liveInverted = new Set();
   let netTarget = null;
+  let questionTarget = null;
+  // Top/Bottom сервер пишет под шкалой и под каждым элементом матрицы.
+  const BOX_TYPES = new Set(["scale", "matrix"]);
 
   function overridesPayload() {
     const payload = {};
     // Настройки вопроса, убранного из строк, помнятся до его возвращения,
     // но в расчёт не идут.
-    liveNets.forEach((nets, code) => {
-      if (nets.length && layout.rows.includes(code)) payload[code] = { nets };
+    layout.rows.forEach(code => {
+      const override = {};
+      const nets = liveNets.get(code);
+      if (nets?.length) override.nets = nets;
+      if (BOX_TYPES.has(byCode.get(code)?.type)) {
+        const size = liveBoxes.get(code) || Number(boxSelect.value);
+        if (size) override.scale_box = size;
+        if (liveInverted.has(code)) override.scale_inverted = true;
+      }
+      if (Object.keys(override).length) payload[code] = override;
     });
-    // Размер Top/Bottom — настройка отчёта: сервер применяет его ко всем
-    // шкалам таблицы, поэтому передаётся с любым вопросом строк.
-    if (boxSelect.value && layout.rows.length) {
-      const code = layout.rows[0];
-      payload[code] = { ...(payload[code] || {}), scale_box: Number(boxSelect.value) };
-    }
     return Object.keys(payload).length ? payload : undefined;
   }
 
@@ -1175,82 +1205,118 @@ const TablesSection = (() => {
       question.rows.some(row => row.kind === "value" && !row.derived));
   }
 
-  function netCount() {
-    return layout.rows.reduce((sum, code) => sum + (liveNets.get(code)?.length || 0), 0);
+  // Кнопка настроек есть у каждого вопроса строк, кроме числового: у него
+  // нет ни ответов для NET, ни шкалы для Top/Bottom.
+  function tunable(code) {
+    const type = byCode.get(code)?.type;
+    return Boolean(type) && type !== "numeric";
   }
 
-  /* Пилюля «Группировки», как «Вид», называет только отступления от
-     отчёта: число NET-групп и размер Top/Bottom. */
-  function renderNetControl() {
+  // Кнопка на вопросе, как пилюля «Вид», называет только отступления.
+  function tuneSummary(code) {
     const parts = [];
-    const total = netCount();
-    if (total) parts.push(`NET ${total}`);
-    if (boxSelect.value) parts.push(`Top/Bottom ${boxSelect.value}`);
-    const slot = document.querySelector("#bld-groups-value");
-    slot.textContent = parts.join(" · ");
-    slot.hidden = !parts.length;
-    syncSegments();
-    if (!groupsMenu.hidden) renderNetList();
-    scheduleSave();
+    if (liveBoxes.get(code)) parts.push(`T${liveBoxes.get(code)}`);
+    if (liveInverted.has(code)) parts.push("↕");
+    const nets = liveNets.get(code)?.length || 0;
+    if (nets) parts.push(`NET ${nets}`);
+    return parts.join(" · ");
   }
 
-  // Список вопросов таблицы: у каждого свои группы и своя кнопка «+ NET».
-  function renderNetList() {
-    const questions = netableQuestions();
-    if (!questions.length) {
+  function syncTuneButtons() {
+    trees.rows.root.querySelectorAll(".bld-node-tune").forEach(button => {
+      const code = button.dataset.tune;
+      const summary = tuneSummary(code);
+      button.hidden = !layout.rows.includes(code) || !tunable(code);
+      button.textContent = summary || "Σ";
+      button.classList.toggle("on", Boolean(summary));
+      button.setAttribute("aria-expanded", String(!groupsMenu.hidden && questionTarget === code));
+    });
+  }
+
+  function tuneButton(code) {
+    return trees.rows.root.querySelector(`.bld-node-tune[data-tune="${CSS.escape(code)}"]`);
+  }
+
+  function renderNetControl() {
+    syncTuneButtons();
+    renderViewValue();
+    if (!groupsMenu.hidden) renderQuestionMenu();
+  }
+
+  // Окно одного вопроса: его размер Top/Bottom и его NET-группы.
+  function renderQuestionMenu() {
+    const code = questionTarget;
+    const item = byCode.get(code);
+    document.querySelector("#bld-q-code").textContent = item?.display || code;
+    const name = document.querySelector("#bld-q-name");
+    name.textContent = item?.label || "";
+    name.title = item?.label || "";
+    document.querySelector("#bld-q-box-row").hidden = !BOX_TYPES.has(item?.type);
+    questionBoxSelect.value = liveBoxes.get(code) ? String(liveBoxes.get(code)) : "";
+    invertButton.setAttribute("aria-pressed", String(liveInverted.has(code)));
+    syncSegments();
+    const question = netableQuestions().find(entry => entry.code === code);
+    if (!question) {
       netList.innerHTML = `<p class="bld-net-empty">${lastTable
         ? "У вопроса нет вариантов ответа для группы."
         : "Таблица ещё считается — группы соберутся из её строк."}</p>`;
       return;
     }
-    netList.innerHTML = questions.map(question => {
-      const nets = liveNets.get(question.code) || [];
-      const chips = nets.map(net =>
-        `<span class="bld-net-chip" title="${escapeHtml(net.values.join(", "))}">${escapeHtml(net.label)}` +
-        `<button type="button" data-drop-net="${escapeHtml(net.label)}" data-net-question="${escapeHtml(question.code)}" aria-label="Убрать группу ${escapeHtml(net.label)}">×</button></span>`).join("");
-      return `<div class="bld-net-q">
-        <div class="bld-net-q-head">
-          <span class="bld-net-q-code">${escapeHtml(question.code)}</span>
-          <span class="bld-net-q-name" title="${escapeHtml(question.label)}">${escapeHtml(question.label)}</span>
-          <button type="button" class="bld-net-open" data-net-open="${escapeHtml(question.code)}">+ NET</button>
-        </div>
-        ${chips ? `<div class="bld-net-chips">${chips}</div>` : ""}
-      </div>`;
-    }).join("");
+    const chips = (liveNets.get(code) || []).map(net =>
+      `<span class="bld-net-chip" title="${escapeHtml(net.values.join(", "))}">${escapeHtml(net.label)}` +
+      `<button type="button" data-drop-net="${escapeHtml(net.label)}" aria-label="Убрать группу ${escapeHtml(net.label)}">×</button></span>`).join("");
+    netList.innerHTML = `${chips ? `<div class="bld-net-chips">${chips}</div>` : ""}` +
+      '<button type="button" class="bld-net-open" data-net-open>+ NET</button>';
   }
 
   function closeGroupsMenu() {
     groupsMenu.hidden = true;
-    groupsButton.setAttribute("aria-expanded", "false");
+    syncTuneButtons();
   }
 
-  function openGroupsMenu() {
+  function openQuestionMenu(code) {
+    const anchor = tuneButton(code);
+    if (!anchor) return;
     closePicker();
     closeReportMenu();
     closeViewMenu();
     closeExportMenu();
-    renderNetList();
+    questionTarget = code;
+    renderQuestionMenu();
     groupsMenu.hidden = false;
-    groupsButton.setAttribute("aria-expanded", "true");
-    placePopover(groupsMenu, groupsButton);
+    syncTuneButtons();
+    placePopover(groupsMenu, anchor);
   }
 
-  groupsButton.addEventListener("click", event => {
+  trees.rows.root.addEventListener("click", event => {
+    const button = event.target.closest(".bld-node-tune");
+    if (!button) return;
     event.stopPropagation();
-    if (!groupsMenu.hidden) closeGroupsMenu();
-    else openGroupsMenu();
+    if (!groupsMenu.hidden && questionTarget === button.dataset.tune) closeGroupsMenu();
+    else openQuestionMenu(button.dataset.tune);
   });
   groupsMenu.addEventListener("click", event => {
     event.stopPropagation();
     if (event.target.closest("[data-net-open]")) {
       closeGroupsMenu();
-      openNetPicker(open.dataset.netOpen);
+      openNetPicker(questionTarget);
       return;
     }
     const drop = event.target.closest("[data-drop-net]");
     if (!drop) return;
-    const code = drop.dataset.netQuestion;
-    liveNets.set(code, (liveNets.get(code) || []).filter(net => net.label !== drop.dataset.dropNet));
+    liveNets.set(questionTarget, (liveNets.get(questionTarget) || []).filter(net => net.label !== drop.dataset.dropNet));
+    renderNetControl();
+    void renderGrid();
+  });
+  invertButton.addEventListener("click", () => {
+    if (liveInverted.has(questionTarget)) liveInverted.delete(questionTarget);
+    else liveInverted.add(questionTarget);
+    renderNetControl();
+    void renderGrid();
+  });
+  questionBoxSelect.addEventListener("change", () => {
+    if (questionBoxSelect.value) liveBoxes.set(questionTarget, Number(questionBoxSelect.value));
+    else liveBoxes.delete(questionTarget);
     renderNetControl();
     void renderGrid();
   });
@@ -1258,7 +1324,8 @@ const TablesSection = (() => {
   // Сборка группы — в том же поповере, что фильтр: название и ответы.
   function openNetPicker(code) {
     const question = netableQuestions().find(item => item.code === code);
-    if (!question) return;
+    const anchor = tuneButton(code);
+    if (!question || !anchor) return;
     netTarget = question.code;
     const rows = question.rows.filter(row => row.kind === "value" && !row.derived);
     const taken = new Set((liveNets.get(question.code) || []).map(net => net.label));
@@ -1280,7 +1347,7 @@ const TablesSection = (() => {
     pickerMode = "net";
     pickerZone = null;
     params.forEach(item => item.setAttribute("aria-expanded", "false"));
-    placePopover(picker, groupsButton);
+    placePopover(picker, anchor);
     document.querySelector("#bld-net-label").select();
   }
 
@@ -1289,7 +1356,7 @@ const TablesSection = (() => {
     if (event.target.closest(".bld-net-back")) {
       event.stopPropagation();
       closePicker();
-      openGroupsMenu();
+      openQuestionMenu(netTarget);
       return;
     }
     if (!event.target.closest("#bld-net-add")) return;
@@ -1302,7 +1369,7 @@ const TablesSection = (() => {
     closePicker();
     renderNetControl();
     void renderGrid();
-    openGroupsMenu();
+    openQuestionMenu(netTarget);
   });
 
   boxSelect.addEventListener("change", () => { renderNetControl(); void renderGrid(); });
@@ -1554,9 +1621,9 @@ const TablesSection = (() => {
     exportButton.setAttribute("aria-expanded", "false");
   }
 
-  /* Меню «Вид» — то, что меняет вид уже посчитанного: доли, размер
-     Top/Bottom и NET. В полосе они стояли отдельными пилюлями, и
-     полоса из-за них не держалась в одну строку. */
+  /* Меню «Вид» — то, что меняет вид уже посчитанного: доли и размер
+     Top/Bottom всей таблицы. Свои Top/Bottom и NET вопроса — на кнопке
+     вопроса в дереве «Строки». */
   function closeViewMenu() {
     viewMenu.hidden = true;
     viewButton.setAttribute("aria-expanded", "false");
@@ -1626,7 +1693,7 @@ const TablesSection = (() => {
   document.addEventListener("click", event => {
     if (!event.target.closest(".bld-export-wrap")) closeExportMenu();
     if (!event.target.closest("#bld-view-menu") && !event.target.closest("#bld-view")) closeViewMenu();
-    if (!event.target.closest("#bld-groups-menu") && !event.target.closest("#bld-groups")) closeGroupsMenu();
+    if (!event.target.closest("#bld-groups-menu") && !event.target.closest(".bld-node-tune")) closeGroupsMenu();
   });
   document.addEventListener("keydown", event => {
     if (event.key !== "Escape") return;

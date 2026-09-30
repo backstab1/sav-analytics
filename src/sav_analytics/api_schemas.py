@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -278,6 +278,8 @@ class TableQuestionOverride(BaseModel):
 
     nets: list[NetDefinition] | None = Field(default=None, max_length=20)
     scale_box: int | None = Field(default=None, ge=1, le=3)
+    # Top — младшие коды, Bottom — старшие: шкала, где 1 значит «лучше».
+    scale_inverted: bool | None = None
 
 
 class TablePreviewRequest(BaseModel):
@@ -332,7 +334,14 @@ class TableReportLayout(BaseModel):
     filter_id: UUID | None = None
     sheet: Literal["main", "filter"] = "main"
     measure: Literal["value", "index"] = "value"
+    # Размер Top/Bottom всей таблицы и свой у отдельных вопросов: свой
+    # размер вопроса сильнее общего.
     scale_box: int | None = Field(default=None, ge=1, le=3)
+    boxes: dict[str, Annotated[int, Field(ge=1, le=3)]] = Field(
+        default_factory=dict, max_length=50
+    )
+    # Вопросы, у которых Top и Bottom поменяны местами.
+    inverted: list[str] = Field(default_factory=list, max_length=50)
     nets: dict[str, list[NetDefinition]] = Field(default_factory=dict, max_length=50)
 
     @model_validator(mode="after")

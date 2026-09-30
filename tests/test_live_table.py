@@ -18,7 +18,7 @@ from sav_analytics.core.reporting.live import (
 )
 from sav_analytics.core.reporting.models import ReportError
 from sav_analytics.repository import ProjectRepository
-from tests.test_report import _significance_project
+from tests.test_report import _output_frame, _output_project, _significance_project
 from tests.test_sav_reader import write_fixture
 
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -383,3 +383,39 @@ def test_live_nets_and_top_size_apply_without_saving(tmp_path: Path) -> None:
 
     plain = build_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
     assert all(not row["label"].startswith("NET") for row in plain["questions"][0]["rows"])
+
+
+def test_live_top_size_is_set_per_question(tmp_path: Path) -> None:
+    """Размер Top/Bottom экрана — свой у вопроса, а не у всей таблицы."""
+    source = tmp_path / "output.sav"
+    project = _output_project(source, _output_frame())
+    overrides = {"SCALE": {"scale_box": 3}}
+
+    table = build_live_table(
+        source, project, questions=["SCALE", "AMOUNT"], overrides=overrides
+    )
+
+    rows = {row["label"]: row for row in table["questions"][0]["rows"]}
+    assert "Top-2" not in rows
+    # Коды 3, 4, 5 у четырёх из шести.
+    assert rows["Top-3"]["cells"][0]["value"] == pytest.approx(4 / 6 * 100)
+    # Настройка отчёта не тронута: книга по-прежнему считает Top-2.
+    assert project["configuration"]["report_settings"].get("scale_box", 2) == 2
+    scale = next(
+        item for item in project["configuration"]["questions"] if item["code"] == "SCALE"
+    )
+    assert "scale_box" not in scale
+
+
+def test_live_top_and_bottom_can_be_inverted(tmp_path: Path) -> None:
+    """Шкала, где 1 значит «лучше»: Top берёт младшие коды, Bottom — старшие."""
+    source = tmp_path / "output.sav"
+    project = _output_project(source, _output_frame())
+    overrides = {"SCALE": {"scale_inverted": True}}
+
+    table = build_live_table(source, project, questions=["SCALE"], overrides=overrides)
+
+    rows = {row["label"]: row for row in table["questions"][0]["rows"]}
+    # Коды 1 и 2 — у двух из шести; 4 и 5 — у трёх из шести.
+    assert rows["Top-2"]["cells"][0]["value"] == pytest.approx(2 / 6 * 100)
+    assert rows["Bottom-2"]["cells"][0]["value"] == pytest.approx(3 / 6 * 100)

@@ -290,7 +290,6 @@ def _apply_overrides(live: dict[str, Any], overrides: dict[str, dict[str, Any]])
         return
     configuration = live["configuration"]
     by_code = {item["code"]: item for item in configuration["questions"]}
-    scale_box = None
     for code, override in overrides.items():
         question = by_code.get(code)
         if question is None:
@@ -301,13 +300,11 @@ def _apply_overrides(live: dict[str, Any], overrides: dict[str, dict[str, Any]])
                 for net in override["nets"]
             ]
         if override.get("scale_box") is not None:
-            scale_box = int(override["scale_box"])
-    if scale_box is not None:
-        # Размер Top/Bottom — настройка отчёта, а не вопроса: на экране он
-        # общий для всех шкал таблицы.
-        settings = dict(configuration.get("report_settings") or {})
-        settings["scale_box"] = scale_box
-        configuration["report_settings"] = settings
+            # Размер Top/Bottom — свой у каждого вопроса экрана: у одной
+            # шкалы Top-2, у соседней Top-3. Книга отчёта его не видит.
+            question["scale_box"] = int(override["scale_box"])
+        if override.get("scale_inverted"):
+            question["scale_inverted"] = True
 
 
 def _net_values(question: dict[str, Any], live: dict[str, Any], values: list[Any]) -> list[Any]:

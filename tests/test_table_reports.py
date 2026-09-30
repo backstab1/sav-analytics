@@ -100,12 +100,15 @@ def test_layout_keeps_view_and_nets(project) -> None:
         ],
         "sheet": "filter",
         "scale_box": 3,
+        "boxes": {"Q2": 1},
+        "inverted": ["Q2"],
         "nets": {"Q1": [{"label": "Все", "values": ["Мужчина", "Женщина"]}]},
     }
     saved = _reports(client.put(f"{base}/{report['id']}", json=layout))[0]
     assert [len(block["sources"]) for block in saved["cols"]] == [2, 1]
     assert saved["cols"][0]["sources"][1]["ref"] == "Q2" and saved["sheet"] == "filter"
-    assert saved["scale_box"] == 3
+    assert saved["scale_box"] == 3 and saved["boxes"] == {"Q2": 1}
+    assert saved["inverted"] == ["Q2"]
     assert saved["nets"]["Q1"][0]["label"] == "Все"
     assert saved["name"] == "Таблица 1"
 
@@ -117,6 +120,8 @@ def test_layout_is_checked_against_the_project(project) -> None:
     missing = client.post(base, json={"rows": ["NOPE"]})
     assert missing.status_code == 422
     assert "NOPE" in missing.json()["detail"]
+    assert client.post(base, json={"boxes": {"NOPE": 2}}).status_code == 422
+    assert client.post(base, json={"boxes": {"Q1": 4}}).status_code == 422
     both = client.post(base, json={
         "banner_id": "00000000-0000-0000-0000-000000000001",
         "cols": [{"sources": [{"kind": "question", "ref": "Q1"}]}],

@@ -182,7 +182,12 @@ def _source_holders(configuration: dict[str, Any]) -> Iterator[_SourceHolder]:
     for card in configuration.get("analysis_cards", []):
         yield _SourceHolder("карточка «Анализа»", [card.get("a", {}), card.get("b", {})])
     for report in configuration.get("table_reports", []):
-        rows = [*report.get("rows", []), *report.get("nets", {})]
+        rows = [
+            *report.get("rows", []),
+            *report.get("nets", {}),
+            *report.get("boxes", {}),
+            *report.get("inverted", []),
+        ]
         yield _SourceHolder(
             f"таблица «{report.get('name')}»",
             [

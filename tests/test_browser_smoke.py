@@ -1915,17 +1915,20 @@ def test_net_group_is_built_on_the_table_screen_without_saving(
     page.keyboard.press("Escape")
     expect(page.locator("#bld-grid-wrap table.bld-grid")).to_be_visible(timeout=UI_TIMEOUT)
 
-    # NET и Top/Bottom — в меню «Группировки»; NET задаётся каждому
-    # вопросу таблицы своей кнопкой, а не только первому.
-    page.click("#bld-groups")
-    page.click('#bld-net-list [data-net-open="BRAND"]')
+    # NET и Top/Bottom — свои у каждого вопроса: кнопка на отмеченном
+    # вопросе в дереве «Строки» открывает его настройки.
+    tune = page.locator('#bld-rows-tree .bld-node-tune[data-tune="BRAND"]')
+    expect(tune).to_be_visible(timeout=UI_TIMEOUT)
+    tune.click()
+    expect(page.locator("#bld-q-box-row")).to_be_hidden()
+    page.click("#bld-net-list [data-net-open]")
     expect(page.locator("#bld-net-add")).to_be_visible(timeout=UI_TIMEOUT)
     page.fill("#bld-net-label", "Любая марка")
     page.locator(".bld-net-values input").first.check()
     page.locator(".bld-net-values input").nth(1).check()
     page.click("#bld-net-add")
     expect(page.locator("#bld-grid-wrap")).to_contain_text("NET: Любая марка", timeout=UI_TIMEOUT)
-    expect(page.locator("#bld-groups-value")).to_have_text("NET 1")
+    expect(tune).to_have_text("NET 1")
     expect(page.locator("#bld-net-list")).to_contain_text("Любая марка")
     page.keyboard.press("Escape")
 

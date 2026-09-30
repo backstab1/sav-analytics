@@ -650,8 +650,6 @@
                      что изменено на этом экране. -->
                 <button type="button" id="bld-view" class="bld-param" aria-haspopup="dialog" aria-expanded="false"
                         title="Показатель и база долей — настройки этого экрана"><em>Вид</em><b id="bld-view-value" hidden></b><span class="bld-caret" aria-hidden="true"></span></button>
-                <button type="button" id="bld-groups" class="bld-param" aria-haspopup="dialog" aria-expanded="false"
-                        title="Top/Bottom и NET-группы строк — настройки этого экрана"><em>Группировки</em><b id="bld-groups-value" hidden></b><span class="bld-caret" aria-hidden="true"></span></button>
                 <span class="bld-params-grow" aria-hidden="true"></span>
                 <button type="button" id="bld-save-cut" class="bld-action" hidden
                         title="Сохранить колонки таблицы баннером отчёта — переименовать можно в «Отчётах»">В баннер</button>
@@ -743,15 +741,21 @@
                 <div class="bld-menu-row"><span id="bld-sheet-cap">Доли от</span>
                   <select id="bld-sheet" class="bld-seg-source" aria-labelledby="bld-sheet-cap" hidden><option value="main" title="От всех респондентов, как лист topline_main">Всех</option><option value="filter" title="От ответивших на вопрос, как лист topline_filter">Ответивших</option></select>
                 </div>
+                <div class="bld-menu-row" title="Сколько крайних кодов шкалы входит в Top и Bottom — у шкал, которым в «Строках» не задан свой размер"><span id="bld-box-cap">Top/Bottom</span>
+                  <select id="bld-box" class="bld-seg-source" aria-labelledby="bld-box-cap" hidden><option value="" title="Как в настройках отчёта">Отчёт</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+                </div>
                 <p class="bld-menu-note">Сохраняется вместе с таблицей; на книгу отчёта не влияет.</p>
               </div>
 
-              <!-- Меню «Группировки»: то, что собирает строки в группы, — размер
-                   Top/Bottom шкал и NET-группы. NET задаётся каждому вопросу
-                   таблицы, а не только первому. В проект не сохраняется. -->
-              <div id="bld-groups-menu" class="bld-menu bld-groups-menu" role="dialog" aria-label="Группировки" hidden>
-                <div class="bld-menu-row" title="Сколько крайних кодов шкалы входит в Top и Bottom — у всех шкал таблицы"><span id="bld-box-cap">Top/Bottom шкал</span>
-                  <select id="bld-box" class="bld-seg-source" aria-labelledby="bld-box-cap" hidden><option value="" title="Как в настройках отчёта">Отчёт</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+              <!-- Настройки вопроса строк: открываются кнопкой на отмеченном
+                   вопросе в дереве «Строки». Размер Top/Bottom шкалы и NET-группы
+                   — свои у каждого вопроса. В проект не сохраняются. -->
+              <div id="bld-groups-menu" class="bld-menu bld-groups-menu" role="dialog" aria-labelledby="bld-q-name" hidden>
+                <p class="bld-q-head"><span id="bld-q-code" class="bld-net-q-code"></span><span id="bld-q-name" class="bld-net-q-name"></span></p>
+                <div id="bld-q-box-row" class="bld-menu-row" title="Сколько крайних кодов шкалы входит в Top и Bottom у этого вопроса">
+                  <span class="bld-q-box-cap"><span id="bld-qbox-cap">Top/Bottom</span><button type="button" id="bld-q-invert" class="bld-q-invert" aria-pressed="false" aria-label="Инвертировать Top и Bottom"
+                          title="Инвертировать: Top — младшие коды, Bottom — старшие. Для шкал, где 1 значит «лучше»"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 13V3M5 3 2.5 5.5M5 3l2.5 2.5M11 3v10m0 0-2.5-2.5M11 13l2.5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg></button></span>
+                  <select id="bld-qbox" class="bld-seg-source" aria-labelledby="bld-qbox-cap" hidden><option value="" title="Как у всей таблицы — меню «Вид»">Таблица</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
                 </div>
                 <div class="bld-groups-sep" role="separator"></div>
                 <p class="bld-groups-cap">NET-группы</p>
