@@ -17,27 +17,118 @@ function analysisSources() {
   return [...questions, ...recodings];
 }
 
+/* Витрина инструментов и окно инструмента. Раздел показывает плашки, а
+   каждый инструмент работает в своём окне #analysis-window: настройка слева,
+   результат справа. Окно — родной <dialog>: фокус, Escape и затенение даёт
+   браузер, а глобальный обработчик Escape из app.js уступает открытому
+   диалогу. Панели окна — постоянная разметка index.html, поэтому их
+   идентификаторы те же, на что опираются браузерные сценарии. */
+const ANALYSIS_TOOLS = {
+  variable: { pane: "variable", title: "Профиль переменной", subtitle: "Распределение, пропуски и описательные статистики" },
+  association: { pane: "association", title: "Связь двух переменных", subtitle: "Тест по типам переменных, эффект и поправка Benjamini–Hochberg" },
+  models: { pane: "models", title: "Регрессия и драйверы", subtitle: "Линейная и логистическая модель, важность драйверов" },
+  turf: { pane: "method", title: "TURF", subtitle: "Охват портфеля вариантов" },
+  "van-westendorp": { pane: "method", title: "Van Westendorp", subtitle: "Ценовая чувствительность по четырём вопросам о цене" },
+  "gabor-granger": { pane: "method", title: "Gabor–Granger", subtitle: "Спрос и выручка по ценовым ступеням" },
+  maxdiff: { pane: "method", title: "MaxDiff", subtitle: "Счётные оценки по выборам «лучший / худший»" },
+};
+const METHOD_HINTS = {
+  turf: "Перебирает портфели из вариантов вопроса с несколькими ответами и находит тот, что охватывает больше всего респондентов. Результат в проект не сохраняется.",
+  "van-westendorp": "Четыре числовых вопроса о цене: слишком дёшево, дёшево, дорого, слишком дорого. Непоследовательные ответы исключаются. Результат в проект не сохраняется.",
+  "gabor-granger": "Для каждой цены — вопрос о готовности купить и ответы, которые считаются «куплю». Нужно не меньше двух цен. Результат в проект не сохраняется.",
+  maxdiff: "Каждое задание — пара вопросов «лучший» и «худший» и показанные в нём варианты. Результат в проект не сохраняется.",
+};
+const analysisWindow = document.querySelector("#analysis-window");
+let analysisTool = null;
+
+function analysisEmpty(text) {
+  return `<div class="aw-empty">${escapeHtml(text)}</div>`;
+}
+
+function fillSourceSelect(select, options, fallbackIndex = 0) {
+  const previous = select.value;
+  select.innerHTML = options;
+  if (previous) select.value = previous;
+  if ((!previous || !select.value) && select.options.length > fallbackIndex) select.selectedIndex = fallbackIndex;
+}
+
+function pluralRu(count, forms) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return forms[1];
+  return forms[2];
+}
+
+function renderAnalysisCounts() {
+  const cards = (currentProject.configuration.analysis_cards || []).length;
+  const models = (currentProject.configuration.analysis_models || []).length;
+  const set = (key, count, forms) => {
+    const meta = document.querySelector(`[data-analysis-count="${key}"]`);
+    meta.textContent = count ? `${count} ${pluralRu(count, forms)} в проекте` : "Пока пусто";
+    meta.classList.toggle("has-items", Boolean(count));
+  };
+  set("association", cards, ["карточка", "карточки", "карточек"]);
+  set("models", models, ["модель", "модели", "моделей"]);
+}
+
 function renderAnalysisSection() {
   if (!currentProject) return;
-  const variableSelect = document.querySelector("#variable-source");
-  const previousVariable = variableSelect.value;
-  variableSelect.innerHTML = analysisSources()
-    .map(item => `<option value="${escapeAttribute(item.value)}">${escapeHtml(item.label)}</option>`).join("");
-  if (previousVariable) variableSelect.value = previousVariable;
   const options = analysisSources()
     .map(item => `<option value="${escapeAttribute(item.value)}">${escapeHtml(item.label)}</option>`).join("");
-  ["#analysis-a", "#analysis-b"].forEach((selector, index) => {
-    const select = document.querySelector(selector);
-    const previous = select.value;
-    select.innerHTML = options;
-    if (previous) select.value = previous;
-    else if (select.options.length > index) select.selectedIndex = index;
-  });
-  void loadAnalysisCards();
+  fillSourceSelect(document.querySelector("#variable-source"), options);
+  fillSourceSelect(document.querySelector("#analysis-a"), options, 0);
+  fillSourceSelect(document.querySelector("#analysis-b"), options, 1);
   renderModelForm();
-  void loadAnalysisModels();
-  renderMethodFields();
+  renderAnalysisCounts();
 }
+
+function openAnalysisTool(tool) {
+  const spec = ANALYSIS_TOOLS[tool];
+  if (!spec || !currentProject) return;
+  analysisTool = tool;
+  renderAnalysisSection();
+  analysisWindow.querySelectorAll(".aw-pane").forEach(pane => { pane.hidden = pane.dataset.pane !== spec.pane; });
+  analysisWindow.dataset.tool = tool;
+  document.querySelector("#aw-title").textContent = spec.title;
+  document.querySelector("#aw-subtitle").textContent = spec.subtitle;
+  document.querySelector("#aw-icon").innerHTML = document.querySelector(`[data-analysis-tool="${tool}"] .aw-tile-icon`).innerHTML;
+  analysisWindow.querySelectorAll(".error").forEach(box => { box.hidden = true; });
+  if (tool === "variable") void describeVariable();
+  if (tool === "association") void loadAnalysisCards();
+  if (tool === "models") void loadAnalysisModels();
+  if (spec.pane === "method") {
+    document.querySelector("#method-kind").value = tool;
+    document.querySelector("#method-hint").textContent = METHOD_HINTS[tool];
+    const result = document.querySelector("#method-result");
+    result.classList.remove("aw-stale");
+    result.innerHTML = analysisEmpty("Задайте параметры и нажмите «Посчитать».");
+    renderMethodFields();
+  }
+  if (!analysisWindow.open) analysisWindow.showModal();
+  analysisWindow.querySelector(".aw-pane:not([hidden]) select, .aw-pane:not([hidden]) input:not([type=hidden])")?.focus();
+}
+
+function closeAnalysisTool() {
+  if (analysisWindow.open) analysisWindow.close();
+}
+
+analysisWindow.addEventListener("close", () => {
+  const tile = document.querySelector(`[data-analysis-tool="${analysisTool}"]`);
+  analysisTool = null;
+  if (currentProject) renderAnalysisCounts();
+  tile?.focus();
+});
+analysisWindow.addEventListener("click", event => {
+  // Щелчок по затенению вокруг окна приходит самому <dialog>.
+  if (event.target === analysisWindow || event.target.closest("[data-close-analysis]")) closeAnalysisTool();
+});
+document.querySelector("#section-analysis").addEventListener("click", event => {
+  const tile = event.target.closest("[data-analysis-tool]");
+  if (tile) openAnalysisTool(tile.dataset.analysisTool);
+});
+// Смена раздела кнопками браузера не должна оставлять окно поверх другого раздела.
+window.addEventListener("popstate", closeAnalysisTool);
 
 /* Методы исследования (PQ.15): TURF, Van Westendorp, Gabor–Granger. Считает
    сервер, по запросу; экран собирает параметры и показывает результат. */
@@ -58,8 +149,8 @@ function renderMethodFields() {
   if (kind === "turf") {
     const multiple = questionOptions(question => ["multiple_choice_dichotomy", "multiple_choice_categorical"].includes(question.question_type));
     box.innerHTML = multiple
-      ? `<label>Вопрос с несколькими ответами<select id="turf-question">${multiple}</select></label><label>Портфель до<input id="turf-size" type="number" min="1" max="8" value="3" /></label>`
-      : '<p class="analysis-note">В проекте нет вопросов с несколькими ответами.</p>';
+      ? `<label>Вопрос с несколькими ответами<select id="turf-question">${multiple}</select></label><label>Наибольший размер портфеля<input id="turf-size" type="number" min="1" max="8" value="3" /><small>Лучший портфель ищется для каждого размера от 1 до этого числа.</small></label>`
+      : '<p class="aw-hint">В проекте нет вопросов с несколькими ответами — TURF строить не из чего.</p>';
   } else if (kind === "van-westendorp") {
     box.innerHTML = PRICE_ROLES.map(([role, label], index) =>
       `<label>${label}<select data-price-role="${role}">${numeric}</select></label>`).join("");
@@ -67,11 +158,11 @@ function renderMethodFields() {
       if (select.options.length > index) select.selectedIndex = index;
     });
   } else if (kind === "gabor-granger") {
-    box.innerHTML = '<div id="gg-steps" class="gg-steps"></div><button id="add-gg-step" class="secondary compact-button" type="button">+ Цена</button>';
+    box.innerHTML = '<div id="gg-steps" class="gg-steps"></div><button id="add-gg-step" class="aw-add" type="button">+ Ещё цена</button>';
     addGaborStep();
     addGaborStep();
   } else {
-    box.innerHTML = '<div id="md-tasks" class="gg-steps"></div><button id="add-md-task" class="secondary compact-button" type="button">+ Задание</button><label>Вариантов на экране (если показы не записаны)<input id="md-per-task" type="number" min="2" max="20" /></label>';
+    box.innerHTML = '<div id="md-tasks" class="gg-steps"></div><button id="add-md-task" class="aw-add" type="button">+ Ещё задание</button><label>Вариантов на экране<input id="md-per-task" type="number" min="2" max="20" /><small>Нужно, только если показанные варианты не записаны в массив.</small></label>';
     addMaxDiffTask();
   }
 }
@@ -81,8 +172,9 @@ function addMaxDiffTask() {
   const row = document.createElement("div");
   row.className = "gg-step md-task";
   const number = document.querySelectorAll("#md-tasks .md-task").length + 1;
-  row.innerHTML = `<label>Задание ${number}: лучший<select class="md-best">${single}</select></label><label>Худший<select class="md-worst">${single}</select></label><label>Показанные варианты<select class="md-shown" multiple size="3">${single}</select></label>`;
+  row.innerHTML = `${stepHead("Задание")}<label>Лучший<select class="md-best">${single}</select></label><label>Худший<select class="md-worst">${single}</select></label><label>Показанные варианты<select class="md-shown" multiple size="4">${single}</select><small>Несколько — с Ctrl или ⌘.</small></label>`;
   document.querySelector("#md-tasks").append(row);
+  renumberSteps("#md-tasks");
   const selects = row.querySelectorAll(".md-best, .md-worst");
   selects.forEach((select, index) => {
     const position = (number - 1) * 2 + index;
@@ -90,12 +182,30 @@ function addMaxDiffTask() {
   });
 }
 
+/* Шапка шага: номер и удаление. Меньше минимума шагов не удаляется:
+   Gabor–Granger без двух цен не строит кривую спроса, MaxDiff без задания
+   нечего считать. */
+const STEP_MINIMUM = { "gg-steps": 2, "md-tasks": 1 };
+function stepHead(noun) {
+  return `<div class="gg-step-head"><strong data-noun="${noun}"></strong><button type="button" class="icon-button" data-remove-step aria-label="Удалить">×</button></div>`;
+}
+
+function renumberSteps(selector) {
+  const rows = [...document.querySelectorAll(`${selector} > .gg-step`)];
+  rows.forEach((row, index) => {
+    const title = row.querySelector(".gg-step-head strong");
+    title.textContent = `${title.dataset.noun} ${index + 1}`;
+    row.querySelector("[data-remove-step]").hidden = rows.length <= STEP_MINIMUM[selector.slice(1)];
+  });
+}
+
 function addGaborStep() {
   const single = questionOptions(question => question.question_type === "single_choice" && question.source_variables.length === 1);
   const row = document.createElement("div");
   row.className = "gg-step";
-  row.innerHTML = `<label>Вопрос о покупке<select class="gg-question">${single}</select></label><label>Цена<input class="gg-price" type="number" min="0.01" step="0.01" required /></label><div class="gg-codes"></div>`;
+  row.innerHTML = `${stepHead("Цена")}<label>Цена<input class="gg-price" type="number" min="0.01" step="0.01" placeholder="Например, 250" required /></label><label>Вопрос о покупке по этой цене<select class="gg-question">${single}</select></label><div class="gg-codes"></div>`;
   document.querySelector("#gg-steps").append(row);
+  renumberSteps("#gg-steps");
   const select = row.querySelector(".gg-question");
   const steps = document.querySelectorAll("#gg-steps .gg-step").length;
   if (select.options.length >= steps) select.selectedIndex = steps - 1;
@@ -106,7 +216,7 @@ function renderGaborCodes(row) {
   const code = row.querySelector(".gg-question").value;
   const question = configuredQuestions().find(item => item.code === code);
   const variable = currentProject.inspection.variables.find(item => item.name === question?.source_variables?.[0]);
-  row.querySelector(".gg-codes").innerHTML = `<span>«Куплю» —</span>${(variable?.value_labels || []).map((item, index) =>
+  row.querySelector(".gg-codes").innerHTML = `<span class="gg-codes-cap">Считать «куплю»</span>${(variable?.value_labels || []).map((item, index) =>
     `<label class="checkbox"><input type="checkbox" value="${escapeAttribute(String(item.value))}" ${index === 0 ? "checked" : ""} /> ${escapeHtml(item.label)}</label>`).join("")}`;
 }
 
@@ -203,14 +313,25 @@ function priceCurves(curves) {
   </svg><p class="analysis-note curve-legend"><i class="c1"></i>слишком дёшево <i class="c2"></i>дёшево <i class="c3"></i>дорого <i class="c4"></i>слишком дорого</p></details>`;
 }
 
-document.querySelector("#method-kind").addEventListener("change", () => {
-  document.querySelector("#method-result").innerHTML = "";
-  renderMethodFields();
-});
 document.querySelector("#method-fields").addEventListener("click", event => {
   if (event.target.closest("#add-gg-step")) addGaborStep();
   if (event.target.closest("#add-md-task")) addMaxDiffTask();
+  const remove = event.target.closest("[data-remove-step]");
+  if (remove) {
+    const list = remove.closest(".gg-steps");
+    remove.closest(".gg-step").remove();
+    renumberSteps(`#${list.id}`);
+    markMethodStale();
+  }
 });
+// Результат метода не сохраняется и считается по нажатию: после правки
+// параметров он описывает уже не их — показываем это, а не молча.
+function markMethodStale() {
+  const result = document.querySelector("#method-result");
+  if (result.querySelector(".method-card")) result.classList.add("aw-stale");
+}
+document.querySelector("#method-fields").addEventListener("input", markMethodStale);
+document.querySelector("#method-fields").addEventListener("change", markMethodStale);
 document.querySelector("#method-fields").addEventListener("change", event => {
   const select = event.target.closest(".gg-question");
   if (select) renderGaborCodes(select.closest(".gg-step"));
@@ -228,7 +349,10 @@ document.querySelector("#method-form").addEventListener("submit", async event =>
     showError(errorBox, error);
     return;
   }
-  result.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  const button = document.querySelector("#run-method");
+  result.classList.remove("aw-stale");
+  setBusy(button, true, "Считаем…");
+  result.innerHTML = analysisEmpty("Считаем…");
   try {
     const response = await api(`/api/projects/${currentProject.id}/analysis/methods/${kind}`, {
       method: "POST",
@@ -237,8 +361,10 @@ document.querySelector("#method-form").addEventListener("submit", async event =>
     });
     result.innerHTML = renderMethodResult(kind, response);
   } catch (error) {
-    result.innerHTML = "";
+    result.innerHTML = analysisEmpty("Расчёт не выполнен — причина указана под кнопкой «Посчитать».");
     showError(errorBox, error);
+  } finally {
+    setBusy(button, false, "Посчитать");
   }
 });
 
@@ -260,10 +386,30 @@ function renderModelForm() {
   const previous = dependent.value;
   dependent.innerHTML = sources.map(item => `<option value="${escapeAttribute(item.value)}">${escapeHtml(item.label)}</option>`).join("");
   if (previous) dependent.value = previous;
+  if (!previous || !dependent.value) {
+    // Первая модель чаще всего линейная — предлагаем числовую зависимую.
+    const numeric = configuredQuestions().find(question => ["numeric", "scale"].includes(question.question_type) && question.source_variables.length === 1);
+    if (numeric) dependent.value = `question:${numeric.code}`;
+    if (!dependent.value) dependent.selectedIndex = 0;
+  }
   const checked = new Set([...document.querySelectorAll("#model-predictors input:checked")].map(input => input.value));
   document.querySelector("#model-predictors").innerHTML = sources.map(item =>
     `<label class="checkbox" data-search="${escapeAttribute(item.label.toLowerCase())}"><input type="checkbox" value="${escapeAttribute(item.value)}" ${checked.has(item.value) ? "checked" : ""} /> ${escapeHtml(item.label)}</label>`).join("");
+  syncDependentPredictor();
   renderModelEvent();
+}
+
+// Зависимая не может быть своим предиктором: её строка в списке гаснет.
+function syncDependentPredictor() {
+  const dependent = document.querySelector("#model-dependent").value;
+  document.querySelectorAll("#model-predictors input").forEach(input => {
+    const own = input.value === dependent;
+    input.disabled = own;
+    if (own) input.checked = false;
+    input.closest("label").classList.toggle("is-dependent", own);
+    input.closest("label").title = own ? "Это зависимая переменная модели" : "";
+  });
+  renderPredictorCount();
 }
 
 function renderModelEvent() {
@@ -281,13 +427,14 @@ function renderModelEvent() {
 async function loadAnalysisModels() {
   const container = document.querySelector("#model-list");
   if (!(currentProject.configuration.analysis_models || []).length) {
-    container.innerHTML = '<p class="analysis-note">Моделей пока нет.</p>';
+    container.innerHTML = analysisEmpty("Моделей пока нет. Выберите зависимую и предикторы и постройте первую.");
     return;
   }
-  container.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  container.innerHTML = analysisEmpty("Считаем…");
   try {
     const { models } = await api(`/api/projects/${currentProject.id}/analysis/models`);
-    container.innerHTML = models.map(renderModel).join("");
+    // Свежая модель — сверху: её только что построили, её и смотрят.
+    container.innerHTML = models.slice().reverse().map(renderModel).join("");
   } catch (error) {
     container.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
   }
@@ -363,13 +510,22 @@ function driverMap(importance) {
 }
 
 document.querySelector("#model-kind").addEventListener("change", renderModelEvent);
-document.querySelector("#model-dependent").addEventListener("change", renderModelEvent);
+document.querySelector("#model-dependent").addEventListener("change", () => {
+  syncDependentPredictor();
+  renderModelEvent();
+});
 document.querySelector("#model-predictor-search").addEventListener("input", event => {
   const needle = event.target.value.trim().toLowerCase();
   document.querySelectorAll("#model-predictors label").forEach(label => {
     label.hidden = Boolean(needle) && !label.dataset.search.includes(needle);
   });
 });
+document.querySelector("#model-predictors").addEventListener("change", renderPredictorCount);
+
+function renderPredictorCount() {
+  const count = document.querySelectorAll("#model-predictors input:checked").length;
+  document.querySelector("#model-predictor-count").textContent = count ? `отмечено ${count}` : "не выбраны";
+}
 
 document.querySelector("#model-form").addEventListener("submit", async event => {
   event.preventDefault();
@@ -398,6 +554,7 @@ document.querySelector("#model-form").addEventListener("submit", async event => 
         event: kind === "logistic" ? document.querySelector("#model-event").value || null : null,
       }),
     });
+    renderAnalysisCounts();
     await loadAnalysisModels();
   } catch (error) {
     showError(errorBox, error);
@@ -411,6 +568,7 @@ document.querySelector("#model-list").addEventListener("click", async event => {
   if (!button) return;
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/analysis/models/${button.dataset.deleteModel}`, { method: "DELETE" });
+    renderAnalysisCounts();
     await loadAnalysisModels();
   } catch (error) {
     showError(document.querySelector("#model-error"), error);
@@ -420,13 +578,13 @@ document.querySelector("#model-list").addEventListener("click", async event => {
 async function loadAnalysisCards() {
   const container = document.querySelector("#analysis-cards");
   if (!(currentProject.configuration.analysis_cards || []).length) {
-    container.innerHTML = '<p class="analysis-note">Карточек пока нет. Выберите две переменные и добавьте первую.</p>';
+    container.innerHTML = analysisEmpty("Карточек пока нет. Выберите две переменные и добавьте первую.");
     return;
   }
-  container.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  container.innerHTML = analysisEmpty("Считаем…");
   try {
     const { cards } = await api(`/api/projects/${currentProject.id}/analysis/cards`);
-    container.innerHTML = cards.map(renderAnalysisCard).join("");
+    container.innerHTML = cards.slice().reverse().map(renderAnalysisCard).join("");
   } catch (error) {
     container.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
   }
@@ -477,18 +635,19 @@ document.querySelector("#analysis-form").addEventListener("submit", async event 
   errorBox.hidden = true;
   const [a, b] = ["#analysis-a", "#analysis-b"].map(selector => parseBannerSource(document.querySelector(selector).value));
   const button = document.querySelector("#add-analysis-card");
-  button.disabled = true;
+  setBusy(button, true, "Считаем…");
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/analysis/cards`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ a, b }),
     });
+    renderAnalysisCounts();
     await loadAnalysisCards();
   } catch (error) {
     showError(errorBox, error);
   } finally {
-    button.disabled = false;
+    setBusy(button, false, "Добавить карточку");
   }
 });
 
@@ -497,26 +656,43 @@ document.querySelector("#analysis-cards").addEventListener("click", async event 
   if (!button) return;
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/analysis/cards/${button.dataset.deleteCard}`, { method: "DELETE" });
+    renderAnalysisCounts();
     await loadAnalysisCards();
   } catch (error) {
-    alert(error.message);
+    showError(document.querySelector("#analysis-error"), error);
   }
 });
 
-// Карточка переменной: что в ней есть, прежде чем искать связи.
-document.querySelector("#describe-variable").addEventListener("click", async () => {
+document.querySelector("#swap-analysis").addEventListener("click", () => {
+  const a = document.querySelector("#analysis-a");
+  const b = document.querySelector("#analysis-b");
+  [a.value, b.value] = [b.value, a.value];
+});
+
+// Профиль переменной: что в ней есть, прежде чем искать связи. Строится
+// сразу при выборе — отдельная кнопка «Показать» была лишним шагом.
+let variableRequest = 0;
+async function describeVariable() {
   const body = document.querySelector("#variable-body");
   const value = document.querySelector("#variable-source").value;
-  if (!value) return;
+  if (!value) {
+    body.innerHTML = analysisEmpty("В проекте нет переменных, которые можно описать.");
+    return;
+  }
   const source = parseBannerSource(value);
-  body.innerHTML = '<p class="analysis-note">Считаем…</p>';
+  const request = ++variableRequest;
+  body.innerHTML = analysisEmpty("Считаем…");
   try {
     const profile = await api(`/api/projects/${currentProject.id}/analysis/variable?kind=${encodeURIComponent(source.kind)}&ref=${encodeURIComponent(source.ref)}`);
-    body.innerHTML = renderVariableProfile(profile);
+    // Ответ на прежний выбор, пришедший позже нового, не перетирает профиль.
+    if (request !== variableRequest) return;
+    const label = document.querySelector("#variable-source").selectedOptions[0]?.textContent || "";
+    body.innerHTML = `<article class="analysis-card"><header><span><strong>${escapeHtml(label)}</strong></span></header>${renderVariableProfile(profile)}</article>`;
   } catch (error) {
-    body.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    if (request === variableRequest) body.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
   }
-});
+}
+document.querySelector("#variable-source").addEventListener("change", () => { void describeVariable(); });
 
 function renderVariableProfile(profile) {
   const head = `<p class="analysis-facts"><span>Ответили <b>${profile.answered.toLocaleString("ru-RU")}</b> из ${profile.total.toLocaleString("ru-RU")}</span><span>Пропуски <b>${profile.missing.toLocaleString("ru-RU")}</b>${profile.total ? ` · ${analysisNumber(profile.missing / profile.total * 100, 1)}%` : ""}</span>${profile.filtered ? "<span>Учтён общий фильтр отчёта</span>" : ""}</p>`;

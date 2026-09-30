@@ -131,6 +131,22 @@ def _open_view(page: Page, view: str) -> None:
     page.click(f".tabs button[data-view='{view}']")
 
 
+def _open_analysis_tool(page: Page, tool: str) -> None:
+    """Инструмент «Анализа» работает в своём окне: плашка раздела открывает его.
+
+    Открытое окно другого инструмента сначала закрывается Escape — плашки
+    под модальным окном недоступны.
+    """
+    window = page.locator("#analysis-window")
+    if window.is_visible():
+        page.keyboard.press("Escape")
+        expect(window).to_be_hidden()
+    if not page.locator("#section-analysis").is_visible():
+        _open_view(page, "analysis")
+    page.click(f"[data-analysis-tool='{tool}']")
+    expect(window).to_be_visible(timeout=UI_TIMEOUT)
+
+
 def _open_weight_sheet(page: Page) -> None:
     """Лист веса открывается из плитки «Вес» раздела «Отчёт».
 
@@ -1566,6 +1582,7 @@ def test_analysis_card_shows_the_test_chosen_by_types(
 
     page.click(".tabs button[data-view='analysis']")
     expect(page.locator("#section-analysis")).to_be_visible(timeout=UI_TIMEOUT)
+    _open_analysis_tool(page, "association")
     expect(page.locator("#analysis-cards")).to_contain_text("Карточек пока нет")
     page.select_option("#analysis-a", "question:SEX")
     page.select_option("#analysis-b", "question:BRAND")
@@ -1577,13 +1594,16 @@ def test_analysis_card_shows_the_test_chosen_by_types(
     card.locator("[data-delete-card]").click()
     expect(page.locator("#analysis-cards")).to_contain_text("Карточек пока нет", timeout=UI_TIMEOUT)
 
-    # Карточка переменной: что в переменной есть до поиска связей.
+    # Профиль переменной: что в переменной есть до поиска связей. Строится
+    # сразу при выборе, без отдельной кнопки.
+    _open_analysis_tool(page, "variable")
     page.select_option("#variable-source", "question:AGE")
-    page.click("#describe-variable")
     expect(page.locator("#variable-body")).to_contain_text("Медиана", timeout=UI_TIMEOUT)
     page.select_option("#variable-source", "question:SEX")
-    page.click("#describe-variable")
     expect(page.locator("#variable-body")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
+    page.keyboard.press("Escape")
+    expect(page.locator("#analysis-window")).to_be_hidden()
+    expect(page.locator("#section-analysis")).to_be_visible()
 
 
 def test_anova_card_lists_the_pairs_that_differ(
@@ -1612,7 +1632,7 @@ def test_anova_card_lists_the_pairs_that_differ(
     page.reload()
     expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
 
-    page.click(".tabs button[data-view='analysis']")
+    _open_analysis_tool(page, "association")
     page.select_option("#analysis-a", f"recoding:{recoding_id}")
     page.select_option("#analysis-b", "question:SCORE")
     page.click("#add-analysis-card")
@@ -1628,7 +1648,7 @@ def test_models_are_built_with_coefficients_and_drivers(
     source = tmp_path / "survey.sav"
     _write_survey(source)
     _open_project(page, live_server, source)
-    page.click(".tabs button[data-view='analysis']")
+    _open_analysis_tool(page, "models")
     expect(page.locator("#model-list")).to_contain_text("Моделей пока нет", timeout=UI_TIMEOUT)
 
     page.select_option("#model-dependent", "question:SCORE")
@@ -1648,7 +1668,8 @@ def test_models_are_built_with_coefficients_and_drivers(
     page.select_option("#model-event", "Вторая")
     page.uncheck("#model-predictors input[value='question:SEX']")
     page.click("#add-model")
-    logistic = page.locator("#model-list .model-card").nth(1)
+    # Свежая модель встаёт сверху.
+    logistic = page.locator("#model-list .model-card").first
     expect(logistic).to_contain_text("Отношение шансов", timeout=UI_TIMEOUT)
     expect(logistic).to_contain_text("= «Вторая»")
 
@@ -1715,9 +1736,7 @@ def test_price_methods_are_run_from_the_analysis_section(
         },
     )
     _open_project(page, live_server, source)
-    page.click(".tabs button[data-view='analysis']")
-
-    page.select_option("#method-kind", "van-westendorp")
+    _open_analysis_tool(page, "van-westendorp")
     for role, code in (
         ("too_cheap", "TOOCHEAP"), ("cheap", "CHEAP"),
         ("expensive", "PRICEY"), ("too_expensive", "TOOPRICEY"),
@@ -1728,7 +1747,7 @@ def test_price_methods_are_run_from_the_analysis_section(
     expect(result).to_contain_text("Оптимальная цена", timeout=UI_TIMEOUT)
     expect(result.locator(".price-curves polyline")).to_have_count(4)
 
-    page.select_option("#method-kind", "gabor-granger")
+    _open_analysis_tool(page, "gabor-granger")
     steps = page.locator("#gg-steps .gg-step")
     steps.nth(0).locator(".gg-question").select_option("BUYLOW")
     steps.nth(0).locator(".gg-price").fill("100")
@@ -1747,8 +1766,7 @@ def test_maxdiff_counts_are_run_from_the_analysis_section(
     source = tmp_path / "maxdiff.sav"
     _maxdiff_file(source)
     _open_project(page, live_server, source)
-    page.click(".tabs button[data-view='analysis']")
-    page.select_option("#method-kind", "maxdiff")
+    _open_analysis_tool(page, "maxdiff")
     tasks = page.locator("#md-tasks .md-task")
     tasks.nth(0).locator(".md-best").select_option("FIRSTBEST")
     tasks.nth(0).locator(".md-worst").select_option("FIRSTWORST")

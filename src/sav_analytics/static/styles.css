@@ -359,13 +359,9 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .answer-chip small { color: var(--c-ink-3); font-size: 10px; }
 .answer-add { padding: 2px 6px; font-size: var(--t-xs); max-width: 180px; }
 @media (max-width: 860px) { .coding-body { grid-template-columns: 1fr; } }
-.analysis-wrap { align-self: flex-start; width: min(100%, 920px); display: grid; gap: 12px; }
 .analysis-wrap .eyebrow { margin: 0; color: var(--c-ink-3); font-size: var(--t-micro); letter-spacing: .09em; text-transform: uppercase; }
 .analysis-wrap h1 { margin: 0; font-size: var(--t-2xl); font-weight: 800; letter-spacing: -0.035em; }
 .analysis-wrap .lead { margin: 0; color: var(--c-ink-3); font-size: var(--t-sm); }
-.analysis-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 14px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
-.analysis-form label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }
-.analysis-form select { padding: 7px 9px; min-width: 0; }
 .analysis-cards { display: grid; gap: 10px; }
 .wave-groups { display: grid; gap: 10px; }
 .wave-group h4 { margin: 0 0 4px; font-size: var(--t-sm); }
@@ -379,10 +375,6 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .header-preview-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-preview-row em { font-style: normal; color: var(--c-ink-3); }
 .header-preview-row.small-base em { color: var(--c-danger, #b3261e); }
-.variable-card { padding: 12px 14px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); display: grid; gap: 10px; }
-.variable-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
-.variable-bar label { display: grid; gap: 4px; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; min-width: 0; }
-.variable-bar select { padding: 7px 9px; min-width: 0; }
 .variable-rows { display: grid; gap: 4px; }
 .variable-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 56px; gap: 8px; align-items: center; font-size: var(--t-xs); }
 .variable-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -401,7 +393,6 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .analysis-detail table { border-collapse: collapse; margin-top: 6px; }
 .analysis-detail td, .analysis-detail th { padding: 3px 8px; border-bottom: 1px solid var(--c-border); text-align: right; }
 .analysis-detail th:first-child, .analysis-detail td:first-child { text-align: left; }
-@media (max-width: 720px) { .analysis-form { grid-template-columns: 1fr; } }
 
 /* ---------- Рельс: заменяет ряд вкладок внутри панели ---------- */
 .rail {
@@ -2880,13 +2871,6 @@ body.is-landing { background: #050807; }
 .history-button { min-width: 30px; padding: 0 8px; font-size: 15px; line-height: 1; }
 .history-button:disabled { opacity: 0.4; cursor: default; }
 /* Модели «Анализа». */
-.analysis-models { margin-top: 28px; }
-.analysis-models h2 { margin: 0 0 4px; font-size: var(--t-lg, 16px); }
-.model-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; align-items: end; margin: 10px 0; }
-.model-form label { display: grid; gap: 4px; font-size: var(--t-xs); }
-.model-predictors { grid-column: 1 / -1; border: 1px solid var(--c-line, #d6dbd8); border-radius: 8px; padding: 8px 10px; margin: 0; }
-.model-predictors legend { font-size: var(--t-xs); padding: 0 4px; }
-.model-predictor-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 12px; max-height: 180px; overflow: auto; margin-top: 6px; }
 .model-list { display: grid; gap: 12px; }
 .model-table { width: auto; border-collapse: collapse; font-size: var(--t-xs); margin: 8px 0; }
 .model-table th, .model-table td { padding: 4px 10px; text-align: right; border-bottom: 1px solid var(--c-line, #e3e7e4); height: auto; text-transform: none; }
@@ -2914,15 +2898,8 @@ body.is-landing { background: #050807; }
 .driver-map text { font-size: 11px; fill: var(--c-ink-2, #3f4a44); }
 .driver-map text.caption { font-size: 10px; fill: var(--c-ink-3, #8a948f); }
 /* Методы исследования. */
-.analysis-methods { margin-top: 28px; }
-.analysis-methods h2 { margin: 0 0 4px; font-size: var(--t-lg, 16px); }
-.method-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; }
-.method-fields label { display: grid; gap: 4px; font-size: var(--t-xs); }
-.gg-steps { grid-column: 1 / -1; display: grid; gap: 8px; }
-.gg-step { display: grid; grid-template-columns: minmax(200px, 2fr) minmax(90px, 1fr) minmax(200px, 3fr); gap: 10px; align-items: end; }
-.gg-codes { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: var(--t-xs); }
+.gg-steps { display: grid; gap: 8px; }
 .gg-codes label.checkbox { display: flex; align-items: center; gap: 4px; }
-.method-card { margin-top: 10px; }
 .price-curves svg { width: 100%; max-width: 560px; height: auto; display: block; }
 .price-curves .axis { stroke: var(--c-ink-3, #8a948f); }
 .price-curves polyline { fill: none; stroke-width: 2; }
@@ -2934,3 +2911,131 @@ body.is-landing { background: #050807; }
 .curve-legend i { display: inline-block; width: 12px; height: 3px; margin: 0 4px 2px 8px; vertical-align: middle; }
 /* Видимый фокус у заголовка вопроса и ручки — это теперь точки входа с клавиатуры. */
 td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(--c-brand, #2e7d52); outline-offset: 2px; border-radius: 3px; }
+
+/* ================================================================
+   АНАЛИЗ: витрина инструментов и окно инструмента
+
+   Раздел — плашки инструментов по группам. Плашка открывает окно
+   #analysis-window (родной <dialog>): слева настройка, справа результат.
+   Раньше четыре формы шли одной лентой, и результат модели оказывался
+   под формой методов — теперь у каждого инструмента свой экран.
+   ================================================================ */
+#section-analysis { min-width: 0; padding: 26px var(--canvas-pad) 48px; }
+.analysis-wrap { width: min(100%, 1080px); margin: 0 auto; display: grid; gap: 12px; }
+.aw-group-title {
+  margin: 18px 0 0; color: var(--c-ink-3); font-family: var(--font-body);
+  font-size: var(--t-micro); font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+}
+.aw-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.aw-tile {
+  display: grid; grid-template-rows: auto 1fr auto; gap: 12px; align-content: start;
+  min-height: 172px; padding: 18px; text-align: left; white-space: normal;
+  background: var(--c-surface); color: var(--c-ink); font-weight: 400;
+  border: 1px solid var(--c-border); border-radius: var(--r-3); box-shadow: var(--shadow-card);
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), transform 160ms var(--ease);
+}
+.aw-tile:hover { background: var(--c-surface); border-color: var(--c-brand); box-shadow: var(--shadow-drawer); transform: translateY(-2px); }
+.aw-tile:active { transform: translateY(0) scale(.99); }
+.aw-tile-icon {
+  display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 auto;
+  border-radius: 12px; background: var(--c-brand-tint); color: var(--c-brand);
+}
+.aw-tile-icon svg { width: 24px; height: 24px; }
+.aw-tile-text { display: grid; gap: 5px; align-content: start; }
+.aw-tile-text strong { font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.015em; }
+.aw-tile-text span { color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1.45; }
+.aw-tile-meta { color: var(--c-ink-3); font-size: var(--t-xs); }
+.aw-tile-meta.has-items { color: var(--c-brand); font-weight: 600; }
+
+/* Окно. Высота — почти весь экран: результат модели или кривые длинные,
+   а прокручивается только своя колонка. */
+.aw {
+  width: min(1240px, calc(100vw - 48px)); height: calc(100dvh - 48px); max-width: none; max-height: none;
+  padding: 0; border: 0; border-radius: 18px; background: var(--c-surface); color: var(--c-ink);
+  box-shadow: var(--shadow-drawer); overflow: hidden;
+}
+.aw[open] { display: flex; flex-direction: column; animation: sheet-in 240ms var(--spring); }
+.aw::backdrop { background: rgba(29,29,31,.28); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.aw-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+  padding: 14px 14px 14px 20px; border-bottom: 1px solid var(--c-border);
+}
+.aw-head .aw-tile-icon { width: 38px; height: 38px; border-radius: 10px; }
+.aw-head .aw-tile-icon svg { width: 21px; height: 21px; }
+.aw-head > div { flex: 1 1 auto; min-width: 0; }
+.aw-head h2 { font-size: var(--t-lg); }
+.aw-head p { margin: 2px 0 0; color: var(--c-ink-3); font-size: var(--t-xs); }
+.aw-head .icon-button { font-size: 20px; }
+
+.aw-pane { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
+.aw-pane[hidden] { display: none; }
+
+/* Колонка настройки повторяет инспектор «Данных»: белое тело с полями в
+   общей грамматике (серое поле без рамки, подпись над ним) и ряд действий
+   внизу, который не уезжает вместе с длинным списком предикторов. */
+.aw-setup { display: flex; flex-direction: column; min-height: 0; background: var(--c-surface); border-right: 1px solid var(--c-border); }
+.aw-setup-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: grid; align-content: start; gap: 12px; padding: 16px 18px;
+  scrollbar-width: thin; scrollbar-color: var(--c-border-strong) transparent;
+}
+.aw-setup-foot {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 10px 18px; border-top: 1px solid var(--c-border); background: var(--c-surface);
+}
+.aw-setup label:not(.checkbox) {
+  display: grid; gap: 5px; min-width: 0;
+  color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.01em;
+}
+.aw-setup small { color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500; line-height: 1.4; }
+.aw-setup select, .aw-setup input, .aw-setup textarea { min-width: 0; max-width: 100%; }
+.aw-setup .error { margin: 0; }
+.aw-swap { justify-self: center; width: 30px; height: 30px; padding: 0; margin: -4px 0; border-radius: 50%; font-size: 14px; }
+.aw-hint { margin: 2px 0 0; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
+.aw-add {
+  justify-self: stretch; padding: 8px 12px; border: 1px dashed var(--c-border-strong); border-radius: var(--r-1);
+  background: transparent; color: var(--c-brand); font-size: var(--t-xs); font-weight: 600;
+}
+.aw-add:hover { background: var(--c-brand-tint); border-color: var(--c-brand); transform: none; }
+
+/* Результат — на сером холсте, карточки белые: как таблица «Данных»
+   рядом с инспектором. */
+.aw-result { min-width: 0; min-height: 0; overflow-y: auto; padding: 18px 22px 28px; background: var(--c-bg); }
+.aw-result > div { display: grid; gap: 12px; align-content: start; transition: opacity 160ms var(--ease); }
+.aw-result .analysis-card { min-width: 0; overflow-x: auto; box-shadow: none; }
+.aw-result > .aw-stale { opacity: .45; }
+.aw-result > .aw-stale::before {
+  content: "Параметры изменились — нажмите «Посчитать», чтобы обновить результат.";
+  padding: 8px 12px; border-radius: var(--r-1); background: var(--c-warn-tint); color: var(--c-warn-ink); font-size: var(--t-xs); font-weight: 600;
+}
+.aw-empty {
+  display: grid; place-items: center; min-height: 200px; padding: 32px; text-align: center;
+  color: var(--c-ink-3); font-size: var(--t-sm);
+  border: 1px dashed var(--c-border-strong); border-radius: var(--r-3); background: var(--c-surface);
+}
+.analysis-card header button { width: 26px; height: 26px; padding: 0; border-radius: 50%; background: transparent; color: var(--c-ink-3); font-size: 15px; }
+.analysis-card header button:hover { background: var(--c-danger-tint); color: var(--c-danger); transform: none; }
+
+/* Поля инструментов в узкой колонке — одной стопкой. */
+.model-predictors { display: grid; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.model-predictors legend { display: flex; width: 100%; padding: 0; margin-bottom: 6px; }
+.model-predictors legend strong { font-size: var(--t-xs); font-weight: 600; }
+.model-predictor-list { display: grid; gap: 0; max-height: 280px; overflow: auto; padding: 4px 10px; border-radius: var(--r-1); background: var(--c-surface-soft); }
+.model-predictor-list .checkbox { font-size: var(--t-sm); padding: 5px 0; }
+.model-predictor-list .checkbox.is-dependent { color: var(--c-ink-4, #aeaeb2); }
+.method-fields { display: grid; gap: 12px; }
+.gg-step { display: grid; gap: 10px; padding: 10px 12px 12px; border: 1px solid var(--c-border); border-radius: var(--r-2); }
+.gg-step-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: -2px; }
+.gg-step-head strong { font-size: var(--t-sm); }
+.gg-step-head .icon-button { width: 24px; height: 24px; font-size: 14px; }
+.gg-codes { display: flex; flex-wrap: wrap; gap: 0 14px; align-items: center; }
+.gg-codes-cap { flex: 1 0 100%; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.gg-codes .checkbox { padding: 4px 0; }
+
+@media (max-width: 820px) {
+  .aw { width: 100vw; height: 100dvh; border-radius: 0; }
+  .aw-pane { grid-template-columns: 1fr; grid-template-rows: auto auto; align-content: start; overflow-y: auto; }
+  .aw-setup-body, .aw-result { overflow: visible; }
+  .aw-setup { border-right: 0; border-bottom: 1px solid var(--c-border); }
+  .aw-result { padding: 16px; }
+}
