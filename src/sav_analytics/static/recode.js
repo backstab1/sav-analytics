@@ -32,10 +32,15 @@ function openRecoding(recodingId = null, options = {}) {
     renderConditionCategories(recoding?.categories || defaultConditionCategories());
   } else if (recoding) {
     recoding.categories.forEach(category => addRangeRow(category));
-  } else if (document.querySelector("#recode-mode").value === "ranges") {
+  } else if (document.querySelector("#recode-mode").value === "ranges" && options.sourceVariable) {
     addRangeRow({ label: "18–24", lower: 18, upper: 24 });
     addRangeRow({ label: "25–34", lower: 25, upper: 34 });
     addRangeRow({ label: "35 и старше", lower: 35, upper: null });
+  } else if (document.querySelector("#recode-mode").value === "ranges") {
+    // Переменная ещё не выбрана — и заготовка «18–24, 25–34» ни к чему:
+    // две пустые строки, границы подскажет выбранная переменная.
+    addRangeRow();
+    addRangeRow();
   }
   renderRecodeMode();
   renderVariableKinds(variableKindOf(document.querySelector("#recode-mode").value), Boolean(recoding));
@@ -66,7 +71,12 @@ function fillRecodeSources(selected) {
   const sources = currentProject.inspection.variables.filter(item => (
     mode === "ranges" ? item.storage_type === "numeric" : item.value_labels.length > 0
   ));
-  document.querySelector("#recode-source").innerHTML = sources.map(variable => `
+  // Без выбранной переменной список начинается с приглашения, а не с первой
+  // подходящей: раньше «+ Переменная → Группировка» молча подставляла ID
+  // анкеты. Пустое значение не пройдёт `required` при сохранении.
+  const known = sources.some(variable => variable.name === selected);
+  const prompt = known ? "" : '<option value="" selected disabled>Выберите переменную…</option>';
+  document.querySelector("#recode-source").innerHTML = prompt + sources.map(variable => `
     <option value="${escapeHtml(variable.name)}" ${variable.name === selected ? "selected" : ""}>${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`).join("");
 }
 
@@ -435,7 +445,10 @@ async function renderCategoryEditor(groups) {
   const variableName = document.querySelector("#recode-source").value;
   document.querySelector("#category-group-list").innerHTML = "";
   if (!variableName) {
-    pool.innerHTML = '<p class="muted">Нет переменных с подписями значений.</p>';
+    const choosable = document.querySelectorAll("#recode-source option:not([value=''])").length > 0;
+    pool.innerHTML = choosable
+      ? '<p class="muted">Выберите переменную — её ответы появятся здесь, и их можно будет разложить по группам.</p>'
+      : '<p class="muted">Нет переменных с подписями значений.</p>';
     categoryEditorLoading = false;
     return;
   }
@@ -613,7 +626,8 @@ document.querySelector("#add-category-group").addEventListener("click", () => {
   refreshCategoryZones();
 });
 document.querySelector("#recode-mode").addEventListener("change", () => {
-  fillRecodeSources();
+  // Выбранная переменная остаётся, если подходит и новому способу.
+  fillRecodeSources(document.querySelector("#recode-source").value);
   renderRecodeMode();
   if (document.querySelector("#recode-mode").value === "categories") void renderCategoryEditor(defaultCategoryGroups());
   if (document.querySelector("#recode-mode").value === "conditions") renderConditionCategories(defaultConditionCategories());

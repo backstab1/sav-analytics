@@ -136,7 +136,10 @@ function renderQuestionMembers(question) {
   const ungroup = splittable
     ? `<button type="button" class="text-button" data-ungroup="${escapeAttribute(question.code)}">Разгруппировать</button>`
     : "";
-  container.innerHTML = items.length < 2 ? "" : `<div><strong>Состав блока · ${items.length}</strong><small>Общие настройки выше применяются ко всем пунктам.</small>${ungroup}</div><div class="member-list">${items.map(item => `<p><code>${escapeHtml(item.variable)}</code><span>${escapeHtml(item.label)}</span></p>`).join("")}</div>`;
+  // Общее начало подписей («Что вы обычно заказываете: …») уже стоит в
+  // названии блока — в строках остаётся то, чем пункты различаются.
+  const labels = stripCommonPrefix(items.map(item => item.label));
+  container.innerHTML = items.length < 2 ? "" : `<div><div class="members-head"><strong>Состав блока · ${items.length}</strong>${ungroup}</div><small>Общие настройки выше применяются ко всем пунктам.</small></div><div class="member-list">${items.map((item, index) => `<p title="${escapeAttribute(item.label)}"><code>${escapeHtml(item.variable)}</code><span>${escapeHtml(labels[index])}</span></p>`).join("")}</div>`;
 }
 
 document.querySelector("#question-members").addEventListener("click", async event => {
@@ -174,7 +177,8 @@ function renderSpecialAnswers(question) {
   if (question.question_type === "multiple_choice_dichotomy") {
     const items = question.items || [];
     section.hidden = items.length === 0;
-    list.innerHTML = items.map(item => `<label class="checkbox"><input type="checkbox" data-special-item="${escapeAttribute(item.variable)}" ${(question.special_items || []).includes(item.variable) ? "checked" : ""} /> ${escapeHtml(item.label)}</label>`).join("");
+    const labels = stripCommonPrefix(items.map(item => item.label));
+    list.innerHTML = items.map((item, index) => `<label class="checkbox" title="${escapeAttribute(item.label)}"><input type="checkbox" data-special-item="${escapeAttribute(item.variable)}" ${(question.special_items || []).includes(item.variable) ? "checked" : ""} /> ${escapeHtml(labels[index])}</label>`).join("");
     return;
   }
   if (!effect) {
