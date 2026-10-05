@@ -148,12 +148,14 @@ async function pollAiJobs() {
     aiJobsKnown.set(job.job_id, job);
   }
   renderAiJobs(jobs);
+  updateCodingStatuses();
   if (jobs.some(job => job.status === "queued" || job.status === "running")) {
     aiJobsTimer = window.setTimeout(pollAiJobs, 1500);
   }
 }
 
 function announceAiJob(job) {
+  if (job.kind === "coding" || job.kind === "codebook_revision") void onCodingJobFinished(job);
   if (job.status === "failed") {
     showToast(`${job.title}: ошибка — откройте «Задачи ИИ»`);
     return;

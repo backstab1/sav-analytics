@@ -221,6 +221,11 @@ class ProjectLifecycle(ProjectStore):
             )
             for original in (self.root / str(project_id)).glob("original.*"):
                 shutil.copy2(original, temporary / original.name)
+            # Результаты кодирования открытых ответов — файлы по ссылкам из
+            # конфигурации: без них копия потеряла бы коды.
+            coding = self.root / str(project_id) / "coding"
+            if coding.is_dir():
+                shutil.copytree(coding, temporary / "coding")
             created_at = datetime.now(UTC).isoformat()
             copied = json.loads(json.dumps(project))
             copied["id"] = str(copy_id)

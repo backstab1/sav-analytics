@@ -60,7 +60,15 @@
   предлагает подписи вопросов, переменных и кодов, тип вопроса из одной переменной и
   порядок. Предложения проверяются сервером, отброшенное показывается с причиной;
   выбранные строки «было → станет» применяются одним шагом отмены. Подписи хранятся
-  в `configuration.label_overrides` и переживают перераспознавание и новую волну.
+  в `configuration.label_overrides` и переживают перераспознавание и новую волну;
+- «Открытые ответы»: «Распознать открытые» (в «Данных» и в разделе) находит текстовые
+  вопросы, включая «Другое», и кодирует отмеченные. ИИ строит двухуровневый справочник
+  кодов, редкие коды уходят в «Другое», ответы кодируются пачками с мультикодом и
+  пометкой низкой уверенности. Вопросы стоят строками; раскрытая строка — справочник
+  (правка руками или просьбой к ИИ, инструкция, мультикод, порог «Другое») и ответы с
+  плитками ревью. Правка человека пишется в словарь «текст → коды» и переживает
+  перекодирование; режимы — «Докодировать новые», «Перекодировать с учётом правок»,
+  «Сбросить всё». Коды — вопрос multiple-response для таблиц, фильтров и баннера.
 
 ### Анализ
 
@@ -271,7 +279,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py src/sav_analytics/ai_jobs.py src/sav_analytics/core/questionnaire.py src/sav_analytics/routers/ai.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py src/sav_analytics/ai_jobs.py src/sav_analytics/core/questionnaire.py src/sav_analytics/routers/ai.py src/sav_analytics/coding_jobs.py src/sav_analytics/core/open_text.py src/sav_analytics/routers/codeframes.py
 ```
 
 На 18 сентября в ветке `Codex_Savanalytics` набор содержит 308 non-browser pytest-кейсов
@@ -361,8 +369,10 @@ src/sav_analytics/
 │   ├── service.py     # разговор, журнал assistant.json, применение, отказ и откат
 │   ├── system_prompt.md # системный промпт
 │   ├── questionnaire.py # разбор анкеты моделью: один запрос с submit_mapping
-│   └── questionnaire_prompt.md # промпт разбора анкеты
+│   ├── questionnaire_prompt.md # промпт разбора анкеты
+│   └── coding.py      # справочник кодов, коды пачки ответов и правка справочника моделью
 ├── ai_jobs.py         # фоновые задачи ИИ: прогресс, результат, повтор
+├── coding_jobs.py     # кодирование открытых ответов: справочник, пачки, режимы
 ├── atomic_file.py     # замена файла, переживающая параллельного читателя в Windows
 ├── report_cache.py    # immutable-артефакты отчёта по cache key
 ├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту
@@ -386,8 +396,7 @@ src/sav_analytics/
 │   ├── weighting.py   # рассчитанный вес: raking, ячейки, внутри волн, цели по перекодировкам
 │   ├── weight_targets.py # шаблон целей веса в Excel и его чтение
 │   ├── questionnaire.py # текст анкеты, каталог для модели, проверка и применение подписей
-│   ├── open_text.py   # кодификатор открытых ответов: запросы, отметки, темы как столбцы
-│   ├── russian_stemmer.py # стеммер Snowball для запросов тем
+│   ├── open_text.py   # кодификатор: справочник кодов, коды ответов по тексту, словарь правок
 │   ├── sav_export.py  # выгрузка SAV с формулами, перекодировками и весами
 │   ├── sav_writing.py # проверка записанного SAV на поломку длинных строк readstat
 │   ├── report.py      # совместимый публичный фасад отчётов

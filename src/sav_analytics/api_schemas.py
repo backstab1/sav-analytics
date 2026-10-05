@@ -152,23 +152,38 @@ class CodeframeCreate(BaseModel):
 
 
 class CodeframeTheme(BaseModel):
-    # Новая тема приходит с временным id экрана — сервер выдаст постоянный.
-    id: str | None = Field(default=None, max_length=64)
+    # Новый код приходит с временным id экрана — сервер выдаст постоянный.
+    id: str | None = Field(default=None, max_length=80)
     name: str = Field(min_length=1, max_length=250)
-    parent_id: str | None = Field(default=None, max_length=64)
-    queries: list[str] = Field(default_factory=list, max_length=50)
+    parent_id: str | None = Field(default=None, max_length=80)
+    description: str = Field(default="", max_length=500)
 
 
 class CodeframeUpdate(BaseModel):
     label: str = Field(min_length=1, max_length=500)
-    themes: list[CodeframeTheme] = Field(default_factory=list, max_length=200)
+    themes: list[CodeframeTheme] = Field(default_factory=list, max_length=300)
+    instruction: str | None = Field(default=None, max_length=4000)
+    multi: bool | None = None
+    # Доля ответивших, реже которой код уходит в «Другое» при построении справочника.
+    other_threshold: float | None = Field(default=None, ge=0, le=0.2)
 
 
-class CodeframeMark(BaseModel):
-    theme_id: str = Field(min_length=1, max_length=64)
-    row: int = Field(ge=0)
-    # true/false — отметка человека; null снимает её и возвращает решение запросу.
-    value: bool | None
+class CodeframeBatch(BaseModel):
+    question_codes: list[str] = Field(min_length=1, max_length=200)
+
+
+class CodeframeCodeRequest(BaseModel):
+    mode: Literal["new", "keep_edits", "reset"] = "new"
+
+
+class CodeframeRevise(BaseModel):
+    request: str = Field(min_length=1, max_length=4000)
+
+
+class CodeframeAnswerCodes(BaseModel):
+    key: str = Field(min_length=1, max_length=20_000)
+    # Список — правка человека, попадает в словарь; null снимает правку.
+    codes: list[str] | None = Field(default=None, max_length=50)
 
 
 class QuestionGroupRequest(BaseModel):

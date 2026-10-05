@@ -49,6 +49,9 @@ class AiJob:
     kind: str
     title: str
     function: JobFunction = field(repr=False)
+    # Объект задачи, например id кодификатора: по нему экран показывает
+    # прогресс в строке этого объекта.
+    subject: str | None = None
     status: JobStatus = "queued"
     completed: int = 0
     total: int = 1
@@ -66,6 +69,7 @@ class AiJob:
             "project_id": self.project_id,
             "kind": self.kind,
             "title": self.title,
+            "subject": self.subject,
             "status": self.status,
             "completed": self.completed,
             "total": self.total,
@@ -80,8 +84,21 @@ class AiJob:
         }
 
 
-def start_job(project_id: str, kind: str, title: str, function: JobFunction) -> dict[str, Any]:
-    job = AiJob(id=str(uuid4()), project_id=project_id, kind=kind, title=title, function=function)
+def start_job(
+    project_id: str,
+    kind: str,
+    title: str,
+    function: JobFunction,
+    subject: str | None = None,
+) -> dict[str, Any]:
+    job = AiJob(
+        id=str(uuid4()),
+        project_id=project_id,
+        kind=kind,
+        title=title,
+        function=function,
+        subject=subject,
+    )
     with _guard:
         _jobs[job.id] = job
         _forget_old(project_id)

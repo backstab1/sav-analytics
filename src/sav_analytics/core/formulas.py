@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import pyreadstat
 
-from .open_text import codeframe_columns, codeframe_text_variable, theme_owners
+from .open_text import codeframe_columns, codeframe_text_variable, load_coding, theme_owners
 
 
 class FormulaError(ValueError):
@@ -454,7 +454,8 @@ def read_project_frame(
             continue
         computed.add(codeframe["id"])
         text_variable = codeframe_text_variable(codeframe, project)  # type: ignore[arg-type]
-        for column, values in codeframe_columns(frame[text_variable], codeframe).items():
+        coding = load_coding(Path(path).parent, codeframe.get("coding_ref"))
+        for column, values in codeframe_columns(frame[text_variable], codeframe, coding).items():
             frame[column] = values
     for name in wanted:
         frame[name] = evaluate_formula(formulas[name]["expression"], frame)

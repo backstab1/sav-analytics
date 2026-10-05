@@ -58,6 +58,9 @@ jobs:
           src/sav_analytics/ai_jobs.py
           src/sav_analytics/core/questionnaire.py
           src/sav_analytics/routers/ai.py
+          src/sav_analytics/coding_jobs.py
+          src/sav_analytics/core/open_text.py
+          src/sav_analytics/routers/codeframes.py
 
       - name: Pytest с покрытием
         run: >-

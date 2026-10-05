@@ -22,6 +22,9 @@ from ..core.open_text import (
     answered_mask,
     codeframe_columns,
     codeframe_text_variable,
+    load_coding,
+    normalize_answer,
+    store_coding,
     theme_variable,
     validate_codeframe,
 )
@@ -103,103 +106,201 @@ class DerivedVariables(ProjectStore):
 
     def create_codeframe(self, project_id: UUID, question_code: str) -> dict:
         project = self.get(project_id)
+        self._add_codeframe(project, question_code)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def create_codeframes(self, project_id: UUID, question_codes: list[str]) -> dict:
+        """Кодификаторы для отмеченных открытых вопросов — одной ревизией.
+
+        Вопрос, у которого кодификатор уже есть, пропускается.
+        """
+        project = self.get(project_id)
+        framed = {item["question_code"] for item in project["configuration"].get("codeframes", [])}
+        for code in dict.fromkeys(question_codes):
+            if code not in framed:
+                self._add_codeframe(project, code)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def _add_codeframe(self, project: dict, question_code: str) -> dict:
         configuration = project["configuration"]
         question = self._find_question(project, question_code)
         if question["question_type"] != "open_text" or len(question["source_variables"]) != 1:
-            raise InvalidUploadError("Кодификатор строится для открытого вопроса.")
+            raise InvalidUploadError(f"{question_code}: кодируется только открытый вопрос.")
         codeframes = configuration.setdefault("codeframes", [])
         if any(item["question_code"] == question_code for item in codeframes):
             raise InvalidUploadError("У этого вопроса уже есть кодификатор.")
         taken = {item["name"].lower() for item in project["inspection"]["variables"]} | {
             item["code"].lower() for item in configuration["questions"]
-        }
+        } | {item["code"].lower() for item in codeframes}
         base = re.sub(r"[^A-Za-z0-9_]", "_", question_code)
         if not re.match(r"^[A-Za-z]", base):
             base = f"T_{base}"
-        code = f"{base}_T"
+        code = f"{base}_C"
         index = 2
         while code.lower() in taken or any(
             name.lower().startswith(f"{code.lower()}_") for name in taken
         ):
-            code = f"{base}_T{index}"
+            code = f"{base}_C{index}"
             index += 1
-        codeframes.append(
-            {
-                "id": str(uuid4()),
-                "question_code": question_code,
-                "code": code,
-                "label": f"Темы: {question['label']}",
-                "themes": [],
-                "next_number": 1,
-            }
-        )
-        configuration["updated_at"] = datetime.now(UTC).isoformat()
-        self._write_project(project_id, project)
-        return project
+        codeframe = {
+            "id": str(uuid4()),
+            "question_code": question_code,
+            "code": code,
+            "label": f"Коды: {question['label']}",
+            "themes": [],
+            "next_number": 1,
+            "instruction": "",
+            "multi": True,
+            "other_threshold": 0.01,
+            "coding_ref": None,
+        }
+        codeframes.append(codeframe)
+        return codeframe
 
     def update_codeframe(
-        self, project_id: UUID, codeframe_id: UUID, label: str, themes: list[dict]
+        self,
+        project_id: UUID,
+        codeframe_id: UUID,
+        label: str,
+        themes: list[dict],
+        settings: dict | None = None,
     ) -> dict:
+        """Справочник кодов и настройки кодирования.
+
+        Удалённый код снимается со всех ответов — и в кодах модели, и в
+        словаре правок: иначе он вернулся бы с новой волной.
+        """
         project = self.get(project_id)
         codeframe = self._find_codeframe(project, codeframe_id)
-        existing = {theme["id"]: theme for theme in codeframe["themes"]}
-        identifiers = {}
-        for theme in themes:
-            if theme.get("id") in existing:
-                identifiers[theme["id"]] = theme["id"]
-            else:
-                identifiers[theme.get("id") or str(uuid4())] = str(uuid4())
-        rebuilt = []
-        next_number = codeframe.get("next_number", 1)
-        for theme in themes:
-            identifier = identifiers[theme.get("id")] if theme.get("id") in identifiers else None
-            if identifier is None:
-                identifier = str(uuid4())
-            previous = existing.get(identifier)
-            if previous is None:
-                number = next_number
-                next_number += 1
-            else:
-                number = previous["number"]
-            parent = theme.get("parent_id")
-            rebuilt.append(
-                {
-                    "id": identifier,
-                    "number": number,
-                    "name": theme["name"].strip(),
-                    "parent_id": identifiers.get(parent) if parent else None,
-                    "queries": [line.strip() for line in theme.get("queries", []) if line.strip()],
-                    "manual": previous.get("manual", {}) if previous else {},
-                }
-            )
+        rebuilt, next_number = _rebuilt_themes(codeframe, themes)
         candidate = {**codeframe, "label": label, "themes": rebuilt, "next_number": next_number}
+        for key, value in (settings or {}).items():
+            if value is not None:
+                candidate[key] = value
         try:
             validate_codeframe(candidate)
         except CodeframeError as exc:
             raise InvalidUploadError(str(exc)) from exc
+        removed = {theme["id"] for theme in codeframe["themes"]} - {
+            theme["id"] for theme in rebuilt
+        }
+        if removed and codeframe.get("coding_ref"):
+            coding = self.coding(project_id, codeframe)
+            for entry in coding["answers"].values():
+                entry["codes"] = [code for code in entry.get("codes", []) if code not in removed]
+            for key, codes in coding["dictionary"].items():
+                coding["dictionary"][key] = [code for code in codes if code not in removed]
+            candidate["coding_ref"] = store_coding(self.root / str(project_id), coding)
         codeframe.update(candidate)
         self._sync_codeframe(project_id, project, codeframe)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
 
-    def mark_codeframe_answer(
-        self, project_id: UUID, codeframe_id: UUID, theme_id: str, row: int, value: bool | None
+    def coding(self, project_id: UUID, codeframe: dict) -> dict:
+        return load_coding(self.root / str(project_id), codeframe.get("coding_ref"))
+
+    def set_answer_codes(
+        self, project_id: UUID, codeframe_id: UUID, key: str, codes: list[str] | None
     ) -> dict:
+        """Правка человека: коды ответа и запись в словарь «текст → коды».
+
+        `codes = None` снимает правку — ответу возвращаются коды модели.
+        """
         project = self.get(project_id)
         codeframe = self._find_codeframe(project, codeframe_id)
-        theme = next((item for item in codeframe["themes"] if item["id"] == theme_id), None)
-        if theme is None:
-            raise ProjectNotFoundError(theme_id)
-        manual = theme.setdefault("manual", {})
-        if value is None:
-            manual.pop(str(row), None)
+        known = {theme["id"] for theme in codeframe["themes"]}
+        coding = self.coding(project_id, codeframe)
+        key = normalize_answer(key)
+        if codes is None:
+            coding["dictionary"].pop(key, None)
+            entry = coding["answers"].get(key)
+            if entry and entry.get("source") == "manual":
+                coding["answers"].pop(key)
         else:
-            manual[str(row)] = 1 if value else 0
+            unknown = [code for code in codes if code not in known]
+            if unknown:
+                raise ProjectNotFoundError(unknown[0])
+            if not codeframe.get("multi", True) and len(codes) > 1:
+                raise InvalidUploadError("В этом кодификаторе у ответа один код.")
+            codes = list(dict.fromkeys(codes))
+            coding["dictionary"][key] = codes
+            previous = coding["answers"].get(key) or {}
+            coding["answers"][key] = {**previous, "codes": codes, "source": "manual", "low": False}
+        codeframe["coding_ref"] = store_coding(self.root / str(project_id), coding)
         self._sync_codeframe(project_id, project, codeframe)
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         self._write_project(project_id, project)
         return project
+
+    def save_coding_result(
+        self,
+        project_id: UUID,
+        codeframe_id: UUID,
+        themes: list[dict],
+        next_number: int,
+        coding: dict,
+    ) -> dict:
+        """Итог фоновой задачи кодирования — одной ревизией."""
+        project = self.get(project_id)
+        codeframe = self._find_codeframe(project, codeframe_id)
+        candidate = {**codeframe, "themes": themes, "next_number": next_number}
+        try:
+            validate_codeframe(candidate)
+        except CodeframeError as exc:
+            raise InvalidUploadError(str(exc)) from exc
+        candidate["coding_ref"] = store_coding(self.root / str(project_id), coding)
+        codeframe.update(candidate)
+        self._sync_codeframe(project_id, project, codeframe)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def import_codeframe(self, project_id: UUID, codeframe_id: UUID, definition: dict) -> dict:
+        """Справочник и словарь правок из файла другого проекта.
+
+        Коды сопоставляются по названию: совпавшие остаются, новые
+        добавляются. Словарь переносится для тех ответов, что встретятся.
+        """
+        project = self.get(project_id)
+        codeframe = self._find_codeframe(project, codeframe_id)
+        themes = [dict(theme) for theme in codeframe["themes"]]
+        by_name = {theme["name"].casefold(): theme for theme in themes}
+        ids: dict[str, str] = {}
+        next_number = codeframe.get("next_number", 1)
+        added = []
+        for theme in definition.get("themes") or []:
+            name = str(theme.get("name") or "").strip()
+            if not name:
+                continue
+            existing = by_name.get(name.casefold())
+            if existing is not None:
+                ids[str(theme.get("id"))] = existing["id"]
+                continue
+            record = {
+                "id": str(uuid4()),
+                "number": next_number,
+                "name": name,
+                "parent_id": theme.get("parent_id"),
+                "description": str(theme.get("description") or ""),
+            }
+            ids[str(theme.get("id"))] = record["id"]
+            next_number += 1
+            themes.append(record)
+            added.append(record)
+            by_name[name.casefold()] = record
+        for record in added:
+            parent = record.get("parent_id")
+            record["parent_id"] = ids.get(str(parent)) if parent else None
+        coding = self.coding(project_id, codeframe)
+        for key, codes in (definition.get("dictionary") or {}).items():
+            mapped = [ids[str(code)] for code in codes if str(code) in ids]
+            coding["dictionary"][normalize_answer(key)] = mapped
+        return self.save_coding_result(project_id, codeframe_id, themes, next_number, coding)
 
     def delete_codeframe(self, project_id: UUID, codeframe_id: UUID) -> dict:
         project = self.get(project_id)
@@ -257,7 +358,8 @@ class DerivedVariables(ProjectStore):
         texts = read_project_frame(self.source_path(project_id), project, [text_variable])[
             text_variable
         ]
-        columns = codeframe_columns(texts, codeframe)
+        coding = self.coding(project_id, codeframe)
+        columns = codeframe_columns(texts, codeframe, coding)
         names = []
         for theme in codeframe["themes"]:
             name = theme_variable(codeframe, theme)
@@ -407,3 +509,37 @@ class DerivedVariables(ProjectStore):
             return formula_statistics(self.source_path(project_id), record, project)
         except FormulaError as exc:
             raise InvalidUploadError(str(exc)) from exc
+
+
+def _rebuilt_themes(codeframe: dict, themes: list[dict]) -> tuple[list[dict], int]:
+    """Справочник с экрана: постоянные id и номера у новых кодов.
+
+    Новый код приходит с временным id экрана; номер у кода не
+    переиспользуется после удаления — имя столбца стабильно.
+    """
+    existing = {theme["id"]: theme for theme in codeframe["themes"]}
+    identifiers = {
+        str(theme.get("id")): (theme["id"] if theme.get("id") in existing else str(uuid4()))
+        for theme in themes
+    }
+    next_number = codeframe.get("next_number", 1)
+    rebuilt = []
+    for theme in themes:
+        identifier = identifiers[str(theme.get("id"))]
+        previous = existing.get(identifier)
+        if previous is None:
+            number = next_number
+            next_number += 1
+        else:
+            number = previous["number"]
+        parent = theme.get("parent_id")
+        rebuilt.append(
+            {
+                "id": identifier,
+                "number": number,
+                "name": theme["name"].strip(),
+                "parent_id": identifiers.get(str(parent)) if parent else None,
+                "description": str(theme.get("description") or "").strip(),
+            }
+        )
+    return rebuilt, next_number

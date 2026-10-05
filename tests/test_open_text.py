@@ -1,5 +1,16 @@
-"""Кодирование открытых ответов (PQ.12)."""
+"""Открытые ответы на ИИ (PQ.17, решение 034).
 
+Модель подменена правилами: справочник фиксированный, коды ставятся по
+словам ответа. Проверяется ядро: коды привязаны к тексту ответа, правка
+человека пишется в словарь и переживает перекодирование, редкие коды
+уходят в «Другое», код — вопрос multiple-response в книге и в отмене.
+"""
+
+import json
+import re
+import threading
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pandas as pd
@@ -7,10 +18,19 @@ import pyreadstat
 import pytest
 from fastapi.testclient import TestClient
 
+from sav_analytics import coding_jobs
 from sav_analytics.api import app, get_repository
-from sav_analytics.core.open_text import CodeframeError, parse_query, query_matches
+from sav_analytics.api_dependencies import get_fast_chat_model, get_long_chat_model
+from sav_analytics.assistant.models import ModelError, ModelReply, ToolCall, ToolSpec
+from sav_analytics.coding_jobs import codebook_themes, sample_answers
+from sav_analytics.core.open_text import (
+    answer_rows,
+    codeframe_summary,
+    merge_rare_codes,
+    normalize_answer,
+    unique_answers,
+)
 from sav_analytics.core.report import build_topline_xlsx
-from sav_analytics.core.russian_stemmer import stem
 from sav_analytics.repository import ProjectRepository
 from tests.test_report import _cell_value, _row_labels
 
@@ -23,131 +43,372 @@ ANSWERS = [
     "Довольна качеством и ценой",
     "Курьер опоздал с доставкой",
     "Ничего не понравилось",
+    "цены  высокие",
+    "Дорого",
 ]
 
-
-def test_snowball_stems_join_word_forms() -> None:
-    assert stem("доставка") == stem("доставкой") == stem("доставку") == "доставк"
-    assert stem("красивые") == stem("красивая") == "красив"
-    assert stem("ёлки") == "елк"
-
-
-def test_queries_find_word_forms_prefixes_and_exclusions() -> None:
-    texts = pd.Series(ANSWERS)
-
-    delivery = query_matches(texts, ["доставка"])
-    assert delivery.tolist() == [True, True, False, False, False, False, True, False]
-
-    # «доволен» и «довольна» — через префикс основы.
-    assert query_matches(texts, ["доволен"]).tolist()[5] is True
-    # Все слова строки — И, исключение — минусом.
-    assert query_matches(texts, ["доставка -курьер"]).tolist()[6] is False
-    assert query_matches(texts, ["цен*"]).tolist() == [
-        False, False, False, True, False, True, False, False
+CODEBOOK = {
+    "codes": [
+        {"name": "Быстрая доставка", "group": "Доставка", "description": "о скорости"},
+        {"name": "Курьер", "group": "Доставка"},
+        {"name": "Высокие цены", "group": "Цена"},
+        {"name": "Качество"},
+        {"name": "Ничего не понравилось"},
     ]
-    with pytest.raises(CodeframeError):
-        parse_query("-курьер")
+}
+
+RULES = {
+    "Быстрая доставка": ("доставк", "быстро"),
+    "Курьер": ("курьер",),
+    "Высокие цены": ("дорого", "цен"),
+    "Качество": ("качеств",),
+    "Ничего не понравилось": ("ничего",),
+}
+
+
+class RuleModel:
+    """Справочник по запросу и коды по словам ответа."""
+
+    def __init__(self, codebook: dict | None = None, fail_codes: int = 0) -> None:
+        self.codebook = codebook or CODEBOOK
+        self.fail_codes = fail_codes
+        self.calls: list[str] = []
+        self.coded_texts: list[str] = []
+        self._lock = threading.Lock()
+
+    def complete(self, system: str, messages: list[dict], tools: list[ToolSpec]) -> ModelReply:
+        tool = tools[0].name
+        with self._lock:
+            self.calls.append(tool)
+        if tool == "submit_codebook":
+            return _call(tool, self.codebook)
+        with self._lock:
+            if self.fail_codes:
+                self.fail_codes -= 1
+                raise ModelError("таймаут")
+        content = messages[0]["content"]
+        numbers = dict(
+            (name, int(number))
+            for number, name in re.findall(r"^(\d+)\. ([^—\n]+?)(?: —|$)", content, re.M)
+        )
+        answers = json.loads(content[content.index("Ответы:\n") + len("Ответы:\n"):])
+        items = []
+        for answer in answers:
+            text = answer["text"].lower()
+            with self._lock:
+                self.coded_texts.append(answer["text"])
+            codes = [
+                numbers[name] for name, words in RULES.items()
+                if name in numbers and any(word in text for word in words)
+            ]
+            items.append({"i": answer["i"], "codes": codes, "low_confidence": "но" in text})
+        return _call(tool, {"items": items})
+
+
+def _call(name: str, arguments: dict) -> ModelReply:
+    return ModelReply(content=None, tool_calls=[ToolCall("c1", name, arguments)])
 
 
 def _write(path: Path) -> None:
     pyreadstat.write_sav(
-        pd.DataFrame({"ID": list(range(1, 9)), "WHY": ANSWERS}),
+        pd.DataFrame({"ID": list(range(1, len(ANSWERS) + 1)), "WHY": ANSWERS}),
         path,
         column_labels={"ID": "Номер", "WHY": "Почему вы так оценили?"},
         variable_measure={"ID": "nominal"},
     )
 
 
-def test_codeframe_becomes_a_multiple_response_question(tmp_path: Path) -> None:
+@pytest.fixture
+def project(tmp_path: Path) -> Iterator[dict]:
     repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    context: dict = {"repository": repository, "model": RuleModel()}
     app.dependency_overrides[get_repository] = lambda: repository
+    app.dependency_overrides[get_long_chat_model] = lambda: context["model"]
+    app.dependency_overrides[get_fast_chat_model] = lambda: context["model"]
     source = tmp_path / "open.sav"
     _write(source)
     try:
         with TestClient(app) as client, source.open("rb") as stream:
-            project = client.post(
-                "/api/projects",
-                files={"file": ("open.sav", stream, "application/octet-stream")},
+            created = client.post(
+                "/api/projects", files={"file": ("open.sav", stream, "application/octet-stream")}
             ).json()
-            base = f"/api/projects/{project['id']}"
-            assert client.patch(
-                f"{base}/questions/WHY", json={"question_type": "open_text"}
-            ).status_code == 200
-            created = client.post(f"{base}/codeframes", json={"question_code": "WHY"})
-            assert created.status_code == 201
-            codeframe = created.json()["configuration"]["codeframes"][0]
-            url = f"{base}/codeframes/{codeframe['id']}"
-
-            updated = client.put(
-                url,
-                json={
-                    "label": "Темы: почему",
-                    "themes": [
-                        {"id": "new-1", "name": "Доставка", "queries": ["доставка"]},
-                        {"id": "new-2", "name": "Цена", "queries": ["цен*", "дорого"]},
-                        {"id": "new-3", "name": "Курьер", "parent_id": "new-1",
-                         "queries": ["курьер"]},
-                    ],
-                },
-            )
-            assert updated.status_code == 200, updated.text
-            configuration = updated.json()["configuration"]
-            themes = configuration["codeframes"][0]["themes"]
-            price = next(theme for theme in themes if theme["name"] == "Цена")
-            question = next(
-                item for item in configuration["questions"] if item["code"] == codeframe["code"]
-            )
-            assert question["question_type"] == "multiple_choice_dichotomy"
-            assert question["source_variables"] == [f"{codeframe['code']}_{n}" for n in (1, 2, 3)]
-            assert (question["valid_count"], question["missing_count"]) == (7, 1)
-
-            summary = client.get(f"{url}/summary").json()
-            counts = {item["id"]: item["count"] for item in summary["themes"]}
-            assert counts[price["id"]] == 3
-            assert summary["answered"] == 7
-            assert summary["uncoded"] == 1  # только «Ничего не понравилось»
-
-            # Человек снимает «Цену» с 3-й строки и ставит на 8-ю.
-            client.put(f"{url}/marks", json={"theme_id": price["id"], "row": 2, "value": False})
-            marked = client.put(
-                f"{url}/marks", json={"theme_id": price["id"], "row": 7, "value": True}
-            )
-            assert marked.status_code == 200
-            rows = client.get(f"{url}/answers", params={"theme_id": price["id"]}).json()
-            assert [row["row"] for row in rows["rows"]] == [3, 5, 7]
-            assert {row["row"]: row["themes"][0]["source"] for row in rows["rows"]}[7] == "manual"
-
-            uncoded = client.get(f"{url}/answers", params={"uncoded": True}).json()
-            assert all(row["themes"] == [] for row in uncoded["rows"])
-
-            stored = repository.get(project["id"])
-            content = build_topline_xlsx(repository.source_path(project["id"]), stored)
-            assert "Доставка" in _row_labels(content)
-            # Доставка: строки 0, 1, 6 (курьер — дочерняя тема). Главный лист считает
-            # от полной базы — 8 респондентов, включая не ответившего.
-            assert _cell_value(content, "Доставка", "B") == pytest.approx(3 / 8 * 100)
-
-            exported = client.get(f"{url}/export").json()
-            assert exported["format"] == "sav-analytics/codeframe"
-            assert [theme["name"] for theme in exported["themes"]] == ["Доставка", "Цена", "Курьер"]
-            assert "manual" not in exported["themes"][1]
-            courier = exported["themes"][2]
-            assert courier["parent_id"] == exported["themes"][0]["id"]
-
-            refreshed = client.post(f"{base}/structure/refresh").json()
-            assert any(
-                item["code"] == codeframe["code"]
-                for item in refreshed["configuration"]["questions"]
-            )
-
-            deleted = client.delete(url)
-            assert deleted.status_code == 200
-            assert all(
-                item["code"] != codeframe["code"]
-                for item in deleted.json()["configuration"]["questions"]
-            )
+            base = f"/api/projects/{created['id']}"
+            client.patch(f"{base}/questions/WHY", json={"question_type": "open_text"})
+            context.update(client=client, project_id=created["id"], base=base)
+            yield context
     finally:
         app.dependency_overrides.clear()
+
+
+def _wait(context: dict, job_id: str) -> dict:
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        job = context["client"].get(f"{context['base']}/jobs/{job_id}").json()
+        if job["status"] in {"complete", "failed"}:
+            return job
+        time.sleep(0.02)
+    raise AssertionError("Задача не завершилась")
+
+
+def _code(context: dict) -> tuple[dict, dict]:
+    response = context["client"].post(
+        f"{context['base']}/codeframes/batch", json={"question_codes": ["WHY"]}
+    )
+    assert response.status_code == 200, response.text
+    job = _wait(context, response.json()["jobs"][0]["job_id"])
+    assert job["status"] == "complete", job
+    project = context["client"].get(context["base"]).json()
+    return project, project["configuration"]["codeframes"][0]
+
+
+def _url(context: dict, codeframe: dict) -> str:
+    return f"{context['base']}/codeframes/{codeframe['id']}"
+
+
+def _themes(codeframe: dict) -> dict[str, dict]:
+    return {theme["name"]: theme for theme in codeframe["themes"]}
+
+
+def test_answers_are_keyed_by_normalized_text() -> None:
+    assert normalize_answer("  Цены  ВЫСОКИЕ ") == normalize_answer("цены высокие")
+    assert normalize_answer("Ёлка") == "елка"
+    unique = unique_answers(pd.Series(ANSWERS))
+    assert unique[0][1:] == ("Цены высокие", 2)
+    assert len(unique) == 8
+
+
+def test_codebook_groups_become_parents_and_keep_preserves_codes() -> None:
+    themes, next_number = codebook_themes(CODEBOOK, [], 1)
+    names = {theme["name"]: theme for theme in themes}
+    assert names["Курьер"]["parent_id"] == names["Доставка"]["id"]
+    # Группа из одного кода не создаётся: «Высокие цены» — без группы «Цена».
+    assert "Цена" not in names
+    assert names["Высокие цены"]["parent_id"] is None
+    assert next_number == 7
+
+    revised, _ = codebook_themes(
+        {"codes": [{"name": "Цена слишком высокая", "keep": names["Высокие цены"]["number"]}]},
+        themes,
+        next_number,
+    )
+    assert revised[0]["id"] == names["Высокие цены"]["id"]
+    assert revised[0]["name"] == "Цена слишком высокая"
+
+
+def test_sample_keeps_frequent_answers_first() -> None:
+    unique = [(f"k{i}", f"t{i}", 1000 - i) for i in range(1000)]
+    sample = sample_answers(unique)
+    assert len(sample) == 400
+    assert sample[0] == ("t0", 1000)
+
+
+def test_rare_codes_merge_into_other() -> None:
+    themes = [
+        {"id": "a", "number": 1, "name": "Частый", "parent_id": None},
+        {"id": "b", "number": 2, "name": "Редкий", "parent_id": None},
+    ]
+    coding = {"answers": {"x": {"codes": ["a"]}, "y": {"codes": ["b", "a"]}}, "dictionary": {}}
+    kept, coding, next_number = merge_rare_codes(
+        themes, coding, {"a": 99, "b": 1}, 100, 0.05, lambda: "other", 3
+    )
+    assert [theme["name"] for theme in kept] == ["Частый", "Другое"]
+    assert coding["answers"]["y"]["codes"] == ["a", "other"]
+    assert next_number == 4
+
+
+def test_coding_needs_enabled_ai(project) -> None:
+    project["client"].put(f"{project['base']}/ai", json={"enabled": False})
+    response = project["client"].post(
+        f"{project['base']}/codeframes/batch", json={"question_codes": ["WHY"]}
+    )
+    assert response.status_code == 409
+    assert project["model"].calls == []
+
+
+def test_candidates_list_open_questions(project) -> None:
+    candidates = project["client"].get(f"{project['base']}/codeframes/candidates").json()
+    assert [item["code"] for item in candidates["questions"]] == ["WHY"]
+    assert candidates["questions"][0]["respondent_answers"] is True
+
+
+def test_batch_builds_codebook_and_codes_unique_answers_once(project) -> None:
+    built, codeframe = _code(project)
+    names = _themes(codeframe)
+    assert set(names) == {
+        "Доставка", "Быстрая доставка", "Курьер", "Высокие цены", "Качество",
+        "Ничего не понравилось",
+    }
+    # Справочник строит основная модель один раз, коды — пачкой; одинаковые
+    # ответы «Цены высокие» и «цены  высокие» уходят модели один раз.
+    assert project["model"].calls[0] == "submit_codebook"
+    assert len(project["model"].coded_texts) == 8
+
+    question = next(
+        item for item in built["configuration"]["questions"] if item["code"] == codeframe["code"]
+    )
+    assert question["question_type"] == "multiple_choice_dichotomy"
+    assert (question["valid_count"], question["missing_count"]) == (9, 1)
+
+    summary = project["client"].get(f"{_url(project, codeframe)}/summary").json()
+    counts = {item["id"]: item["count"] for item in summary["themes"]}
+    assert counts[names["Высокие цены"]["id"]] == 5
+    # Группа отмечена, если отмечен любой её код.
+    assert counts[names["Доставка"]["id"]] == 3
+    assert summary["tiles"] == {"unique": 8, "dictionary": 0, "ai": 8, "low": 2, "uncoded": 0}
+
+    stored = project["repository"].get(project["project_id"])
+    content = build_topline_xlsx(project["repository"].source_path(project["project_id"]), stored)
+    assert "Высокие цены" in _row_labels(content)
+    assert _cell_value(content, "Высокие цены", "B") == pytest.approx(5 / 10 * 100)
+
+
+def test_manual_codes_go_to_dictionary_and_survive_recoding(project) -> None:
+    _built, codeframe = _code(project)
+    names = _themes(codeframe)
+    url = _url(project, codeframe)
+    edited = project["client"].put(
+        f"{url}/answers",
+        json={"key": "Дорого, но качественно", "codes": [names["Качество"]["id"]]},
+    )
+    assert edited.status_code == 200, edited.text
+    rows = project["client"].get(f"{url}/answers", params={"view": "dictionary"}).json()
+    assert [row["text"] for row in rows["rows"]] == ["Дорого, но качественно"]
+    assert rows["rows"][0]["source"] == "manual"
+
+    project["model"].coded_texts.clear()
+    job = project["client"].post(f"{url}/code", json={"mode": "keep_edits"}).json()
+    assert _wait(project, job["job_id"])["status"] == "complete"
+    assert "Дорого, но качественно" not in project["model"].coded_texts
+    assert len(project["model"].coded_texts) == 7
+    row = project["client"].get(
+        f"{url}/answers", params={"search": "качественно"}
+    ).json()["rows"][0]
+    assert row["codes"] == [names["Качество"]["id"]]
+
+    # «Сбросить всё» очищает словарь: модель кодирует ответ заново.
+    job = project["client"].post(f"{url}/code", json={"mode": "reset"}).json()
+    assert _wait(project, job["job_id"])["status"] == "complete"
+    reset = project["client"].get(f"{url}/answers", params={"view": "dictionary"}).json()
+    assert reset["total"] == 0
+
+
+def test_new_mode_codes_only_answers_without_codes(project) -> None:
+    _built, codeframe = _code(project)
+    project["model"].coded_texts.clear()
+    job = project["client"].post(f"{_url(project, codeframe)}/code", json={"mode": "new"}).json()
+    done = _wait(project, job["job_id"])
+    assert done["status"] == "complete"
+    assert project["model"].coded_texts == []
+
+
+def test_failed_batch_is_retried_once(project) -> None:
+    project["model"].fail_codes = 1
+    _built, codeframe = _code(project)
+    summary = project["client"].get(f"{_url(project, codeframe)}/summary").json()
+    assert summary["tiles"]["uncoded"] == 0
+
+
+def test_job_fails_when_every_batch_fails(project) -> None:
+    project["model"].fail_codes = 10
+    response = project["client"].post(
+        f"{project['base']}/codeframes/batch", json={"question_codes": ["WHY"]}
+    )
+    job = _wait(project, response.json()["jobs"][0]["job_id"])
+    assert job["status"] == "failed"
+    assert job["error_code"] == "AI_PROVIDER_ERROR"
+
+
+def test_deleted_code_leaves_answers_and_dictionary(project) -> None:
+    _built, codeframe = _code(project)
+    names = _themes(codeframe)
+    url = _url(project, codeframe)
+    project["client"].put(
+        f"{url}/answers", json={"key": "Цены высокие", "codes": [names["Высокие цены"]["id"]]}
+    )
+    themes = [
+        {"id": theme["id"], "name": theme["name"], "parent_id": theme["parent_id"]}
+        for theme in codeframe["themes"] if theme["name"] != "Высокие цены"
+    ]
+    updated = project["client"].put(
+        url, json={"label": codeframe["label"], "themes": themes, "instruction": "Бренды отдельно",
+                   "multi": False}
+    )
+    assert updated.status_code == 200, updated.text
+    stored = updated.json()["configuration"]["codeframes"][0]
+    assert stored["instruction"] == "Бренды отдельно" and stored["multi"] is False
+    exported = project["client"].get(f"{url}/export").json()
+    assert exported["dictionary"] == {"цены высокие": []}
+    assert names["Высокие цены"]["id"] not in {theme["id"] for theme in exported["themes"]}
+
+
+def test_coding_is_one_undo_step(project) -> None:
+    _built, codeframe = _code(project)
+    names = _themes(codeframe)
+    url = _url(project, codeframe)
+    before = project["client"].get(f"{url}/answers", params={"search": "дорого"}).json()
+    project["client"].put(
+        f"{url}/answers", json={"key": "Дорого", "codes": [names["Качество"]["id"]]}
+    )
+    project["client"].post(f"{project['base']}/undo")
+    after = project["client"].get(f"{url}/answers", params={"search": "дорого"}).json()
+    assert after == before
+
+
+def test_revision_returns_draft_without_saving(project) -> None:
+    _built, codeframe = _code(project)
+    names = _themes(codeframe)
+    project["model"].codebook = {
+        "codes": [
+            {"name": "Цена", "keep": names["Высокие цены"]["number"]},
+            {"name": "Сервис"},
+        ]
+    }
+    job = project["client"].post(
+        f"{_url(project, codeframe)}/revise", json={"request": "Объедини цену, добавь сервис"}
+    ).json()
+    done = _wait(project, job["job_id"])
+    assert done["status"] == "complete"
+    draft = done["result"]["themes"]
+    assert draft[0]["id"] == names["Высокие цены"]["id"]
+    assert draft[1]["id"].startswith("new-")
+    unchanged = project["client"].get(project["base"]).json()["configuration"]["codeframes"][0]
+    assert unchanged["themes"] == codeframe["themes"]
+
+
+def test_import_maps_codes_by_name_and_brings_dictionary(project) -> None:
+    _built, codeframe = _code(project)
+    url = _url(project, codeframe)
+    response = project["client"].post(
+        f"{url}/import",
+        json={
+            "format": "sav-analytics/codeframe",
+            "themes": [{"id": "x1", "name": "Качество"}, {"id": "x2", "name": "Упаковка"}],
+            "dictionary": {"Ничего не понравилось": ["x2"]},
+        },
+    )
+    assert response.status_code == 200, response.text
+    names = _themes(response.json()["configuration"]["codeframes"][0])
+    assert "Упаковка" in names
+    row = project["client"].get(f"{url}/answers", params={"search": "ничего"}).json()["rows"][0]
+    assert row["codes"] == [names["Упаковка"]["id"]]
+
+
+def test_duplicate_project_keeps_codes(project) -> None:
+    _built, codeframe = _code(project)
+    copy = project["client"].post(f"{project['base']}/duplicate").json()
+    copied = copy["configuration"]["codeframes"][0]
+    rows = project["client"].get(
+        f"/api/projects/{copy['id']}/codeframes/{copied['id']}/answers"
+    ).json()
+    assert all(row["codes"] for row in rows["rows"])
+
+
+def test_summary_and_rows_without_coding() -> None:
+    codeframe = {"themes": [{"id": "a", "number": 1, "name": "A", "parent_id": None}]}
+    coding = {"answers": {}, "dictionary": {}}
+    texts = pd.Series(["x", "y", ""])
+    assert codeframe_summary(texts, codeframe, coding)["tiles"]["uncoded"] == 2
+    assert answer_rows(texts, codeframe, coding, view="uncoded")["total"] == 2
 
 
 def test_text_profile_separates_answers_from_service_fields() -> None:
@@ -158,7 +419,7 @@ def test_text_profile_separates_answers_from_service_fields() -> None:
 
     assert answers["wordy_share"] > 0.8
     assert logins["wordy_share"] == 0
-    assert answers["answered"] == 7
+    assert answers["answered"] == 9
 
 
 def test_service_fields_are_recognised_by_code_and_label() -> None:
@@ -170,3 +431,11 @@ def test_service_fields_are_recognised_by_code_and_label() -> None:
     assert not looks_like_service_field("Q13", "Почему Вы поставили именно такую оценку?")
     assert not looks_like_service_field("Q20_2T", "Нет (уточните, почему не оформляет)")
 
+
+assert coding_jobs.MODES == ("new", "keep_edits", "reset")
+
+
+def test_revision_keeps_nested_codes_matched_by_name() -> None:
+    themes, next_number = codebook_themes(CODEBOOK, [], 1)
+    revised, _ = codebook_themes(CODEBOOK, themes, next_number)
+    assert [theme["id"] for theme in revised] == [theme["id"] for theme in themes]

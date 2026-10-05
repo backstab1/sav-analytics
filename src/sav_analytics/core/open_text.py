@@ -1,98 +1,47 @@
-"""Кодирование открытых ответов: кодификатор, темы по запросам, ручные отметки.
+"""Кодирование открытых ответов (PQ.17, решение 034): справочник кодов и
+кодирование ответов моделью с ручной правкой.
 
-Кодификатор привязан к открытому вопросу. У темы есть название, родитель
-(иерархия), запросы и ручные отметки. Запрос — строка слов:
+Кодификатор привязан к открытому вопросу. Справочник — коды в два уровня:
+группа (родитель) и коды внутри неё; группа становится NET. Каждый код —
+вариант multiple-response вопроса: столбец `<код>_<номер>` со значением 1
+или 0, пустой у тех, кто не ответил. Родитель отмечен, если отмечен он сам
+или любой его код. Столбцы досчитываются при чтении массива
+(`read_project_frame`) и работают в таблицах, фильтрах и баннере.
 
-- все слова строки должны встретиться в ответе (И), строки темы — ИЛИ;
-- слово ищется со всеми формами: сравниваются основы Snowball, основа слова
-  ответа должна начинаться с основы слова запроса («доволен» → «довольна»);
-- `слово*` — буквальный префикс без стемминга, `-слово` — исключение.
+Коды ставятся не строке массива, а **тексту ответа**: одинаковые ответы
+кодируются одинаково, а правка человека пишется в словарь «текст → коды»
+и переходит на новую волну и в другие проекты. Текст сравнивается
+нормализованным (`normalize_answer`).
 
-Ручная отметка человека перекрывает запрос в обе стороны, и у каждой отметки
-виден источник — запрос или человек. Поэтому кодирование воспроизводимо:
-тот же кодификатор на той же или новой волне даёт тот же результат.
-
-Тема — вариант multiple-response вопроса: столбец `<код>_<номер>` со значением
-1 или 0, пустой у тех, кто не ответил. Столбцы досчитываются при чтении
-массива (read_project_frame), как формулы, и работают в таблицах, фильтрах и
-баннере как обычный вопрос. Родительская тема отмечена, если отмечена она сама
-или любая дочерняя.
+Результат кодирования — ответы, словарь, источники и уверенность — может
+занимать мегабайты, поэтому он не живёт в `project.json`, который целиком
+уходит в историю отмены и ключ кэша. Он лежит неизменяемым файлом
+`coding/<sha>.json` рядом с проектом, а кодификатор хранит ссылку на него
+(`coding_ref`). Новая правка — новый файл и новая ссылка: отмена
+возвращает прежнюю ссылку, ключ кэша отчёта меняется вместе с ней.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
-from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
-
-from .russian_stemmer import stem
 
 
 class CodeframeError(ValueError):
     pass
 
 
-_TOKEN = re.compile(r"[0-9a-zа-яё]+", re.IGNORECASE)
-MIN_STEM = 2
-
-
-@dataclass(frozen=True)
-class QueryTerm:
-    text: str
-    prefix: bool
-    exclude: bool
-
-
-def parse_query(line: str) -> list[QueryTerm]:
-    terms = []
-    for raw in line.split():
-        exclude = raw.startswith("-")
-        body = raw[1:] if exclude else raw
-        prefix = body.endswith("*")
-        body = body.rstrip("*").lower().replace("ё", "е")
-        words = _TOKEN.findall(body)
-        if not words:
-            continue
-        word = words[0]
-        terms.append(QueryTerm(word if prefix else stem(word), prefix, exclude))
-    if terms and all(term.exclude for term in terms):
-        raise CodeframeError(f"В запросе «{line}» только исключения — нечего искать.")
-    return terms
-
-
-def _word_stems(text: Any) -> tuple[list[str], list[str]]:
-    words = [word.lower().replace("ё", "е") for word in _TOKEN.findall(str(text))]
-    return words, [stem(word) for word in words]
-
-
-def _term_found(term: QueryTerm, words: list[str], stems: list[str]) -> bool:
-    if term.prefix:
-        return any(word.startswith(term.text) for word in words)
-    if len(term.text) < MIN_STEM:
-        return term.text in words
-    return any(item.startswith(term.text) for item in stems)
-
-
-def query_matches(texts: pd.Series, queries: list[str]) -> pd.Series:
-    parsed = [terms for terms in (parse_query(line) for line in queries) if terms]
-    if not parsed:
-        return pd.Series(False, index=texts.index)
-    result = []
-    for text in texts:
-        if _is_empty(text):
-            result.append(False)
-            continue
-        words, stems = _word_stems(text)
-        matched = False
-        for terms in parsed:
-            if all(_term_found(term, words, stems) != term.exclude for term in terms):
-                matched = True
-                break
-        result.append(matched)
-    return pd.Series(result, index=texts.index)
+CODING_DIR = "coding"
+OTHER_NAME = "Другое"
+# Источник кодов ответа: модель, человек, словарь правок прежних волн.
+SOURCES = ("ai", "manual", "dictionary")
 
 
 def _is_empty(value: Any) -> bool:
@@ -103,6 +52,12 @@ def answered_mask(texts: pd.Series) -> pd.Series:
     return texts.map(lambda value: not _is_empty(value))
 
 
+def normalize_answer(value: Any) -> str:
+    """Текст ответа как ключ: регистр, «ё», пробелы и края не различаются."""
+    text = str(value).strip().lower().replace("ё", "е")
+    return re.sub(r"\s+", " ", text)
+
+
 def theme_variable(codeframe: dict[str, Any], theme: dict[str, Any]) -> str:
     return f"{codeframe['code']}_{theme['number']}"
 
@@ -111,71 +66,125 @@ def validate_codeframe(codeframe: dict[str, Any]) -> None:
     themes = codeframe.get("themes", [])
     ids = [theme["id"] for theme in themes]
     if len(ids) != len(set(ids)):
-        raise CodeframeError("У тем повторяются идентификаторы.")
+        raise CodeframeError("У кодов повторяются идентификаторы.")
     names = [theme["name"].strip().casefold() for theme in themes]
     if not all(names):
-        raise CodeframeError("У каждой темы должно быть название.")
+        raise CodeframeError("У каждого кода должно быть название.")
     if len(names) != len(set(names)):
-        raise CodeframeError("Названия тем не должны повторяться.")
+        raise CodeframeError("Названия кодов не должны повторяться.")
     by_id = {theme["id"]: theme for theme in themes}
     for theme in themes:
         parent = theme.get("parent_id")
         if parent is None:
             continue
-        if parent not in by_id:
-            raise CodeframeError(f"У темы «{theme['name']}» не найдена родительская тема.")
-        if by_id[parent].get("parent_id") is not None:
-            raise CodeframeError("Иерархия тем — два уровня: у дочерней темы не бывает детей.")
         if parent == theme["id"]:
-            raise CodeframeError("Тема не может быть родителем самой себя.")
-    for theme in themes:
-        for line in theme.get("queries", []):
-            parse_query(line)
+            raise CodeframeError("Код не может быть группой самому себе.")
+        if parent not in by_id:
+            raise CodeframeError(f"У кода «{theme['name']}» не найдена группа.")
+        if by_id[parent].get("parent_id") is not None:
+            raise CodeframeError("Справочник — два уровня: у кода внутри группы нет своих кодов.")
+
+
+# ---------------------------------------------------------------- хранение
+
+
+def empty_coding() -> dict[str, Any]:
+    return {"answers": {}, "dictionary": {}}
+
+
+def store_coding(project_dir: Path, coding: dict[str, Any]) -> str:
+    """Записать результат кодирования неизменяемым файлом и вернуть ссылку."""
+    data = json.dumps(coding, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ref = hashlib.sha256(data.encode("utf-8")).hexdigest()[:32]
+    directory = project_dir / CODING_DIR
+    directory.mkdir(exist_ok=True)
+    target = directory / f"{ref}.json"
+    if not target.exists():
+        temporary = directory / f".{ref}.tmp"
+        temporary.write_text(data, encoding="utf-8")
+        temporary.replace(target)
+    return ref
+
+
+def load_coding(project_dir: Path, ref: str | None) -> dict[str, Any]:
+    if not ref:
+        return empty_coding()
+    return json.loads(json.dumps(_cached_coding(str(project_dir), ref)))
+
+
+@lru_cache(maxsize=64)
+def _cached_coding(project_dir: str, ref: str) -> dict[str, Any]:
+    path = Path(project_dir) / CODING_DIR / f"{ref}.json"
+    if not path.is_file():
+        # Файл потерян (ручная чистка папки): кодирование пустое, а не ошибка
+        # чтения всего массива.
+        return empty_coding()
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------- расчёт
+
+
+def answer_codes(
+    codeframe: dict[str, Any], coding: dict[str, Any], key: str
+) -> list[str]:
+    """Коды ответа: словарь правок важнее кодов модели."""
+    known = {theme["id"] for theme in codeframe.get("themes", [])}
+    if key in coding.get("dictionary", {}):
+        codes = coding["dictionary"][key]
+    else:
+        codes = (coding.get("answers", {}).get(key) or {}).get("codes", [])
+    return [code for code in codes if code in known]
+
+
+def answer_source(coding: dict[str, Any], key: str) -> str | None:
+    if key in coding.get("dictionary", {}):
+        entry = coding.get("answers", {}).get(key) or {}
+        return "manual" if entry.get("source") == "manual" else "dictionary"
+    entry = coding.get("answers", {}).get(key)
+    return entry.get("source") if entry else None
 
 
 def code_answers(
-    texts: pd.Series, codeframe: dict[str, Any]
-) -> dict[str, dict[str, pd.Series]]:
-    """Отметки тем по ответам: значение и источник («query» или «manual»).
-
-    Возвращает по id темы серию 1.0/0.0/NaN и серию источника отметки.
-    """
+    texts: pd.Series, codeframe: dict[str, Any], coding: dict[str, Any]
+) -> dict[str, pd.Series]:
+    """Отметки кодов по строкам: id кода → серия 1.0/0.0/NaN."""
     answered = answered_mask(texts)
+    keys = texts.map(lambda value: None if _is_empty(value) else normalize_answer(value))
     themes = codeframe.get("themes", [])
-    own: dict[str, pd.Series] = {}
-    sources: dict[str, pd.Series] = {}
+    own: dict[str, list[bool]] = {theme["id"]: [] for theme in themes}
+    cache: dict[str, set[str]] = {}
+    for key in keys:
+        if key is None:
+            codes: set[str] = set()
+        else:
+            if key not in cache:
+                cache[key] = set(answer_codes(codeframe, coding, key))
+            codes = cache[key]
+        for theme in themes:
+            own[theme["id"]].append(theme["id"] in codes)
+    result: dict[str, pd.Series] = {}
     for theme in themes:
-        matched = query_matches(texts, theme.get("queries", [])) & answered
-        source = pd.Series(np.where(matched, "query", ""), index=texts.index, dtype=object)
-        for row, value in (theme.get("manual") or {}).items():
-            position = int(row)
-            if position not in texts.index or not answered.get(position, False):
-                continue
-            matched.loc[position] = bool(value)
-            source.loc[position] = "manual"
-        own[theme["id"]] = matched
-        sources[theme["id"]] = source
-    result: dict[str, dict[str, pd.Series]] = {}
-    for theme in themes:
-        marked = own[theme["id"]].copy()
+        marked = pd.Series(own[theme["id"]], index=texts.index, dtype=bool)
         for child in themes:
             if child.get("parent_id") == theme["id"]:
-                marked |= own[child["id"]]
-        values = marked.astype(float).where(answered)
-        result[theme["id"]] = {"value": values, "source": sources[theme["id"]]}
+                marked |= pd.Series(own[child["id"]], index=texts.index, dtype=bool)
+        result[theme["id"]] = marked.astype(float).where(answered)
     return result
 
 
-def codeframe_columns(texts: pd.Series, codeframe: dict[str, Any]) -> dict[str, pd.Series]:
-    coded = code_answers(texts, codeframe)
+def codeframe_columns(
+    texts: pd.Series, codeframe: dict[str, Any], coding: dict[str, Any]
+) -> dict[str, pd.Series]:
+    coded = code_answers(texts, codeframe, coding)
     return {
-        theme_variable(codeframe, theme): coded[theme["id"]]["value"]
+        theme_variable(codeframe, theme): coded[theme["id"]]
         for theme in codeframe.get("themes", [])
     }
 
 
 def theme_owners(project: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    """Имя столбца темы → кодификатор, которому он принадлежит."""
+    """Имя столбца кода → кодификатор, которому он принадлежит."""
     owners = {}
     for codeframe in ((project or {}).get("configuration") or {}).get("codeframes", []):
         for theme in codeframe.get("themes", []):
@@ -197,75 +206,153 @@ def codeframe_text_variable(codeframe: dict[str, Any], project: dict[str, Any]) 
     return question["source_variables"][0]
 
 
-def codeframe_summary(texts: pd.Series, codeframe: dict[str, Any]) -> dict[str, Any]:
-    coded = code_answers(texts, codeframe)
+def unique_answers(texts: pd.Series) -> list[tuple[str, str, int]]:
+    """Уникальные ответы по убыванию частоты: ключ, пример текста, число."""
+    counts: dict[str, int] = {}
+    examples: dict[str, str] = {}
+    for value in texts:
+        if _is_empty(value):
+            continue
+        key = normalize_answer(value)
+        counts[key] = counts.get(key, 0) + 1
+        examples.setdefault(key, str(value).strip())
+    return sorted(
+        ((key, examples[key], count) for key, count in counts.items()),
+        key=lambda item: (-item[2], item[0]),
+    )
+
+
+def codeframe_summary(
+    texts: pd.Series, codeframe: dict[str, Any], coding: dict[str, Any]
+) -> dict[str, Any]:
+    """Плитки ревью и счётчики кодов."""
     answered = answered_mask(texts)
-    any_theme = pd.Series(False, index=texts.index)
-    counts = []
+    unique = unique_answers(texts)
+    tiles = {"unique": len(unique), "dictionary": 0, "ai": 0, "low": 0, "uncoded": 0}
+    uncoded_rows = 0
+    for key, _text, count in unique:
+        codes = answer_codes(codeframe, coding, key)
+        source = answer_source(coding, key)
+        if source in {"manual", "dictionary"}:
+            tiles["dictionary"] += 1
+        elif source == "ai":
+            tiles["ai"] += 1
+            if (coding["answers"].get(key) or {}).get("low"):
+                tiles["low"] += 1
+        if not codes:
+            tiles["uncoded"] += 1
+            uncoded_rows += count
+    coded = code_answers(texts, codeframe, coding)
+    total = int(answered.sum())
+    themes = []
     for theme in codeframe.get("themes", []):
-        values = coded[theme["id"]]["value"]
-        source = coded[theme["id"]]["source"]
-        marked = values.fillna(0).astype(bool)
-        any_theme |= marked
-        counts.append(
+        marked = coded[theme["id"]].fillna(0).astype(bool)
+        themes.append(
             {
                 "id": theme["id"],
                 "count": int(marked.sum()),
-                "manual": int((source == "manual").sum()),
-                "share": float(marked.sum() / answered.sum()) if answered.sum() else None,
+                "share": float(marked.sum() / total) if total else None,
             }
         )
     return {
-        "answered": int(answered.sum()),
-        "uncoded": int((answered & ~any_theme).sum()),
-        "themes": counts,
+        "answered": total,
+        "uncoded": uncoded_rows,
+        "tiles": tiles,
+        "themes": themes,
     }
 
 
 def answer_rows(
     texts: pd.Series,
     codeframe: dict[str, Any],
+    coding: dict[str, Any],
     *,
     theme_id: str | None = None,
-    uncoded: bool = False,
+    view: str = "all",
     search: str = "",
     offset: int = 0,
     limit: int = 50,
 ) -> dict[str, Any]:
-    coded = code_answers(texts, codeframe)
-    answered = answered_mask(texts)
-    selected = answered.copy()
-    if theme_id:
-        if theme_id not in coded:
-            raise CodeframeError("Тема не найдена.")
-        selected &= coded[theme_id]["value"].fillna(0).astype(bool)
-    if uncoded:
-        any_theme = pd.Series(False, index=texts.index)
-        for item in coded.values():
-            any_theme |= item["value"].fillna(0).astype(bool)
-        selected &= ~any_theme
-    if search.strip():
-        selected &= query_matches(texts, [search])
-    rows = list(texts.index[selected])
-    page = rows[offset : offset + limit]
-    return {
-        "total": len(rows),
-        "rows": [
-            {
-                "row": int(position),
-                "text": str(texts.loc[position]),
-                "themes": [
-                    {
-                        "id": theme["id"],
-                        "source": coded[theme["id"]]["source"].loc[position] or "child",
-                    }
-                    for theme in codeframe.get("themes", [])
-                    if coded[theme["id"]]["value"].loc[position] == 1
-                ],
+    """Уникальные ответы с кодами и источником, по фильтру ревью.
+
+    `view`: all, uncoded (без кода), low (низкая уверенность модели),
+    dictionary (из словаря правок), ai (поставлены моделью).
+    """
+    known = {theme["id"]: theme for theme in codeframe.get("themes", [])}
+    if theme_id and theme_id not in known:
+        raise CodeframeError("Код не найден.")
+    needle = normalize_answer(search) if search.strip() else ""
+    rows = []
+    for key, text, count in unique_answers(texts):
+        codes = answer_codes(codeframe, coding, key)
+        source = answer_source(coding, key)
+        low = bool((coding.get("answers", {}).get(key) or {}).get("low")) and source == "ai"
+        if view == "uncoded" and codes:
+            continue
+        if view == "low" and not low:
+            continue
+        if view == "dictionary" and source not in {"manual", "dictionary"}:
+            continue
+        if view == "ai" and source != "ai":
+            continue
+        if theme_id:
+            children = {
+                item["id"] for item in known.values() if item.get("parent_id") == theme_id
             }
-            for position in page
-        ],
+            if not ({theme_id} | children) & set(codes):
+                continue
+        if needle and needle not in key:
+            continue
+        rows.append(
+            {"key": key, "text": text, "count": count, "codes": codes, "source": source,
+             "low": low}
+        )
+    return {"total": len(rows), "rows": rows[offset : offset + limit]}
+
+
+def merge_rare_codes(
+    themes: list[dict[str, Any]],
+    coding: dict[str, Any],
+    counts: dict[str, int],
+    total: int,
+    threshold: float,
+    new_id: Any,
+    next_number: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    """Коды реже порога уходят в «Другое» (решение 034).
+
+    Сравнивается доля ответивших с кодом; группы не сливаются, а коды
+    внутри группы сливаются в общее «Другое». Возвращает справочник,
+    кодирование и следующий свободный номер.
+    """
+    if threshold <= 0 or not total:
+        return themes, coding, next_number
+    parents = {theme.get("parent_id") for theme in themes if theme.get("parent_id")}
+    rare = {
+        theme["id"]
+        for theme in themes
+        if theme["id"] not in parents
+        and theme["name"].casefold() != OTHER_NAME.casefold()
+        and counts.get(theme["id"], 0) / total < threshold
     }
+    if not rare:
+        return themes, coding, next_number
+    other = next(
+        (theme for theme in themes if theme["name"].casefold() == OTHER_NAME.casefold()), None
+    )
+    kept = [theme for theme in themes if theme["id"] not in rare]
+    if other is None:
+        other = {"id": str(new_id()), "number": next_number, "name": OTHER_NAME,
+                 "parent_id": None, "description": "Редкие ответы"}
+        next_number += 1
+        kept.append(other)
+    for entry in coding["answers"].values():
+        codes = entry.get("codes", [])
+        if rare & set(codes):
+            entry["codes"] = list(dict.fromkeys(
+                [code for code in codes if code not in rare] + [other["id"]]
+            ))
+    return kept, coding, next_number
 
 
 _WORD = re.compile(r"[a-zа-яё]{2,}", re.IGNORECASE)
@@ -303,4 +390,3 @@ _SERVICE = re.compile(
 def looks_like_service_field(code: str, label: str) -> bool:
     """Код или подпись говорят о служебном поле: идентификатор, имя, контакт, дата."""
     return bool(_SERVICE.search(code) or _SERVICE.search(label))
-

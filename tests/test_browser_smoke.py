@@ -1818,13 +1818,26 @@ def test_maxdiff_counts_are_run_from_the_analysis_section(
     expect(result.locator("tr").nth(1)).to_contain_text("A")
 
 
-def test_open_answers_are_coded_by_query_and_by_hand(
+def test_open_answers_are_coded_by_ai_and_by_hand(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
+    from sav_analytics.api_dependencies import (
+        get_fast_chat_model,
+        get_long_chat_model,
+        get_settings,
+    )
+    from sav_analytics.settings import Settings
+    from tests.test_open_text import RuleModel
+
+    model = RuleModel()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        data_dir=tmp_path, assistant_base_url="http://stub.local", assistant_model="stub"
+    )
+    app.dependency_overrides[get_long_chat_model] = lambda: model
+    app.dependency_overrides[get_fast_chat_model] = lambda: model
     source = tmp_path / "open.sav"
-    # Номер в конце делает ответы разными: иначе столбец похож на закрытый вопрос.
     answers = [
-        f"{text} (анкета {index})"
+        f"{text} (анкета {index})" if index % 2 else text
         for index, text in enumerate(
             [
                 "Очень доволен доставкой",
@@ -1832,8 +1845,9 @@ def test_open_answers_are_coded_by_query_and_by_hand(
                 "Дорого, но качественно",
                 "Цены высокие",
                 "Ничего не понравилось",
+                "Всё отлично",
             ]
-            * 8
+            * 6
         )
     ]
     pyreadstat.write_sav(
@@ -1841,41 +1855,32 @@ def test_open_answers_are_coded_by_query_and_by_hand(
         source,
         column_labels={"ID": "Номер", "WHY": "Почему вы так оценили?"},
     )
-    _open_project(page, live_server, source)
-    _open_view(page, "text")
-    expect(page.locator("#section-text")).to_be_visible(timeout=UI_TIMEOUT)
-    expect(page.locator("#text-question option[value='WHY']")).to_have_count(1, timeout=UI_TIMEOUT)
+    try:
+        _open_project(page, live_server, source)
+        page.click("#recognize-open-data")
+        expect(page.locator("#recognize-body input[value='WHY']")).to_be_checked(
+            timeout=UI_TIMEOUT
+        )
+        page.click("#recognize-apply")
+        # Первое обращение к ИИ в проекте — согласие с тем, что уйдёт провайдеру.
+        expect(page.locator("#ai-consent-sheet")).to_be_visible(timeout=UI_TIMEOUT)
+        page.click("#ai-consent-accept")
+        expect(page.locator("#section-text")).to_be_visible(timeout=UI_TIMEOUT)
+        row = page.locator("#coding-list .cq").first
+        expect(row.locator("[data-cq-status]")).to_contain_text("кодов", timeout=UI_TIMEOUT)
 
-    page.click("#create-codeframe")
-    expect(page.locator("#coding-body")).to_be_visible(timeout=UI_TIMEOUT)
-    page.click("#add-theme")
-    row = page.locator("#theme-list .theme-row").last
-    row.locator(".theme-name").fill("Доставка")
-    row.locator(".theme-queries").fill("доставка")
-    page.click("#save-themes")
-    expect(page.locator("#coding-stats")).to_contain_text("без темы 24", timeout=UI_TIMEOUT)
-    expect(page.locator("#theme-list .theme-count").first).to_have_text("16", timeout=UI_TIMEOUT)
+        row.locator("[data-cq-toggle]").click()
+        expect(row.locator("[data-tile='uncoded'] b")).to_have_text("6", timeout=UI_TIMEOUT)
+        expect(row.locator(".code-row")).to_have_count(6)
 
-    page.select_option("#answer-filter", "uncoded")
-    expect(page.locator("#answer-count")).to_contain_text("из 24", timeout=UI_TIMEOUT)
-    first = page.locator("#answer-list .answer-row").first
-    first.locator(".answer-add").select_option(label="Доставка")
-    expect(page.locator("#coding-stats")).to_contain_text("без темы 23", timeout=UI_TIMEOUT)
-    expect(page.locator("#theme-list .theme-count").first).to_contain_text("вручную 1")
-
-    # Кодификатор другой волны: новые темы добавляются, совпадающие пропускаются.
-    codeframe = tmp_path / "codeframe.json"
-    codeframe.write_text(
-        '{"format": "sav-analytics/codeframe", "version": 1, "label": "x", "themes": ['
-        '{"id": "a", "name": "Доставка", "parent_id": null, "queries": ["доставка"]},'
-        '{"id": "b", "name": "Цена", "parent_id": null, "queries": ["цен*"]}]}',
-        encoding="utf-8",
-    )
-    page.set_input_files("#import-codeframe", str(codeframe))
-    expect(page.locator("#theme-list .theme-row")).to_have_count(2, timeout=UI_TIMEOUT)
-    page.click("#save-themes")
-    expect(page.locator("#coding-stats")).to_contain_text("без темы 15", timeout=UI_TIMEOUT)
-
+        row.locator("[data-tile='uncoded']").click()
+        expect(row.locator(".answer-row")).to_have_count(6, timeout=UI_TIMEOUT)
+        row.locator(".answer-row").first.locator(".answer-add").select_option(label="Качество")
+        expect(row.locator("[data-tile='dictionary'] b")).to_have_text("1", timeout=UI_TIMEOUT)
+        expect(row.locator("[data-tile='uncoded'] b")).to_have_text("5")
+    finally:
+        for dependency in (get_settings, get_long_chat_model, get_fast_chat_model):
+            app.dependency_overrides.pop(dependency, None)
 
 
 def test_header_preview_shows_columns_and_bases_before_building(
