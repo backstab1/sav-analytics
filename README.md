@@ -236,6 +236,12 @@ API доступна по адресу [http://127.0.0.1:8000/docs](http://127.0
 Каталог можно изменить переменной `SAV_ANALYTICS_DATA_DIR`, а максимальный размер загрузки —
 `SAV_ANALYTICS_MAX_UPLOAD_BYTES`.
 
+Заявки «Получить демо» с лендинга (`POST /api/demo-requests`) дописываются в
+`.data/demo_requests.jsonl`. Письмо о заявке уходит, только если заданы получатель
+`SAV_ANALYTICS_DEMO_MAIL_TO` и SMTP-сервер `SAV_ANALYTICS_SMTP_HOST`; порт, логин,
+пароль, отправитель и TLS — в `.env.example`. Сбой почты пишется в лог, заявка
+при этом уже сохранена.
+
 ### Docker
 
 ```powershell

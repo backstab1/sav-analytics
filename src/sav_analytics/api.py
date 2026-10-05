@@ -31,6 +31,7 @@ from .routers import (
     banners,
     codeframes,
     data_rows,
+    demo_requests,
     filters,
     formulas,
     projects,
@@ -218,6 +219,7 @@ for router in (
     table_reports.router,
     tables.router,
     assistant.router,
+    demo_requests.router,
 ):
     app.include_router(router)
 

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20260930-nest-button" />
+    <link rel="stylesheet" href="/styles.css?v=20261001-landing" />
   </head>
   <body>
     <!-- ================================================================
@@ -69,18 +69,19 @@
         <div class="lp-hero">
           <canvas class="lp-board" aria-hidden="true"></canvas>
           <div class="lp-hero-copy">
-            <span class="lp-badge"><i></i> SPSS&nbsp;.sav → Excel-топлайн</span>
+            <span class="lp-badge"><i></i> SPSS&nbsp;.sav → таблицы → Excel</span>
             <h1>Из массива SPSS&nbsp;— <span>в&nbsp;ясные выводы.</span></h1>
-            <p class="lp-lead">SAV Analytics распознаёт структуру исследования, считает статистику и собирает аккуратный Excel-топлайн. Вам остаётся проверить логику и интерпретировать результат.</p>
+            <p class="lp-lead">SAV Analytics разбирает анкету, строит живые кросстабы с&nbsp;весами и&nbsp;значимостью и&nbsp;выгружает Excel-топлайн, где у&nbsp;каждой цифры есть протокол расчёта. Вам остаётся читать результат, а&nbsp;не&nbsp;собирать его.</p>
             <div class="lp-cta">
-              <button type="button" class="lp-start">Начать с массива <span aria-hidden="true">↗</span></button>
+              <button type="button" class="lp-demo">Получить демо <span aria-hidden="true">↗</span></button>
+              <button type="button" class="lp-start">Вход</button>
               <button type="button" class="lp-tour">Как это работает <span aria-hidden="true">↓</span></button>
             </div>
             <div class="lp-trust">
               <span>Работает с</span>
-              <b>.SAV</b><b>.CSV</b><b>.TSV</b>
+              <b>.SAV</b><b>.CSV</b><b>.TSV</b><b>.XLSX</b>
               <span class="lp-trust-sep"></span>
-              <span>Данные остаются на вашем сервере</span>
+              <span>Разворачивается на вашем сервере</span>
             </div>
           </div>
           <div class="lp-slot" aria-hidden="true"></div>
@@ -88,20 +89,59 @@
 
         <div class="lp-marquee" aria-label="Возможности">
           <div>
-            <p><span>SPSS metadata</span><i>//</i><span>Баннеры</span><i>//</i><span>Raking / IPF</span><i>//</i><span>Subgroup / Rest</span><i>//</i><span>NPS &amp; CSAT</span><i>//</i><span>Сравнение волн</span><i>//</i></p>
-            <p aria-hidden="true"><span>SPSS metadata</span><i>//</i><span>Баннеры</span><i>//</i><span>Raking / IPF</span><i>//</i><span>Subgroup / Rest</span><i>//</i><span>NPS &amp; CSAT</span><i>//</i><span>Сравнение волн</span><i>//</i></p>
+            <p><span>Метаданные SPSS</span><i>//</i><span>Живые кросстабы</span><i>//</i><span>Subgroup / Rest</span><i>//</i><span>Raking / IPF</span><i>//</i><span>Сравнение волн</span><i>//</i><span>NPS &amp; CSAT</span><i>//</i><span>Драйверы</span><i>//</i><span>TURF</span><i>//</i><span>Van Westendorp</span><i>//</i><span>MaxDiff</span><i>//</i></p>
+            <p aria-hidden="true"><span>Метаданные SPSS</span><i>//</i><span>Живые кросстабы</span><i>//</i><span>Subgroup / Rest</span><i>//</i><span>Raking / IPF</span><i>//</i><span>Сравнение волн</span><i>//</i><span>NPS &amp; CSAT</span><i>//</i><span>Драйверы</span><i>//</i><span>TURF</span><i>//</i><span>Van Westendorp</span><i>//</i><span>MaxDiff</span><i>//</i></p>
           </div>
         </div>
 
         <section class="lp-section lp-how" id="how-it-works">
           <div class="lp-section-head">
-            <p class="lp-kicker">Один понятный процесс</p>
+            <p class="lp-kicker">Как это работает</p>
             <h2>От файла до готового топлайна без десятка промежуточных таблиц</h2>
           </div>
           <div class="lp-steps">
-            <article><span>01</span><div class="lp-step-icon">↑</div><h3>Загрузите массив</h3><p>SAV Analytics прочитает labels, типы переменных, missing values и наборы multiple response.</p></article>
-            <article><span>02</span><div class="lp-step-icon">⌁</div><h3>Проверьте структуру</h3><p>Настройте вопросы, баннеры, фильтры и веса в одном последовательном интерфейсе.</p></article>
-            <article><span>03</span><div class="lp-step-icon">↗</div><h3>Заберите результат</h3><p>Скачайте Excel с базами, долями, средними, значимостью и полным аудитом расчётов.</p></article>
+            <article><span>01</span><div class="lp-step-icon">↑</div><h3>Загрузите массив</h3><p>SAV, CSV, TSV или XLSX. Приложение прочитает labels, missing values и наборы multiple response, соберёт матрицы и&nbsp;дихотомии в&nbsp;вопросы и&nbsp;пометит спорные места. Оригинал хранится неизменным.</p></article>
+            <article><span>02</span><div class="lp-step-icon">⌁</div><h3>Соберите таблицы</h3><p>Вопросы строками, баннеры колонками, вложенные разрезы, NET и&nbsp;Top/Bottom, фильтры по&nbsp;подписям ответов и&nbsp;веса&nbsp;— таблица пересчитывается на&nbsp;экране сразу.</p></article>
+            <article><span>03</span><div class="lp-step-icon">↗</div><h3>Заберите книгу</h3><p>Excel с&nbsp;содержанием, полной и&nbsp;валидной базой, значимостью, графиками и&nbsp;листом параметров сборки&nbsp;— плюс statistics.txt с&nbsp;протоколом каждого теста.</p></article>
+          </div>
+        </section>
+
+        <section class="lp-section lp-adv" id="advantages">
+          <div class="lp-section-head">
+            <p class="lp-kicker">Почему SAV Analytics</p>
+            <h2>То, чего обычно не&nbsp;хватает в&nbsp;кросстабах</h2>
+          </div>
+          <div class="lp-adv-grid">
+            <article>
+              <b class="lp-adv-tag">Одна правда</b>
+              <h3>Одно число на&nbsp;экране, в&nbsp;Excel и&nbsp;в&nbsp;аудите</h3>
+              <p>Живую таблицу, лист книги, примечание к&nbsp;ячейке и&nbsp;statistics.txt пишет один и&nbsp;тот же код. Цифры не&nbsp;расходятся между тем, что вы&nbsp;видели, и&nbsp;тем, что ушло заказчику.</p>
+            </article>
+            <article>
+              <b class="lp-adv-tag">Статистика</b>
+              <h3>Протокол за&nbsp;каждой буквой значимости</h3>
+              <p>Subgroup/Rest и&nbsp;попарные сравнения, поправка Bonferroni, эффективная база Киша на&nbsp;весах. Щелчок по&nbsp;ячейке показывает базы, оценки, p-value&nbsp;— и&nbsp;причину, если тест не&nbsp;проводился.</p>
+            </article>
+            <article>
+              <b class="lp-adv-tag">Веса</b>
+              <h3>Вес, который проверяет себя</h3>
+              <p>Raking/IPF по&nbsp;нескольким целям или точный вес по&nbsp;ячейкам, отдельно внутри каждой волны. Design effect и&nbsp;доля экстремальных значений видны до&nbsp;применения, непригодный вес не&nbsp;пройдёт в&nbsp;отчёт.</p>
+            </article>
+            <article>
+              <b class="lp-adv-tag">Контроль</b>
+              <h3>Ошибки ловятся до&nbsp;сборки</h3>
+              <p>Проверка перед запуском блокирует пустой фильтр, пустую базу и&nbsp;плохой вес. Автоматически распознанные вопросы помечены «Проверить», коды «не&nbsp;применимо» находятся и&nbsp;выводятся из&nbsp;базы блоком.</p>
+            </article>
+            <article>
+              <b class="lp-adv-tag">Анализ</b>
+              <h3>Методы исследователя из&nbsp;коробки</h3>
+              <p>Драйверы по&nbsp;Джонсону и&nbsp;регрессии, сегментация k-means, которая сразу становится разрезом баннера, TURF, Van Westendorp, Gabor–Granger и&nbsp;MaxDiff&nbsp;— без выгрузки в&nbsp;другой пакет.</p>
+            </article>
+            <article>
+              <b class="lp-adv-tag">Данные</b>
+              <h3>Массивы остаются у&nbsp;вас</h3>
+              <p>Приложение разворачивается на&nbsp;вашем сервере. Каждая книга воспроизводима: лист «Параметры» хранит хеш исходника, ревизию настроек и&nbsp;версию, а&nbsp;история запусков&nbsp;— все прошлые сборки.</p>
+            </article>
           </div>
         </section>
 
@@ -109,14 +149,14 @@
           <div class="lp-feature-copy">
             <p class="lp-kicker">Умная структура</p>
             <h2>Понимает анкету, а&nbsp;не&nbsp;просто столбцы</h2>
-            <p>Связывает дихотомии в multiple choice, собирает матрицы, отличает технические переменные и показывает спорные места до расчёта.</p>
-            <ul><li>Variable и value labels</li><li>Multiple-response sets</li><li>Шкалы, NPS и CSAT</li></ul>
+            <p>Связывает дихотомии в multiple choice, собирает матрицы и&nbsp;ранжирования, отличает технические переменные и&nbsp;показывает спорные места до&nbsp;расчёта. Новую волну можно загрузить поверх&nbsp;— настройки проекта сохранятся.</p>
+            <ul><li>Variable и value labels, missing values</li><li>Multiple response, матрицы, ранжирования</li><li>Шкалы, NPS и CSAT, NET-группы</li></ul>
           </div>
           <div class="lp-structure-demo" aria-hidden="true">
             <div class="lp-demo-top"><span>Структура массива</span><b>48 вопросов</b></div>
             <div class="lp-question"><code>Q1</code><span><b>Знание брендов</b><small>Multiple choice · 8 вариантов</small></span><em>Готово</em></div>
             <div class="lp-question"><code>Q4</code><span><b>Оценка характеристик</b><small>Matrix · шкала 1–5</small></span><em>Готово</em></div>
-            <div class="lp-question selected"><code>Q7</code><span><b>Готовность рекомендовать</b><small>NPS · шкала 0–10</small></span><em>−12 NPS</em></div>
+            <div class="lp-question selected"><code>Q7</code><span><b>Готовность рекомендовать</b><small>NPS · шкала 0–10</small></span><em>Проверить</em></div>
             <div class="lp-question"><code>Q12</code><span><b>Возраст, полных лет</b><small>Numeric · перекодировка</small></span><em>Готово</em></div>
           </div>
         </section>
@@ -125,11 +165,11 @@
           <div class="lp-feature-copy">
             <p class="lp-kicker">Статистика без чёрного ящика</p>
             <h2>Каждое число можно объяснить</h2>
-            <p>Приложение сохраняет базы, параметры и причины пропуска тестов. Результат можно проверить и спокойно передать заказчику.</p>
-            <ul><li>Попарные сравнения и Bonferroni</li><li>Эффективная база Киша</li><li>Отдельный statistics.txt с аудитом</li></ul>
+            <p>Приложение сохраняет базы, параметры и&nbsp;причины пропуска тестов. Результат можно проверить самому и&nbsp;спокойно передать заказчику.</p>
+            <ul><li>Попарные сравнения и Bonferroni</li><li>Сравнение с прошлой волной</li><li>Отдельный statistics.txt с аудитом</li></ul>
           </div>
           <div class="lp-audit-demo" aria-hidden="true">
-            <div class="lp-audit-head"><span>Протокол ячейки</span><i>Проверено</i></div>
+            <div class="lp-audit-head"><span>Протокол ячейки</span><i>Значимо</i></div>
             <div class="lp-audit-title">Женщины · «Скорее куплю»</div>
             <div class="lp-audit-value"><strong>64%</strong><span>+8 п.п.</span></div>
             <div class="lp-audit-rule"><span>Subgroup / Rest</span><b>p = 0,012</b></div>
@@ -142,10 +182,47 @@
         <section class="lp-final">
           <div>
             <p class="lp-kicker">Меньше сборки. Больше анализа.</p>
-            <h2>Ваш следующий топлайн может быть готов сегодня.</h2>
+            <h2>Покажем на&nbsp;ваших данных.</h2>
           </div>
-          <button type="button" class="lp-start">Начать новый проект <span aria-hidden="true">↗</span></button>
+          <div class="lp-final-cta">
+            <button type="button" class="lp-demo">Получить демо <span aria-hidden="true">↗</span></button>
+            <button type="button" class="lp-start">Вход</button>
+          </div>
         </section>
+
+        <!-- Заявка на демо. Отправляет demo-request.js в POST /api/demo-requests;
+             поле website — ловушка для ботов, человеку не видно. -->
+        <dialog id="demo-dialog" class="lp-dialog" aria-labelledby="demo-title">
+          <form id="demo-form" class="lp-dialog-body" novalidate>
+            <button type="button" class="lp-dialog-close" data-demo-close aria-label="Закрыть">×</button>
+            <div class="lp-dialog-head">
+              <p class="lp-kicker">Демо</p>
+              <h2 id="demo-title">Покажем SAV Analytics на&nbsp;вашем массиве</h2>
+              <p>Оставьте контакты&nbsp;— свяжемся, договоримся о&nbsp;времени и&nbsp;покажем полный путь от&nbsp;файла до&nbsp;книги.</p>
+            </div>
+            <div class="lp-fields">
+              <label>Имя<span aria-hidden="true">*</span><input name="demo_name" autocomplete="name" maxlength="120" required /></label>
+              <label>Рабочая почта<span aria-hidden="true">*</span><input name="demo_email" type="email" autocomplete="email" maxlength="254" required /></label>
+              <label>Телефон<input name="demo_phone" type="tel" autocomplete="tel" maxlength="32" placeholder="+7" /></label>
+              <label>Компания<input name="demo_company" autocomplete="organization" maxlength="160" /></label>
+              <label class="lp-field-wide">Роль<input name="demo_role" autocomplete="organization-title" maxlength="120" placeholder="Например, руководитель исследований" /></label>
+              <label class="lp-field-wide">Что хотите увидеть<textarea name="demo_message" rows="3" maxlength="2000" placeholder="Трекинг бренда, веса, сравнение волн…"></textarea></label>
+              <label class="lp-honeypot" aria-hidden="true">Сайт<input name="demo_website" tabindex="-1" autocomplete="off" /></label>
+            </div>
+            <label class="lp-consent"><input name="demo_consent" type="checkbox" required /><span>Согласен на&nbsp;обработку персональных данных для связи по&nbsp;заявке</span></label>
+            <p id="demo-error" class="lp-form-error" role="alert" hidden></p>
+            <div class="lp-dialog-actions">
+              <button type="submit" class="lp-demo-submit">Отправить заявку</button>
+              <button type="button" class="lp-ghost" data-demo-close>Отмена</button>
+            </div>
+          </form>
+          <div id="demo-done" class="lp-dialog-body lp-dialog-done" hidden>
+            <div class="lp-done-mark" aria-hidden="true">✓</div>
+            <h2>Заявка отправлена</h2>
+            <p>Спасибо! Мы&nbsp;напишем на&nbsp;указанную почту в&nbsp;течение рабочего дня.</p>
+            <button type="button" class="lp-ghost" data-demo-close>Закрыть</button>
+          </div>
+        </dialog>
       </section>
 
       <!-- ================= Экран «Ручной режим» ================= -->
@@ -1042,7 +1119,7 @@
     </dialog>
     <script src="/util.js?v=20260930-question-tune" defer></script>
     <script src="/tables.js?v=20260930-nest-button" defer></script>
-    <script src="/shell.js?v=20260930-question-tune" defer></script>
+    <script src="/shell.js?v=20261001-landing" defer></script>
     <script src="/app.js?v=20260930-question-tune" defer></script>
     <script src="/route.js?v=20260930-question-tune" defer></script>
     <script src="/source.js?v=20260930-question-tune" defer></script>
@@ -1061,7 +1138,8 @@
     <script src="/coding.js?v=20260930-question-tune" defer></script>
     <script src="/select-search.js?v=20260930-question-tune" defer></script>
     <script src="/history.js?v=20260930-question-tune" defer></script>
-    <script src="/landing.js?v=20260930-question-tune" defer></script>
+    <script src="/landing.js?v=20261001-landing" defer></script>
+    <script src="/demo-request.js?v=20261001-landing" defer></script>
     <script src="/boot.js?v=20260930-question-tune" defer></script>
   </body>
 </html>

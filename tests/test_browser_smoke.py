@@ -412,6 +412,11 @@ def test_screens_switch_and_the_project_bar_actions_stay_reachable(
     expect(page).to_have_url(re.compile(r"#/home$"))
     # Лендинг живёт без шапки приложения; в приложение ведёт его CTA.
     expect(page.locator("header.bar")).to_be_hidden()
+    # «Получить демо» открывает окно заявки, крестик его закрывает.
+    page.click(".lp-hero .lp-demo")
+    expect(page.locator("#demo-dialog")).to_be_visible(timeout=UI_TIMEOUT)
+    page.click("#demo-dialog .lp-dialog-close")
+    expect(page.locator("#demo-dialog")).to_be_hidden()
     page.click(".lp-hero .lp-start")
     expect(page.locator("header.bar")).to_be_visible(timeout=UI_TIMEOUT)
 

@@ -24,6 +24,22 @@ class Settings(BaseSettings):
     assistant_temperature: float | None = 0.0
     assistant_max_tool_calls: int = 15
 
+    # Заявки на демо с лендинга. Журнал в data_dir пишется всегда, письмо —
+    # только при заданных получателе и SMTP-сервере.
+    demo_mail_to: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str | None = None
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+    smtp_timeout_seconds: float = 15.0
+
     @property
     def assistant_enabled(self) -> bool:
         return bool(self.assistant_base_url and self.assistant_model)
+
+    @property
+    def demo_mail_enabled(self) -> bool:
+        return bool(self.demo_mail_to and self.smtp_host)
