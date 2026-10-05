@@ -26,6 +26,7 @@ from .core.preflight import PreflightBlockedError
 from .core.weight_validation import WeightNotUsableError
 from .project_models import InvalidStoredProjectError
 from .routers import (
+    ai,
     analysis,
     assistant,
     banners,
@@ -219,6 +220,7 @@ for router in (
     table_reports.router,
     tables.router,
     assistant.router,
+    ai.router,
     demo_requests.router,
 ):
     app.include_router(router)

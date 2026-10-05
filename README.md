@@ -47,6 +47,21 @@
   непроверенные вопросы предупреждением;
 - предпросмотр распределений и описательной статистики.
 
+### ИИ в проекте
+
+- провайдер — любой OpenAI-совместимый API, настраивается переменными окружения
+  (`docs/assistant.md`, раздел 1); отдельная модель для массовых задач;
+- выключатель «ИИ в проекте» в меню «Выгрузка»: в выключенном проекте ни одна функция
+  не обращается к модели. Перед первым обращением показывается, что и какому провайдеру
+  уйдёт (решение 034: модели можно отдавать данные, числа считает только ядро);
+- фоновые задачи с прогрессом, уведомлением и повтором упавшей: индикатор «ИИ» в ряду
+  действий «Данных» и лист «Задачи ИИ»;
+- «Загрузить анкету» (DOCX, PDF, TXT): модель сопоставляет анкету с массивом и
+  предлагает подписи вопросов, переменных и кодов, тип вопроса из одной переменной и
+  порядок. Предложения проверяются сервером, отброшенное показывается с причиной;
+  выбранные строки «было → станет» применяются одним шагом отмены. Подписи хранятся
+  в `configuration.label_overrides` и переживают перераспознавание и новую волну.
+
 ### Анализ
 
 - карточки связи двух переменных: тест выбирается по типам (хи-квадрат или Фишер,
@@ -256,7 +271,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py src/sav_analytics/ai_jobs.py src/sav_analytics/core/questionnaire.py src/sav_analytics/routers/ai.py
 ```
 
 На 18 сентября в ветке `Codex_Savanalytics` набор содержит 308 non-browser pytest-кейсов
@@ -329,7 +344,7 @@ src/sav_analytics/
 ├── project_models.py  # версионированный контракт сохраняемого проекта
 ├── routers/           # projects, questions, recodings, formulas, banners, filters, weights,
 │                      # reports, report_settings, tables, table_reports, analysis, codeframes,
-│                      # assistant
+│                      # assistant, ai (выключатель ИИ, задачи, анкета)
 ├── repository/        # локальное хранилище проектов: ProjectRepository из частей
 │   ├── store.py       # чтение, миграция, запись ревизией, черновик, блокировки, структура
 │   ├── lifecycle.py   # создание, новая волна, библиотека проектов, отмена
@@ -344,7 +359,10 @@ src/sav_analytics/
 │   ├── plans.py       # шаги плана, проверка в черновике, описание, применение одной ревизией
 │   ├── changes.py     # что изменил план и выборочный откат
 │   ├── service.py     # разговор, журнал assistant.json, применение, отказ и откат
-│   └── system_prompt.md # системный промпт
+│   ├── system_prompt.md # системный промпт
+│   ├── questionnaire.py # разбор анкеты моделью: один запрос с submit_mapping
+│   └── questionnaire_prompt.md # промпт разбора анкеты
+├── ai_jobs.py         # фоновые задачи ИИ: прогресс, результат, повтор
 ├── atomic_file.py     # замена файла, переживающая параллельного читателя в Windows
 ├── report_cache.py    # immutable-артефакты отчёта по cache key
 ├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту
@@ -367,6 +385,7 @@ src/sav_analytics/
 │   ├── research_methods.py # TURF, Van Westendorp, Gabor–Granger, MaxDiff
 │   ├── weighting.py   # рассчитанный вес: raking, ячейки, внутри волн, цели по перекодировкам
 │   ├── weight_targets.py # шаблон целей веса в Excel и его чтение
+│   ├── questionnaire.py # текст анкеты, каталог для модели, проверка и применение подписей
 │   ├── open_text.py   # кодификатор открытых ответов: запросы, отметки, темы как столбцы
 │   ├── russian_stemmer.py # стеммер Snowball для запросов тем
 │   ├── sav_export.py  # выгрузка SAV с формулами, перекодировками и весами
@@ -523,7 +542,8 @@ production-архитектура — в [docs/architecture.md](docs/architectur
   раздел «Отчёт» со строками конфигурации, вердиктом preflight и сборкой);
 - поиск, сортировка, корзина проектов, autosave и локальный Undo/`Ctrl+Z`;
 - пользователи, роли и авторизация;
-- PostgreSQL, Redis, очередь фоновых расчётов и версионирование отчётов;
+- PostgreSQL, Redis, очередь фоновых расчётов и версионирование отчётов; фоновые
+  задачи ИИ живут в памяти процесса и не переживают перезапуск сервера;
 - e2e-проверка связки интерфейса и API;
 - ручной выбор и изменение порядка включённых волн, расчёт raking отдельно внутри волн,
   цели по проектным перекодировкам;

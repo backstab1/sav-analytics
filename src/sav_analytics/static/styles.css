@@ -3235,3 +3235,44 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
   .aw-setup { border-right: 0; border-bottom: 1px solid var(--c-border); }
   .aw-result { padding: 16px; }
 }
+
+/* ================================================================
+   ИИ проекта: задачи, согласие, разбор анкеты (ai.js)
+   ================================================================ */
+.ai-jobs.is-busy { border-color: var(--c-brand); color: var(--c-brand); }
+.ai-jobs.is-busy::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c-brand); animation: ai-pulse 1.2s ease-in-out infinite;
+}
+.ai-jobs.is-failed { border-color: var(--c-danger, #c0392b); color: var(--c-danger, #c0392b); }
+@keyframes ai-pulse { 50% { opacity: .3; } }
+#load-questionnaire { cursor: pointer; }
+
+.ai-jobs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ai-job { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: 10px; }
+.ai-job > div { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.ai-job small { color: var(--c-ink-3); font-size: var(--t-xs); }
+.ai-job.is-failed small { color: var(--c-danger, #c0392b); }
+
+.ai-consent-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+#ai-consent-body p { margin: 0 0 8px; }
+
+.ai-progress { display: grid; gap: 8px; }
+.ai-progress p { margin: 0; }
+.ai-progress-bar { height: 6px; border-radius: 3px; background: var(--c-surface-soft); overflow: hidden; }
+.ai-progress-bar span { display: block; height: 100%; background: var(--c-brand); transition: width 300ms var(--ease); }
+
+.qn-tools { display: flex; gap: 4px; margin-left: -10px; }
+.qn-tools .text-button { font-size: var(--t-xs); padding: 4px 10px; }
+.qn-stale { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--c-warn-tint); color: var(--c-warn-ink); font-size: var(--t-xs); }
+.qn-group h4 { margin: 0; font-size: var(--t-sm); }
+.qn-group h4 .checkbox { padding: var(--s-1, 4px) 0; font-weight: 600; cursor: pointer; }
+.qn-table input[type="checkbox"] { display: inline-block; width: 16px; height: 16px; margin: 1px 0 0; padding: 0; accent-color: var(--c-brand); }
+.qn-table { width: 100%; border-collapse: collapse; font-size: var(--t-xs); table-layout: fixed; }
+.qn-table td { padding: 4px 6px; border-top: 1px solid var(--c-border); vertical-align: top; overflow-wrap: anywhere; }
+.qn-table .qn-check { width: 26px; }
+.qn-table .qn-target { width: 22%; }
+.qn-table .qn-before { color: var(--c-ink-3); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
+.qn-table .qn-after { color: var(--c-ink); }
+.qn-skipped { font-size: var(--t-xs); color: var(--c-ink-3); }
+.qn-skipped ul { margin: 4px 0 0; padding-left: 18px; }

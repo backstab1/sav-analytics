@@ -43,3 +43,34 @@ def get_chat_model(settings: Annotated[Settings, Depends(get_settings)]) -> Chat
         settings.assistant_timeout_seconds,
         settings.assistant_temperature,
     )
+
+
+def get_long_chat_model(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ChatModel | None:
+    """Основная модель с длинным таймаутом — для разовых больших запросов в
+    фоновых задачах (разбор анкеты). Тесты подменяют эту зависимость."""
+    if not settings.assistant_enabled:
+        return None
+    return _chat_model(
+        settings.assistant_base_url or "",
+        settings.assistant_api_key.get_secret_value() if settings.assistant_api_key else None,
+        settings.assistant_model or "",
+        settings.ai_long_timeout_seconds,
+        settings.assistant_temperature,
+    )
+
+
+def get_fast_chat_model(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ChatModel | None:
+    """Модель массовых задач; без `ai_fast_model` — основная. Тесты подменяют."""
+    if not settings.assistant_enabled:
+        return None
+    return _chat_model(
+        settings.assistant_base_url or "",
+        settings.assistant_api_key.get_secret_value() if settings.assistant_api_key else None,
+        settings.ai_fast_model or settings.assistant_model or "",
+        settings.ai_long_timeout_seconds,
+        settings.assistant_temperature,
+    )

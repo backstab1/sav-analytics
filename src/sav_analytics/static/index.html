@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20261005-merge" />
+    <link rel="stylesheet" href="/styles.css?v=20261005-qn2" />
   </head>
   <body>
     <!-- ================================================================
@@ -318,6 +318,10 @@
               <div class="canvas-tools">
                 <div id="summary" class="summary"></div>
                 <div class="canvas-tools-actions">
+                  <button id="ai-jobs" class="pill ai-jobs" type="button" hidden aria-live="polite" title="Фоновые задачи ИИ"></button>
+                  <label id="load-questionnaire" class="pill" title="ИИ сопоставит анкету с массивом и предложит подписи вопросов и кодов">
+                    Загрузить анкету<input id="questionnaire-file" type="file" accept=".docx,.pdf,.txt,.md" hidden />
+                  </label>
                   <button id="find-not-applicable" class="pill" type="button" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">
                     Пропуски по анкете
                   </button>
@@ -340,6 +344,8 @@
                       <div class="export-sep" role="separator"></div>
                       <label class="export-item" role="menuitem">Заменить данные (новая волна)<input id="wave-file" type="file" accept=".sav,.csv,.tsv,.xlsx" hidden /></label>
                       <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
+                      <div class="export-sep" role="separator"></div>
+                      <button id="ai-toggle" class="export-item" type="button" role="menuitem">ИИ в проекте: включён</button>
                     </div>
                   </div>
                 </div>
@@ -1012,6 +1018,45 @@
         </div>
       </aside>
 
+      <aside id="questionnaire-sheet" class="sheet wide" hidden>
+        <div class="sheet-head">
+          <div><h3>Анкета</h3><small id="questionnaire-subtitle">Подписи вопросов и кодов по анкете</small></div>
+          <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть разбор анкеты">×</button>
+        </div>
+        <div class="sheet-body scroll">
+          <div id="questionnaire-body"></div>
+        </div>
+        <div class="sheet-foot">
+          <span id="questionnaire-note" class="foot-note">Применится одним шагом: «Отменить» вернёт всё</span>
+          <button type="button" class="secondary" data-close-sheet>Закрыть</button>
+          <button id="questionnaire-apply" type="button" disabled>Применить</button>
+        </div>
+      </aside>
+
+      <aside id="ai-consent-sheet" class="sheet" hidden>
+        <div class="sheet-head">
+          <div><h3>ИИ в этом проекте</h3><small>Что уйдёт провайдеру модели</small></div>
+          <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть">×</button>
+        </div>
+        <div class="sheet-body">
+          <div id="ai-consent-body"></div>
+        </div>
+        <div class="sheet-foot">
+          <button id="ai-consent-disable" type="button" class="secondary">Выключить ИИ в проекте</button>
+          <button id="ai-consent-accept" type="button">Согласен, продолжить</button>
+        </div>
+      </aside>
+
+      <aside id="ai-jobs-sheet" class="sheet" hidden>
+        <div class="sheet-head">
+          <div><h3>Задачи ИИ</h3><small>Идут в фоне, страницу можно не держать открытой на этом разделе</small></div>
+          <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть">×</button>
+        </div>
+        <div class="sheet-body scroll">
+          <ul id="ai-jobs-list" class="ai-jobs-list"></ul>
+        </div>
+      </aside>
+
       <aside id="not-applicable-editor" class="sheet wide" hidden>
         <div class="sheet-head">
           <div><h3>Пропуски по анкете</h3><small>Найденные коды пропуска по ветке</small></div>
@@ -1120,7 +1165,7 @@
     <script src="/util.js?v=20261001-uiux" defer></script>
     <script src="/tables.js?v=20260930-nest-button" defer></script>
     <script src="/shell.js?v=20261001-landing" defer></script>
-    <script src="/app.js?v=20261001-uiux" defer></script>
+    <script src="/app.js?v=20261005-ai" defer></script>
     <script src="/route.js?v=20260930-question-tune" defer></script>
     <script src="/source.js?v=20260930-question-tune" defer></script>
     <script src="/library.js?v=20260930-question-tune" defer></script>
@@ -1138,6 +1183,7 @@
     <script src="/coding.js?v=20260930-question-tune" defer></script>
     <script src="/select-search.js?v=20260930-question-tune" defer></script>
     <script src="/history.js?v=20260930-question-tune" defer></script>
+    <script src="/ai.js?v=20261005-qn2" defer></script>
     <script src="/landing.js?v=20261001-landing" defer></script>
     <script src="/demo-request.js?v=20261001-landing" defer></script>
     <script src="/boot.js?v=20260930-question-tune" defer></script>

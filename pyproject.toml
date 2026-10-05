@@ -19,6 +19,7 @@ dependencies = [
   "scipy>=1.16,<2",
   "uvicorn[standard]>=0.34,<1",
   "XlsxWriter>=3.2,<4",
+  "pypdf>=5,<7",
 ]
 
 [project.optional-dependencies]

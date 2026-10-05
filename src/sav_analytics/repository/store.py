@@ -17,6 +17,7 @@ from ..configuration_revision import (
     current_expected_revision,
 )
 from ..core.question_groups import carry_manual_groups
+from ..core.questionnaire import apply_label_overrides
 from ..core.report_settings import (
     REPORT_SETTING_KEYS,
     resolved_report_settings,
@@ -217,6 +218,8 @@ class ProjectStore:
         )
         project["inspection"] = refreshed
         project["configuration"]["questions"] = merged
+        # Подписи из анкеты в SAV не записаны — накладываем их заново.
+        apply_label_overrides(project)
         project["configuration"]["structure_version"] = STRUCTURE_VERSION
         project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
         return project

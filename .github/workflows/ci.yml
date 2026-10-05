@@ -55,6 +55,9 @@ jobs:
           src/sav_analytics/routers/tables.py
           src/sav_analytics/assistant
           src/sav_analytics/routers/assistant.py
+          src/sav_analytics/ai_jobs.py
+          src/sav_analytics/core/questionnaire.py
+          src/sav_analytics/routers/ai.py
 
       - name: Pytest с покрытием
         run: >-

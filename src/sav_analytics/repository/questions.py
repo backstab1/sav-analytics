@@ -15,6 +15,7 @@ from ..core.formulas import (
 )
 from ..core.not_applicable import NotApplicableConfirmationRequired, assess_not_applicable
 from ..core.question_groups import QuestionGroupError, build_group, split_group
+from ..core.questionnaire import apply_label_overrides, record_override, reordered
 from ..core.ranking import RankingError, ranking_items
 from ..core.review import CONFIRMED_RECOGNITIONS
 from ..core.sav_reader import spss_missing_mask
@@ -338,6 +339,81 @@ class QuestionEditing(ProjectStore):
         ]
         if pending:
             raise NotApplicableConfirmationRequired(pending)
+
+    def observed_values(self, project_id: UUID, names: list[str]) -> dict[str, list]:
+        """Встреченные в данных значения переменных — не больше 41 на переменную.
+
+        Нужны, чтобы по анкете подписать коды, у которых в SAV подписей нет.
+        Читаются только названные столбцы.
+        """
+        if not names:
+            return {}
+        project = self.get(project_id)
+        frame = read_project_frame(self.source_path(project_id), project, names)
+        observed: dict[str, list] = {}
+        for name in names:
+            if name not in frame.columns:
+                continue
+            column = frame[name].dropna()
+            if column.dtype == object:
+                column = column.astype(str).str.strip()
+                column = column[column != ""]
+            values = pd.unique(column)[:41]
+            plain = [value.item() if hasattr(value, "item") else value for value in values]
+            numbers = sorted(value for value in plain if not isinstance(value, str))
+            observed[name] = numbers + sorted(value for value in plain if isinstance(value, str))
+        return observed
+
+    def apply_questionnaire(self, project_id: UUID, rows: list[dict]) -> dict:
+        """Принятые строки анкеты — одной ревизией и всё или ничего.
+
+        Подписи переменных и кодов уходят в `label_overrides` и сразу
+        накладываются на описание; подпись и тип вопроса проходят обычную
+        проверку правки вопроса.
+        """
+        project = self.get(project_id)
+        configuration = project["configuration"]
+        for row in rows:
+            kind = row["kind"]
+            if kind in {"variable_label", "value_label"}:
+                record_override(configuration, row)
+            elif kind in {"question_label", "question_type"}:
+                question = self._find_question(project, row["question"])
+                field = "label" if kind == "question_label" else "question_type"
+                try:
+                    self._apply_question_changes(
+                        project_id,
+                        project,
+                        question,
+                        {field: row["after"]},
+                        confirm_recognition=False,
+                    )
+                except InvalidUploadError as exc:
+                    raise InvalidUploadError(f"Вопрос {row['question']}: {exc}") from exc
+            elif kind == "order":
+                codes = reordered(
+                    [item["code"] for item in configuration["questions"]], row["after"]
+                )
+                by_code = {item["code"]: item for item in configuration["questions"]}
+                configuration["questions"] = [by_code[code] for code in codes]
+        apply_label_overrides(project)
+        configuration["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def set_ai_settings(
+        self, project_id: UUID, *, enabled: bool | None, acknowledged: bool | None
+    ) -> dict:
+        """Выключатель ИИ проекта (решение 034). Живёт вне конфигурации: не
+        входит ни в ключ кэша отчёта, ни в историю отмены."""
+        project = self.get(project_id)
+        settings = project.setdefault("ai", {"enabled": True, "acknowledged": False})
+        if enabled is not None:
+            settings["enabled"] = enabled
+        if acknowledged is not None:
+            settings["acknowledged"] = acknowledged
+        self._write_project(project_id, project)
+        return project
 
     def reorder_questions(self, project_id: UUID, codes: list[str]) -> dict:
         project = self.get(project_id)

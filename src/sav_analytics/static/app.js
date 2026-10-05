@@ -900,6 +900,7 @@ function renderProject() {
   renderTable();
   publishVariablesToShell(inspection, questions);
   renderLogicVariablePicker();
+  renderAiChrome();
 }
 
 /* Раздел «Таблицы» живёт в другом файле, но умеет менять конфигурацию —

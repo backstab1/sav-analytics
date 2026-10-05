@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     assistant_timeout_seconds: float = 60.0
     assistant_temperature: float | None = 0.0
     assistant_max_tool_calls: int = 15
+    # Модель для массовых задач — кодирования тысяч открытых ответов — у того
+    # же провайдера (решение 034: модель под задачу). Пусто — берётся
+    # основная `assistant_model`.
+    ai_fast_model: str | None = None
+    # Таймаут разовых больших запросов: разбор анкеты, план автоотчёта.
+    ai_long_timeout_seconds: float = 300.0
 
     # Заявки на демо с лендинга. Журнал в data_dir пишется всегда, письмо —
     # только при заданных получателе и SMTP-сервере.

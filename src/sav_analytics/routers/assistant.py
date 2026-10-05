@@ -45,8 +45,11 @@ def assistant_state(
     repository: Annotated[ProjectRepository, Depends(get_repository)],
     model: Annotated[ChatModel | None, Depends(get_chat_model)],
 ) -> dict:
-    """Разговор и планы проекта. `enabled: false` — провайдер не настроен."""
-    return {"enabled": model is not None, **_service(repository, project_id).state()}
+    """Разговор и планы проекта. `enabled: false` — провайдер не настроен
+    или ИИ выключен в проекте."""
+    service = _service(repository, project_id)
+    allowed = (repository.get(project_id).get("ai") or {}).get("enabled", True)
+    return {"enabled": model is not None and allowed, **service.state()}
 
 
 @router.post("/messages")
@@ -59,6 +62,13 @@ def send_message(
     settings: Annotated[Settings, Depends(get_settings)],
 ):
     service = _service(repository, project_id)
+    if not (repository.get(project_id).get("ai") or {}).get("enabled", True):
+        return error_response(
+            request,
+            status_code=status.HTTP_409_CONFLICT,
+            error_code="AI_DISABLED",
+            detail="В этом проекте ИИ выключен. Включите его в меню проекта.",
+        )
     if model is None:
         return error_response(
             request,

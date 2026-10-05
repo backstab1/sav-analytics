@@ -38,6 +38,7 @@ SECTION_LABELS = {
     "analysis_cards": "карточки анализа",
     "analysis_models": "модели анализа",
     "table_reports": "таблицы",
+    "label_overrides": "подписи из анкеты",
     "inspection": "описание переменных",
 }
 _IGNORED = {"revision", "updated_at"}
