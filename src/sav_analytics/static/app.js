@@ -386,6 +386,8 @@ function renderSectionHead(view) {
   document.querySelector("#logic-variables").closest(".pill-select").hidden = view !== "data";
   // Сводка — фильтр таблицы вопросов, в других разделах ей нечего фильтровать.
   document.querySelector("#summary").hidden = view !== "data";
+  // Действия «Данных» (волны, анкета, открытые) в «Ручном отчёте» чужие.
+  document.querySelector("#app-shell > .canvas").dataset.section = view;
 }
 
 // Заголовки и ячейки обрезаются многоточием, поэтому дублируем текст в подсказку.
@@ -904,6 +906,7 @@ function renderProject() {
   publishVariablesToShell(inspection, questions);
   renderLogicVariablePicker();
   renderAiChrome();
+  renderWaveChrome();
 }
 
 /* Раздел «Таблицы» живёт в другом файле, но умеет менять конфигурацию —
@@ -951,7 +954,9 @@ function tableItemChildren(question, variablesByName) {
 function publishVariablesToShell(inspection, questions) {
   const variablesByName = new Map(inspection.variables.map(item => [item.name, item]));
   const questionItems = questions
-    .filter(question => question.included_in_report)
+    // Переменная волны в отчёт не входит, но колонкой «Таблиц» нужна: так
+    // собирается разрез по волнам (PQ.19).
+    .filter(question => question.included_in_report || question.role === "wave")
     .map(question => {
       const labels = variablesByName.get(question.source_variables?.[0])?.value_labels || [];
       return {
@@ -960,7 +965,7 @@ function publishVariablesToShell(inspection, questions) {
         type: question.question_type,
         source: { kind: "question", ref: question.code },
         children: tableItemChildren(question, variablesByName),
-        canRow: TABLE_ROW_TYPES.includes(question.question_type),
+        canRow: question.role !== "wave" && TABLE_ROW_TYPES.includes(question.question_type),
         canCol: (question.question_type === "single_choice" && labels.length > 0)
           || MULTIPLE_TYPES.includes(question.question_type),
       };

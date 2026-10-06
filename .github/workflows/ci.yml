@@ -65,6 +65,8 @@ jobs:
           src/sav_analytics/core/autoreport.py
           src/sav_analytics/core/docx_report.py
           src/sav_analytics/routers/autoreport.py
+          src/sav_analytics/core/waves.py
+          src/sav_analytics/routers/waves.py
 
       - name: Pytest с покрытием
         run: >-

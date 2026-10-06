@@ -139,10 +139,17 @@ def request_plan(
     answers: dict[str, str],
     catalog: list[dict[str, Any]],
     weights: list[str],
+    wave: str | None = None,
 ) -> dict[str, Any]:
+    waves = (
+        f"Переменная волны: {wave} — в проекте несколько волн; ставь её первой в разрез, "
+        "чтобы выводы сравнивали волны.\n\n"
+        if wave
+        else ""
+    )
     content = (
         f"<бриф>\n{_brief_block(brief, clarifications, answers)}\n</бриф>\n\n"
-        f"Переменные веса: {', '.join(weights) or 'нет'}\n\n"
+        f"Переменные веса: {', '.join(weights) or 'нет'}\n\n{waves}"
         f"<каталог>\n{json.dumps(catalog, ensure_ascii=False)}\n</каталог>"
     )
     return _tool_arguments(model, PLAN_PROMPT, content, SUBMIT_PLAN)

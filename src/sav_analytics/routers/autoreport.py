@@ -77,6 +77,7 @@ def _view(state: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
         **state,
         "catalog": autoreport.plan_catalog(project),
         "weights": autoreport.weight_candidates(project),
+        "wave_variable": autoreport.wave_variable(project),
         "labels": labels,
         "edited_blocks": autoreport.edited_blocks(state.get("report")),
         "stale": bool(state.get("report"))

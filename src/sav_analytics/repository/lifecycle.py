@@ -223,9 +223,15 @@ class ProjectLifecycle(ProjectStore):
                 shutil.copy2(original, temporary / original.name)
             # Результаты кодирования открытых ответов — файлы по ссылкам из
             # конфигурации: без них копия потеряла бы коды.
-            coding = self.root / str(project_id) / "coding"
-            if coding.is_dir():
-                shutil.copytree(coding, temporary / "coding")
+            for folder in ("coding", "waves"):
+                # Кодирование открытых ответов и файлы волн — по ссылкам из
+                # проекта: без них копия потеряла бы коды и не пересобрала волны.
+                source_folder = self.root / str(project_id) / folder
+                if source_folder.is_dir():
+                    shutil.copytree(
+                        source_folder, temporary / folder,
+                        ignore=shutil.ignore_patterns(".staging-*"),
+                    )
             created_at = datetime.now(UTC).isoformat()
             copied = json.loads(json.dumps(project))
             copied["id"] = str(copy_id)

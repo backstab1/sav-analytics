@@ -8,6 +8,7 @@ from typing import Any, TextIO
 
 import xlsxwriter
 
+from ..waves import trend_project
 from .correlations import correlation_matrix, write_correlations
 from .data import prepare_report_data
 from .excel_layout import write_charts, write_contents, write_parameters, write_topline
@@ -123,6 +124,21 @@ def build_topline_artifacts(
             report_formats(workbook, counts_data.statistical_settings),
             [],
             "Счётчики",
+            valid_denominator=False,
+        )
+    trend = trend_project(project)
+    if trend is not None:
+        # Лист трендов (PQ.19): те же вопросы, колонки — волны, стрелки —
+        # отличие от предыдущей волны. Считает тот же write_topline.
+        trend_data = prepare_report_data(path, trend)
+        write_topline(
+            workbook.add_worksheet("Тренды"),
+            trend_data,
+            trend,
+            trend_data.questions,
+            report_formats(workbook, trend_data.statistical_settings),
+            [],
+            "Тренды",
             valid_denominator=False,
         )
     write_contents(contents, project, data.questions, main_rows, filter_rows, formats)

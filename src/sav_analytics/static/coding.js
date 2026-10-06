@@ -17,11 +17,18 @@ let newCodeCounter = 0;
 const CODING_VIEWS = [
   ["all", "Уникальных"],
   ["dictionary", "Из словаря"],
-  ["ai", "Закодировал ИИ"],
-  ["low", "Низкая уверенность"],
+  ["ai", "ИИ"],
+  ["low", "Низкая"],
   ["uncoded", "Без кода"],
 ];
 const CODING_TILE_KEYS = { all: "unique", dictionary: "dictionary", ai: "ai", low: "low", uncoded: "uncoded" };
+const TILE_TITLES = {
+  all: "Уникальные тексты ответов",
+  dictionary: "Коды из словаря правок человека",
+  ai: "Закодировал ИИ",
+  low: "Низкая уверенность ИИ — проверьте в первую очередь",
+  uncoded: "Ответы без кода",
+};
 const SOURCE_LABELS = { ai: "ИИ", manual: "вручную", dictionary: "словарь" };
 
 function codeframes() {
@@ -186,7 +193,7 @@ function renderCodeframeBody(codeframe) {
         <div class="cq-code-actions">
           <button type="button" data-code-mode="new" title="Закодировать ответы, у которых ещё нет кодов: новая волна, новые коды справочника">${codeframe.coding_ref ? "Докодировать новые" : "Закодировать"}</button>
           <button type="button" class="secondary" data-code-mode="keep_edits" ${codeframe.coding_ref ? "" : "hidden"} title="Модель заново кодирует всё, кроме ответов из словаря правок">Перекодировать с учётом правок</button>
-          <button type="button" class="secondary danger-text" data-code-mode="reset" ${codeframe.coding_ref ? "" : "hidden"} title="Сбросить справочник и словарь, построить справочник и закодировать с нуля">Сбросить всё…</button>
+          <button type="button" class="text-button danger-text cq-reset" data-code-mode="reset" ${codeframe.coding_ref ? "" : "hidden"} title="Сбросить справочник и словарь, построить справочник и закодировать с нуля">Сбросить всё…</button>
         </div>
       </section>
     </div>`;
@@ -263,7 +270,7 @@ function renderTiles(codeframe) {
   const state = stateFor(codeframe);
   const tiles = state.summary?.tiles || {};
   articleFor(codeframe.id).querySelector("[data-tiles]").innerHTML = CODING_VIEWS.map(([view, label]) => `
-    <button type="button" class="cq-tile${state.view === view ? " is-active" : ""}${view === "low" && tiles.low ? " is-warn" : ""}" data-tile="${view}" aria-pressed="${state.view === view}">
+    <button type="button" class="cq-tile${state.view === view ? " is-active" : ""}${view === "low" && tiles.low ? " is-warn" : ""}" data-tile="${view}" aria-pressed="${state.view === view}" title="${TILE_TITLES[view]}">
       <b>${(tiles[CODING_TILE_KEYS[view]] ?? 0).toLocaleString("ru-RU")}</b><span>${label}</span>
     </button>`).join("");
 }

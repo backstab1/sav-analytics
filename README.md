@@ -75,6 +75,10 @@
   функцией, что лист книги; модель пишет выводы, проценты вне таблиц помечаются.
   Отчёт правится на экране, правки переживают пересборку; DOCX с родными
   диаграммами Word и таблицами значимости, книга Excel — в «Ручном отчёте».
+- Волны отдельными источниками: «Добавить волну…» — сопоставление переменных по имени,
+  подписи и ИИ с подтверждением человеком, проверка сходимости (типы, коды, цели веса),
+  новые переменные по выбору. Общий массив собирается с переменной волны; волна —
+  колонка «Таблиц» и баннера, в книге лист «Тренды» со сравнением с прошлой волной.
 
 ### Анализ
 
@@ -285,7 +289,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py src/sav_analytics/ai_jobs.py src/sav_analytics/core/questionnaire.py src/sav_analytics/routers/ai.py src/sav_analytics/coding_jobs.py src/sav_analytics/core/open_text.py src/sav_analytics/routers/codeframes.py src/sav_analytics/autoreport_jobs.py src/sav_analytics/core/autoreport.py src/sav_analytics/core/docx_report.py src/sav_analytics/routers/autoreport.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py src/sav_analytics/ai_jobs.py src/sav_analytics/core/questionnaire.py src/sav_analytics/routers/ai.py src/sav_analytics/coding_jobs.py src/sav_analytics/core/open_text.py src/sav_analytics/routers/codeframes.py src/sav_analytics/autoreport_jobs.py src/sav_analytics/core/autoreport.py src/sav_analytics/core/docx_report.py src/sav_analytics/routers/autoreport.py src/sav_analytics/core/waves.py src/sav_analytics/routers/waves.py
 ```
 
 На 18 сентября в ветке `Codex_Savanalytics` набор содержит 308 non-browser pytest-кейсов
@@ -377,7 +381,8 @@ src/sav_analytics/
 │   ├── questionnaire.py # разбор анкеты моделью: один запрос с submit_mapping
 │   ├── questionnaire_prompt.md # промпт разбора анкеты
 │   ├── coding.py      # справочник кодов, коды пачки ответов и правка справочника моделью
-│   └── autoreport.py  # план отчёта и тексты по числам ядра
+│   ├── autoreport.py  # план отчёта и тексты по числам ядра
+│   └── waves.py       # пары переменных волн для несопоставленных
 ├── ai_jobs.py         # фоновые задачи ИИ: прогресс, результат, повтор
 ├── coding_jobs.py     # кодирование открытых ответов: справочник, пачки, режимы
 ├── autoreport_jobs.py # ИИ отчёт: план по брифу, сборка разделов и текста
@@ -406,6 +411,7 @@ src/sav_analytics/
 │   ├── questionnaire.py # текст анкеты, каталог для модели, проверка и применение подписей
 │   ├── autoreport.py  # ИИ отчёт: план, числа живой таблицы, проверка процентов, сборка
 │   ├── docx_report.py # DOCX без зависимостей: текст, таблицы, родные диаграммы Word
+│   ├── waves.py       # волны: сопоставление, сходимость, общий массив, проект трендов
 │   ├── open_text.py   # кодификатор: справочник кодов, коды ответов по тексту, словарь правок
 │   ├── sav_export.py  # выгрузка SAV с формулами, перекодировками и весами
 │   ├── sav_writing.py # проверка записанного SAV на поломку длинных строк readstat

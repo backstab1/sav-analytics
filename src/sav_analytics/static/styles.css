@@ -3497,3 +3497,47 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
   .cq.is-open .cq-codes { height: auto; max-height: 40vh; }
   .cq.is-open .cq-answers { height: 70vh; }
 }
+
+/* Волны (waves.js) */
+.wave-map-sheet { width: min(860px, 100%); }
+.wave-map-head { display: grid; gap: 6px; }
+.wave-map-head p { margin: 0; font-size: var(--t-xs); }
+.wave-map-head input { max-width: 280px; }
+.wave-map-tools { display: flex; gap: 10px; align-items: center; font-size: var(--t-xs); }
+.wave-map-wrap { border: 1px solid var(--c-border); border-radius: 10px; overflow: auto; max-height: 48vh; }
+.wave-map { width: 100%; border-collapse: collapse; font-size: var(--t-xs); table-layout: fixed; }
+.wave-map thead th { position: sticky; top: 0; background: var(--c-surface-soft); text-align: left; padding: 6px 8px; color: var(--c-ink-3); font-weight: 600; }
+.wave-map th:nth-child(1) { width: 36%; }
+.wave-map th:nth-child(3) { width: 96px; }
+.wave-map td { padding: 5px 8px; border-top: 1px solid var(--c-border); vertical-align: top; }
+.wave-map td small { display: block; color: var(--c-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wave-map td small.wave-note { color: var(--c-warn-ink); white-space: normal; }
+.wave-map select { width: 100%; padding: 3px 6px; font-size: var(--t-xs); }
+.wave-map tr.is-missing td:first-child { box-shadow: inset 3px 0 0 var(--c-warn-ink); }
+.wave-extra { display: grid; gap: 4px; }
+.wave-extra h4 { margin: 0; font-size: var(--t-sm); }
+.wave-extra p { margin: 0 0 4px; font-size: var(--t-xs); }
+.waves-list { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+.waves-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; }
+.waves-list li small { grid-column: 1; }
+.waves-list li button { grid-column: 2; grid-row: 1; }
+
+/* Просмотр 6 октября: коды читаются целиком, ряд действий в одну строку. */
+.answers-table th:nth-child(1) { width: 40%; }
+.answers-table th.ans-actions-head { width: 96px; }
+.ans-codes .answer-chip { white-space: normal; overflow: visible; text-overflow: clip; max-width: none; line-height: 1.3; }
+.cq-tile span { white-space: nowrap; }
+.cq-code-actions { align-items: center; }
+.cq-code-actions .cq-reset { margin-left: auto; padding: 4px 8px; font-size: var(--t-xs); }
+.canvas:not([data-section="data"]) :is(#waves-pill, #recognize-open-data, #load-questionnaire, #ai-jobs) { display: none !important; }
+/* ИИ отчёт на узком экране: шапка карточки переносится, графики не распирают. */
+.ar-card, .ar-report-section, .ar-cards > *, .ar-question-card { min-width: 0; }
+.ar-question-card header { flex-wrap: wrap; row-gap: 4px; }
+.ar-question-card header b { flex: 1 1 220px; }
+.ar-chart.is-bar .ar-bar { grid-template-columns: minmax(70px, 34%) minmax(40px, 1fr) 40px; }
+.ar-report-bar > div { min-width: 0; }
+@media (max-width: 600px) {
+  #section-aireport, #section-text { padding: 12px 10px 32px; }
+  #section-aireport .autoreport { padding: 8px; }
+  .ar-question-card { padding: 8px; }
+}

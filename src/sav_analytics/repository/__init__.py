@@ -19,6 +19,7 @@ from .store import (
 )
 from .tables import TableReports
 from .variables import DerivedVariables
+from .waves import WaveSources
 
 __all__ = [
     "ANALYSIS_QUESTION_TYPES",
@@ -36,6 +37,7 @@ class ProjectRepository(
     ReportSetup,
     AnalysisItems,
     TableReports,
+    WaveSources,
     ProjectStore,
 ):
     """Проекты на диске: папка на проект с `project.json` и исходным SAV."""

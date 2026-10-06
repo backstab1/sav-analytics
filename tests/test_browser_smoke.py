@@ -2099,3 +2099,26 @@ def test_ai_report_goes_from_brief_to_docx(page: Page, live_server: str, tmp_pat
     finally:
         for dependency in (get_settings, get_long_chat_model):
             app.dependency_overrides.pop(dependency, None)
+
+
+def test_second_wave_is_mapped_and_stacked(page: Page, live_server: str, tmp_path: Path) -> None:
+    from tests.test_sav_reader import write_fixture
+    from tests.test_waves import write_second_wave
+
+    first = tmp_path / "wave1.sav"
+    second = tmp_path / "wave2.sav"
+    write_fixture(first)
+    write_second_wave(second)
+    _open_project(page, live_server, first)
+    page.click("#export-toggle")
+    page.set_input_files("#add-wave-file", str(second))
+    expect(page.locator("#wave-map-sheet")).to_be_visible(timeout=UI_TIMEOUT)
+    # Q2 найден по подписи под другим именем, новые переменные предложены флажками.
+    expect(page.locator("[data-wave-map='Q2']")).to_have_value("SCORE", timeout=UI_TIMEOUT)
+    expect(page.locator("[data-wave-add='Q9']")).to_be_checked()
+    page.fill("#wave-label", "Октябрь")
+    page.click("#wave-map-apply")
+    expect(page.locator("#waves-pill")).to_have_text("Волны: 2", timeout=UI_TIMEOUT)
+    page.click("#waves-pill")
+    expect(page.locator("#waves-body [data-wave-label]")).to_have_count(2)
+    expect(page.locator("#waves-body [data-wave-label]").nth(1)).to_have_value("Октябрь")

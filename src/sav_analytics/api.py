@@ -43,6 +43,7 @@ from .routers import (
     reports,
     table_reports,
     tables,
+    waves,
     weights,
 )
 
@@ -223,6 +224,7 @@ for router in (
     assistant.router,
     ai.router,
     autoreport.router,
+    waves.router,
     demo_requests.router,
 ):
     app.include_router(router)

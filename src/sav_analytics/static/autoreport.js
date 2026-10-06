@@ -163,6 +163,9 @@ function planHtml(state) {
   const plan = state.plan;
   const catalog = state.catalog;
   const bannerOptions = catalog.filter(item => ["single_choice", "multiple_choice_dichotomy", "multiple_choice_categorical"].includes(item.type) && !plan.banner.includes(item.code));
+  if (state.wave_variable && !plan.banner.includes(state.wave_variable)) {
+    bannerOptions.unshift({ code: state.wave_variable, label: "Волна — сравнение волн" });
+  }
   const clarifications = state.clarifications.map(item => `
     <div class="ar-question" data-clarification="${escapeAttribute(item.id)}">
       <p><b>${escapeHtml(item.question)}</b></p>
@@ -298,7 +301,7 @@ function reportHtml(state) {
       <span class="toolbar-grow"></span>
       <button type="button" class="secondary" data-ar-run="build">Пересобрать</button>
       <button type="button" class="secondary" data-ar-excel title="Книга Excel с теми же разрезом и весом — в «Ручном отчёте»">Книга Excel</button>
-      <a class="btn" href="/api/projects/${currentProject.id}/autoreport/report.docx" download>Скачать DOCX</a>
+      <a class="link-button" href="/api/projects/${currentProject.id}/autoreport/report.docx" download>Скачать DOCX</a>
     </div>
     <section class="ar-report-section" data-report-block="summary">
       <div class="ar-section-head"><h3>Ключевые выводы</h3>${report.summary.edited ? '<span class="answer-source is-manual">правлено</span>' : ""}</div>
