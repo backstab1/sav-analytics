@@ -48,39 +48,37 @@
   /* Техническое меню в углу шапки панели: выгрузки и перераспознавание.
      Держим здесь, а не в app.js, потому что это поведение оболочки, а не
      работы с проектом; app.js по-прежнему слушает сами пункты по их id. */
-  const exportToggle = document.querySelector("#export-toggle");
-  const exportList = document.querySelector("#export-list");
-
-  function closeExportMenu() {
-    if (!exportList || exportList.hidden) return;
-    exportList.hidden = true;
-    exportToggle.setAttribute("aria-expanded", "false");
-  }
-
-  function toggleExportMenu() {
-    const open = exportList.hidden;
-    exportList.hidden = !open;
-    exportToggle.setAttribute("aria-expanded", String(open));
-    if (open) exportList.querySelector("[role=menuitem]").focus();
-  }
-
-  if (exportToggle) {
-    exportToggle.addEventListener("click", event => {
-      event.stopPropagation();
-      toggleExportMenu();
+  /* Тем же выпадающим меню набраны «Инструменты» и фильтр по статусу.
+     Слушаем делегированием: фильтр перерисовывается целиком (renderSummary). */
+  function closeMenus(except) {
+    document.querySelectorAll(".export-menu").forEach(menu => {
+      if (menu === except) return;
+      const list = menu.querySelector(".export-list");
+      if (!list || list.hidden) return;
+      list.hidden = true;
+      menu.querySelector(".menu-toggle")?.setAttribute("aria-expanded", "false");
     });
+  }
+
+  document.addEventListener("click", event => {
+    const toggle = event.target.closest(".menu-toggle");
+    if (toggle) {
+      const menu = toggle.closest(".export-menu");
+      const list = menu.querySelector(".export-list");
+      closeMenus(menu);
+      const open = list.hidden;
+      list.hidden = !open;
+      toggle.setAttribute("aria-expanded", String(open));
+      if (open) list.querySelector("[role=menuitem]:not([hidden])")?.focus();
+      return;
+    }
     // Пункты закрывают меню сами: скачивание уже началось, держать его открытым
     // незачем, а «Перераспознать» показывает confirm поверх.
-    exportList.addEventListener("click", event => {
-      if (event.target.closest("[role=menuitem]")) closeExportMenu();
-    });
-    document.addEventListener("click", event => {
-      if (!event.target.closest(".export-menu")) closeExportMenu();
-    });
-    document.addEventListener("keydown", event => {
-      if (event.key === "Escape") closeExportMenu();
-    });
-  }
+    if (event.target.closest(".export-list [role=menuitem]") || !event.target.closest(".export-menu")) closeMenus();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeMenus();
+  });
 
   // Основной CTA лендинга ведёт в существующий сценарий загрузки массива:
   // отдельной регистрации у приложения пока нет, и лендинг её не обещает.
@@ -109,7 +107,7 @@
       projectChrome.hidden = !open;
       if (!open) {
         TablesSection.setVariables([], {});
-        closeExportMenu();
+        closeMenus();
       }
     },
     /* Вызывается из app.js после разбора проекта. */

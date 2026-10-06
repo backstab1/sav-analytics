@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20261006-review3" />
+    <link rel="stylesheet" href="/styles.css?v=20261006-menus" />
   </head>
   <body>
     <!-- ================================================================
@@ -324,13 +324,20 @@
                 <div class="canvas-tools-actions">
                   <button id="ai-jobs" class="pill ai-jobs" type="button" hidden aria-live="polite" title="Фоновые задачи ИИ"></button>
                   <button id="waves-pill" class="pill" type="button" hidden title="Волны проекта"></button>
-                  <button id="recognize-open-data" class="pill" type="button" title="Найти открытые вопросы и закодировать ответы с ИИ">Распознать открытые</button>
-                  <label id="load-questionnaire" class="pill" title="ИИ сопоставит анкету с массивом и предложит подписи вопросов и кодов">
-                    Загрузить анкету<input id="questionnaire-file" type="file" accept=".docx,.pdf,.txt,.md" hidden />
-                  </label>
-                  <button id="find-not-applicable" class="pill" type="button" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">
-                    Пропуски по анкете
-                  </button>
+                  <!-- Разовые действия «Данных» собраны в одну капсулу: по
+                       отдельности три пилюли перегружали ряд. -->
+                  <div id="tools-menu" class="export-menu">
+                    <button class="menu-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false">
+                      Инструменты<span class="export-caret" aria-hidden="true"></span>
+                    </button>
+                    <div class="export-list" role="menu" hidden>
+                      <button id="recognize-open-data" class="export-item" type="button" role="menuitem" title="Найти открытые вопросы и закодировать ответы с ИИ">Распознать открытые</button>
+                      <label id="load-questionnaire" class="export-item" role="menuitem" title="ИИ сопоставит анкету с массивом и предложит подписи вопросов и кодов">
+                        Загрузить анкету<input id="questionnaire-file" type="file" accept=".docx,.pdf,.txt,.md" hidden />
+                      </label>
+                      <button id="find-not-applicable" class="export-item" type="button" role="menuitem" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">Пропуски по анкете</button>
+                    </div>
+                  </div>
                   <label class="pill pill-select"><select id="logic-variables" aria-label="Логические переменные"></select></label>
 
                   <div class="history-buttons" role="group" aria-label="История изменений">
@@ -338,7 +345,7 @@
                     <button id="redo-change" class="pill history-button" type="button" disabled aria-label="Вернуть" title="Вернуть (Ctrl+Shift+Z)">↷</button>
                   </div>
                   <div id="project-actions" class="export-menu">
-                    <button id="export-toggle" class="export-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
+                    <button id="export-toggle" class="export-toggle menu-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
                       <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
                       Выгрузка<span class="export-caret" aria-hidden="true"></span>
                     </button>
@@ -1225,8 +1232,8 @@
     </dialog>
     <script src="/util.js?v=20261001-uiux" defer></script>
     <script src="/tables.js?v=20260930-nest-button" defer></script>
-    <script src="/shell.js?v=20261001-landing" defer></script>
-    <script src="/app.js?v=20261006-waves" defer></script>
+    <script src="/shell.js?v=20261006-menus" defer></script>
+    <script src="/app.js?v=20261006-menus" defer></script>
     <script src="/route.js?v=20260930-question-tune" defer></script>
     <script src="/source.js?v=20260930-question-tune" defer></script>
     <script src="/library.js?v=20260930-question-tune" defer></script>

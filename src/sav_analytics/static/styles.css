@@ -3059,6 +3059,16 @@ body.is-landing { background: #050807; }
 .export-item:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
 .export-item[aria-disabled="true"] { color: var(--c-ink-3); cursor: not-allowed; }
 .export-sep { height: 1px; margin: 5px 6px; background: var(--c-border); }
+.export-item[hidden] { display: none; }
+.menu-toggle[aria-expanded="true"]:not(.export-toggle) { border-color: var(--c-border-strong); }
+/* Фильтр по статусу: капсула слева и тот же список, что у «Выгрузки». */
+.status-menu .export-list { left: 0; right: auto; min-width: 180px; }
+.status-item { display: flex; align-items: center; gap: 8px; }
+.status-item b { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.status-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-ink-4); flex: 0 0 auto; }
+.status-item.warn .dot { background: #e0a32e; }
+.status-item.ok .dot { background: var(--c-brand-2); }
+.status-item.active { background: var(--c-brand-tint); color: var(--c-brand); }
 
 /* Предупреждающая подпись под выбором схемы сравнения. */
 .warning-hint { color: var(--c-warn-ink); font-weight: 500; }
@@ -3529,7 +3539,7 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .cq-tile span { white-space: nowrap; }
 .cq-code-actions { align-items: center; }
 .cq-code-actions .cq-reset { margin-left: auto; padding: 4px 8px; font-size: var(--t-xs); }
-.canvas:not([data-section="data"]) :is(#waves-pill, #recognize-open-data, #load-questionnaire, #ai-jobs) { display: none !important; }
+.canvas:not([data-section="data"]) :is(#waves-pill, #tools-menu, #ai-jobs) { display: none !important; }
 /* ИИ отчёт на узком экране: шапка карточки переносится, графики не распирают. */
 .ar-card, .ar-report-section, .ar-cards > *, .ar-question-card { min-width: 0; }
 .ar-question-card header { flex-wrap: wrap; row-gap: 4px; }

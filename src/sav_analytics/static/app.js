@@ -277,13 +277,11 @@ function resetStructureSearch({ render = true } = {}) {
   if (render && currentProject) renderTable();
 }
 
-// Карточки сводки работают как фильтр таблицы: повторный клик снимает его.
+// Пункты фильтра по статусу; «Все» снимает фильтр.
 document.querySelector("#summary").addEventListener("click", event => {
   const card = event.target.closest("button[data-status-filter]");
   if (!card || !currentProject) return;
-  // Пустой ключ — чип «Все»: он снимает фильтр, а не ставит свой.
-  const key = card.dataset.statusFilter || null;
-  structureStatusFilter = structureStatusFilter === key ? null : key;
+  structureStatusFilter = card.dataset.statusFilter || null;
   if (structureStatusFilter) {
     currentView = "data";
     structureMode = "questions";
@@ -1020,19 +1018,27 @@ function renderSummary(inspection, questions) {
     `${questions.length} вопросов`,
     `${inspection.variables.length} столбцов SAV`,
   ].join(" · ");
-  document.querySelector("#summary").innerHTML = [
+  // Одна капсула «Фильтр: …» с выпадающим списком статусов вместо ряда
+  // чипов: ряд не переносится на вторую строку. Открывает меню shell.js.
+  const chips = [
     { value: questions.length, label: "Все", key: null },
     { value: review.length, label: "Проверить", key: "review", tone: "warn" },
     { value: ready.length, label: "Готовы", key: "ready", tone: "ok" },
     { value: excluded.length, label: "Исключены", key: "excluded", tone: "off" },
-  ].map(chip => {
-    const number = chip.value.toLocaleString("ru-RU");
-    const active = chip.key ? structureStatusFilter === chip.key : !structureStatusFilter;
-    return `<button type="button" class="stat ${chip.tone || ""} ${active ? "active" : ""}"
-      data-status-filter="${chip.key || ""}" aria-pressed="${active}"
-      title="${chip.key ? `Показать только: ${chip.label.toLowerCase()}` : "Показать все вопросы"}"
-      ><span class="dot" aria-hidden="true"></span>${chip.label}<b>${number}</b></button>`;
-  }).join("");
+  ];
+  const current = chips.find(chip => chip.key === (structureStatusFilter || null)) || chips[0];
+  const number = chip => chip.value.toLocaleString("ru-RU");
+  document.querySelector("#summary").innerHTML = `<div class="export-menu status-menu">
+    <button type="button" class="menu-toggle stat ${current.tone || ""} ${current.key ? "active" : ""}"
+      aria-haspopup="menu" aria-expanded="false" title="Фильтр вопросов по статусу"
+      ><span class="dot" aria-hidden="true"></span>Фильтр: ${current.label}<b>${number(current)}</b><span class="export-caret" aria-hidden="true"></span></button>
+    <div class="export-list" role="menu" hidden>${chips.map(chip => {
+      const active = chip === current;
+      return `<button type="button" class="export-item status-item ${chip.tone || ""} ${active ? "active" : ""}" role="menuitemradio"
+        data-status-filter="${chip.key || ""}" aria-checked="${active}"
+        ><span class="dot" aria-hidden="true"></span>${chip.label}<b>${number(chip)}</b></button>`;
+    }).join("")}</div>
+  </div>`;
   renderRailCounts(questions);
   // Что уйдёт в Excel — подсказка на кнопке выгрузки. Раньше это была
   // строка под карточками; в один ярус она не помещается, а нужна ровно

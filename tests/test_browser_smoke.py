@@ -1857,6 +1857,7 @@ def test_open_answers_are_coded_by_ai_and_by_hand(
     )
     try:
         _open_project(page, live_server, source)
+        page.click("#tools-menu .menu-toggle")
         page.click("#recognize-open-data")
         expect(page.locator("#recognize-body input[value='WHY']")).to_be_checked(
             timeout=UI_TIMEOUT
