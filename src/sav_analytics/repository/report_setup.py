@@ -95,6 +95,41 @@ class ReportSetup(ProjectStore):
         self._write_project(project_id, project)
         return project
 
+    def apply_autoreport_setup(
+        self, project_id: UUID, banner_codes: list[str], weight: str | None
+    ) -> tuple[dict, str | None]:
+        """План автоотчёта в проекте — одной ревизией (решение 034).
+
+        Разрез становится баннером «Автоотчёт» (свой, помеченный: повторная
+        сборка обновляет его, а не плодит копии) и баннером отчёта; вес —
+        весом отчёта. Это обычные настройки: их видно и можно поправить в
+        «Отчётах». Возвращает проект и id баннера (None без разреза).
+        """
+        project = self.get(project_id)
+        configuration = project["configuration"]
+        banners = configuration["banners"]
+        existing = next((item for item in banners if item.get("autoreport")), None)
+        banner_id = None
+        if banner_codes:
+            blocks = [
+                {"label": None, "sources": [{"kind": "question", "ref": code}]}
+                for code in banner_codes
+            ]
+            if existing is None:
+                existing = {"id": str(uuid4()), "name": "Автоотчёт", "autoreport": True}
+                banners.append(existing)
+            existing["blocks"] = blocks
+            banner_id = existing["id"]
+        configuration["report_banner_id"] = banner_id
+        settings = dict(configuration["report_settings"])
+        settings["weight_variable"] = weight
+        if weight:
+            settings["calculated_weight_id"] = None
+        configuration["report_settings"] = settings
+        configuration["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project, coalesce="autoreport")
+        return project, banner_id
+
     def update_report_settings(self, project_id: UUID, settings: dict) -> dict:
         project = self.get(project_id)
         project["configuration"]["report_settings"] = settings

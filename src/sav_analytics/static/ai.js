@@ -149,6 +149,7 @@ async function pollAiJobs() {
   }
   renderAiJobs(jobs);
   updateCodingStatuses();
+  updateAutoreportProgress();
   if (jobs.some(job => job.status === "queued" || job.status === "running")) {
     aiJobsTimer = window.setTimeout(pollAiJobs, 1500);
   }
@@ -156,6 +157,7 @@ async function pollAiJobs() {
 
 function announceAiJob(job) {
   if (job.kind === "coding" || job.kind === "codebook_revision") void onCodingJobFinished(job);
+  if (job.kind.startsWith("autoreport")) void onAutoreportJobFinished(job);
   if (job.status === "failed") {
     showToast(`${job.title}: ошибка — откройте «Задачи ИИ»`);
     return;

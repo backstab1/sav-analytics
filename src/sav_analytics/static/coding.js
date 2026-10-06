@@ -114,12 +114,23 @@ document.querySelector("#coding-list").addEventListener("click", event => {
   const article = toggle.closest(".cq");
   const id = article.dataset.cf;
   const open = !codingOpen.has(id);
+  // Раскрыт один вопрос: раскрытая строка занимает экран целиком.
+  document.querySelectorAll("#coding-list .cq.is-open").forEach(other => {
+    if (other === article) return;
+    codingOpen.delete(other.dataset.cf);
+    other.classList.remove("is-open");
+    other.querySelector("[data-cq-toggle]").setAttribute("aria-expanded", "false");
+    other.querySelector("[data-cq-body]").hidden = true;
+  });
   if (open) codingOpen.add(id); else codingOpen.delete(id);
   article.classList.toggle("is-open", open);
   toggle.setAttribute("aria-expanded", String(open));
   const body = article.querySelector("[data-cq-body]");
   body.hidden = !open;
-  if (open) renderCodeframeBody(codeframeById(id));
+  if (open) {
+    renderCodeframeBody(codeframeById(id));
+    article.scrollIntoView({ block: "start" });
+  }
 });
 
 /* ---------------- Тело строки ---------------- */
@@ -165,7 +176,12 @@ function renderCodeframeBody(codeframe) {
           <input type="search" data-search placeholder="Найти в ответах" aria-label="Поиск по ответам" value="${escapeAttribute(state.search)}" />
         </div>
         <p class="muted cq-count" data-answer-count></p>
-        <div class="answer-list" data-answers></div>
+        <div class="answers-wrap">
+          <table class="answers-table">
+            <thead><tr><th>Ответ</th><th class="num" title="Сколько респондентов так ответили">Раз</th><th>Коды</th><th class="ans-actions-head"><span class="sr-only">Действия</span></th></tr></thead>
+            <tbody data-answers></tbody>
+          </table>
+        </div>
         <button type="button" class="secondary compact-button" data-more hidden>Показать ещё</button>
         <div class="cq-code-actions">
           <button type="button" data-code-mode="new" title="Закодировать ответы, у которых ещё нет кодов: новая волна, новые коды справочника">${codeframe.coding_ref ? "Докодировать новые" : "Закодировать"}</button>
@@ -234,7 +250,7 @@ async function refreshCodeframe(codeframe) {
   try {
     state.summary = await api(`/api/projects/${currentProject.id}/codeframes/${codeframe.id}/summary`);
   } catch (error) {
-    article.querySelector("[data-answers]").innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    article.querySelector("[data-answers]").innerHTML = `<tr><td colspan="4" class="error">${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   renderTiles(codeframe);
@@ -271,27 +287,57 @@ async function loadCodeframeAnswers(codeframe, append) {
   try {
     const result = await api(`/api/projects/${currentProject.id}/codeframes/${codeframe.id}/answers?${params}`);
     const names = new Map(codeframe.themes.map(theme => [theme.id, theme.name]));
-    const parents = new Set(codeframe.themes.map(theme => theme.parent_id).filter(Boolean));
-    const leaves = codeframe.themes.filter(theme => !parents.has(theme.id));
-    const html = result.rows.map(row => {
-      const chips = row.codes.map(code => `<button type="button" class="answer-chip" data-remove-code="${escapeAttribute(code)}" title="Снять код">${escapeHtml(names.get(code) || "")}<span aria-hidden="true">×</span></button>`).join("");
-      const options = leaves.filter(theme => !row.codes.includes(theme.id))
-        .map(theme => `<option value="${escapeAttribute(theme.id)}">${escapeHtml(theme.name)}</option>`).join("");
-      const source = row.source ? `<span class="answer-source is-${row.source}">${SOURCE_LABELS[row.source] || row.source}</span>` : "";
-      return `<article class="answer-row${row.low ? " is-low" : ""}" data-key="${escapeAttribute(row.key)}" data-codes="${escapeAttribute(JSON.stringify(row.codes))}">
-        <p>${escapeHtml(row.text)}${row.count > 1 ? ` <span class="answer-times">×${row.count}</span>` : ""}</p>
-        <div class="answer-marks">${chips}${options ? `<select class="answer-add" aria-label="Добавить код"><option value="">+ код</option>${options}</select>` : ""}
-          <span class="answer-meta">${row.low ? '<span class="answer-low" title="Модель не уверена в кодах">проверить</span>' : ""}${source}${row.source === "manual" ? '<button type="button" class="text-button answer-reset" data-reset-answer title="Убрать правку из словаря и вернуть коды модели">вернуть ИИ</button>' : ""}</span>
-        </div>
-      </article>`;
-    }).join("");
-    list.innerHTML = append ? list.innerHTML + html : (html || '<p class="muted">Ответов нет.</p>');
+    const html = result.rows.map(row => answerRowHtml(row, names)).join("");
+    list.innerHTML = append ? list.innerHTML + html : (html || '<tr><td colspan="4" class="muted">Ответов нет.</td></tr>');
     state.offset += result.rows.length;
     article.querySelector("[data-answer-count]").textContent = `Показано ${Math.min(state.offset, result.total).toLocaleString("ru-RU")} из ${result.total.toLocaleString("ru-RU")} уникальных ответов`;
     article.querySelector("[data-more]").hidden = state.offset >= result.total;
   } catch (error) {
-    list.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    list.innerHTML = `<tr><td colspan="4" class="error">${escapeHtml(error.message)}</td></tr>`;
   }
+}
+
+/* Строка таблицы ревью, как у Смыслографа: ответ в одну строку (полный
+   текст — по щелчку и в подсказке), сколько раз встретился, коды чипами и
+   карандаш правки. Список всех кодов показывается только в редакторе. */
+const VISIBLE_CODES = 3;
+
+function answerRowHtml(row, names) {
+  const shown = row.codes.slice(0, VISIBLE_CODES)
+    .map(code => `<span class="answer-chip">${escapeHtml(names.get(code) || "")}</span>`).join("");
+  const more = row.codes.length > VISIBLE_CODES
+    ? `<span class="answer-more" title="${escapeAttribute(row.codes.slice(VISIBLE_CODES).map(code => names.get(code) || "").join(", "))}">+${row.codes.length - VISIBLE_CODES}</span>`
+    : "";
+  const badges = `${row.low ? '<span class="answer-low" title="Модель не уверена в кодах">низкая</span>' : ""}${row.source === "manual" || row.source === "dictionary" ? `<span class="answer-source is-${row.source}" title="${row.source === "manual" ? "Поправлено вручную, лежит в словаре" : "Из словаря правок"}">${SOURCE_LABELS[row.source]}</span>` : ""}`;
+  return `<tr class="ans${row.low ? " is-low" : ""}" data-key="${escapeAttribute(row.key)}" data-codes="${escapeAttribute(JSON.stringify(row.codes))}" data-source="${escapeAttribute(row.source || "")}">
+    <td class="ans-text" title="${escapeAttribute(row.text)}" data-expand-answer><span>${escapeHtml(row.text)}</span></td>
+    <td class="num">${row.count.toLocaleString("ru-RU")}</td>
+    <td class="ans-codes">${shown}${more}${row.codes.length ? "" : '<span class="muted">без кода</span>'}</td>
+    <td class="ans-actions">${badges}<button type="button" class="icon-button ans-edit" data-edit-answer aria-label="Изменить коды ответа" title="Изменить коды">✎</button></td>
+  </tr>`;
+}
+
+function answerEditorHtml(codeframe, row) {
+  const codes = new Set(JSON.parse(row.dataset.codes));
+  const themes = codeframe.themes;
+  const parents = new Set(themes.map(theme => theme.parent_id).filter(Boolean));
+  const type = codeframe.multi === false ? "radio" : "checkbox";
+  const option = theme => `<label class="ans-option"><input type="${type}" name="ans-codes" value="${escapeAttribute(theme.id)}" ${codes.has(theme.id) ? "checked" : ""} /> ${escapeHtml(theme.name)}</label>`;
+  const groups = themes.filter(theme => !theme.parent_id).map(theme => parents.has(theme.id)
+    ? `<fieldset class="ans-group"><legend>${escapeHtml(theme.name)}</legend>${themes.filter(child => child.parent_id === theme.id).map(option).join("")}</fieldset>`
+    : option(theme)).join("");
+  return `<tr class="ans-editor"><td colspan="4">
+    <div class="ans-editor-box">
+      <p class="ans-editor-text">${escapeHtml(row.querySelector(".ans-text").title)}</p>
+      <div class="ans-options">${groups}</div>
+      <div class="ans-editor-actions">
+        ${row.dataset.source === "manual" ? '<button type="button" class="text-button" data-reset-answer title="Убрать правку из словаря и вернуть коды модели">Вернуть коды ИИ</button>' : ""}
+        <span class="toolbar-grow"></span>
+        <button type="button" class="secondary" data-cancel-answer>Отмена</button>
+        <button type="button" data-save-answer>Сохранить</button>
+      </div>
+    </div>
+  </td></tr>`;
 }
 
 async function setAnswerCodes(codeframe, key, codes) {
@@ -362,11 +408,6 @@ document.querySelector("#coding-list").addEventListener("change", event => {
   } else if (event.target.matches("[data-theme-filter]")) {
     state.themeId = event.target.value;
     void loadCodeframeAnswers(codeframe, false);
-  } else if (event.target.matches(".answer-add") && event.target.value) {
-    const row = event.target.closest(".answer-row");
-    const codes = JSON.parse(row.dataset.codes);
-    const next = codeframe.multi === false ? [event.target.value] : [...codes, event.target.value];
-    void setAnswerCodes(codeframe, row.dataset.key, next);
   } else if (event.target.matches("[data-import]")) {
     void importCodebook(codeframe, event.target);
   }
@@ -400,12 +441,24 @@ document.querySelector("#coding-list").addEventListener("click", async event => 
     void loadCodeframeAnswers(codeframe, false);
   } else if (target.closest("[data-more]")) {
     void loadCodeframeAnswers(codeframe, true);
-  } else if (target.closest("[data-remove-code]")) {
-    const row = target.closest(".answer-row");
-    const codes = JSON.parse(row.dataset.codes).filter(code => code !== target.closest("[data-remove-code]").dataset.removeCode);
-    void setAnswerCodes(codeframe, row.dataset.key, codes);
+  } else if (target.closest("[data-expand-answer]")) {
+    target.closest(".ans").classList.toggle("is-expanded");
+  } else if (target.closest("[data-edit-answer]")) {
+    const row = target.closest(".ans");
+    const open = row.nextElementSibling?.classList.contains("ans-editor");
+    articleFor(codeframe.id).querySelectorAll(".ans-editor").forEach(item => item.remove());
+    if (!open) {
+      row.insertAdjacentHTML("afterend", answerEditorHtml(codeframe, row));
+      row.nextElementSibling.querySelector("input")?.focus();
+    }
+  } else if (target.closest("[data-cancel-answer]")) {
+    target.closest(".ans-editor").remove();
+  } else if (target.closest("[data-save-answer]")) {
+    const editor = target.closest(".ans-editor");
+    const codes = [...editor.querySelectorAll("input[name='ans-codes']:checked")].map(input => input.value);
+    void setAnswerCodes(codeframe, editor.previousElementSibling.dataset.key, codes);
   } else if (target.closest("[data-reset-answer]")) {
-    void setAnswerCodes(codeframe, target.closest(".answer-row").dataset.key, null);
+    void setAnswerCodes(codeframe, target.closest(".ans-editor").previousElementSibling.dataset.key, null);
   } else if (target.closest("[data-code-mode]")) {
     await startCoding(codeframe, target.closest("[data-code-mode]").dataset.codeMode);
   }

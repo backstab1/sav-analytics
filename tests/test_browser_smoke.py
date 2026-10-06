@@ -1874,8 +1874,11 @@ def test_open_answers_are_coded_by_ai_and_by_hand(
         expect(row.locator(".code-row")).to_have_count(6)
 
         row.locator("[data-tile='uncoded']").click()
-        expect(row.locator(".answer-row")).to_have_count(6, timeout=UI_TIMEOUT)
-        row.locator(".answer-row").first.locator(".answer-add").select_option(label="Качество")
+        expect(row.locator("tr.ans")).to_have_count(6, timeout=UI_TIMEOUT)
+        # Коды правятся карандашом: под строкой открывается список кодов.
+        row.locator("tr.ans").first.locator("[data-edit-answer]").click()
+        row.locator(".ans-editor .ans-option", has_text="Качество").locator("input").check()
+        row.locator(".ans-editor [data-save-answer]").click()
         expect(row.locator("[data-tile='dictionary'] b")).to_have_text("1", timeout=UI_TIMEOUT)
         expect(row.locator("[data-tile='uncoded'] b")).to_have_text("5")
     finally:
@@ -2054,3 +2057,45 @@ def test_new_wave_shows_the_diff_and_replaces_data(
         "Данные проекта заменены", timeout=UI_TIMEOUT
     )
     expect(page.locator("#table-body tr[data-code='CITY']")).to_be_visible(timeout=UI_TIMEOUT)
+
+
+def test_ai_report_goes_from_brief_to_docx(page: Page, live_server: str, tmp_path: Path) -> None:
+    from sav_analytics.api_dependencies import get_long_chat_model, get_settings
+    from sav_analytics.settings import Settings
+    from tests.test_autoreport import TextModel
+    from tests.test_sav_reader import write_fixture
+
+    model = TextModel()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        data_dir=tmp_path, assistant_base_url="http://stub.local", assistant_model="stub"
+    )
+    app.dependency_overrides[get_long_chat_model] = lambda: model
+    source = tmp_path / "survey.sav"
+    write_fixture(source)
+    try:
+        _open_project(page, live_server, source)
+        _open_view(page, "aireport")
+        expect(page.locator("#section-aireport")).to_be_visible(timeout=UI_TIMEOUT)
+        page.fill("[data-brief='tasks']", "Понять оценку сервиса")
+        page.fill("[data-brief='object']", "Наш сервис")
+        page.click("[data-ar-run='plan']")
+        expect(page.locator("#ai-consent-sheet")).to_be_visible(timeout=UI_TIMEOUT)
+        page.click("#ai-consent-accept")
+        expect(page.locator("#ar-body .ar-section")).to_have_count(1, timeout=UI_TIMEOUT)
+        expect(page.locator("#ar-body [data-clarification]")).to_have_count(1)
+
+        page.click("[data-answer-option='А']")
+        model.texts = {
+            "summary": ["Вывод: 25%."],
+            "sections": [],
+            "conclusion": "Итог.",
+        }
+        page.click("[data-ar-run='build']")
+        expect(page.locator("#ar-body .ar-question-card")).to_have_count(2, timeout=UI_TIMEOUT)
+        expect(page.locator("#ar-body a[href$='/autoreport/report.docx']")).to_be_visible()
+        # Разрез из плана — обычный баннер «Ручного отчёта».
+        _open_view(page, "reports")
+        expect(page.locator("#entity-list")).to_contain_text("Автоотчёт", timeout=UI_TIMEOUT)
+    finally:
+        for dependency in (get_settings, get_long_chat_model):
+            app.dependency_overrides.pop(dependency, None)

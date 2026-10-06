@@ -29,6 +29,7 @@ from .routers import (
     ai,
     analysis,
     assistant,
+    autoreport,
     banners,
     codeframes,
     data_rows,
@@ -221,6 +222,7 @@ for router in (
     tables.router,
     assistant.router,
     ai.router,
+    autoreport.router,
     demo_requests.router,
 ):
     app.include_router(router)

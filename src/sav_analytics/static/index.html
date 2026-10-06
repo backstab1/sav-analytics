@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20261006-ai-coding2" />
+    <link rel="stylesheet" href="/styles.css?v=20261006-split" />
   </head>
   <body>
     <!-- ================================================================
@@ -289,7 +289,11 @@
                 </button>
                 <button class="rail-item" data-view="reports" type="button">
                   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="4" width="14" height="10" rx="1.8" stroke="currentColor" stroke-width="1.5" /><path d="M10 14v3M7 17h6M6.5 11V9M9.5 11V7M12.5 11V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
-                  <span>Отчёты</span>
+                  <span>Ручной отчёт</span>
+                </button>
+                <button class="rail-item" data-view="aireport" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 3.5h7l3 3v10H5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M10 8.2l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8z" fill="currentColor" /></svg>
+                  <span>ИИ отчёт</span>
                 </button>
               </div>
             </nav>
@@ -944,6 +948,25 @@
                 <div id="coding-list" class="coding-list"></div>
               </div>
             </section>
+
+            <!-- ИИ отчёт (PQ.18): бриф → план → отчёт. Числа считает ядро,
+                 текст пишет модель; см. core/autoreport.py. -->
+            <section id="section-aireport" class="soon" hidden>
+              <div class="coding-wrap">
+                <p class="eyebrow">ИИ отчёт</p>
+                <h1>Отчёт с выводами и графиками</h1>
+                <p class="lead">Бриф → план → DOCX. ИИ выбирает, что считать, и пишет выводы; все числа считает приложение — они совпадают с книгой Excel. Разрез и вес из плана видны и в «Ручном отчёте».</p>
+                <section id="autoreport" class="autoreport">
+                  <ol class="ar-steps" role="tablist" aria-label="Шаги ИИ отчёта">
+                    <li><button type="button" role="tab" data-ar-step="brief"><span>1</span>Бриф</button></li>
+                    <li><button type="button" role="tab" data-ar-step="plan"><span>2</span>План</button></li>
+                    <li><button type="button" role="tab" data-ar-step="report"><span>3</span>Отчёт</button></li>
+                  </ol>
+                  <div id="ar-progress" class="ar-progress" role="status" hidden></div>
+                  <div id="ar-body" class="ar-body"></div>
+                </section>
+              </div>
+            </section>
                   <section class="coding-answers">
                     <div class="coding-filter">
                       <select id="answer-filter" aria-label="Какие ответы показать"></select>
@@ -1175,7 +1198,7 @@
     <script src="/util.js?v=20261001-uiux" defer></script>
     <script src="/tables.js?v=20260930-nest-button" defer></script>
     <script src="/shell.js?v=20261001-landing" defer></script>
-    <script src="/app.js?v=20261005-ai" defer></script>
+    <script src="/app.js?v=20261006-split" defer></script>
     <script src="/route.js?v=20260930-question-tune" defer></script>
     <script src="/source.js?v=20260930-question-tune" defer></script>
     <script src="/library.js?v=20260930-question-tune" defer></script>
@@ -1190,10 +1213,11 @@
     <script src="/banner.js?v=20260930-question-tune" defer></script>
     <script src="/formulas.js?v=20260930-question-tune" defer></script>
     <script src="/analysis.js?v=20260930-question-tune" defer></script>
-    <script src="/coding.js?v=20261006-ai-coding2" defer></script>
+    <script src="/coding.js?v=20261006-split" defer></script>
     <script src="/select-search.js?v=20260930-question-tune" defer></script>
     <script src="/history.js?v=20260930-question-tune" defer></script>
-    <script src="/ai.js?v=20261006-ai-coding2" defer></script>
+    <script src="/ai.js?v=20261006-autoreport" defer></script>
+    <script src="/autoreport.js?v=20261006-split" defer></script>
     <script src="/landing.js?v=20261001-landing" defer></script>
     <script src="/demo-request.js?v=20261001-landing" defer></script>
     <script src="/boot.js?v=20260930-question-tune" defer></script>

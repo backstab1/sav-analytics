@@ -3185,7 +3185,7 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
    и «Отчётов»: тот же потолок ширины и те же поля, поэтому заголовок раздела
    при переключении не прыгает вбок. У «Открытых ответов» полей не было
    вовсе — текст прилипал к рельсу, а надзаголовок уходил под шапку. */
-#section-analysis, #section-text {
+#section-analysis, #section-text, #section-aireport {
   min-width: 0; min-height: 0; overflow-y: auto;
   padding: var(--canvas-pad) var(--canvas-pad) 48px;
 }
@@ -3351,3 +3351,149 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .qn-table .qn-after { color: var(--c-ink); }
 .qn-skipped { font-size: var(--t-xs); color: var(--c-ink-3); }
 .qn-skipped ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* Таблица ревью ответов (как у Смыслографа): строка — уникальный ответ. */
+.answers-wrap { border: 1px solid var(--c-border); border-radius: 10px; overflow: auto; min-height: 0; flex: 1 1 auto; }
+.answers-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--t-xs); }
+.answers-table thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--c-surface-soft);
+  padding: 6px 8px; text-align: left; font-weight: 600; color: var(--c-ink-3); border-bottom: 1px solid var(--c-border);
+}
+.answers-table th:nth-child(1) { width: 48%; }
+.answers-table th.num { width: 52px; text-align: right; }
+.answers-table th.ans-actions-head { width: 112px; }
+.answers-table td { padding: 5px 8px; border-bottom: 1px solid var(--c-border); vertical-align: middle; }
+.answers-table td.num { text-align: right; color: var(--c-ink-3); font-variant-numeric: tabular-nums; }
+.answers-table tr.ans:hover td { background: var(--c-surface-soft); }
+.answers-table tr.ans.is-low td:first-child { box-shadow: inset 3px 0 0 var(--c-warn-ink); }
+.ans-text { cursor: pointer; }
+.ans-text span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-ink); font-size: var(--t-sm); }
+.ans.is-expanded .ans-text span { white-space: normal; overflow-wrap: anywhere; }
+.ans-codes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.answers-table td.ans-codes { display: table-cell; }
+.ans-codes .answer-chip { cursor: default; margin: 1px 2px 1px 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.answer-more { color: var(--c-ink-3); font-weight: 600; cursor: help; }
+.ans-actions { text-align: right; white-space: nowrap; }
+.ans-actions .answer-low, .ans-actions .answer-source { margin-right: 4px; }
+.ans-edit { padding: 2px 6px; color: var(--c-ink-3); background: transparent; }
+.ans-edit:hover { color: var(--c-brand); background: var(--c-brand-tint); }
+.ans-editor td { background: var(--c-surface-soft); }
+.ans-editor-box { display: grid; gap: 8px; padding: 4px 0; }
+.ans-editor-text { margin: 0; font-size: var(--t-sm); overflow-wrap: anywhere; }
+.ans-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px 12px; }
+.ans-group { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px 12px; margin: 2px 0; padding: 0; border: 0; }
+.ans-group legend { padding: 0; font-weight: 700; color: var(--c-ink-2); }
+.ans-option { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.ans-option input { width: 14px; height: 14px; margin: 0; padding: 0; accent-color: var(--c-brand); flex: 0 0 auto; }
+.ans-editor-actions { display: flex; gap: 8px; align-items: center; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ================================================================
+   «Отчёт с ИИ» в разделе «Отчёты» (autoreport.js)
+   ================================================================ */
+.autoreport { flex: 0 0 auto; border: 1px solid var(--c-border); border-radius: var(--r-3); background: var(--c-surface); margin-bottom: 10px; min-width: 0; }
+.autoreport[hidden] { display: none; }
+.autoreport.is-open { box-shadow: var(--shadow-1, 0 1px 3px rgb(0 0 0 / 6%)); }
+.ar-head { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 0; }
+.ar-toggle {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; justify-content: flex-start;
+  padding: 8px 14px; background: transparent; color: var(--c-ink); font-weight: 500; white-space: nowrap;
+}
+.ar-toggle:hover { background: transparent; color: var(--c-brand); }
+.autoreport.is-open .cq-caret { transform: rotate(45deg); }
+.ar-head-title { font-weight: 700; }
+.ar-head-note { color: var(--c-ink-3); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; }
+.ar-inner { padding: 0 14px 14px; display: grid; gap: 10px; max-height: min(70vh, 960px); overflow-y: auto; }
+.ar-inner[hidden] { display: none; }
+.ar-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.ar-steps button {
+  display: inline-flex; gap: 8px; align-items: center; padding: 5px 12px 5px 6px;
+  background: var(--c-surface-soft); color: var(--c-ink-2); font-weight: 600;
+}
+.ar-steps button span { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--c-surface); font-size: var(--t-xs); }
+.ar-steps button.active { background: var(--c-brand); color: #fff; }
+.ar-steps button.active span { background: rgb(255 255 255 / 25%); }
+.ar-steps button.done span { background: var(--c-brand-tint); color: var(--c-brand); }
+.ar-steps button:disabled { opacity: .45; cursor: default; }
+.ar-progress { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--c-brand-tint); font-size: var(--t-xs); }
+.ar-progress p { margin: 0; }
+.ar-progress[hidden] { display: none; }
+.ar-card { display: grid; gap: 10px; min-width: 0; }
+.ar-card h2 { margin: 0; font-size: var(--t-lg); }
+.ar-card h3 { margin: 0; font-size: var(--t-sm); }
+.ar-card > p { margin: 0; }
+.ar-card textarea, .ar-card input:not([type]), .ar-card select { min-width: 0; }
+.ar-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ar-block { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--c-border); }
+.ar-block > p { margin: 0; font-size: var(--t-xs); }
+.ar-question { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--c-surface-soft); }
+.ar-question p { margin: 0; font-size: var(--t-sm); }
+.ar-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.ar-options .pill.active { border-color: var(--c-brand); background: var(--c-brand-tint); color: var(--c-brand); }
+.ar-question input { padding: 5px 8px; font-size: var(--t-xs); }
+.ar-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ar-chips .answer-chip { cursor: default; }
+.ar-chips select { padding: 3px 6px; font-size: var(--t-xs); max-width: 260px; }
+.chip-x { padding: 0 2px; background: transparent; color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1; }
+.chip-x:hover { background: transparent; color: var(--c-danger); }
+.ar-weight { max-width: 280px; }
+.ar-sections { display: grid; gap: 8px; }
+.ar-section { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: 10px; }
+.ar-section-head { display: flex; align-items: center; gap: 8px; }
+.ar-section-head input { flex: 1 1 auto; font-weight: 600; padding: 4px 8px; }
+.ar-section-number { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c-brand-tint); color: var(--c-brand); font-size: var(--t-xs); font-weight: 700; flex: 0 0 auto; }
+.ar-goal { padding: 4px 8px; font-size: var(--t-xs); color: var(--c-ink-2); }
+.ar-report-bar h2 { margin: 0; }
+.ar-report-bar small { display: block; margin-top: 2px; font-size: var(--t-xs); }
+.ar-report-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--c-border); }
+.ar-text { width: 100%; resize: vertical; font-size: var(--t-sm); line-height: 1.5; }
+.ar-method { margin: 0; font-size: var(--t-xs); color: var(--c-ink-2); }
+.ar-warn { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--c-warn-tint); color: var(--c-warn-ink); font-size: var(--t-xs); }
+.ar-cards { display: grid; gap: 8px; }
+.ar-question-card { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--c-border); border-radius: 10px; min-width: 0; }
+.ar-question-card header { display: flex; align-items: center; gap: 8px; font-size: var(--t-sm); }
+.ar-question-card header b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar-question-card.is-hidden { opacity: .6; }
+.ar-question-card.is-hidden p { margin: 0; font-size: var(--t-xs); }
+.segmented { display: inline-flex; padding: 2px; border-radius: var(--r-pill); background: var(--c-surface-soft); }
+.segmented button { padding: 3px 10px; background: transparent; color: var(--c-ink-2); font-weight: 600; font-size: var(--t-xs); }
+.segmented button.active { background: var(--c-surface); color: var(--c-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+.segmented.compact button { padding: 1px 8px; }
+.ar-chart.is-bar { display: grid; gap: 4px; }
+.ar-chart.is-bar .ar-bar { display: grid; grid-template-columns: minmax(120px, 34%) minmax(0, 1fr) 44px; gap: 8px; align-items: center; font-size: var(--t-xs); }
+.ar-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-ink-2); }
+.ar-bar-track { display: block; height: 14px; border-radius: 4px; background: var(--c-surface-soft); overflow: hidden; }
+.ar-chart.is-bar .ar-bar-fill { display: block; height: 100%; background: var(--c-brand); border-radius: 4px; }
+.ar-bar b { text-align: right; font-variant-numeric: tabular-nums; }
+.ar-chart.is-column { display: flex; gap: 10px; align-items: flex-end; height: 170px; padding-top: 6px; }
+.ar-chart.is-column .ar-bar { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; height: 100%; font-size: var(--t-xs); }
+.ar-chart.is-column .ar-bar-label { max-width: 100%; text-align: center; }
+.ar-chart.is-column .ar-bar-track { flex: 1 1 auto; width: 70%; height: auto; display: flex; align-items: flex-end; background: transparent; }
+.ar-chart.is-column .ar-bar-fill { display: block; width: 100%; background: var(--c-brand); border-radius: 4px 4px 0 0; }
+.ar-table-wrap { overflow-x: auto; }
+.ar-table { border-collapse: collapse; font-size: var(--t-xs); min-width: 100%; }
+.ar-table th, .ar-table td { padding: 4px 8px; border-bottom: 1px solid var(--c-border); text-align: right; white-space: nowrap; }
+.ar-table thead th { color: var(--c-ink-3); font-weight: 600; vertical-align: bottom; }
+.ar-table thead th small { display: block; font-weight: 400; }
+.ar-table tbody th { text-align: left; font-weight: 500; color: var(--c-ink); white-space: normal; min-width: 160px; }
+.ar-table td.is-higher { color: var(--c-brand); font-weight: 700; }
+.ar-table td.is-lower { color: var(--c-danger); font-weight: 700; }
+.ar-table .is-small { color: var(--c-ink-3); }
+
+/* Раскрытый вопрос «Открытых ответов» — в один экран: справочник и таблица
+   ответов прокручиваются каждый внутри себя, а не страницей. */
+.cq.is-open { scroll-margin-top: 8px; }
+.cq.is-open .cq-grid { height: calc(100dvh - 150px); min-height: 420px; }
+.cq.is-open .cq-codes { height: 100%; min-height: 0; overflow-y: auto; align-content: start; }
+.cq.is-open .cq-answers { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.cq.is-open .cq-answers > * { flex: 0 0 auto; }
+.cq.is-open .cq-answers > .answers-wrap { flex: 1 1 auto; }
+.cq-tile { padding: 6px 10px; }
+.cq-tile b { font-size: var(--t-base); }
+.cq-code-actions { padding-top: 6px; }
+#section-aireport .autoreport { display: grid; gap: 10px; padding: 14px; }
+@media (max-width: 960px) {
+  .cq.is-open .cq-grid { height: auto; }
+  .cq.is-open .cq-codes { height: auto; max-height: 40vh; }
+  .cq.is-open .cq-answers { height: 70vh; }
+}

@@ -69,6 +69,12 @@
   плитками ревью. Правка человека пишется в словарь «текст → коды» и переживает
   перекодирование; режимы — «Докодировать новые», «Перекодировать с учётом правок»,
   «Сбросить всё». Коды — вопрос multiple-response для таблиц, фильтров и баннера.
+  Ответы — компактная таблица уникальных текстов: коды чипами, правка по карандашу;
+- «ИИ отчёт» — отдельный раздел рельса рядом с «Ручным отчётом»: бриф → план
+  (разделы, разрез, вес, уточнения от ИИ) → сборка. Числа считает ядро той же
+  функцией, что лист книги; модель пишет выводы, проценты вне таблиц помечаются.
+  Отчёт правится на экране, правки переживают пересборку; DOCX с родными
+  диаграммами Word и таблицами значимости, книга Excel — в «Ручном отчёте».
 
 ### Анализ
 
@@ -279,7 +285,7 @@ docker compose up --build
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m pytest --cov=sav_analytics
-.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py src/sav_analytics/ai_jobs.py src/sav_analytics/core/questionnaire.py src/sav_analytics/routers/ai.py src/sav_analytics/coding_jobs.py src/sav_analytics/core/open_text.py src/sav_analytics/routers/codeframes.py
+.\.venv\Scripts\python.exe -m mypy --follow-imports=skip src/sav_analytics/api.py src/sav_analytics/api_errors.py src/sav_analytics/project_models.py src/sav_analytics/report_cache.py src/sav_analytics/report_jobs.py src/sav_analytics/configuration_revision.py src/sav_analytics/core/weight_validation.py src/sav_analytics/core/review.py src/sav_analytics/api_presentation.py src/sav_analytics/core/not_applicable.py src/sav_analytics/core/reporting/live.py src/sav_analytics/routers/tables.py src/sav_analytics/assistant src/sav_analytics/routers/assistant.py src/sav_analytics/ai_jobs.py src/sav_analytics/core/questionnaire.py src/sav_analytics/routers/ai.py src/sav_analytics/coding_jobs.py src/sav_analytics/core/open_text.py src/sav_analytics/routers/codeframes.py src/sav_analytics/autoreport_jobs.py src/sav_analytics/core/autoreport.py src/sav_analytics/core/docx_report.py src/sav_analytics/routers/autoreport.py
 ```
 
 На 18 сентября в ветке `Codex_Savanalytics` набор содержит 308 non-browser pytest-кейсов
@@ -370,9 +376,11 @@ src/sav_analytics/
 │   ├── system_prompt.md # системный промпт
 │   ├── questionnaire.py # разбор анкеты моделью: один запрос с submit_mapping
 │   ├── questionnaire_prompt.md # промпт разбора анкеты
-│   └── coding.py      # справочник кодов, коды пачки ответов и правка справочника моделью
+│   ├── coding.py      # справочник кодов, коды пачки ответов и правка справочника моделью
+│   └── autoreport.py  # план отчёта и тексты по числам ядра
 ├── ai_jobs.py         # фоновые задачи ИИ: прогресс, результат, повтор
 ├── coding_jobs.py     # кодирование открытых ответов: справочник, пачки, режимы
+├── autoreport_jobs.py # ИИ отчёт: план по брифу, сборка разделов и текста
 ├── atomic_file.py     # замена файла, переживающая параллельного читателя в Windows
 ├── report_cache.py    # immutable-артефакты отчёта по cache key
 ├── report_jobs.py     # фоновые задачи, привязанные к ревизии и артефакту
@@ -396,6 +404,8 @@ src/sav_analytics/
 │   ├── weighting.py   # рассчитанный вес: raking, ячейки, внутри волн, цели по перекодировкам
 │   ├── weight_targets.py # шаблон целей веса в Excel и его чтение
 │   ├── questionnaire.py # текст анкеты, каталог для модели, проверка и применение подписей
+│   ├── autoreport.py  # ИИ отчёт: план, числа живой таблицы, проверка процентов, сборка
+│   ├── docx_report.py # DOCX без зависимостей: текст, таблицы, родные диаграммы Word
 │   ├── open_text.py   # кодификатор: справочник кодов, коды ответов по тексту, словарь правок
 │   ├── sav_export.py  # выгрузка SAV с формулами, перекодировками и весами
 │   ├── sav_writing.py # проверка записанного SAV на поломку длинных строк readstat

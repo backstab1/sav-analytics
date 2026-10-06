@@ -369,7 +369,7 @@ const sectionHeads = {
     lead: "Типы и названия вопросов определены автоматически. Проверьте отмеченное.",
   },
   reports: {
-    eyebrow: "Отчёты",
+    eyebrow: "Ручной отчёт",
     title: "Книга Excel",
     lead: "Слева — что войдёт в книгу, справа — как считаются различия.",
   },
@@ -619,7 +619,7 @@ function syncSectionChrome(view) {
 // Разделы проекта по макету v8. «Данные» и «Отчёты» живут на холсте,
 // «Данные» и «Отчёты» живут на общем холсте, остальные разделы — своими
 // секциями во второй колонке оболочки.
-const SECTION_VIEWS = ["data", "tables", "analysis", "text", "reports"];
+const SECTION_VIEWS = ["data", "tables", "analysis", "text", "reports", "aireport"];
 const CANVAS_VIEWS = ["data", "reports"];
 
 function setView(view) {
@@ -637,6 +637,7 @@ function setView(view) {
   document.querySelector("#section-tables").hidden = view !== "tables";
   document.querySelector("#section-analysis").hidden = view !== "analysis";
   document.querySelector("#section-text").hidden = view !== "text";
+  document.querySelector("#section-aireport").hidden = view !== "aireport";
   syncSectionChrome(view);
   if (onCanvas) {
     renderSectionHead(view);
@@ -648,6 +649,8 @@ function setView(view) {
     renderAnalysisSection();
   } else if (view === "text") {
     void renderTextSection();
+  } else if (view === "aireport") {
+    renderAutoreportSection();
   }
   writeRoute();
 }
