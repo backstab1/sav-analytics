@@ -3576,3 +3576,6 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .ans-tones-label { font-weight: 700; color: var(--c-ink-2); }
 .ans-tone-option { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .ans-tone-option input { width: 14px; height: 14px; margin: 0; padding: 0; accent-color: var(--tone); }
+/* Группа по анкете: пункты, которые станут одним вопросом. */
+.qn-table .qn-members code { display: inline-block; margin: 0 4px 2px 0; color: var(--c-ink-2); }
+.qn-table .qn-type { display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: var(--r-pill); background: var(--c-brand-tint); color: var(--c-brand); font-weight: 600; }

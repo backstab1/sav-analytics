@@ -23,6 +23,9 @@ import zipfile
 from typing import Any
 from xml.etree import ElementTree
 
+from .configuration_integrity import find_references
+from .question_groups import QuestionGroupError, build_group
+
 QUESTIONNAIRE_EXTENSIONS = (".docx", ".pdf", ".txt", ".md")
 MAX_QUESTIONNAIRE_BYTES = 30 * 1024 * 1024
 # Сколько текста анкеты уходит модели. Анкета на 60 страниц — около 150 тысяч
@@ -33,9 +36,21 @@ MAX_TEXT_CHARS = 250_000
 MAX_UNLABELED_CODES = 40
 
 # Типы, между которыми вопрос из одной переменной можно переключить по
-# анкете. Группы (multiple, матрица, ранжирование) собираются в «Данных»
-# руками, их состав анкета не меняет.
+# анкете. Группы анкета не переключает, а собирает отдельной строкой `group`
+# из одиночных вопросов — той же `build_group`, что и ручная сборка.
 SINGLE_VARIABLE_TYPES = ("single_choice", "scale", "numeric", "open_text")
+# Группы, которые собираются по анкете. Ранжированию нужна кодировка (ранг
+# по пункту или пункт по рангу), по тексту анкеты её не угадать.
+QUESTIONNAIRE_GROUP_TYPES = (
+    "multiple_choice_dichotomy",
+    "multiple_choice_categorical",
+    "matrix",
+)
+GROUP_TYPE_NAMES = {
+    "multiple_choice_dichotomy": "multiple-дихотомия",
+    "multiple_choice_categorical": "категориальный multiple",
+    "matrix": "матрица",
+}
 
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
@@ -305,6 +320,8 @@ def proposal_rows(
                 }
             )
 
+    rows.extend(_group_rows(project, proposal, skipped))
+
     order = [str(code) for code in proposal.get("order") or [] if str(code) in questions]
     order = list(dict.fromkeys(order))
     if len(order) >= 2:
@@ -321,6 +338,61 @@ def proposal_rows(
     for index, row in enumerate(rows, start=1):
         row["id"] = f"r{index}"
     return rows, skipped
+
+
+def _group_rows(
+    project: dict, proposal: dict[str, Any], skipped: list[str]
+) -> list[dict[str, Any]]:
+    """Группы из одиночных вопросов: каждая проверяется сборкой «всухую».
+
+    Вопрос уходит не больше чем в одну группу; вопрос, на который ссылается
+    баннер, фильтр или перекодировка, в группу не уходит — как при ручной
+    сборке.
+    """
+    configuration = project["configuration"]
+    questions = configuration["questions"]
+    variables = {item["name"]: item for item in project["inspection"]["variables"]}
+    taken: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    for item in _records(proposal.get("groups")):
+        question_type = str(item.get("question_type") or "")
+        codes = list(dict.fromkeys(str(code) for code in item.get("codes") or []))
+        name = ", ".join(codes[:4]) + ("…" if len(codes) > 4 else "") or "(без вопросов)"
+        if question_type not in QUESTIONNAIRE_GROUP_TYPES:
+            skipped.append(f"Группа {name}: тип «{question_type}» по анкете не собирается.")
+            continue
+        repeated = [code for code in codes if code in taken]
+        if repeated:
+            skipped.append(
+                f"Группа {name}: {', '.join(repeated)} уже в другой предложенной группе."
+            )
+            continue
+        referenced = [code for code in codes if find_references(configuration, "question", code)]
+        if referenced:
+            skipped.append(
+                f"Группа {name}: на {', '.join(referenced)} ссылаются баннер, фильтр или "
+                "перекодировка. Сначала снимите связи."
+            )
+            continue
+        label = _clean_label(item.get("label"))
+        try:
+            group = build_group(questions, variables, codes, question_type, label=label or None)
+        except QuestionGroupError as exc:
+            skipped.append(f"Группа {name}: {exc}")
+            continue
+        taken.update(codes)
+        members = [question["code"] for question in questions if question["code"] in set(codes)]
+        rows.append(
+            {
+                "kind": "group",
+                "question_type": question_type,
+                "codes": members,
+                "code": group["code"],
+                "before": members,
+                "after": group["label"],
+            }
+        )
+    return rows
 
 
 def _records(value: Any) -> list[dict[str, Any]]:

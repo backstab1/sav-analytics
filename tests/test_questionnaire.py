@@ -323,3 +323,76 @@ def test_apply_unknown_job_is_404(project) -> None:
         json={"job_id": "00000000-0000-0000-0000-000000000000", "row_ids": ["r1"]},
     )
     assert response.status_code == 404
+
+
+GROUPS_MAPPING = {
+    "questions": [],
+    "variables": [],
+    "groups": [
+        {"question_type": "multiple_choice_dichotomy", "codes": ["Q3_1", "Q3_2"],
+         "label": "Что вам понравилось?"},
+        # Пол и оценка — разные шкалы: матрицу из них не собрать.
+        {"question_type": "matrix", "codes": ["Q1", "Q2"]},
+        {"question_type": "ranking", "codes": ["Q1", "Q2"]},
+        # Q3_1 уже ушёл в первую группу.
+        {"question_type": "multiple_choice_dichotomy", "codes": ["Q3_1", "Q2"]},
+    ],
+    "order": ["Q3_1", "Q3_2", "Q1", "Q2"],
+}
+
+
+def _ungroup_q3(context: dict) -> None:
+    response = context["client"].post(f"{context['base']}/questions/Q3/ungroup")
+    assert response.status_code == 200, response.text
+
+
+def test_questionnaire_groups_single_questions_in_one_undo_step(project) -> None:
+    _ungroup_q3(project)
+    job = _parsed(project, GROUPS_MAPPING)
+    rows = job["result"]["rows"]
+    groups = [row for row in rows if row["kind"] == "group"]
+    assert len(groups) == 1
+    assert groups[0]["codes"] == ["Q3_1", "Q3_2"]
+    assert groups[0]["after"] == "Что вам понравилось?"
+    skipped = " ".join(job["result"]["skipped"])
+    assert "Матрица" in skipped and "ranking" in skipped and "другой предложенной группе" in skipped
+    # Модель перечислила в порядке прежние коды пунктов — проверка их пропускает.
+    assert next(row for row in rows if row["kind"] == "order")["after"] == [
+        "Q3_1", "Q3_2", "Q1", "Q2",
+    ]
+
+    response = project["client"].post(
+        f"{project['base']}/questionnaire/apply",
+        json={"job_id": job["job_id"], "row_ids": [row["id"] for row in rows]},
+    )
+    assert response.status_code == 200, response.text
+    applied = response.json()
+    group = _question(applied, groups[0]["code"])
+    assert group["question_type"] == "multiple_choice_dichotomy"
+    assert group["source_variables"] == ["Q3_1", "Q3_2"]
+    assert group["label"] == "Что вам понравилось?"
+    codes = [item["code"] for item in applied["configuration"]["questions"]]
+    assert "Q3_1" not in codes and "Q3_2" not in codes
+    # Группа встала по анкете на место своих пунктов — перед Q1.
+    assert codes.index(group["code"]) < codes.index("Q1") < codes.index("Q2")
+
+    assert project["client"].get(f"{project['base']}/history").json()["undo"] == 2
+    project["client"].post(f"{project['base']}/undo")
+    restored = [item["code"] for item in _project(project)["configuration"]["questions"]]
+    assert "Q3_1" in restored and group["code"] not in restored
+
+
+def test_questionnaire_group_skips_questions_used_in_banner(project) -> None:
+    banner = project["client"].post(
+        f"{project['base']}/banners",
+        json={"name": "Пол", "blocks": [{"sources": [{"kind": "question", "ref": "Q1"}]}]},
+    )
+    assert banner.status_code in {200, 201}, banner.text
+    mapping = {
+        "questions": [],
+        "variables": [],
+        "groups": [{"question_type": "multiple_choice_dichotomy", "codes": ["Q1", "Q2"]}],
+    }
+    job = _parsed(project, mapping)
+    assert not [row for row in job["result"]["rows"] if row["kind"] == "group"]
+    assert any("ссылаются" in item for item in job["result"]["skipped"])

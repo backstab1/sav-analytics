@@ -57,6 +57,25 @@ SUBMIT_MAPPING = ToolSpec(
                     "required": ["name"],
                 },
             },
+            "groups": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question_type": {
+                            "type": "string",
+                            "enum": [
+                                "multiple_choice_dichotomy",
+                                "multiple_choice_categorical",
+                                "matrix",
+                            ],
+                        },
+                        "codes": {"type": "array", "items": _STRING},
+                        "label": _STRING,
+                    },
+                    "required": ["question_type", "codes"],
+                },
+            },
             "order": {"type": "array", "items": _STRING},
             "notes": _STRING,
         },

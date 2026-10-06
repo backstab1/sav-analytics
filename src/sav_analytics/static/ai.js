@@ -17,6 +17,7 @@ const aiKindLabels = {
   question_type: "Типы вопросов",
   variable_label: "Подписи переменных и пунктов",
   value_label: "Подписи кодов",
+  group: "Группы вопросов",
   order: "Порядок вопросов",
 };
 
@@ -323,6 +324,16 @@ function renderQuestionnaireRow(row) {
   if (row.kind === "question_type") {
     before = aiTypeLabels[before] || typeLabels[before] || before;
     after = aiTypeLabels[after] || after;
+  }
+  if (row.kind === "group") {
+    // Группа не переписывает подпись, а собирает вопросы: слева — что было,
+    // справа — тип и подпись нового вопроса.
+    return `<tr>
+    <td class="qn-check"><input type="checkbox" data-qn-row="${row.id}" checked aria-label="Собрать группу ${escapeHtml(row.code)}" /></td>
+    <td class="qn-target"><code>${escapeHtml(row.code)}</code></td>
+    <td class="qn-members">${row.codes.map(code => `<code>${escapeHtml(code)}</code>`).join(" ")}</td>
+    <td class="qn-after"><span class="qn-type">${escapeHtml(typeLabels[row.question_type] || row.question_type)}</span> ${escapeHtml(row.after)}</td>
+  </tr>`;
   }
   if (row.kind === "order") {
     return `<tr><td class="qn-check"><input type="checkbox" data-qn-row="${row.id}" checked aria-label="Применить порядок" /></td>

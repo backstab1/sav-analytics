@@ -373,6 +373,9 @@ class QuestionEditing(ProjectStore):
         """
         project = self.get(project_id)
         configuration = project["configuration"]
+        grouped: dict[str, list[str]] = {}
+        # Группы — раньше порядка: порядок ссылается на их код.
+        rows = sorted(rows, key=lambda row: row["kind"] == "order")
         for row in rows:
             kind = row["kind"]
             if kind in {"variable_label", "value_label"}:
@@ -390,9 +393,31 @@ class QuestionEditing(ProjectStore):
                     )
                 except InvalidUploadError as exc:
                     raise InvalidUploadError(f"Вопрос {row['question']}: {exc}") from exc
+            elif kind == "group":
+                try:
+                    self._group_in_project(
+                        project_id,
+                        project,
+                        row["codes"],
+                        row["question_type"],
+                        code=row["code"],
+                        label=row["after"],
+                    )
+                except InvalidUploadError as exc:
+                    raise InvalidUploadError(f"Группа {row['code']}: {exc}") from exc
+                grouped[row["code"]] = row["codes"]
             elif kind == "order":
+                # Пункты, собранные в группу этим же применением, в порядке
+                # заменяются кодом группы на месте первого из них.
+                order: list[str] = []
+                for code in row["after"]:
+                    owner = next(
+                        (group for group, members in grouped.items() if code in members), code
+                    )
+                    order.append(owner)
                 codes = reordered(
-                    [item["code"] for item in configuration["questions"]], row["after"]
+                    [item["code"] for item in configuration["questions"]],
+                    list(dict.fromkeys(order)),
                 )
                 by_code = {item["code"]: item for item in configuration["questions"]}
                 configuration["questions"] = [by_code[code] for code in codes]
@@ -444,6 +469,26 @@ class QuestionEditing(ProjectStore):
         бы. Связи снимаются сначала, это же правило действует при удалении.
         """
         project = self.get(project_id)
+        self._group_in_project(
+            project_id, project, codes, question_type, code=code, label=label,
+            ranking_encoding=ranking_encoding,
+        )
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def _group_in_project(
+        self,
+        project_id: UUID,
+        project: dict,
+        codes: list[str],
+        question_type: str,
+        *,
+        code: str | None = None,
+        label: str | None = None,
+        ranking_encoding: str | None = None,
+    ) -> dict:
+        """Сборка группы в проекте в памяти, без записи: её же применяет анкета."""
         configuration = project["configuration"]
         for member in dict.fromkeys(codes):
             ensure_not_referenced(configuration, "question", member, f"Вопрос {member}")
@@ -470,9 +515,7 @@ class QuestionEditing(ProjectStore):
         remaining = [item for item in questions if item["code"] not in members]
         remaining.insert(min(position, len(remaining)), group)
         configuration["questions"] = remaining
-        configuration["updated_at"] = datetime.now(UTC).isoformat()
-        self._write_project(project_id, project)
-        return project
+        return group
 
     def ungroup_question(self, project_id: UUID, code: str) -> dict:
         """Разобрать группу на одиночные вопросы — по одному на переменную."""
