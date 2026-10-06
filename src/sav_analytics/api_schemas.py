@@ -164,6 +164,8 @@ class CodeframeUpdate(BaseModel):
     themes: list[CodeframeTheme] = Field(default_factory=list, max_length=300)
     instruction: str | None = Field(default=None, max_length=4000)
     multi: bool | None = None
+    # Тональность ответов — тем же вызовом модели, что и коды.
+    sentiment: bool | None = None
     # Доля ответивших, реже которой код уходит в «Другое» при построении справочника.
     other_threshold: float | None = Field(default=None, ge=0, le=0.2)
 
@@ -184,6 +186,12 @@ class CodeframeAnswerCodes(BaseModel):
     key: str = Field(min_length=1, max_length=20_000)
     # Список — правка человека, попадает в словарь; null снимает правку.
     codes: list[str] | None = Field(default=None, max_length=50)
+
+
+class CodeframeAnswerTone(BaseModel):
+    key: str = Field(min_length=1, max_length=20_000)
+    # Тон — правка человека, попадает в словарь тонов; null снимает правку.
+    tone: Literal["positive", "neutral", "mixed", "negative"] | None = None
 
 
 class QuestionGroupRequest(BaseModel):

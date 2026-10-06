@@ -8,7 +8,10 @@
   закодировать всё с нуля.
 
 Пустой справочник строится основной моделью по выборке ответов; коды
-ставит модель массовых задач пачками, по четыре пачки параллельно. Пачка,
+ставит модель массовых задач пачками, по четыре пачки параллельно.
+При включённой тональности тем же вызовом ставится тон. Ответ, у которого
+коды уже есть (из словаря правок или с прошлого запуска в режиме `new`),
+а тона нет, уходит модели только за тоном: его коды не меняются. Пачка,
 которая не удалась дважды, остаётся незакодированной — это видно на
 плитке «без кода», а не роняет всю задачу.
 """
@@ -26,7 +29,9 @@ from .assistant.models import ChatModel, ModelError
 from .core.formulas import read_project_frame
 from .core.open_text import (
     OTHER_NAME,
+    TONE_VALUES,
     answer_codes,
+    answer_tone,
     codeframe_text_variable,
     empty_coding,
     merge_rare_codes,
@@ -169,15 +174,26 @@ def run_coding(
     targets = leaves(themes)
     by_number = {theme["number"]: theme["id"] for theme in targets}
     dictionary = coding["dictionary"]
+    sentiment = bool(codeframe.get("sentiment"))
+    coding.setdefault("tones", {})
+
+    def needs_tone(key: str) -> bool:
+        return sentiment and answer_tone(coding, key) is None
+
     if mode == "new":
         todo = [
             (key, text) for key, text, _count in unique
-            if key not in dictionary and key not in coding["answers"]
+            if (key not in dictionary and key not in coding["answers"]) or needs_tone(key)
         ]
+        tone_only = {key for key, _text in todo if key in dictionary or key in coding["answers"]}
     else:
         todo = [(key, text) for key, text, _count in unique if key not in dictionary]
         for key, _text in todo:
             coding["answers"].pop(key, None)
+        todo += [
+            (key, text) for key, text, _count in unique if key in dictionary and needs_tone(key)
+        ]
+        tone_only = {key for key, _text in todo if key in dictionary}
     batches = [todo[start : start + BATCH_SIZE] for start in range(0, len(todo), BATCH_SIZE)]
     multi = bool(codeframe.get("multi", True))
     done = 0
@@ -190,7 +206,7 @@ def run_coding(
             try:
                 result = request_codes(
                     fast_model, question, codeframe.get("instruction") or "", targets,
-                    [text for _key, text in batch], multi=multi,
+                    [text for _key, text in batch], multi=multi, sentiment=sentiment,
                 )
             except ModelError:
                 continue
@@ -205,14 +221,18 @@ def run_coding(
                 codes = list(dict.fromkeys(codes))
                 if not multi:
                     codes = codes[:1]
-                coded[batch[item["i"]][0]] = {
+                entry: dict[str, Any] = {
                     "codes": codes,
                     "source": "ai",
                     "low": bool(item.get("low_confidence")) or not codes,
                 }
+                if sentiment and item.get("tone") in TONE_VALUES:
+                    entry["tone"] = item["tone"]
+                coded[batch[item["i"]][0]] = entry
             for key, _text in batch:
                 # Пропущенный моделью ответ — без кода и на проверку человеку.
-                coded.setdefault(key, {"codes": [], "source": "ai", "low": True})
+                if key not in tone_only:
+                    coded.setdefault(key, {"codes": [], "source": "ai", "low": True})
             return coded
         return None
 
@@ -223,7 +243,13 @@ def run_coding(
                 failed += 1
                 failed_answers += len(batch)
             else:
-                coding["answers"].update(result)
+                for key, entry in result.items():
+                    if key in tone_only:
+                        # Коды ответа уже стоят — берётся только тон.
+                        if "tone" in entry:
+                            coding["answers"].setdefault(key, {})["tone"] = entry["tone"]
+                    else:
+                        coding["answers"][key] = entry
             progress(done, len(batches), f"Кодируем ответы: {min(done * BATCH_SIZE, len(todo))} "
                      f"из {len(todo)}")
     if batches and failed == len(batches):

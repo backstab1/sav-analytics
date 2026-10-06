@@ -4,6 +4,8 @@ import re
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pandas as pd
+
 from ..core.configuration_integrity import (
     ConfigurationIntegrityError,
     ensure_not_referenced,
@@ -18,6 +20,8 @@ from ..core.formulas import (
     validate_formula,
 )
 from ..core.open_text import (
+    TONE_VALUES,
+    TONES,
     CodeframeError,
     answered_mask,
     codeframe_columns,
@@ -26,6 +30,7 @@ from ..core.open_text import (
     normalize_answer,
     store_coding,
     theme_variable,
+    tone_variable,
     validate_codeframe,
 )
 from .store import (
@@ -155,6 +160,7 @@ class DerivedVariables(ProjectStore):
             "next_number": 1,
             "instruction": "",
             "multi": True,
+            "sentiment": True,
             "other_threshold": 0.01,
             "coding_ref": None,
         }
@@ -237,6 +243,29 @@ class DerivedVariables(ProjectStore):
         self._write_project(project_id, project)
         return project
 
+    def set_answer_tone(
+        self, project_id: UUID, codeframe_id: UUID, key: str, tone: str | None
+    ) -> dict:
+        """Правка тона человеком — в словарь «текст → тон»; `None` снимает правку."""
+        project = self.get(project_id)
+        codeframe = self._find_codeframe(project, codeframe_id)
+        if not codeframe.get("sentiment"):
+            raise InvalidUploadError("В этом кодификаторе тональность выключена.")
+        if tone is not None and tone not in TONE_VALUES:
+            raise InvalidUploadError("Неизвестная тональность.")
+        coding = self.coding(project_id, codeframe)
+        tones = coding.setdefault("tones", {})
+        key = normalize_answer(key)
+        if tone is None:
+            tones.pop(key, None)
+        else:
+            tones[key] = tone
+        codeframe["coding_ref"] = store_coding(self.root / str(project_id), coding)
+        self._sync_codeframe(project_id, project, codeframe)
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
     def save_coding_result(
         self,
         project_id: UUID,
@@ -300,6 +329,10 @@ class DerivedVariables(ProjectStore):
         for key, codes in (definition.get("dictionary") or {}).items():
             mapped = [ids[str(code)] for code in codes if str(code) in ids]
             coding["dictionary"][normalize_answer(key)] = mapped
+        tones = coding.setdefault("tones", {})
+        for key, tone in (definition.get("tones") or {}).items():
+            if tone in TONE_VALUES:
+                tones[normalize_answer(key)] = tone
         return self.save_coding_result(project_id, codeframe_id, themes, next_number, coding)
 
     def delete_codeframe(self, project_id: UUID, codeframe_id: UUID) -> dict:
@@ -307,6 +340,9 @@ class DerivedVariables(ProjectStore):
         codeframe = self._find_codeframe(project, codeframe_id)
         configuration = project["configuration"]
         ensure_not_referenced(configuration, "question", codeframe["code"], "Кодификатор")
+        ensure_not_referenced(
+            configuration, "question", tone_variable(codeframe), "Тональность кодификатора"
+        )
         configuration["codeframes"] = [
             item for item in configuration["codeframes"] if item["id"] != codeframe["id"]
         ]
@@ -337,18 +373,29 @@ class DerivedVariables(ProjectStore):
         return codeframe
 
     def _sync_codeframe(self, project_id: UUID, project: dict, codeframe: dict) -> None:
-        """Производные переменные тем и вопрос multiple-response — по кодификатору."""
+        """Производные переменные тем и вопрос multiple-response — по кодификатору.
+
+        Тональность — свой вопрос single choice с тем же `codeframe_id` и
+        пометкой `codeframe_tone`; он живёт, пока тональность включена.
+        """
         configuration = project["configuration"]
         identifier = codeframe["id"]
         variables = [
             item for item in project["inspection"]["variables"]
             if item.get("codeframe_id") != identifier
         ]
-        question = next(
-            (item for item in configuration["questions"] if item.get("codeframe_id") == identifier),
-            None,
-        )
-        if not codeframe["themes"]:
+        owned = [
+            item for item in configuration["questions"] if item.get("codeframe_id") == identifier
+        ]
+        question = next((item for item in owned if not item.get("codeframe_tone")), None)
+        tone_question = next((item for item in owned if item.get("codeframe_tone")), None)
+        if tone_question is not None and not codeframe.get("sentiment"):
+            ensure_not_referenced(
+                configuration, "question", tone_question["code"], "Тональность кодификатора"
+            )
+            configuration["questions"].remove(tone_question)
+            tone_question = None
+        if not codeframe["themes"] and not codeframe.get("sentiment"):
             project["inspection"]["variables"] = variables
             if question is not None:
                 ensure_not_referenced(configuration, "question", question["code"], "Кодификатор")
@@ -360,63 +407,136 @@ class DerivedVariables(ProjectStore):
         ]
         coding = self.coding(project_id, codeframe)
         columns = codeframe_columns(texts, codeframe, coding)
-        names = []
-        for theme in codeframe["themes"]:
-            name = theme_variable(codeframe, theme)
-            values = columns[name]
-            names.append(name)
-            variables.append(
-                {
-                    "name": name,
-                    "label": theme["name"],
-                    "storage_type": "numeric",
-                    "original_format": None,
-                    "measurement_level": "nominal",
-                    "question_type": "multiple_choice_dichotomy",
-                    "role": "question",
-                    "valid_count": int(values.notna().sum()),
-                    "missing_count": int(values.isna().sum()),
-                    "unique_count": int(values.dropna().nunique()),
-                    "value_labels": [],
-                    "warnings": [],
-                    "codeframe_id": identifier,
-                }
+        if not codeframe["themes"]:
+            if question is not None:
+                ensure_not_referenced(configuration, "question", question["code"], "Кодификатор")
+                configuration["questions"].remove(question)
+        else:
+            names = []
+            for theme in codeframe["themes"]:
+                name = theme_variable(codeframe, theme)
+                values = columns[name]
+                names.append(name)
+                variables.append(
+                    {
+                        "name": name,
+                        "label": theme["name"],
+                        "storage_type": "numeric",
+                        "original_format": None,
+                        "measurement_level": "nominal",
+                        "question_type": "multiple_choice_dichotomy",
+                        "role": "question",
+                        "valid_count": int(values.notna().sum()),
+                        "missing_count": int(values.isna().sum()),
+                        "unique_count": int(values.dropna().nunique()),
+                        "value_labels": [],
+                        "warnings": [],
+                        "codeframe_id": identifier,
+                    }
+                )
+            answered = int(answered_mask(texts).sum())
+            if question is None:
+                configuration["questions"].append(
+                    {
+                        "code": codeframe["code"],
+                        "label": codeframe["label"],
+                        "question_type": "multiple_choice_dichotomy",
+                        "role": "question",
+                        "source_variables": names,
+                        "valid_count": answered,
+                        "missing_count": len(texts) - answered,
+                        "included_in_report": True,
+                        "recognition": "manual",
+                        "warnings": [],
+                        "items": [],
+                        "special_values": [],
+                        "special_items": [],
+                        "multiple_response": {"encoding": "dichotomy", "counted_value": 1},
+                        "codeframe_id": identifier,
+                    }
+                )
+            else:
+                question.update(
+                    label=codeframe["label"],
+                    source_variables=names,
+                    valid_count=answered,
+                    missing_count=len(texts) - answered,
+                )
+                if question.get("nets"):
+                    question["nets"] = [
+                        {**net, "values": [value for value in net["values"] if value in names]}
+                        for net in question["nets"]
+                        if any(value in names for value in net["values"])
+                    ]
+        # Тональность — после вопроса кодов, чтобы в анкете стоять за ним.
+        if codeframe.get("sentiment"):
+            self._sync_tone(
+                project, codeframe, columns[tone_variable(codeframe)], tone_question, variables
             )
         project["inspection"]["variables"] = variables
-        answered = int(answered_mask(texts).sum())
+
+    @staticmethod
+    def _sync_tone(
+        project: dict,
+        codeframe: dict,
+        values: pd.Series,
+        question: dict | None,
+        variables: list[dict],
+    ) -> None:
+        configuration = project["configuration"]
+        name = tone_variable(codeframe)
+        source = next(
+            (
+                item
+                for item in configuration["questions"]
+                if item["code"] == codeframe["question_code"]
+            ),
+            None,
+        )
+        label = f"Тональность: {source['label'] if source else codeframe['question_code']}"
+        valid = int(values.notna().sum())
+        variables.append(
+            {
+                "name": name,
+                "label": label,
+                "storage_type": "numeric",
+                "original_format": None,
+                "measurement_level": "nominal",
+                "question_type": "single_choice",
+                "role": "question",
+                "valid_count": valid,
+                "missing_count": int(values.isna().sum()),
+                "unique_count": int(values.dropna().nunique()),
+                "value_labels": [
+                    {"value": float(value), "label": tone_label}
+                    for _key, value, tone_label in TONES
+                ],
+                "warnings": [],
+                "codeframe_id": codeframe["id"],
+            }
+        )
         if question is None:
             configuration["questions"].append(
                 {
-                    "code": codeframe["code"],
-                    "label": codeframe["label"],
-                    "question_type": "multiple_choice_dichotomy",
+                    "code": name,
+                    "label": label,
+                    "question_type": "single_choice",
                     "role": "question",
-                    "source_variables": names,
-                    "valid_count": answered,
-                    "missing_count": len(texts) - answered,
+                    "source_variables": [name],
+                    "valid_count": valid,
+                    "missing_count": len(values) - valid,
                     "included_in_report": True,
                     "recognition": "manual",
                     "warnings": [],
                     "items": [],
                     "special_values": [],
                     "special_items": [],
-                    "multiple_response": {"encoding": "dichotomy", "counted_value": 1},
-                    "codeframe_id": identifier,
+                    "codeframe_id": codeframe["id"],
+                    "codeframe_tone": True,
                 }
             )
         else:
-            question.update(
-                label=codeframe["label"],
-                source_variables=names,
-                valid_count=answered,
-                missing_count=len(texts) - answered,
-            )
-            if question.get("nets"):
-                question["nets"] = [
-                    {**net, "values": [value for value in net["values"] if value in names]}
-                    for net in question["nets"]
-                    if any(value in names for value in net["values"])
-                ]
+            question.update(valid_count=valid, missing_count=len(values) - valid)
 
     def create_formula(self, project_id: UUID, definition: dict) -> dict:
         """Формула становится производной переменной и числовым вопросом."""

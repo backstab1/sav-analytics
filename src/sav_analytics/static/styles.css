@@ -3551,3 +3551,28 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
   #section-aireport .autoreport { padding: 8px; }
   .ar-question-card { padding: 8px; }
 }
+
+/* Тональность открытых ответов (coding.js): полоса-фильтр, метка в таблице,
+   выбор в редакторе. Цвет — смысл тона: зелёный, серый, жёлтый, красный. */
+.cq-tone, .tone-mark, .ans-tone-option { --tone: var(--c-ink-3); }
+:is(.cq-tone, .tone-mark, .ans-tone-option).is-positive { --tone: var(--c-ok-ink); }
+:is(.cq-tone, .tone-mark, .ans-tone-option).is-mixed { --tone: var(--c-warn-ink); }
+:is(.cq-tone, .tone-mark, .ans-tone-option).is-negative { --tone: var(--c-danger); }
+.cq-tones { display: flex; flex-wrap: wrap; gap: 6px; }
+.cq-tones[hidden] { display: none; }
+.cq-tone {
+  display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: var(--r-pill);
+  background: var(--c-surface-soft); color: var(--c-ink-2); border: 1px solid transparent;
+  font-size: var(--t-xs); font-weight: 500;
+}
+.cq-tone i, .tone-mark i { width: 8px; height: 8px; border-radius: 50%; background: var(--tone); flex: 0 0 auto; }
+.cq-tone b { color: var(--c-ink); font-variant-numeric: tabular-nums; }
+.cq-tone:hover { background: var(--c-brand-tint); color: var(--c-ink); transform: none; }
+.cq-tone.is-active { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 10%, var(--c-surface)); }
+.answers-table th.ans-tone-head { width: 92px; }
+.tone-mark { display: inline-flex; gap: 5px; align-items: center; color: var(--c-ink-2); white-space: nowrap; }
+.tone-mark.is-manual { font-weight: 600; color: var(--c-ink); }
+.ans-tones { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; padding-top: 6px; border-top: 1px solid var(--c-border); }
+.ans-tones-label { font-weight: 700; color: var(--c-ink-2); }
+.ans-tone-option { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.ans-tone-option input { width: 14px; height: 14px; margin: 0; padding: 0; accent-color: var(--tone); }

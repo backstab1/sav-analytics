@@ -66,14 +66,25 @@ RULES = {
 }
 
 
+def _rule_tone(text: str) -> str:
+    if "но " in text:
+        return "mixed"
+    if any(word in text for word in ("дорог", "высок", "ничего", "опоздал")):
+        return "negative"
+    if any(word in text for word in ("довол", "быстро")):
+        return "positive"
+    return "neutral"
+
+
 class RuleModel:
-    """Справочник по запросу и коды по словам ответа."""
+    """Справочник по запросу, коды и тон по словам ответа."""
 
     def __init__(self, codebook: dict | None = None, fail_codes: int = 0) -> None:
         self.codebook = codebook or CODEBOOK
         self.fail_codes = fail_codes
         self.calls: list[str] = []
         self.coded_texts: list[str] = []
+        self.systems: list[str] = []
         self._lock = threading.Lock()
 
     def complete(self, system: str, messages: list[dict], tools: list[ToolSpec]) -> ModelReply:
@@ -87,6 +98,9 @@ class RuleModel:
                 self.fail_codes -= 1
                 raise ModelError("таймаут")
         content = messages[0]["content"]
+        with self._lock:
+            self.systems.append(system)
+        toned = "tone" in tools[0].parameters["properties"]["items"]["items"]["properties"]
         numbers = dict(
             (name, int(number))
             for number, name in re.findall(r"^(\d+)\. ([^—\n]+?)(?: —|$)", content, re.M)
@@ -101,7 +115,10 @@ class RuleModel:
                 numbers[name] for name, words in RULES.items()
                 if name in numbers and any(word in text for word in words)
             ]
-            items.append({"i": answer["i"], "codes": codes, "low_confidence": "но" in text})
+            item = {"i": answer["i"], "codes": codes, "low_confidence": "но" in text}
+            if toned:
+                item["tone"] = _rule_tone(text)
+            items.append(item)
         return _call(tool, {"items": items})
 
 
@@ -439,3 +456,140 @@ def test_revision_keeps_nested_codes_matched_by_name() -> None:
     themes, next_number = codebook_themes(CODEBOOK, [], 1)
     revised, _ = codebook_themes(CODEBOOK, themes, next_number)
     assert [theme["id"] for theme in revised] == [theme["id"] for theme in themes]
+
+
+def test_tone_is_set_in_the_same_call_and_becomes_single_choice(project) -> None:
+    built, codeframe = _code(project)
+    assert codeframe["sentiment"] is True
+    # Тон приходит тем же вызовом submit_codes: отдельного запроса нет.
+    assert project["model"].calls.count("submit_codes") == 1
+    assert "`tone`" in project["model"].systems[0]
+
+    question = next(
+        item for item in built["configuration"]["questions"]
+        if item["code"] == f"{codeframe['code']}_TONE"
+    )
+    assert question["question_type"] == "single_choice"
+    assert question["codeframe_tone"] is True
+    assert (question["valid_count"], question["missing_count"]) == (9, 1)
+    # Вопрос кодов находится по-прежнему, а не подменяется тональностью.
+    codes = next(
+        item for item in built["configuration"]["questions"] if item["code"] == codeframe["code"]
+    )
+    assert codes["question_type"] == "multiple_choice_dichotomy"
+    order = [item["code"] for item in built["configuration"]["questions"]]
+    assert order.index(question["code"]) == order.index(codes["code"]) + 1
+
+    summary = project["client"].get(f"{_url(project, codeframe)}/summary").json()
+    assert summary["tones"]["counts"] == {
+        "positive": 3, "neutral": 0, "mixed": 1, "negative": 5,
+    }
+    assert summary["tones"]["untoned"] == 0
+
+    stored = project["repository"].get(project["project_id"])
+    content = build_topline_xlsx(project["repository"].source_path(project["project_id"]), stored)
+    assert "Отрицательная" in _row_labels(content)
+    # База — все респонденты, как у кодов того же вопроса.
+    assert _cell_value(content, "Отрицательная", "B") == pytest.approx(5 / 10 * 100)
+
+
+def test_manual_tone_goes_to_dictionary_and_filters_rows(project) -> None:
+    _built, codeframe = _code(project)
+    url = _url(project, codeframe)
+    negative = project["client"].get(f"{url}/answers", params={"tone": "negative"}).json()
+    assert {row["text"] for row in negative["rows"]} == {
+        "Цены высокие", "Курьер опоздал с доставкой", "Ничего не понравилось", "Дорого",
+    }
+    edited = project["client"].put(
+        f"{url}/answers/tone", json={"key": "дорого", "tone": "neutral"}
+    )
+    assert edited.status_code == 200, edited.text
+    row = project["client"].get(f"{url}/answers", params={"search": "дорого"}).json()["rows"]
+    row = next(item for item in row if item["text"] == "Дорого")
+    assert (row["tone"], row["tone_source"]) == ("neutral", "manual")
+
+    # Правка тона переживает перекодирование: модель тон не перебивает.
+    job = project["client"].post(f"{url}/code", json={"mode": "keep_edits"}).json()
+    assert _wait(project, job["job_id"])["status"] == "complete"
+    summary = project["client"].get(f"{url}/summary").json()
+    assert summary["tones"]["counts"]["neutral"] == 1
+
+    exported = project["client"].get(f"{url}/export").json()
+    assert exported["tones"] == {"дорого": "neutral"}
+
+    cleared = project["client"].put(f"{url}/answers/tone", json={"key": "Дорого", "tone": None})
+    assert cleared.status_code == 200
+    summary = project["client"].get(f"{url}/summary").json()
+    assert summary["tones"]["counts"]["neutral"] == 0
+
+
+def test_turning_tone_on_later_tones_without_recoding(project) -> None:
+    client = project["client"]
+    created = client.post(f"{project['base']}/codeframes", json={"question_code": "WHY"})
+    assert created.status_code == 201, created.text
+    codeframe = created.json()["configuration"]["codeframes"][0]
+    url = _url(project, codeframe)
+    response = client.put(url, json={"label": codeframe["label"], "sentiment": False})
+    assert response.status_code == 200, response.text
+    job = client.post(f"{url}/code", json={"mode": "new"}).json()
+    assert _wait(project, job["job_id"])["status"] == "complete"
+    stored = client.get(project["base"]).json()
+    assert not any(item.get("codeframe_tone") for item in stored["configuration"]["questions"])
+    assert "tones" not in client.get(f"{url}/summary").json()
+    refused = client.put(f"{url}/answers/tone", json={"key": "Дорого", "tone": "mixed"})
+    assert refused.status_code == 422
+
+    codeframe = stored["configuration"]["codeframes"][0]
+    names = _themes(codeframe)
+    edited = client.put(
+        f"{url}/answers", json={"key": "Дорого", "codes": [names["Качество"]["id"]]}
+    )
+    assert edited.status_code == 200
+    themes = [
+        {"id": theme["id"], "name": theme["name"], "parent_id": theme["parent_id"]}
+        for theme in codeframe["themes"]
+    ]
+    response = client.put(url, json={"label": codeframe["label"], "themes": themes,
+                                     "sentiment": True})
+    assert response.status_code == 200
+    # Тональность включена, тонов ещё нет: вопрос есть, ответов в нём нет.
+    question = next(
+        item for item in response.json()["configuration"]["questions"]
+        if item.get("codeframe_tone")
+    )
+    assert question["valid_count"] == 0
+
+    project["model"].coded_texts.clear()
+    job = client.post(f"{url}/code", json={"mode": "new"}).json()
+    assert _wait(project, job["job_id"])["status"] == "complete"
+    assert len(project["model"].coded_texts) == 8
+    summary = client.get(f"{url}/summary").json()
+    assert summary["tones"]["untoned"] == 0
+    # Коды не перекодированы: правка человека осталась, источник — правка.
+    row = next(
+        item for item in client.get(f"{url}/answers", params={"view": "dictionary"}).json()["rows"]
+        if item["text"] == "Дорого"
+    )
+    assert row["codes"] == [names["Качество"]["id"]]
+    assert row["source"] == "manual"
+    assert row["tone"] == "negative"
+
+
+def test_tone_question_in_banner_blocks_turning_tone_off(project) -> None:
+    _built, codeframe = _code(project)
+    banner = project["client"].post(
+        f"{project['base']}/banners",
+        json={"name": "Тон", "blocks": [
+            {"sources": [{"kind": "question", "ref": f"{codeframe['code']}_TONE"}]}
+        ]},
+    )
+    assert banner.status_code in {200, 201}, banner.text
+    themes = [
+        {"id": theme["id"], "name": theme["name"], "parent_id": theme["parent_id"]}
+        for theme in codeframe["themes"]
+    ]
+    response = project["client"].put(
+        _url(project, codeframe),
+        json={"label": codeframe["label"], "themes": themes, "sentiment": False},
+    )
+    assert response.status_code == 422

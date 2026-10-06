@@ -13,6 +13,7 @@ from ..api_dependencies import get_fast_chat_model, get_long_chat_model, get_rep
 from ..api_presentation import ProjectRoute, present
 from ..api_schemas import (
     CodeframeAnswerCodes,
+    CodeframeAnswerTone,
     CodeframeBatch,
     CodeframeCodeRequest,
     CodeframeCreate,
@@ -234,6 +235,7 @@ def update_codeframe(
             {
                 "instruction": request.instruction,
                 "multi": request.multi,
+                "sentiment": request.sentiment,
                 "other_threshold": request.other_threshold,
             },
         )
@@ -258,6 +260,21 @@ def set_answer_codes(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.put("/{codeframe_id}/answers/tone")
+def set_answer_tone(
+    project_id: UUID,
+    codeframe_id: UUID,
+    request: CodeframeAnswerTone,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        return repository.set_answer_tone(project_id, codeframe_id, request.key, request.tone)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND) from exc
+    except (InvalidUploadError, ConfigurationIntegrityError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.get("/{codeframe_id}/export")
 def export_codeframe(
     project_id: UUID,
@@ -266,8 +283,8 @@ def export_codeframe(
 ) -> dict:
     """Справочник и словарь правок для другого проекта.
 
-    Словарь — правки человека «текст → коды»: в другом массиве они
-    применятся к тем же ответам без обращения к модели.
+    Словари — правки человека «текст → коды» и «текст → тон»: в другом
+    массиве они применятся к тем же ответам без обращения к модели.
     """
     try:
         project = repository.get(project_id)
@@ -290,6 +307,7 @@ def export_codeframe(
             for theme in codeframe["themes"]
         ],
         "dictionary": coding["dictionary"],
+        "tones": coding.get("tones") or {},
     }
 
 
@@ -349,6 +367,7 @@ def answers(
     theme_id: str | None = None,
     view: Annotated[str, Query(pattern="^(all|uncoded|low|dictionary|ai)$")] = "all",
     search: Annotated[str, Query(max_length=200)] = "",
+    tone: Annotated[str | None, Query(pattern="^(positive|neutral|mixed|negative|none)$")] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> dict:
@@ -361,6 +380,7 @@ def answers(
             theme_id=theme_id,
             view=view,
             search=search,
+            tone=tone,
             offset=offset,
             limit=limit,
         )

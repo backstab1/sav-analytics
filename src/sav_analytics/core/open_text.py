@@ -19,6 +19,12 @@
 `coding/<sha>.json` рядом с проектом, а кодификатор хранит ссылку на него
 (`coding_ref`). Новая правка — новый файл и новая ссылка: отмена
 возвращает прежнюю ссылку, ключ кэша отчёта меняется вместе с ней.
+
+Тональность (`sentiment` у кодификатора) ставит та же модель тем же
+вызовом, что и коды: у ответа один тон из `TONES`. Правка человека пишется
+в словарь `tones` «текст → тон» и, как словарь кодов, важнее модели. Тон —
+вопрос single choice `<код>_TONE` с подписями значений; он работает в
+таблицах, баннере и фильтре наравне с кодами.
 """
 
 from __future__ import annotations
@@ -42,6 +48,15 @@ CODING_DIR = "coding"
 OTHER_NAME = "Другое"
 # Источник кодов ответа: модель, человек, словарь правок прежних волн.
 SOURCES = ("ai", "manual", "dictionary")
+# Тон ответа: ключ, значение столбца `<код>_TONE`, подпись.
+TONES = (
+    ("positive", 1, "Положительная"),
+    ("neutral", 2, "Нейтральная"),
+    ("mixed", 3, "Смешанная"),
+    ("negative", 4, "Отрицательная"),
+)
+TONE_KEYS = tuple(key for key, _value, _label in TONES)
+TONE_VALUES = {key: value for key, value, _label in TONES}
 
 
 def _is_empty(value: Any) -> bool:
@@ -60,6 +75,11 @@ def normalize_answer(value: Any) -> str:
 
 def theme_variable(codeframe: dict[str, Any], theme: dict[str, Any]) -> str:
     return f"{codeframe['code']}_{theme['number']}"
+
+
+def tone_variable(codeframe: dict[str, Any]) -> str:
+    """Столбец тональности. Номера кодов — числа, поэтому имя с ними не совпадёт."""
+    return f"{codeframe['code']}_TONE"
 
 
 def validate_codeframe(codeframe: dict[str, Any]) -> None:
@@ -89,7 +109,7 @@ def validate_codeframe(codeframe: dict[str, Any]) -> None:
 
 
 def empty_coding() -> dict[str, Any]:
-    return {"answers": {}, "dictionary": {}}
+    return {"answers": {}, "dictionary": {}, "tones": {}}
 
 
 def store_coding(project_dir: Path, coding: dict[str, Any]) -> str:
@@ -145,6 +165,36 @@ def answer_source(coding: dict[str, Any], key: str) -> str | None:
     return entry.get("source") if entry else None
 
 
+def answer_tone(coding: dict[str, Any], key: str) -> str | None:
+    """Тон ответа: правка человека важнее тона модели."""
+    tone = (coding.get("tones") or {}).get(key)
+    if tone not in TONE_VALUES:
+        tone = (coding.get("answers", {}).get(key) or {}).get("tone")
+    return tone if tone in TONE_VALUES else None
+
+
+def tone_source(coding: dict[str, Any], key: str) -> str | None:
+    if (coding.get("tones") or {}).get(key) in TONE_VALUES:
+        return "manual"
+    return "ai" if answer_tone(coding, key) else None
+
+
+def tone_column(texts: pd.Series, coding: dict[str, Any]) -> pd.Series:
+    """Значения `<код>_TONE`: номер тона, пусто — нет ответа или тона."""
+    cache: dict[str, float] = {}
+
+    def value(text: Any) -> float:
+        if _is_empty(text):
+            return np.nan
+        key = normalize_answer(text)
+        if key not in cache:
+            tone = answer_tone(coding, key)
+            cache[key] = float(TONE_VALUES[tone]) if tone else np.nan
+        return cache[key]
+
+    return texts.map(value).astype(float)
+
+
 def code_answers(
     texts: pd.Series, codeframe: dict[str, Any], coding: dict[str, Any]
 ) -> dict[str, pd.Series]:
@@ -177,10 +227,13 @@ def codeframe_columns(
     texts: pd.Series, codeframe: dict[str, Any], coding: dict[str, Any]
 ) -> dict[str, pd.Series]:
     coded = code_answers(texts, codeframe, coding)
-    return {
+    columns = {
         theme_variable(codeframe, theme): coded[theme["id"]]
         for theme in codeframe.get("themes", [])
     }
+    if codeframe.get("sentiment"):
+        columns[tone_variable(codeframe)] = tone_column(texts, coding)
+    return columns
 
 
 def theme_owners(project: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
@@ -189,6 +242,8 @@ def theme_owners(project: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
     for codeframe in ((project or {}).get("configuration") or {}).get("codeframes", []):
         for theme in codeframe.get("themes", []):
             owners[theme_variable(codeframe, theme)] = codeframe
+        if codeframe.get("sentiment"):
+            owners[tone_variable(codeframe)] = codeframe
     return owners
 
 
@@ -254,12 +309,28 @@ def codeframe_summary(
                 "share": float(marked.sum() / total) if total else None,
             }
         )
-    return {
+    result: dict[str, Any] = {
         "answered": total,
         "uncoded": uncoded_rows,
         "tiles": tiles,
         "themes": themes,
     }
+    if codeframe.get("sentiment"):
+        # Доля тона — от ответивших, как у кодов; ответ без тона — отдельно.
+        tones = {key: 0 for key in TONE_KEYS}
+        untoned = 0
+        for key, _text, count in unique:
+            tone = answer_tone(coding, key)
+            if tone:
+                tones[tone] += count
+            else:
+                untoned += count
+        result["tones"] = {
+            "counts": tones,
+            "shares": {key: (value / total if total else None) for key, value in tones.items()},
+            "untoned": untoned,
+        }
+    return result
 
 
 def answer_rows(
@@ -270,6 +341,7 @@ def answer_rows(
     theme_id: str | None = None,
     view: str = "all",
     search: str = "",
+    tone: str | None = None,
     offset: int = 0,
     limit: int = 50,
 ) -> dict[str, Any]:
@@ -277,7 +349,10 @@ def answer_rows(
 
     `view`: all, uncoded (без кода), low (низкая уверенность модели),
     dictionary (из словаря правок), ai (поставлены моделью).
+    `tone`: ключ из `TONE_KEYS` или `none` — ответы без тона.
     """
+    if tone is not None and tone != "none" and tone not in TONE_VALUES:
+        raise CodeframeError("Неизвестная тональность.")
     known = {theme["id"]: theme for theme in codeframe.get("themes", [])}
     if theme_id and theme_id not in known:
         raise CodeframeError("Код не найден.")
@@ -303,9 +378,12 @@ def answer_rows(
                 continue
         if needle and needle not in key:
             continue
+        answer_tone_key = answer_tone(coding, key)
+        if tone is not None and answer_tone_key != (None if tone == "none" else tone):
+            continue
         rows.append(
             {"key": key, "text": text, "count": count, "codes": codes, "source": source,
-             "low": low}
+             "low": low, "tone": answer_tone_key, "tone_source": tone_source(coding, key)}
         )
     return {"total": len(rows), "rows": rows[offset : offset + limit]}
 

@@ -6,8 +6,9 @@
    правкой через ИИ, справа ответы с плитками ревью, фильтрами и правкой
    кодов. Коды ставит модель фоновой задачей; правка человека пишется в
    словарь «текст → коды» и не перетирается перекодированием «с учётом
-   правок». Считает и хранит всё сервер; экран держит только несохранённый
-   черновик справочника. */
+   правок». Тональность ставит та же модель тем же вызовом; правка тона
+   пишется в свой словарь «текст → тон». Считает и хранит всё сервер; экран
+   держит только несохранённый черновик справочника. */
 
 const codingOpen = new Set();
 const codingState = new Map();
@@ -30,6 +31,17 @@ const TILE_TITLES = {
   uncoded: "Ответы без кода",
 };
 const SOURCE_LABELS = { ai: "ИИ", manual: "вручную", dictionary: "словарь" };
+const TONES = [
+  ["positive", "Положительная", "Позитив"],
+  ["neutral", "Нейтральная", "Нейтрально"],
+  ["mixed", "Смешанная", "Смешанно"],
+  ["negative", "Отрицательная", "Негатив"],
+];
+const TONE_SHORT = Object.fromEntries(TONES.map(([key, , short]) => [key, short]));
+
+function answerColumns(codeframe) {
+  return codeframe.sentiment ? 5 : 4;
+}
 
 function codeframes() {
   const order = new Map(configuredQuestions().map((question, index) => [question.code, index]));
@@ -48,7 +60,7 @@ function questionLabel(code) {
 function stateFor(codeframe) {
   if (!codingState.has(codeframe.id)) {
     codingState.set(codeframe.id, {
-      view: "all", themeId: "", search: "", offset: 0, rows: [], total: 0,
+      view: "all", themeId: "", tone: "", search: "", offset: 0, rows: [], total: 0,
       summary: null, draft: null, dirty: false, notice: "",
     });
   }
@@ -165,6 +177,7 @@ function renderCodeframeBody(codeframe) {
           <summary>Настройки кодирования</summary>
           <label class="f">Инструкция по кодированию<textarea rows="3" data-setting="instruction" placeholder="Например: бренды выделяй отдельными кодами; негатив о цене — отдельный код">${escapeHtml(state.draft.instruction)}</textarea></label>
           <label class="checkbox"><input type="checkbox" data-setting="multi" ${state.draft.multi ? "checked" : ""} /> Несколько кодов у одного ответа</label>
+          <label class="checkbox" title="Модель ставит ответу тон тем же вызовом, что и коды. Тон — отдельный вопрос для таблиц и баннера"><input type="checkbox" data-setting="sentiment" ${state.draft.sentiment ? "checked" : ""} /> Тональность ответов</label>
           <label class="f cq-threshold">Коды реже, %, уходят в «Другое» при построении справочника<input type="number" min="0" max="20" step="0.5" data-setting="other_threshold" value="${Math.round(state.draft.other_threshold * 1000) / 10}" /></label>
         </details>
         <div class="cq-save">
@@ -178,6 +191,7 @@ function renderCodeframeBody(codeframe) {
       </section>
       <section class="cq-answers">
         <div class="cq-tiles" role="group" aria-label="Ревью ответов" data-tiles></div>
+        <div class="cq-tones" role="group" aria-label="Тональность ответов" data-tones ${codeframe.sentiment ? "" : "hidden"}></div>
         <div class="coding-filter">
           <select data-theme-filter aria-label="Ответы с кодом"></select>
           <input type="search" data-search placeholder="Найти в ответах" aria-label="Поиск по ответам" value="${escapeAttribute(state.search)}" />
@@ -185,7 +199,7 @@ function renderCodeframeBody(codeframe) {
         <p class="muted cq-count" data-answer-count></p>
         <div class="answers-wrap">
           <table class="answers-table">
-            <thead><tr><th>Ответ</th><th class="num" title="Сколько респондентов так ответили">Раз</th><th>Коды</th><th class="ans-actions-head"><span class="sr-only">Действия</span></th></tr></thead>
+            <thead><tr><th>Ответ</th><th class="num" title="Сколько респондентов так ответили">Раз</th><th>Коды</th>${codeframe.sentiment ? '<th class="ans-tone-head">Тон</th>' : ""}<th class="ans-actions-head"><span class="sr-only">Действия</span></th></tr></thead>
             <tbody data-answers></tbody>
           </table>
         </div>
@@ -207,6 +221,7 @@ function draftFrom(codeframe) {
     themes: codeframe.themes.map(theme => ({ id: theme.id, name: theme.name, parent_id: theme.parent_id || null, description: theme.description || "" })),
     instruction: codeframe.instruction || "",
     multi: codeframe.multi !== false,
+    sentiment: Boolean(codeframe.sentiment),
     other_threshold: codeframe.other_threshold ?? 0.01,
   };
 }
@@ -257,10 +272,11 @@ async function refreshCodeframe(codeframe) {
   try {
     state.summary = await api(`/api/projects/${currentProject.id}/codeframes/${codeframe.id}/summary`);
   } catch (error) {
-    article.querySelector("[data-answers]").innerHTML = `<tr><td colspan="4" class="error">${escapeHtml(error.message)}</td></tr>`;
+    article.querySelector("[data-answers]").innerHTML = `<tr><td colspan="${answerColumns(codeframe)}" class="error">${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   renderTiles(codeframe);
+  renderTones(codeframe);
   renderCodeTree(codeframe);
   renderThemeFilter(codeframe);
   await loadCodeframeAnswers(codeframe, false);
@@ -273,6 +289,23 @@ function renderTiles(codeframe) {
     <button type="button" class="cq-tile${state.view === view ? " is-active" : ""}${view === "low" && tiles.low ? " is-warn" : ""}" data-tile="${view}" aria-pressed="${state.view === view}" title="${TILE_TITLES[view]}">
       <b>${(tiles[CODING_TILE_KEYS[view]] ?? 0).toLocaleString("ru-RU")}</b><span>${label}</span>
     </button>`).join("");
+}
+
+/* Полоса тональности: доля каждого тона среди ответивших и фильтр списка. */
+function renderTones(codeframe) {
+  const box = articleFor(codeframe.id)?.querySelector("[data-tones]");
+  if (!box) return;
+  const state = stateFor(codeframe);
+  const tones = state.summary?.tones;
+  box.hidden = !codeframe.sentiment || !tones;
+  if (box.hidden) return;
+  const share = key => tones.shares[key] == null ? "—" : `${Math.round(tones.shares[key] * 100)}%`;
+  const button = (key, label, value, title) => `
+    <button type="button" class="cq-tone is-${key}${state.tone === key ? " is-active" : ""}" data-tone-filter="${key}" aria-pressed="${state.tone === key}" title="${escapeAttribute(title)}">
+      <i aria-hidden="true"></i><span>${label}</span><b>${value}</b>
+    </button>`;
+  box.innerHTML = TONES.map(([key, label]) => button(key, label, share(key), `${plural(tones.counts[key], "респондент", "респондента", "респондентов")}. Щелчок — только такие ответы`)).join("")
+    + (tones.untoned ? button("none", "Без тона", tones.untoned.toLocaleString("ru-RU"), "Ответы без тона: «Докодировать новые» поставит его") : "");
 }
 
 function renderThemeFilter(codeframe) {
@@ -290,17 +323,18 @@ async function loadCodeframeAnswers(codeframe, append) {
   const params = new URLSearchParams({ offset: String(state.offset), limit: "50", view: state.view });
   if (state.themeId) params.set("theme_id", state.themeId);
   if (state.search.trim()) params.set("search", state.search.trim());
+  if (codeframe.sentiment && state.tone) params.set("tone", state.tone);
   const list = article.querySelector("[data-answers]");
   try {
     const result = await api(`/api/projects/${currentProject.id}/codeframes/${codeframe.id}/answers?${params}`);
     const names = new Map(codeframe.themes.map(theme => [theme.id, theme.name]));
-    const html = result.rows.map(row => answerRowHtml(row, names)).join("");
-    list.innerHTML = append ? list.innerHTML + html : (html || '<tr><td colspan="4" class="muted">Ответов нет.</td></tr>');
+    const html = result.rows.map(row => answerRowHtml(row, names, codeframe.sentiment)).join("");
+    list.innerHTML = append ? list.innerHTML + html : (html || `<tr><td colspan="${answerColumns(codeframe)}" class="muted">Ответов нет.</td></tr>`);
     state.offset += result.rows.length;
     article.querySelector("[data-answer-count]").textContent = `Показано ${Math.min(state.offset, result.total).toLocaleString("ru-RU")} из ${result.total.toLocaleString("ru-RU")} уникальных ответов`;
     article.querySelector("[data-more]").hidden = state.offset >= result.total;
   } catch (error) {
-    list.innerHTML = `<tr><td colspan="4" class="error">${escapeHtml(error.message)}</td></tr>`;
+    list.innerHTML = `<tr><td colspan="${answerColumns(codeframe)}" class="error">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 
@@ -309,17 +343,24 @@ async function loadCodeframeAnswers(codeframe, append) {
    карандаш правки. Список всех кодов показывается только в редакторе. */
 const VISIBLE_CODES = 3;
 
-function answerRowHtml(row, names) {
+function toneCellHtml(row) {
+  if (!row.tone) return '<td class="ans-tone"><span class="muted">—</span></td>';
+  const manual = row.tone_source === "manual";
+  return `<td class="ans-tone"><span class="tone-mark is-${row.tone}${manual ? " is-manual" : ""}" title="${manual ? "Тон поправлен вручную" : "Тон поставил ИИ"}"><i aria-hidden="true"></i>${TONE_SHORT[row.tone]}</span></td>`;
+}
+
+function answerRowHtml(row, names, sentiment) {
   const shown = row.codes.slice(0, VISIBLE_CODES)
     .map(code => `<span class="answer-chip">${escapeHtml(names.get(code) || "")}</span>`).join("");
   const more = row.codes.length > VISIBLE_CODES
     ? `<span class="answer-more" title="${escapeAttribute(row.codes.slice(VISIBLE_CODES).map(code => names.get(code) || "").join(", "))}">+${row.codes.length - VISIBLE_CODES}</span>`
     : "";
   const badges = `${row.low ? '<span class="answer-low" title="Модель не уверена в кодах">низкая</span>' : ""}${row.source === "manual" || row.source === "dictionary" ? `<span class="answer-source is-${row.source}" title="${row.source === "manual" ? "Поправлено вручную, лежит в словаре" : "Из словаря правок"}">${SOURCE_LABELS[row.source]}</span>` : ""}`;
-  return `<tr class="ans${row.low ? " is-low" : ""}" data-key="${escapeAttribute(row.key)}" data-codes="${escapeAttribute(JSON.stringify(row.codes))}" data-source="${escapeAttribute(row.source || "")}">
+  return `<tr class="ans${row.low ? " is-low" : ""}" data-key="${escapeAttribute(row.key)}" data-codes="${escapeAttribute(JSON.stringify(row.codes))}" data-source="${escapeAttribute(row.source || "")}" data-tone="${escapeAttribute(row.tone || "")}" data-tone-source="${escapeAttribute(row.tone_source || "")}">
     <td class="ans-text" title="${escapeAttribute(row.text)}" data-expand-answer><span>${escapeHtml(row.text)}</span></td>
     <td class="num">${row.count.toLocaleString("ru-RU")}</td>
     <td class="ans-codes">${shown}${more}${row.codes.length ? "" : '<span class="muted">без кода</span>'}</td>
+    ${sentiment ? toneCellHtml(row) : ""}
     <td class="ans-actions">${badges}<button type="button" class="icon-button ans-edit" data-edit-answer aria-label="Изменить коды ответа" title="Изменить коды">✎</button></td>
   </tr>`;
 }
@@ -333,12 +374,18 @@ function answerEditorHtml(codeframe, row) {
   const groups = themes.filter(theme => !theme.parent_id).map(theme => parents.has(theme.id)
     ? `<fieldset class="ans-group"><legend>${escapeHtml(theme.name)}</legend>${themes.filter(child => child.parent_id === theme.id).map(option).join("")}</fieldset>`
     : option(theme)).join("");
-  return `<tr class="ans-editor"><td colspan="4">
+  const tone = codeframe.sentiment ? `
+      <div class="ans-tones" role="radiogroup" aria-label="Тональность ответа">
+        <span class="ans-tones-label">Тон</span>
+        ${TONES.map(([key, label]) => `<label class="ans-tone-option is-${key}"><input type="radio" name="ans-tone" value="${key}" ${row.dataset.tone === key ? "checked" : ""} /> ${label}</label>`).join("")}
+      </div>` : "";
+  return `<tr class="ans-editor"><td colspan="${answerColumns(codeframe)}">
     <div class="ans-editor-box">
       <p class="ans-editor-text">${escapeHtml(row.querySelector(".ans-text").title)}</p>
-      <div class="ans-options">${groups}</div>
+      <div class="ans-options">${groups}</div>${tone}
       <div class="ans-editor-actions">
         ${row.dataset.source === "manual" ? '<button type="button" class="text-button" data-reset-answer title="Убрать правку из словаря и вернуть коды модели">Вернуть коды ИИ</button>' : ""}
+        ${row.dataset.toneSource === "manual" ? '<button type="button" class="text-button" data-reset-tone title="Убрать правку тона и вернуть тон модели">Вернуть тон ИИ</button>' : ""}
         <span class="toolbar-grow"></span>
         <button type="button" class="secondary" data-cancel-answer>Отмена</button>
         <button type="button" data-save-answer>Сохранить</button>
@@ -348,17 +395,27 @@ function answerEditorHtml(codeframe, row) {
 }
 
 async function setAnswerCodes(codeframe, key, codes) {
+  await saveAnswer(codeframe, key, { codes });
+}
+
+/* `change.codes` и `change.tone`: список или null (снять правку); ключа нет —
+   не трогать. Коды и тон лежат в разных словарях правок. */
+async function saveAnswer(codeframe, key, change) {
+  const base = `/api/projects/${currentProject.id}/codeframes/${codeframe.id}/answers`;
+  const put = (url, body) => api(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   try {
-    currentProject = await api(`/api/projects/${currentProject.id}/codeframes/${codeframe.id}/answers`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, codes }),
-    });
+    if ("codes" in change) currentProject = await put(base, { key, codes: change.codes });
+    if ("tone" in change) currentProject = await put(`${base}/tone`, { key, tone: change.tone });
     renderProject();
     const fresh = codeframeById(codeframe.id);
     const offset = stateFor(fresh).offset;
     stateFor(fresh).summary = await api(`/api/projects/${currentProject.id}/codeframes/${fresh.id}/summary`);
     renderTiles(fresh);
+    renderTones(fresh);
     renderCodeTree(fresh);
     await loadCodeframeAnswers(fresh, false);
     // Остаться на той же странице списка, если человек пролистал дальше.
@@ -412,6 +469,9 @@ document.querySelector("#coding-list").addEventListener("change", event => {
   } else if (event.target.matches("[data-setting='multi']")) {
     state.draft.multi = event.target.checked;
     markDirty(codeframe);
+  } else if (event.target.matches("[data-setting='sentiment']")) {
+    state.draft.sentiment = event.target.checked;
+    markDirty(codeframe);
   } else if (event.target.matches("[data-theme-filter]")) {
     state.themeId = event.target.value;
     void loadCodeframeAnswers(codeframe, false);
@@ -446,6 +506,11 @@ document.querySelector("#coding-list").addEventListener("click", async event => 
     state.view = target.closest("[data-tile]").dataset.tile;
     renderTiles(codeframe);
     void loadCodeframeAnswers(codeframe, false);
+  } else if (target.closest("[data-tone-filter]")) {
+    const tone = target.closest("[data-tone-filter]").dataset.toneFilter;
+    state.tone = state.tone === tone ? "" : tone;
+    renderTones(codeframe);
+    void loadCodeframeAnswers(codeframe, false);
   } else if (target.closest("[data-more]")) {
     void loadCodeframeAnswers(codeframe, true);
   } else if (target.closest("[data-expand-answer]")) {
@@ -462,8 +527,19 @@ document.querySelector("#coding-list").addEventListener("click", async event => 
     target.closest(".ans-editor").remove();
   } else if (target.closest("[data-save-answer]")) {
     const editor = target.closest(".ans-editor");
+    const row = editor.previousElementSibling;
     const codes = [...editor.querySelectorAll("input[name='ans-codes']:checked")].map(input => input.value);
-    void setAnswerCodes(codeframe, editor.previousElementSibling.dataset.key, codes);
+    const before = JSON.parse(row.dataset.codes);
+    const change = {};
+    // Неизменённые коды не пишутся в словарь: иначе правка тона сделала бы
+    // коды модели «ручными».
+    if (codes.length !== before.length || codes.some(code => !before.includes(code))) change.codes = codes;
+    const tone = editor.querySelector("input[name='ans-tone']:checked")?.value;
+    if (tone && tone !== row.dataset.tone) change.tone = tone;
+    if (Object.keys(change).length) void saveAnswer(codeframe, row.dataset.key, change);
+    else editor.remove();
+  } else if (target.closest("[data-reset-tone]")) {
+    void saveAnswer(codeframe, target.closest(".ans-editor").previousElementSibling.dataset.key, { tone: null });
   } else if (target.closest("[data-reset-answer]")) {
     void setAnswerCodes(codeframe, target.closest(".ans-editor").previousElementSibling.dataset.key, null);
   } else if (target.closest("[data-code-mode]")) {
@@ -487,15 +563,25 @@ async function saveCodebook(codeframe) {
         themes,
         instruction: state.draft.instruction,
         multi: state.draft.multi,
+        sentiment: state.draft.sentiment,
         other_threshold: state.draft.other_threshold,
       }),
     });
     renderProject();
     const fresh = codeframeById(codeframe.id);
     const added = fresh.themes.length > codeframe.themes.length;
+    // Подсказка нужна, только если у части ответов тона нет: после
+    // выключения и включения прежние тоны модели остаются.
+    const owned = configuredQuestions().filter(question => question.codeframe_id === fresh.id);
+    const toneQuestion = owned.find(question => question.codeframe_tone);
+    const codesQuestion = owned.find(question => !question.codeframe_tone);
+    const toneOn = fresh.sentiment && !codeframe.sentiment && toneQuestion && codesQuestion
+      && toneQuestion.valid_count < codesQuestion.valid_count;
     state.draft = draftFrom(fresh);
     state.dirty = false;
-    state.notice = added && fresh.coding_ref ? "Новые коды получат ответы после «Перекодировать с учётом правок»." : "";
+    if (!fresh.sentiment) state.tone = "";
+    state.notice = added && fresh.coding_ref ? "Новые коды получат ответы после «Перекодировать с учётом правок»."
+      : toneOn && fresh.coding_ref ? "Тон получат ответы после «Докодировать новые»: коды при этом не меняются." : "";
     renderCodeframeBody(fresh);
     showToast("Справочник сохранён");
   } catch (error) {
