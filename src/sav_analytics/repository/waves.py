@@ -244,11 +244,33 @@ class WaveSources(ProjectStore):
         variable = wave_variable_of(project)
         values = wave_values(project)
         counts: dict[str, int] = {}
+        absent: dict[str, list[str]] = {}
         if variable and len(values) >= 2:
-            frame = read_project_frame(self.source_path(project_id), project, [variable],
-                                       all_waves=True)
+            # Вопросы из исходных переменных: производные считаются по ним же.
+            questions = [
+                item for item in project["configuration"]["questions"]
+                if not item.get("formula_id") and not item.get("codeframe_id")
+                and item["code"] != variable
+            ]
+            names = list(dict.fromkeys(
+                name for item in questions for name in item.get("source_variables") or []
+            ))
+            frame = read_project_frame(
+                self.source_path(project_id), project, [variable, *names], all_waves=True
+            )
             for item, count in frame[variable].value_counts(dropna=True).items():
                 counts[value_key(item)] = int(count)
+            filled = frame[names].notna() & frame[names].astype(str).ne("")
+            for value in values:
+                rows = frame[variable].map(lambda item, expected=value["value"]:
+                                           value_key(item) == value_key(expected))
+                answered = filled[rows].any()
+                # Вопрос, у которого в этой волне ни одного ответа, — «не задавался».
+                absent[value_key(value["value"])] = [
+                    item["code"] for item in questions
+                    if rows.any()
+                    and not any(answered.get(name, False) for name in item["source_variables"])
+                ]
         return {
             "variable": variable,
             "view": wave_view(project),
@@ -256,6 +278,7 @@ class WaveSources(ProjectStore):
                 {**item, "count": counts.get(value_key(item["value"]), 0)} for item in values
             ],
             "total": sum(counts.values()),
+            "absent": absent,
             "waves": project.get("waves") or [],
         }
 

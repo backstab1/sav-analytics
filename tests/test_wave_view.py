@@ -127,6 +127,28 @@ def test_file_wave_extends_the_wave_variable_in_data(context) -> None:
         ("Весна", 2), ("Осень", 3), ("Зима", 2),
     ]
     assert [item["label"] for item in overview["waves"]] == ["Исходный файл", "Зима"]
+    # Вопросов, которых в волне нет, — пустые списки: пол задан всем волнам.
+    assert overview["absent"] == {"1": [], "2": [], "3": []}
+
+
+def test_question_missing_in_a_wave_is_reported_absent(context) -> None:
+    second = context["tmp"] / "new.sav"
+    _write(second, {"ID": [6, 7], "SEX": [1, 2], "DELIVERY": [1, 2]},
+           {"ID": "Номер", "SEX": "Пол", "DELIVERY": "Доставка"},
+           {"SEX": {1: "М", 2: "Ж"}, "DELIVERY": {1: "Да", 2: "Нет"}})
+    client = context["client"]
+    with second.open("rb") as stream:
+        preview = client.post(f"{context['base']}/waves/stage",
+                              files={"file": ("new.sav", stream, "application/octet-stream")}
+                              ).json()
+    added = client.post(f"{context['base']}/waves", json={
+        "staging_id": preview["staging_id"], "label": "Зима", "mapping": {},
+        "added": ["DELIVERY"],
+    })
+    assert added.status_code == 200, added.text
+    absent = client.get(f"{context['base']}/waves").json()["absent"]
+    # Доставку спросили только зимой.
+    assert absent == {"1": ["DELIVERY"], "2": ["DELIVERY"], "3": []}
 
 
 def test_file_wave_with_its_own_wave_codes_keeps_them(context) -> None:

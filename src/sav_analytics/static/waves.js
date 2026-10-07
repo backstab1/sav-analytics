@@ -51,6 +51,13 @@ function activeRowCount() {
   return waveOverview?.total || currentProject.inspection.row_count;
 }
 
+// Вопросы, на которые в выбранной волне нет ни одного ответа.
+function waveAbsentCodes() {
+  const view = currentWaveView();
+  if (view.mode !== "wave" || !waveOverview?.absent) return new Set();
+  return new Set(waveOverview.absent[String(Number(view.value))] || []);
+}
+
 function waveViewTitle(view) {
   if (view.mode === "all") return "Все волны";
   if (view.mode === "compare") return "Сравнение волн";
@@ -76,6 +83,7 @@ function renderWaveChrome() {
       if (currentProject?.id !== projectId) return;
       waveOverview = result;
       if (!document.querySelector("#wave-menu").hidden) renderWaveMenu();
+      if (currentView === "data" && waveAbsentCodes().size) renderTable();
     }).catch(() => {});
   }
   if (!many) waveOverview = null;

@@ -1129,6 +1129,7 @@ function renderTable() {
     const status = questionStatus(question);
     const warnings = status === "review" ? (question.warnings || []).join(" · ") : "";
     const title = `${question.code} — ${question.label}`;
+    const absentHere = waveAbsentCodes();
     // Группировки видны прямо в списке: иначе о них знает только тот,
     // кто откроет карточку исходного вопроса.
     const groupings = recodingsForQuestion(question);
@@ -1143,7 +1144,7 @@ function renderTable() {
       <td class="select-cell"><input type="checkbox" class="select-question" data-select-code="${escapeAttribute(question.code)}" aria-label="Выбрать ${escapeAttribute(question.code)}" ${checked} /></td>
       <td class="drag-cell"><button type="button" class="drag-handle" draggable="${draggable}" data-drag-code="${escapeAttribute(question.code)}" aria-label="Перетащить ${escapeAttribute(question.code)}" title="${structureFiltered() ? "Сбросьте фильтр, чтобы менять порядок" : "Перетащите, чтобы изменить порядок"}"><span aria-hidden="true">⋮⋮</span></button></td>
       <td class="code-column"><code>${escapeHtml(question.code)}</code></td>
-      <td class="question-cell"><button type="button" class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</button>${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
+      <td class="question-cell"><button type="button" class="q-title" title="${escapeAttribute(title)}">${escapeHtml(question.label)}</button>${absentHere.has(question.code) ? `<span class="q-absent" title="В волне «${escapeAttribute(currentWaveView().label)}» на этот вопрос нет ни одного ответа">нет в этой волне</span>` : ""}${sub ? `<span class="q-sub ${warnings ? "warning" : ""}" title="${escapeAttribute(sub)}">${escapeHtml(sub)}</span>` : ""}</td>
       <td class="type-column"><span class="type-icon" role="img" aria-label="${escapeAttribute(typeLabels[question.question_type] || question.question_type)}">${typeIcons[question.question_type] || typeIcons.technical}<span class="type-label" aria-hidden="true">${escapeHtml(typeLabels[question.question_type] || question.question_type)}</span></span></td>
       <td class="count-column"><span class="count">${question.source_variables.length}</span></td>
       <td class="status-column"><span class="status ${status === "ready" ? "" : status}">${statusLabels[status]}</span></td>

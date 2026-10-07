@@ -3726,3 +3726,6 @@ details.runs:not([open]) { padding-bottom: 6px; }
   .chip-wave { max-width: 120px; padding: 4px 8px; }
   .chip-wave svg:first-child { display: none; }
 }
+
+/* Вопрос без ответов в выбранной волне («не задавался»). */
+.q-absent { display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: var(--r-pill); background: var(--c-surface-soft); color: var(--c-ink-3); font-size: var(--t-micro); font-weight: 600; vertical-align: middle; white-space: nowrap; }
