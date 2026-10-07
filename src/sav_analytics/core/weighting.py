@@ -188,7 +188,8 @@ def _start_weights(frame: pd.DataFrame, definition: dict[str, Any]) -> pd.Series
 
 
 def project_wave_variable(project: dict[str, Any]) -> str | None:
-    """Переменная SAV вопроса с ролью «Волна», если он есть."""
+    """Переменная SAV вопроса с ролью «Волна», если он есть (то же, что
+    `core.waves.wave_variable_of`)."""
     for question in project.get("configuration", {}).get("questions", []):
         if question.get("role") == "wave" and len(question.get("source_variables", [])) == 1:
             return str(question["source_variables"][0])

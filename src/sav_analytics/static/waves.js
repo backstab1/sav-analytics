@@ -1,10 +1,13 @@
-/* Волны отдельными источниками (PQ.19, решение 034).
+/* Волны (PQ.19, решения 034 и 039).
+
+   Селектор в шапке выбирает волну для работы: одну, все вместе или
+   сравнение колонками. Выбор хранится в проекте, и по нему считается всё —
+   таблицы, анализ, открытые ответы, книга. Волны — значения одной
+   переменной с ролью «Волна»: размеченные в данных и подгруженные файлами.
 
    Новая волна: файл → предложение сопоставления (по имени и подписи) →
    человек правит пары, может попросить ИИ подобрать несопоставленные,
-   отмечает новые переменные → «Добавить волну». Сервер складывает волны в
-   общий массив с переменной волны; таблицы, баннер и лист «Тренды» видят
-   волны колонками. */
+   отмечает новые переменные → «Добавить волну». */
 
 let wavePreview = null;
 let waveMapping = {};
@@ -16,13 +19,140 @@ function projectWaves() {
   return currentProject?.waves || [];
 }
 
-function renderWaveChrome() {
-  const pill = document.querySelector("#waves-pill");
-  if (!pill || !currentProject) return;
-  const waves = projectWaves();
-  pill.hidden = waves.length < 2;
-  pill.textContent = `Волны: ${waves.length}`;
+let waveOverview = null;
+let waveOverviewKey = "";
+
+// Волны из самого проекта: роль «Волна» и подписи её значений. Число анкет
+// приходит с сервера отдельно, селектор рисуется и без него.
+function projectWaveValues() {
+  const question = configuredQuestions().find(item => item.role === "wave" && item.source_variables?.length === 1);
+  if (!question) return [];
+  const variable = currentProject.inspection.variables.find(item => item.name === question.source_variables[0]);
+  return [...(variable?.value_labels || [])].sort((left, right) => Number(left.value) - Number(right.value));
 }
+
+function currentWaveView() {
+  const values = projectWaveValues();
+  if (values.length < 2) return { mode: "all", value: null, label: null };
+  const stored = currentProject.configuration.wave_view || {};
+  const mode = ["wave", "all", "compare"].includes(stored.mode) ? stored.mode : "wave";
+  if (mode !== "wave") return { mode, value: null, label: null };
+  const chosen = values.find(item => String(Number(item.value)) === String(Number(stored.value))) || values[values.length - 1];
+  return { mode, value: chosen.value, label: chosen.label };
+}
+
+// Сколько анкет в работе: в выбранной волне или во всех.
+function activeRowCount() {
+  const view = currentWaveView();
+  if (view.mode === "wave" && waveOverview) {
+    const item = waveOverview.values.find(entry => String(Number(entry.value)) === String(Number(view.value)));
+    if (item) return item.count;
+  }
+  return waveOverview?.total || currentProject.inspection.row_count;
+}
+
+function waveViewTitle(view) {
+  if (view.mode === "all") return "Все волны";
+  if (view.mode === "compare") return "Сравнение волн";
+  return view.label;
+}
+
+function renderWaveChrome() {
+  if (!currentProject) return;
+  const values = projectWaveValues();
+  const many = values.length >= 2;
+  const view = currentWaveView();
+  document.querySelector("#wave-switch").hidden = !many;
+  document.querySelector("#wave-crumb").hidden = !many;
+  document.querySelector("#wave-add-quick").hidden = many;
+  document.querySelector("#wave-name").textContent = many ? waveViewTitle(view) : "";
+  document.querySelector("#wave-switch").classList.toggle("is-mode", many && view.mode !== "wave");
+  // Числа анкет — один запрос на ревизию проекта.
+  const key = `${currentProject.id}:${currentProject.configuration.revision}`;
+  if (many && waveOverviewKey !== key) {
+    waveOverviewKey = key;
+    const projectId = currentProject.id;
+    api(`/api/projects/${projectId}/waves`).then(result => {
+      if (currentProject?.id !== projectId) return;
+      waveOverview = result;
+      if (!document.querySelector("#wave-menu").hidden) renderWaveMenu();
+    }).catch(() => {});
+  }
+  if (!many) waveOverview = null;
+}
+
+function renderWaveMenu() {
+  const view = currentWaveView();
+  const counts = new Map((waveOverview?.values || []).map(item => [String(Number(item.value)), item.count]));
+  const count = value => counts.has(value) ? counts.get(value).toLocaleString("ru-RU") : "";
+  const item = (attributes, label, note, checked) => `<button type="button" class="wave-option${checked ? " is-on" : ""}" role="menuitemradio" aria-checked="${checked}" ${attributes}>
+      <span class="wave-check" aria-hidden="true">${checked ? "✓" : ""}</span><span class="wave-label">${escapeHtml(label)}</span><span class="wave-count">${note}</span></button>`;
+  const values = projectWaveValues();
+  document.querySelector("#wave-menu").innerHTML = `
+    <p class="wave-menu-cap">Работать с волной</p>
+    ${[...values].reverse().map(entry => item(
+      `data-wave-mode="wave" data-wave-value="${escapeAttribute(String(entry.value))}"`,
+      entry.label, count(String(Number(entry.value))),
+      view.mode === "wave" && String(Number(view.value)) === String(Number(entry.value)),
+    )).join("")}
+    <div class="wave-menu-sep"></div>
+    ${item('data-wave-mode="all"', "Все волны вместе", waveOverview ? waveOverview.total.toLocaleString("ru-RU") : "", view.mode === "all")}
+    ${item('data-wave-mode="compare"', "Сравнение волн", "колонками", view.mode === "compare")}
+    <div class="wave-menu-sep"></div>
+    <button type="button" class="wave-action" role="menuitem" data-wave-action="add">+ Добавить волну</button>
+    <button type="button" class="wave-action" role="menuitem" data-wave-action="manage">Файлы волн…</button>`;
+}
+
+function toggleWaveMenu(open) {
+  const menu = document.querySelector("#wave-menu");
+  if (!currentProject) {
+    menu.hidden = true;
+    return;
+  }
+  const show = open ?? menu.hidden;
+  if (show) renderWaveMenu();
+  menu.hidden = !show;
+  document.querySelector("#wave-switch").setAttribute("aria-expanded", String(show));
+}
+
+async function setWaveView(mode, value = null) {
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/waves/view`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, value: value == null ? null : Number(value) }),
+    });
+    // Числа, посчитанные по прежней волне, больше не верны.
+    [recodePreviewCache, filterPreviewCache, readyWeightCache, recodeSourceValuesCache].forEach(cache => cache.clear());
+    renderProject();
+    void loadReportPreflight();
+    showToast(mode === "wave" ? `Волна «${currentWaveView().label}»` : mode === "all" ? "Все волны вместе" : "Сравнение волн");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+document.querySelector("#wave-switch").addEventListener("click", event => {
+  event.stopPropagation();
+  toggleWaveMenu();
+});
+
+document.querySelector("#wave-menu").addEventListener("click", event => {
+  const option = event.target.closest("[data-wave-mode]");
+  const action = event.target.closest("[data-wave-action]");
+  toggleWaveMenu(false);
+  if (option) void setWaveView(option.dataset.waveMode, option.dataset.waveValue ?? null);
+  else if (action?.dataset.waveAction === "add") document.querySelector("#add-wave-file").click();
+  else if (action?.dataset.waveAction === "manage") openWavesSheet();
+});
+
+document.addEventListener("click", event => {
+  if (!event.target.closest(".wave-switch-wrap")) toggleWaveMenu(false);
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && !document.querySelector("#wave-menu").hidden) toggleWaveMenu(false);
+});
+document.querySelector("#wave-add-quick").addEventListener("click", () => document.querySelector("#add-wave-file").click());
 
 /* ---------------- Список волн ---------------- */
 
@@ -35,8 +165,8 @@ function openWavesSheet() {
           <small class="muted">${escapeHtml(wave.filename || "")}${index === 0 ? " · задаёт структуру" : ""}</small>
           ${index === 0 ? "" : '<button type="button" class="text-button danger-text" data-wave-remove>Удалить</button>'}
         </li>`).join("")}</ol>
-      <p class="muted">Волны сложены в общий массив с переменной «${escapeHtml(currentProject.waves_meta?.variable || "WAVE")}»: поставьте её колонкой в «Таблицах» или баннере. В книге Excel есть лист «Тренды» со сравнением с предыдущей волной.</p>`
-    : '<p class="muted">В проекте одна волна — исходный файл. Добавьте следующую волну файлом, и она встанет колонкой рядом.</p>';
+      <p class="muted">Файлы сложены в общий массив; каждая волна — значение переменной «${escapeHtml(currentProject.waves_meta?.variable || "WAVE")}». Какую волну смотреть, выбирается в шапке рядом с названием проекта.</p>`
+    : '<p class="muted">Волны пока не подгружались файлами. Если волна размечена в данных, назначьте её переменной роль «Волна» в «Данных» — она появится в шапке.</p>';
   openSheet(document.querySelector("#waves-sheet"));
 }
 
@@ -216,5 +346,3 @@ document.querySelector("#wave-map-apply").addEventListener("click", async () => 
   }
 });
 
-document.querySelector("#waves-pill").addEventListener("click", openWavesSheet);
-document.querySelector("#open-waves").addEventListener("click", openWavesSheet);

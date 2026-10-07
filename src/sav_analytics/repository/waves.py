@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, BinaryIO
 from uuid import UUID, uuid4
 
-from ..core.formulas import formula_variable
+from ..core.formulas import formula_variable, read_project_frame
+from ..core.questionnaire import value_key
 from ..core.sav_reader import SavReadError
 from ..core.tabular_import import TabularImportError, convert_to_sav, is_tabular
 from ..core.waves import (
     WAVE_DIR,
+    WAVE_MODES,
     WaveError,
     base_variables,
     convergence,
@@ -18,7 +21,10 @@ from ..core.waves import (
     read_wave,
     stack_waves,
     unmatched_wave_variables,
+    wave_values,
     wave_variable_name,
+    wave_variable_of,
+    wave_view,
 )
 from .store import InvalidUploadError, ProjectNotFoundError, ProjectStore
 
@@ -152,14 +158,20 @@ class WaveSources(ProjectStore):
         project_dir = self.root / str(project_id)
         waves = list(project.get("waves") or [])
         meta = dict(project.get("waves_meta") or {})
+        if not waves:
+            # Волна, размеченная в данных, остаётся переменной волны: файл
+            # добавит ей новое значение, а не заведёт вторую переменную.
+            in_data = wave_variable_of(project)
+            meta["in_data"] = bool(in_data)
         meta["variable"] = wave_variable_name(project)
         if not waves:
             first = {
                 "id": uuid4().hex,
-                "label": "Волна 1",
+                "label": "Исходный файл" if meta["in_data"] else "Волна 1",
                 "filename": project["original_filename"],
                 "mapping": None,
                 "added": [],
+                "code": None if meta["in_data"] else 1.0,
             }
             shutil.copy2(project_dir / "source.sav", directory / f"{first['id']}.sav")
             waves.append(first)
@@ -176,17 +188,76 @@ class WaveSources(ProjectStore):
             raise InvalidUploadError(f"Переменная {clash[0]} уже есть в проекте.")
         if any(wave["label"].casefold() == label.strip().casefold() for wave in waves):
             raise InvalidUploadError("Волна с таким названием уже есть.")
+        # Код волны — следующий после всех известных значений переменной
+        # волны: размеченных в данных и выданных файлам.
+        known = [item["value"] for item in wave_values(project)] + [
+            item.get("code") for item in waves
+        ]
+        numbers = []
+        for value in known:
+            try:
+                numbers.append(float(value))
+            except (TypeError, ValueError):
+                continue
         wave = {
             "id": uuid4().hex,
             "label": label.strip(),
             "filename": preview["filename"],
             "mapping": {row["target"]: row["source"] for row in preview["mapping"]},
             "added": list(dict.fromkeys(added)),
+            "code": float(int(max(numbers, default=0)) + 1),
         }
         self._staged(project_id, staging_id).replace(directory / f"{wave['id']}.sav")
         (directory / f".staging-{staging_id}.name").unlink(missing_ok=True)
         waves.append(wave)
         return self._restack(project_id, project, waves, meta)
+
+    def set_wave_view(self, project_id: UUID, mode: str, value: Any = None) -> dict:
+        """Выбрать волну для работы: одну, все вместе или сравнение.
+
+        Хранится в конфигурации: книга Excel и ИИ отчёт собираются по той же
+        волне, что на экране, а выбор откатывается «Отменить», как любая
+        правка.
+        """
+        project = self.get(project_id)
+        values = wave_values(project)
+        if len(values) < 2:
+            raise InvalidUploadError("В проекте одна волна — выбирать не из чего.")
+        if mode not in WAVE_MODES:
+            raise InvalidUploadError("Неизвестный режим волн.")
+        view: dict[str, Any] = {"mode": mode}
+        if mode == "wave":
+            chosen = next(
+                (item for item in values if value_key(item["value"]) == value_key(value)), None
+            )
+            if chosen is None:
+                raise InvalidUploadError("Такой волны в проекте нет.")
+            view["value"] = chosen["value"]
+        project["configuration"]["wave_view"] = view
+        project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
+        self._write_project(project_id, project)
+        return project
+
+    def wave_overview(self, project_id: UUID) -> dict[str, Any]:
+        """Волны для селектора: значение, подпись и число анкет в каждой."""
+        project = self.get(project_id)
+        variable = wave_variable_of(project)
+        values = wave_values(project)
+        counts: dict[str, int] = {}
+        if variable and len(values) >= 2:
+            frame = read_project_frame(self.source_path(project_id), project, [variable],
+                                       all_waves=True)
+            for item, count in frame[variable].value_counts(dropna=True).items():
+                counts[value_key(item)] = int(count)
+        return {
+            "variable": variable,
+            "view": wave_view(project),
+            "values": [
+                {**item, "count": counts.get(value_key(item["value"]), 0)} for item in values
+            ],
+            "total": sum(counts.values()),
+            "waves": project.get("waves") or [],
+        }
 
     def rename_wave(self, project_id: UUID, wave_id: str, label: str) -> dict:
         project = self.get(project_id)

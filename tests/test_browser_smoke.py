@@ -2131,7 +2131,9 @@ def test_second_wave_is_mapped_and_stacked(page: Page, live_server: str, tmp_pat
     write_fixture(first)
     write_second_wave(second)
     _open_project(page, live_server, first)
-    page.click("#export-toggle")
+    # Без волн в шапке — тихая кнопка «+ Волна», селектора нет.
+    expect(page.locator("#wave-add-quick")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#wave-switch")).to_be_hidden()
     page.set_input_files("#add-wave-file", str(second))
     expect(page.locator("#wave-map-sheet")).to_be_visible(timeout=UI_TIMEOUT)
     # Q2 найден по подписи под другим именем, новые переменные предложены флажками.
@@ -2139,7 +2141,13 @@ def test_second_wave_is_mapped_and_stacked(page: Page, live_server: str, tmp_pat
     expect(page.locator("[data-wave-add='Q9']")).to_be_checked()
     page.fill("#wave-label", "Октябрь")
     page.click("#wave-map-apply")
-    expect(page.locator("#waves-pill")).to_have_text("Волны: 2", timeout=UI_TIMEOUT)
-    page.click("#waves-pill")
+    # Селектор волны в шапке: по умолчанию последняя волна.
+    expect(page.locator("#wave-name")).to_have_text("Октябрь", timeout=UI_TIMEOUT)
+    page.click("#wave-switch")
+    expect(page.locator("#wave-menu [data-wave-mode='wave']")).to_have_count(2)
+    page.click("#wave-menu [data-wave-mode='all']")
+    expect(page.locator("#wave-name")).to_have_text("Все волны", timeout=UI_TIMEOUT)
+    page.click("#wave-switch")
+    page.click("#wave-menu [data-wave-action='manage']")
     expect(page.locator("#waves-body [data-wave-label]")).to_have_count(2)
     expect(page.locator("#waves-body [data-wave-label]").nth(1)).to_have_value("Октябрь")

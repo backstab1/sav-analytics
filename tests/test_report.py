@@ -505,6 +505,8 @@ def test_topline_compares_each_wave_with_previous_and_writes_arrow(tmp_path: Pat
             "recodings": [],
             "filters": [],
             "report_filter_id": None,
+            # Волны колонками — режим сравнения; по умолчанию выбрана одна волна.
+            "wave_view": {"mode": "compare"},
             "banners": [
                 {
                     "name": "По волнам",

@@ -183,7 +183,9 @@ class QuestionEditing(ProjectStore):
         if changes.get("nets"):
             raise InvalidUploadError("NET-группы для ранжирования не поддерживаются.")
         candidate = {**question, **changes}
-        frame = read_project_frame(self.source_path(project_id), project, sources)
+        frame = read_project_frame(
+            self.source_path(project_id), project, sources, all_waves=True
+        )
         variables = {item["name"]: item for item in project["inspection"]["variables"]}
         try:
             items = ranking_items(frame, candidate, variables)
@@ -349,7 +351,9 @@ class QuestionEditing(ProjectStore):
         if not names:
             return {}
         project = self.get(project_id)
-        frame = read_project_frame(self.source_path(project_id), project, names)
+        frame = read_project_frame(
+            self.source_path(project_id), project, names, all_waves=True
+        )
         observed: dict[str, list] = {}
         for name in names:
             if name not in frame.columns:
@@ -500,7 +504,9 @@ class QuestionEditing(ProjectStore):
             )
         except QuestionGroupError as exc:
             raise InvalidUploadError(str(exc)) from exc
-        frame = read_project_frame(self.source_path(project_id), project, group["source_variables"])
+        frame = read_project_frame(
+            self.source_path(project_id), project, group["source_variables"], all_waves=True
+        )
         answered = frame[group["source_variables"]].notna().any(axis=1)
         if question_type == "ranking":
             try:

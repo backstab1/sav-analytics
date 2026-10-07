@@ -39,6 +39,7 @@ SECTION_LABELS = {
     "analysis_models": "модели анализа",
     "table_reports": "таблицы",
     "label_overrides": "подписи из анкеты",
+    "wave_view": "выбранная волна",
     "inspection": "описание переменных",
 }
 _IGNORED = {"revision", "updated_at"}

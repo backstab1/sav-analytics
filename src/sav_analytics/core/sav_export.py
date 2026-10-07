@@ -53,7 +53,7 @@ def export_project_sav(
         dates_as_pandas_datetime=False,
     )
     # Производные считаются, как в отчёте: объявленные пропуски — пустые.
-    computed = read_project_frame(path, project)
+    computed = read_project_frame(path, project, all_waves=True)
     configuration = project["configuration"]
     labels: dict[str, str | None] = dict(meta.column_names_to_labels)
     value_labels: dict[str, dict[Any, str]] = dict(meta.variable_value_labels)

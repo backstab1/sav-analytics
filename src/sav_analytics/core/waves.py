@@ -10,6 +10,14 @@
 
 Переменной, которой нет в волне, в её строках нет значений: в колонке этой
 волны база 0, и тест с ней не считается — «не задавался».
+
+Переменная волны у проекта одна — вопрос с ролью «Волна». Волны бывают
+двух видов и не спорят друг с другом: уже размеченные в данных (значения
+этой переменной в исходном файле) и подгруженные файлами. Файл волны без
+своей переменной волны получает новое значение той же переменной (`code`
+у записи волны), а не вторую переменную. Поэтому выбранная волна
+(`configuration.wave_view`) — всегда значение одной переменной, откуда бы
+волна ни взялась.
 """
 
 from __future__ import annotations
@@ -61,13 +69,115 @@ def _normalized(text: str | None) -> str:
 
 def base_variables(project: dict[str, Any]) -> list[dict[str, Any]]:
     """Переменные первой волны, которые сопоставляются: без производных и
-    без переменной волны."""
-    wave_variable = (project.get("waves_meta") or {}).get("variable")
+    без переменной волны, если её завели файлы волн. Размеченная в данных
+    переменная волны сопоставляется как обычная: у файла волны может быть
+    своя."""
+    meta = project.get("waves_meta") or {}
+    wave_variable = None if meta.get("in_data") else meta.get("variable")
     return [
         item for item in project["inspection"]["variables"]
         if not item.get("formula_id") and not item.get("codeframe_id")
         and item["name"] != wave_variable
     ]
+
+
+def wave_variable_of(project: dict[str, Any] | None) -> str | None:
+    """Переменная волны проекта: вопрос с ролью «Волна»."""
+    for question in ((project or {}).get("configuration") or {}).get("questions", []):
+        if question.get("role") == "wave" and len(question.get("source_variables") or []) == 1:
+            return str(question["source_variables"][0])
+    return None
+
+
+def wave_values(project: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Волны проекта — подписанные значения переменной волны по порядку кода."""
+    variable = wave_variable_of(project)
+    if variable is None:
+        return []
+    record = next(
+        (item for item in project["inspection"]["variables"] if item["name"] == variable),  # type: ignore[index]
+        None,
+    )
+    labels = (record or {}).get("value_labels") or []
+    values = sorted(labels, key=lambda item: (_numeric(item["value"]), str(item["value"])))
+    return [{"value": item["value"], "label": item["label"]} for item in values]
+
+
+def _numeric(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("inf")
+
+
+WAVE_MODES = ("wave", "all", "compare")
+
+
+def wave_view(project: dict[str, Any] | None) -> dict[str, Any]:
+    """Какая волна выбрана для работы.
+
+    `mode`: `wave` — одна волна (по умолчанию последняя), `all` — все
+    вместе, `compare` — сравнение волн колонками. Без двух волн выбора нет:
+    `mode` = `all`. Сохранённая волна, которой больше нет, заменяется
+    последней.
+    """
+    values = wave_values(project)
+    variable = wave_variable_of(project)
+    if len(values) < 2 or variable is None:
+        return {"mode": "all", "variable": variable, "value": None, "label": None}
+    stored = (((project or {}).get("configuration") or {}).get("wave_view")) or {}
+    mode = stored.get("mode") if stored.get("mode") in WAVE_MODES else "wave"
+    if mode != "wave":
+        return {"mode": mode, "variable": variable, "value": None, "label": None}
+    chosen = next(
+        (item for item in values if value_key(item["value"]) == value_key(stored.get("value"))),
+        values[-1],
+    )
+    return {"mode": "wave", "variable": variable, "value": chosen["value"],
+            "label": chosen["label"]}
+
+
+def compare_wave_block(project: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Блок разреза «Волна» для режима сравнения волн, или None.
+
+    В режиме сравнения волна — колонка в таблицах, книге и ИИ отчёте без
+    ручной настройки баннера.
+    """
+    if wave_view(project)["mode"] != "compare":
+        return None
+    variable = wave_variable_of(project)
+    question = next(
+        (
+            item for item in (project or {})["configuration"]["questions"]
+            if item.get("role") == "wave" and item.get("source_variables") == [variable]
+        ),
+        None,
+    )
+    if question is None:
+        return None
+    return {"label": "Волна", "sources": [{"kind": "question", "ref": question["code"]}]}
+
+
+def with_wave_block(banner: dict[str, Any], block: dict[str, Any] | None) -> dict[str, Any]:
+    """Баннер с блоком волны первым, если его в баннере ещё нет."""
+    if block is None:
+        return banner
+    reference = block["sources"][0]["ref"]
+    blocks = list(banner.get("blocks") or [])
+    if any(
+        source.get("kind") == "question" and source.get("ref") == reference
+        for item in blocks for source in item.get("sources") or []
+    ):
+        return banner
+    return {**banner, "name": banner.get("name") or "Волны", "blocks": [block, *blocks]}
+
+
+def active_wave_filter(project: dict[str, Any] | None) -> tuple[str, Any] | None:
+    """Переменная и значение, по которым сужается массив, или None."""
+    view = wave_view(project)
+    if view["mode"] != "wave":
+        return None
+    return view["variable"], view["value"]
 
 
 def propose_mapping(
@@ -226,6 +336,7 @@ def stack_waves(
     measures: dict[str, str] = {}
     missing: dict[str, list[dict[str, Any]]] = {}
     order: list[str] = []
+    file_labels: dict[float, str] = {}
     for index, wave in enumerate(waves, start=1):
         data = read_wave(project_dir / WAVE_DIR / f"{wave['id']}.sav")
         columns = list(data.frame.columns)
@@ -244,6 +355,16 @@ def stack_waves(
                 if name in columns and name not in renames:
                     renames[name] = name
         frame = data.frame[list(renames)].rename(columns=renames)
+        # Волна своей переменной не несёт — строки получают её код. Если
+        # несёт (размечена в данных или сопоставлена), её значения целы,
+        # а пустые получают код файла.
+        code = wave.get("code", float(index))
+        if wave_variable in frame.columns:
+            if code is not None:
+                frame[wave_variable] = frame[wave_variable].fillna(float(code))
+        else:
+            frame[wave_variable] = float(code if code is not None else index)
+            file_labels[float(code if code is not None else index)] = wave["label"]
         for source, name in renames.items():
             if name not in order:
                 order.append(name)
@@ -256,18 +377,23 @@ def stack_waves(
             for code, label in (data.value_labels.get(source) or {}).items():
                 if value_key(code) not in existing:
                     known[code] = label
-        frame[wave_variable] = float(index)
         frames.append(frame)
     combined = pd.concat(frames, ignore_index=True, sort=False)
-    columns = [name for name in order if name in combined.columns] + [wave_variable]
+    columns = [name for name in order if name in combined.columns and name != wave_variable]
+    columns += [wave_variable]
     combined = combined[columns]
     for name in columns:
         if combined[name].dtype == object:
             combined[name] = combined[name].where(combined[name].notna(), "")
-    labels[wave_variable] = "Волна"
-    value_labels[wave_variable] = {
-        float(index): wave["label"] for index, wave in enumerate(waves, start=1)
-    }
+    labels.setdefault(wave_variable, "Волна")
+    if not labels[wave_variable]:
+        labels[wave_variable] = "Волна"
+    known = value_labels.setdefault(wave_variable, {})
+    for code, label in file_labels.items():
+        same = next((key for key in known if value_key(key) == value_key(code)), None)
+        if same is not None:
+            del known[same]
+        known[code] = label
     measures[wave_variable] = "nominal"
     temporary = target.with_suffix(".stacking.sav")
     pyreadstat.write_sav(
@@ -288,10 +414,14 @@ def stack_waves(
 
 
 def wave_variable_name(project: dict[str, Any]) -> str:
-    """Имя переменной волны: WAVE, если свободно, иначе WAVE_2, WAVE_3…"""
+    """Имя переменной волны: размеченная в данных (роль «Волна»), иначе
+    WAVE, если свободно, иначе WAVE_2, WAVE_3…"""
     current = (project.get("waves_meta") or {}).get("variable")
     if current:
         return current
+    in_data = wave_variable_of(project)
+    if in_data:
+        return in_data
     taken = {item["name"].lower() for item in project["inspection"]["variables"]}
     name = "WAVE"
     index = 2
@@ -304,9 +434,9 @@ def wave_variable_name(project: dict[str, Any]) -> str:
 def trend_project(project: dict[str, Any]) -> dict[str, Any] | None:
     """Копия проекта для листа «Тренды»: разрез — переменная волны, сравнение
     с предыдущей волной. None, если волн меньше двух."""
-    if len(project.get("waves") or []) < 2:
+    if len(wave_values(project)) < 2:
         return None
-    variable = (project.get("waves_meta") or {}).get("variable")
+    variable = wave_variable_of(project)
     if not any(item["code"] == variable for item in project["configuration"]["questions"]):
         return None
     trend = copy.deepcopy(project)
@@ -321,8 +451,10 @@ def trend_project(project: dict[str, Any]) -> dict[str, Any] | None:
         },
     ]
     configuration["report_banner_id"] = banner_id
+    # Тренды — всегда по всем волнам, какая бы волна ни была выбрана для работы.
+    configuration["wave_view"] = {"mode": "compare"}
     configuration["report_settings"] = {
-        **configuration["report_settings"],
+        **(configuration.get("report_settings") or {}),
         "wave_comparison": "previous",
         "wave_control_value": None,
         "compare_pairwise": False,

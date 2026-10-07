@@ -103,9 +103,11 @@ def plan_catalog(project: dict[str, Any]) -> list[dict[str, Any]]:
 
 def wave_variable(project: dict[str, Any]) -> str | None:
     """Переменная волны, если волн в проекте две и больше: её ставят в разрез."""
-    if len(project.get("waves") or []) < 2:
+    from .waves import wave_values, wave_variable_of
+
+    if len(wave_values(project)) < 2:
         return None
-    return (project.get("waves_meta") or {}).get("variable")
+    return wave_variable_of(project)
 
 
 def weight_candidates(project: dict[str, Any]) -> list[str]:

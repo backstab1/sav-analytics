@@ -18,7 +18,7 @@ function pickerRows(kind) {
   }
   if (kind === "filter") {
     const active = selectedReportFilterId();
-    const total = currentProject.inspection.row_count;
+    const total = activeRowCount();
     return [{
       value: "", title: "Все респонденты",
       note: `без общего фильтра · ${total.toLocaleString("ru-RU")}`,

@@ -1007,18 +1007,11 @@ function questionStatus(question) {
 
 const statusLabels = { review: "Проверить", ready: "Готов", excluded: "Исключён" };
 
-// Сводка стоит над окном списка и работает фильтром по статусу. Размер
-// массива в неё не входит: он не меняется по ходу работы и потому стоит
-// в шапке рядом с названием проекта.
+// Сводка стоит над окном списка и работает фильтром по статусу.
 function renderSummary(inspection, questions) {
   const ready = questions.filter(item => questionStatus(item) === "ready");
   const review = questions.filter(item => questionStatus(item) === "review");
   const excluded = questions.filter(item => questionStatus(item) === "excluded");
-  document.querySelector("#project-meta").textContent = [
-    `${inspection.row_count.toLocaleString("ru-RU")} респондентов`,
-    `${questions.length} вопросов`,
-    `${inspection.variables.length} столбцов SAV`,
-  ].join(" · ");
   // Одна капсула «Фильтр: …» с выпадающим списком статусов вместо ряда
   // чипов: ряд не переносится на вторую строку. Открывает меню shell.js.
   const chips = [

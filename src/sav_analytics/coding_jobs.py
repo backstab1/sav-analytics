@@ -55,7 +55,9 @@ def _context(
     except ProjectNotFoundError as exc:
         raise JobFailure("Кодификатор или проект удалён.") from exc
     variable = codeframe_text_variable(codeframe, project)
-    texts = read_project_frame(repository.source_path(project_id), project, [variable])[variable]
+    texts = read_project_frame(
+        repository.source_path(project_id), project, [variable], all_waves=True
+    )[variable]
     question = next(
         item for item in project["configuration"]["questions"]
         if item["code"] == codeframe["question_code"]

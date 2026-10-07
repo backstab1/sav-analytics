@@ -17,6 +17,7 @@ from ..multiple_response import response_definition
 from ..not_applicable import not_applicable_values
 from ..ranking import RankingError, ranking_items
 from ..report_settings import resolved_report_settings
+from ..waves import compare_wave_block, wave_variable_of, with_wave_block
 from ..weight_validation import assess_ready_weight, weight_role
 from ..weighting import WeightingError, calculate_weight, weight_method_label
 from .models import ReportError
@@ -51,6 +52,12 @@ def prepare_report_data(
     а таблице на экране — только вопросы раскладки, разрез, фильтр и вес,
     поэтому список считает вызывающий: он же знает раскладку.
     """
+    # Режим «Сравнение волн»: волна — первый блок разреза везде, где
+    # строится отчёт, без ручной настройки баннера.
+    wave_block = compare_wave_block(project)
+    wave_variable = wave_variable_of(project) if wave_block else None
+    if wave_variable and columns is not None and wave_variable not in columns:
+        columns = [*columns, wave_variable]
     frame = read_project_frame(path, project, columns)
     configuration = project["configuration"]
     try:
@@ -59,7 +66,7 @@ def prepare_report_data(
         raise ReportError(str(exc)) from exc
     global_mask = _report_filter_mask(frame, project)
 
-    active_banner = _active_banner(configuration)
+    active_banner = with_wave_block(_active_banner(configuration), wave_block)
     report_settings = resolved_report_settings(configuration, active_banner)
     if active_banner:
         # Comparison metadata belongs to the report, but banner-column building

@@ -402,7 +402,9 @@ class DerivedVariables(ProjectStore):
                 configuration["questions"].remove(question)
             return
         text_variable = codeframe_text_variable(codeframe, project)
-        texts = read_project_frame(self.source_path(project_id), project, [text_variable])[
+        texts = read_project_frame(
+            self.source_path(project_id), project, [text_variable], all_waves=True
+        )[
             text_variable
         ]
         coding = self.coding(project_id, codeframe)

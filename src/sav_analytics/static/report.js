@@ -105,7 +105,7 @@ function reportColumnsRow() {
 
 function reportBaseRow() {
   const filter = configuredFilters().find(item => item.id === selectedReportFilterId()) || null;
-  const total = currentProject.inspection.row_count;
+  const total = activeRowCount();
   const preview = filter ? filterPreviewCache.get(filterPreviewKey(filter)) : null;
   const sample = preview
     ? `выборка <b>${preview.selected.toLocaleString("ru-RU")}</b> из ${preview.total.toLocaleString("ru-RU")}`
@@ -555,7 +555,7 @@ async function loadHeaderPreview() {
   const body = document.querySelector("#header-preview-body");
   const bannerId = selectedReportBannerId();
   if (!bannerId) {
-    const rows = currentProject.inspection.row_count;
+    const rows = activeRowCount();
     body.innerHTML = `<p class="analysis-note">Баннер не выбран: в книге будет только колонка Total, N ${rows.toLocaleString("ru-RU")}.</p>`;
     return;
   }

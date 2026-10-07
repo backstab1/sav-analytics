@@ -406,7 +406,9 @@ def formula_statistics(
 ) -> dict[str, int]:
     """Счётчики производной переменной для структуры проекта."""
     sources = formula_variables(definition["expression"])
-    frame = read_project_frame(path, _without_formula(project or {}, definition.get("id")), sources)
+    frame = read_project_frame(
+        path, _without_formula(project or {}, definition.get("id")), sources, all_waves=True
+    )
     series = evaluate_formula(definition["expression"], frame)
     return {
         "valid_count": int(series.notna().sum()),
@@ -416,14 +418,27 @@ def formula_statistics(
 
 
 def read_project_frame(
-    path: str | Path, project: dict[str, Any] | None, columns: Iterable[str] | None = None
+    path: str | Path,
+    project: dict[str, Any] | None,
+    columns: Iterable[str] | None = None,
+    *,
+    all_waves: bool = False,
 ) -> pd.DataFrame:
     """Прочитать SAV и досчитать производные столбцы, которые просят колонки.
 
     Производные — формулы и темы открытых ответов. Без `columns` читается весь
     файл и считаются все производные, как для книги. Темы считаются раньше
     формул: формула может опираться на тему.
+
+    Если в проекте выбрана одна волна (`core.waves.wave_view`), остаются
+    только её строки — так таблицы, анализ, открытые ответы и книга считают
+    одну волну без отдельного фильтра. Служебные операции, которым нужны все
+    строки (кодирование, подсчёты структуры, выгрузка SAV), передают
+    `all_waves=True`. Индекс строк сохраняется.
     """
+    from .waves import active_wave_filter
+
+    wave_filter = None if all_waves else active_wave_filter(project)
     formulas = {
         item["name"]: item
         for item in ((project or {}).get("configuration") or {}).get("formulas", [])
@@ -446,7 +461,16 @@ def read_project_frame(
         usecols = list(
             dict.fromkeys([name for name in needed if name not in owners] + texts)
         )
+    extra_wave_column = False
+    if wave_filter is not None and usecols is not None and wave_filter[0] not in usecols:
+        usecols.append(wave_filter[0])
+        extra_wave_column = True
     frame = _read_sav(path, usecols)
+    if wave_filter is not None and wave_filter[0] in frame.columns:
+        variable, value = wave_filter
+        frame = frame[frame[variable].map(lambda item: _same_wave(item, value))]
+        if extra_wave_column:
+            frame = frame.drop(columns=[variable])
     computed: set[str] = set()
     for name in themes:
         codeframe = owners[name]
@@ -460,6 +484,13 @@ def read_project_frame(
     for name in wanted:
         frame[name] = evaluate_formula(formulas[name]["expression"], frame)
     return frame
+
+
+def _same_wave(item: Any, value: Any) -> bool:
+    try:
+        return bool(float(item) == float(value))
+    except (TypeError, ValueError):
+        return str(item) == str(value)
 
 
 def _read_sav(path: str | Path, columns: list[str] | None) -> pd.DataFrame:

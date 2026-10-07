@@ -47,15 +47,27 @@ def _errors(call):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+class WaveViewRequest(BaseModel):
+    mode: str = Field(pattern="^(wave|all|compare)$")
+    value: str | int | float | None = None
+
+
 @router.get("")
 def list_waves(
     project_id: UUID, repository: Annotated[ProjectRepository, Depends(get_repository)]
 ) -> dict:
-    project = _errors(lambda: repository.get(project_id))
-    return {
-        "waves": project.get("waves") or [],
-        "variable": (project.get("waves_meta") or {}).get("variable"),
-    }
+    """Волны проекта для селектора: значения переменной волны с числом анкет,
+    выбранная волна и файлы волн."""
+    return _errors(lambda: repository.wave_overview(project_id))
+
+
+@router.put("/view")
+def set_wave_view(
+    project_id: UUID,
+    body: WaveViewRequest,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    return present(_errors(lambda: repository.set_wave_view(project_id, body.mode, body.value)))
 
 
 @router.post("/stage")

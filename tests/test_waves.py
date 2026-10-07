@@ -11,6 +11,7 @@ import time
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
+from uuid import UUID
 
 import pandas as pd
 import pyreadstat
@@ -174,7 +175,8 @@ def test_wave_is_a_column_and_missing_question_has_zero_base(project) -> None:
     preview = _stage(project)
     _add(project, preview, mapping={"Q3_2": None})
     repository = project["repository"]
-    stored = repository.get(project["project_id"])
+    # Волна колонкой — в режиме сравнения; по умолчанию выбрана последняя.
+    stored = repository.set_wave_view(UUID(project["project_id"]), "compare")
     live = build_live_table(
         repository.source_path(project["project_id"]),
         stored,

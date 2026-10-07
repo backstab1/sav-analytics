@@ -3683,3 +3683,46 @@ details.runs:not([open]) { padding-bottom: 6px; }
   .stat-col .sf-controls { min-width: 0; }
   .stat-col .opt { white-space: normal; text-align: left; max-width: 100%; }
 }
+
+/* Селектор волны в шапке: «проект › волна». По выбранной волне считается
+   весь проект, поэтому селектор стоит в цепочке «что открыто». */
+.wave-crumb { color: var(--c-ink-4); font-size: var(--t-md); }
+.wave-crumb[hidden] { display: none; }
+.wave-switch-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
+.chip-wave {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px;
+  padding: 4px 10px; border-radius: var(--r-pill); border: 1px solid color-mix(in srgb, var(--c-brand) 30%, transparent);
+  background: var(--c-brand-tint); color: var(--c-brand); font-size: var(--t-sm);
+}
+.chip-wave[hidden], .chip-wave-add[hidden] { display: none; }
+.chip-wave svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.chip-wave svg:last-child { width: 10px; height: 10px; }
+.chip-wave b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.chip-wave:hover { background: color-mix(in srgb, var(--c-brand) 16%, var(--c-surface)); transform: none; }
+.chip-wave.is-mode { background: var(--c-surface-soft); color: var(--c-ink); border-color: var(--c-border-strong); }
+.chip-wave-add { padding: 3px 9px; border-radius: var(--r-pill); border: 1px dashed var(--c-border-strong); background: transparent; color: var(--c-ink-3); font-size: var(--t-xs); }
+.chip-wave-add:hover { color: var(--c-brand); border-color: var(--c-brand); background: var(--c-brand-tint); transform: none; }
+.wave-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: 280px;
+  display: grid; gap: 1px; padding: 6px; border-radius: var(--r-2);
+  background: var(--c-surface); border: 1px solid var(--c-border); box-shadow: var(--shadow-drawer);
+}
+.wave-menu[hidden] { display: none; }
+.wave-menu-cap { margin: 2px 8px 4px; color: var(--c-ink-3); font-size: var(--t-micro); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.wave-option, .wave-action {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+  width: 100%; padding: 7px 8px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--c-ink); font-size: var(--t-sm); text-align: left;
+}
+.wave-action { display: block; color: var(--c-ink-2); }
+.wave-option:hover, .wave-action:hover { background: var(--c-surface-soft); transform: none; }
+.wave-option.is-on { background: var(--c-brand-tint); color: var(--c-brand); font-weight: 600; }
+.wave-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wave-count { color: var(--c-ink-3); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.wave-check { color: var(--c-brand); font-weight: 700; }
+.wave-menu-sep { height: 1px; margin: 4px 6px; background: var(--c-border); }
+@media (max-width: 620px) {
+  .wave-crumb { display: none; }
+  .chip-wave { max-width: 120px; padding: 4px 8px; }
+  .chip-wave svg:first-child { display: none; }
+}

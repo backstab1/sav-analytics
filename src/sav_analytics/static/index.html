@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20261006-menus" />
+    <link rel="stylesheet" href="/styles.css?v=20261007-waves" />
   </head>
   <body>
     <!-- ================================================================
@@ -41,9 +41,20 @@
           <svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </button>
 
-        <!-- Размер массива: он не меняется по ходу работы, поэтому стоит
-             рядом с названием, а не среди фильтров. Заполняет app.js. -->
-        <span id="project-meta" class="project-meta"></span>
+        <!-- Волна, с которой работаем: по ней считаются таблицы, анализ,
+             открытые ответы и книга. Заполняет waves.js. -->
+        <span id="wave-crumb" class="wave-crumb" aria-hidden="true" hidden>›</span>
+        <div class="wave-switch-wrap">
+          <button id="wave-switch" class="chip-wave" type="button" aria-haspopup="menu" aria-expanded="false" hidden
+                  title="Волна, по которой считается всё в проекте">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5.5 8 2.5l6 3-6 3-6-3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m2 8.5 6 3 6-3M2 11.5l6 3 6-3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            <b id="wave-name"></b>
+            <svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+          <button id="wave-add-quick" class="chip-wave-add" type="button" hidden title="Добавить следующую волну опроса файлом">+ Волна</button>
+          <div id="wave-menu" class="wave-menu" role="menu" hidden></div>
+          <input id="add-wave-file" type="file" accept=".sav,.csv,.tsv,.xlsx" hidden />
+        </div>
       </div>
 
       <div class="bar-grow"></div>
@@ -323,7 +334,6 @@
                 <div id="summary" class="summary"></div>
                 <div class="canvas-tools-actions">
                   <button id="ai-jobs" class="pill ai-jobs" type="button" hidden aria-live="polite" title="Фоновые задачи ИИ"></button>
-                  <button id="waves-pill" class="pill" type="button" hidden title="Волны проекта"></button>
                   <!-- Разовые действия «Данных» собраны в одну капсулу: по
                        отдельности три пилюли перегружали ряд. -->
                   <div id="tools-menu" class="export-menu">
@@ -355,8 +365,6 @@
                       <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
                       <a id="download-derived-sav" class="export-item" href="#" role="menuitem" title="Исходный массив плюс формулы, перекодировки и рассчитанные веса проекта">Скачать SAV с производными</a>
                       <div class="export-sep" role="separator"></div>
-                      <label class="export-item" role="menuitem">Добавить волну…<input id="add-wave-file" type="file" accept=".sav,.csv,.tsv,.xlsx" hidden /></label>
-                      <button id="open-waves" class="export-item" type="button" role="menuitem">Волны проекта</button>
                       <label class="export-item" role="menuitem" title="Заменить файл проекта, сохранив настройки: прежние данные уйдут">Заменить данные<input id="wave-file" type="file" accept=".sav,.csv,.tsv,.xlsx" hidden /></label>
                       <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
                       <div class="export-sep" role="separator"></div>
@@ -1245,26 +1253,26 @@
     <script src="/util.js?v=20261001-uiux" defer></script>
     <script src="/tables.js?v=20260930-nest-button" defer></script>
     <script src="/shell.js?v=20261006-menus" defer></script>
-    <script src="/app.js?v=20261006-menus" defer></script>
+    <script src="/app.js?v=20261007-waves" defer></script>
     <script src="/route.js?v=20260930-question-tune" defer></script>
     <script src="/source.js?v=20260930-question-tune" defer></script>
     <script src="/library.js?v=20260930-question-tune" defer></script>
     <script src="/bulk.js?v=20260930-question-tune" defer></script>
     <script src="/question.js?v=20261001-uiux" defer></script>
     <script src="/recode.js?v=20261001-uiux" defer></script>
-    <script src="/weight.js?v=20260930-question-tune" defer></script>
+    <script src="/weight.js?v=20261007-waves" defer></script>
     <script src="/filter.js?v=20260930-question-tune" defer></script>
-    <script src="/report.js?v=20260930-question-tune" defer></script>
+    <script src="/report.js?v=20261007-waves" defer></script>
     <script src="/launch.js?v=20260930-question-tune" defer></script>
-    <script src="/picker.js?v=20260930-question-tune" defer></script>
+    <script src="/picker.js?v=20261007-waves" defer></script>
     <script src="/banner.js?v=20260930-question-tune" defer></script>
     <script src="/formulas.js?v=20260930-question-tune" defer></script>
     <script src="/analysis.js?v=20260930-question-tune" defer></script>
-    <script src="/coding.js?v=20261006-review" defer></script>
+    <script src="/coding.js?v=20261007-waves" defer></script>
     <script src="/select-search.js?v=20260930-question-tune" defer></script>
     <script src="/history.js?v=20260930-question-tune" defer></script>
-    <script src="/ai.js?v=20261006-autoreport" defer></script>
-    <script src="/waves.js?v=20261006-waves" defer></script>
+    <script src="/ai.js?v=20261007-waves" defer></script>
+    <script src="/waves.js?v=20261007-waves" defer></script>
     <script src="/autoreport.js?v=20261006-review" defer></script>
     <script src="/landing.js?v=20261001-landing" defer></script>
     <script src="/demo-request.js?v=20261001-landing" defer></script>
