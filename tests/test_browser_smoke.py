@@ -131,6 +131,15 @@ def _open_view(page: Page, view: str) -> None:
     page.click(f".tabs button[data-view='{view}']")
 
 
+def _open_stat_group(page: Page, group: str) -> None:
+    """Раскрыть группу правой колонки «Ручного отчёта»: они свёрнуты, а
+    раскрытая переживает перерисовку раздела."""
+    summary = page.locator(f'details[data-stat-group="{group}"] > summary')
+    expect(summary).to_be_visible(timeout=UI_TIMEOUT)
+    if page.locator(f'details[data-stat-group="{group}"]').get_attribute("open") is None:
+        summary.click()
+
+
 def _open_analysis_tool(page: Page, tool: str) -> None:
     """Инструмент «Анализа» работает в своём окне: плашка раздела открывает его.
 
@@ -288,10 +297,15 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     # Раздел стоит двумя колонками: слева свойства книги, справа статистика.
     expect(page.locator("#entity-list .split > .col")).to_have_count(2, timeout=UI_TIMEOUT)
 
-    # Состав — первая строка левой колонки. Он итог структуры, а не
-    # настройка книги, поэтому действие у него одно: переход в «Данные».
+    # Вопросы — первая строка левой колонки. Это итог структуры, а не
+    # настройка книги, поэтому действие у неё одно: переход в «Данные».
     expect(page.locator('[data-block="content"]')).to_contain_text(
-        "Состав", timeout=UI_TIMEOUT
+        "Вопросы", timeout=UI_TIMEOUT
+    )
+    # Свёрнутая группа статистики показывает свой выбор в заголовке.
+    page.click('details[data-stat-group="significance"] > summary')
+    expect(page.locator('details[data-stat-group="significance"] .sf-sum')).to_contain_text(
+        "с остатком", timeout=UI_TIMEOUT
     )
     expect(page.locator('[data-block="content"] [data-goto="data"]')).to_be_visible()
 
@@ -720,6 +734,8 @@ def test_output_profile_is_read_from_the_chosen_metrics(
     _write_survey(source)
     _open_project(page, live_server, source)
     _open_view(page, "reports")
+    for group in ("rows", "format", "extras"):
+        _open_stat_group(page, group)
 
     profile = page.locator('[data-stat="profile"]')
     expect(profile.filter(has_text="Стандарт")).to_have_attribute(
@@ -883,6 +899,10 @@ def test_top_bottom_size_renames_the_scale_toggles(
     _write_survey(source)
     _open_project(page, live_server, source)
     _open_view(page, "reports")
+    for group in ("rows", "extras"):
+        _open_stat_group(page, group)
+    # Подробности значимости видны, когда она считается.
+    page.click('[data-stat="scheme"][data-value="rest"]')
 
     page.click('[data-stat="scale-box"][data-value="3"]')
     expect(page.locator('[data-stat="scale:top2"]')).to_have_text("Top-3", timeout=UI_TIMEOUT)
