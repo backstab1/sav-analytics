@@ -3738,3 +3738,47 @@ details.runs:not([open]) { padding-bottom: 6px; }
 .weight-own-mode [data-remove-weight-dimension], .weight-own-mode #add-weight-dimension { visibility: hidden; }
 /* По какой волне считается раздел — после надзаголовка (waves.js). */
 #workspace .eyebrow::after { content: var(--wave-context, ""); color: var(--c-brand); }
+
+/* Телефон, «Данные»: вопрос читается целиком — порядок, тип и число
+   переменных уходят, статус остаётся точкой с подсказкой. */
+@media (max-width: 620px) {
+  .drag-cell, .type-column, .count-column { display: none; }
+  .question-cell { min-width: 0; }
+  .code-column { width: 74px; }
+  .status-column { width: 22px; padding-left: 0; padding-right: 6px; }
+  .status-column .status { font-size: 0; gap: 0; padding: 0; }
+  .canvas-tools-actions { flex-wrap: wrap; justify-content: flex-end; margin-left: 0; }
+  /* В шапке волна важнее названия проекта. */
+  .chip-wave { flex: 0 0 auto; max-width: 132px; }
+  .chip-wave svg:last-child { display: none; }
+  .chip-project { min-width: 0; }
+}
+@media (max-width: 620px) {
+  /* «Новый проект» на телефоне — «+»: место в шапке нужнее волне. */
+  .screens .nav-action { font-size: 0; padding: 4px 10px; }
+  .screens .nav-action::before { content: "+"; font-size: 17px; font-weight: 700; line-height: 1; }
+}
+@media (max-width: 620px) {
+  .chip-project { max-width: 66px; padding-left: 4px; padding-right: 4px; }
+}
+@media (max-width: 620px) {
+  .wave-switch-wrap { flex: 0 1 auto; min-width: 0; }
+  .chip-wave { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+}
+@media (max-width: 620px) {
+  .canvas-tools-actions { max-width: 100%; min-width: 0; row-gap: 6px; }
+}
+@media (max-width: 620px) {
+  /* История сборок: время, состав и ссылки — друг под другом. */
+  .run { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .run-meta { white-space: normal; }
+}
+@media (max-width: 620px) {
+  /* Кросстаб на телефоне: подписи строк уже, чтобы рядом были видны числа. */
+  .bld-grid { --bld-head-w: 150px; font-size: var(--t-xs); }
+}
+@media (max-width: 560px) {
+  /* Панели строк и колонок не заходят под таблицу: блок не сжимается
+     меньше своих двух панелей. */
+  .bld-side { grid-template-rows: repeat(2, 150px); min-height: 308px; }
+}
