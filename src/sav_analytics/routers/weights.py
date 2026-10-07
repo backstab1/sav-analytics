@@ -41,6 +41,96 @@ def ready_weight_diagnostics(
     return assess_project_weight(source, variable, project).to_dict()
 
 
+@router.get("/comparison")
+def compare_weights(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Все варианты веса проекта рядом: без веса, готовые и рассчитанные.
+
+    Числа те же, что в диагностике каждого веса, поэтому вариант
+    выбирается по эффективной базе и DEFF, а не по памяти. Вес, который
+    не считается или не годится, остаётся строкой с причиной.
+    """
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    configuration = project["configuration"]
+    settings = configuration.get("report_settings") or {}
+    count = int(project["inspection"]["row_count"])
+    rows: list[dict] = [
+        {
+            "kind": "none",
+            "value": "",
+            "name": "Без веса",
+            "applied": not settings.get("weight_variable")
+            and not settings.get("calculated_weight_id"),
+            "usable": True,
+            "error": None,
+            "effective_base": float(count),
+            "design_effect": 1.0,
+            "efficiency_percent": 100.0,
+            "minimum": 1.0,
+            "maximum": 1.0,
+            "maximum_deviation_pp": None,
+        }
+    ]
+    for question in configuration["questions"]:
+        if question.get("role") != "weight" or len(question.get("source_variables") or []) != 1:
+            continue
+        variable = question["source_variables"][0]
+        assessment = assess_project_weight(source, variable, project)
+        diagnostics = assessment.diagnostics
+        rows.append(
+            {
+                "kind": "ready",
+                "value": f"ready:{variable}",
+                "name": variable,
+                "applied": settings.get("weight_variable") == variable,
+                "usable": assessment.usable,
+                "error": " ".join(problem.message for problem in assessment.problems) or None,
+                "effective_base": diagnostics.effective_base if diagnostics else None,
+                "design_effect": diagnostics.design_effect if diagnostics else None,
+                "efficiency_percent": diagnostics.efficiency_percent if diagnostics else None,
+                "minimum": diagnostics.minimum if diagnostics else None,
+                "maximum": diagnostics.maximum if diagnostics else None,
+                "maximum_deviation_pp": None,
+            }
+        )
+    for weight in configuration.get("calculated_weights", []):
+        row = {
+            "kind": "calculated",
+            "value": f"calculated:{weight['id']}",
+            "id": weight["id"],
+            "name": weight["name"],
+            "applied": settings.get("calculated_weight_id") == weight["id"],
+            "usable": True,
+            "error": None,
+        }
+        try:
+            preview = calculate_raking_preview(source, weight, project)
+        except (WeightingError, KeyError) as exc:
+            row.update(usable=False, error=str(exc))
+        else:
+            row.update(
+                {
+                    key: preview[key]
+                    for key in (
+                        "effective_base",
+                        "design_effect",
+                        "efficiency_percent",
+                        "minimum",
+                        "maximum",
+                        "maximum_deviation_pp",
+                    )
+                }
+            )
+        rows.append(row)
+    return {"count": count, "rows": rows}
+
+
 @router.post("/targets-template")
 def download_target_template(
     project_id: UUID,

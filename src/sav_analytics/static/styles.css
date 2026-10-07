@@ -3628,3 +3628,36 @@ details.runs:not([open]) { padding-bottom: 6px; }
   details.sf-group > summary { grid-template-columns: minmax(0, 1fr) 12px; }
   details.sf-group > summary .sf-sum { grid-column: 1; grid-row: 2; }
 }
+
+/* Варианты веса рядом (лист «Вес отчёта»). */
+.weight-compare { display: grid; gap: 8px; }
+.weight-compare[hidden] { display: none; }
+.weight-compare-head { display: grid; gap: 2px; }
+.weight-compare-head small { color: var(--c-ink-3); font-size: var(--t-xs); }
+.weight-compare-body { overflow-x: auto; border: 1px solid var(--c-border); border-radius: var(--r-2); }
+.weight-compare-table { width: 100%; border-collapse: collapse; font-size: var(--t-xs); }
+.weight-compare-table th { padding: 6px 8px; text-align: left; color: var(--c-ink-3); font-weight: 600; background: var(--c-surface-soft); white-space: nowrap; }
+.weight-compare-table td { padding: 6px 8px; border-top: 1px solid var(--c-border); vertical-align: top; }
+.weight-compare-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.weight-compare-table td small { display: block; color: var(--c-ink-3); }
+.weight-compare-table td small.error { color: var(--c-danger); }
+.wc-name { font-weight: 600; color: var(--c-ink); }
+.weight-compare-table tr.is-applied td { background: var(--c-brand-tint); }
+.weight-compare-table tr.is-broken .wc-name { color: var(--c-ink-3); }
+.wc-best { color: var(--c-brand); font-weight: 700; }
+.wc-act { text-align: right; white-space: nowrap; }
+.wc-applied { color: var(--c-brand); font-weight: 600; }
+.weight-compare-table { table-layout: fixed; }
+.weight-compare-table th:nth-child(2) { width: 70px; }
+.weight-compare-table th:nth-child(3) { width: 50px; }
+.weight-compare-table th:nth-child(4) { width: 76px; }
+.weight-compare-table th:nth-child(5) { width: 46px; }
+.weight-compare-table th:nth-child(6) { width: 84px; }
+.weight-compare-table td:first-child { overflow-wrap: anywhere; }
+.weight-compare-table .wc-act .text-button { padding: 0; }
+@media (max-width: 600px) {
+  .weight-compare-table th:nth-child(4), .weight-compare-table td:nth-child(4),
+  .weight-compare-table th:nth-child(5), .weight-compare-table td:nth-child(5) { display: none; }
+  .weight-compare-table th:nth-child(2) { width: 62px; }
+  .weight-compare-table th:nth-child(6) { width: 82px; }
+}

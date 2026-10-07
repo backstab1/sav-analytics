@@ -27,6 +27,7 @@ function openWeight(weightId = null) {
   else addWeightDimension();
   renderWeightMethod();
   document.querySelector("#delete-weight").hidden = !weight;
+  document.querySelector("#save-weight-variant").hidden = !weight;
   const downloadWeight = document.querySelector("#download-weight");
   downloadWeight.hidden = !weight;
   downloadWeight.href = weight
@@ -526,4 +527,76 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
 document.querySelector("#report-weight-create").addEventListener("click", () => {
   closeSheet();
   openWeight();
+});
+
+/* Варианты веса. «Как вариант» сохраняет то, что сейчас в редакторе,
+   отдельным весом — исходный не меняется; так рядом получаются, например,
+   вес с границами 0,3–3 и без них. Сравнение в листе «Вес отчёта» ставит
+   все варианты рядом теми же числами, что диагностика каждого. */
+function variantName(name) {
+  const taken = new Set(configuredWeights().map(item => item.name));
+  const base = name.replace(/ · вариант \d+$/, "");
+  let number = 2;
+  while (taken.has(`${base} · вариант ${number}`)) number += 1;
+  return `${base} · вариант ${number}`;
+}
+
+document.querySelector("#save-weight-variant").addEventListener("click", () => {
+  const name = document.querySelector("#weight-name");
+  name.value = variantName(name.value.trim() || "Вес");
+  currentWeightId = null;
+  setHeadingText(document.querySelector("#weight-editor-title"), name.value);
+  document.querySelector("#save-weight-variant").hidden = true;
+  document.querySelector("#delete-weight").hidden = true;
+  document.querySelector("#weight-form").requestSubmit();
+});
+
+// Варианты одного веса часто отличаются только границами — они в подписи.
+function variantSummary(weight) {
+  if (!weight) return "";
+  const bounds = weight.lower_bound == null && weight.upper_bound == null
+    ? "без ограничения"
+    : `границы ${formatWeightNumber(weight.lower_bound)}–${formatWeightNumber(weight.upper_bound)}`;
+  return `${calculatedWeightSummary(weight)} · ${bounds}`;
+}
+
+async function loadWeightComparison() {
+  const section = document.querySelector("#weight-comparison");
+  const body = document.querySelector("#weight-comparison-body");
+  if (!currentProject) return;
+  const projectId = currentProject.id;
+  body.innerHTML = '<p class="muted">Считаем варианты…</p>';
+  section.hidden = false;
+  let result;
+  try {
+    result = await api(`/api/projects/${projectId}/weights/comparison`);
+  } catch (error) {
+    body.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  if (currentProject?.id !== projectId) return;
+  // Сравнивать нечего, пока вариант один — «без веса».
+  section.hidden = result.rows.length < 2;
+  const number = value => value == null ? "—" : formatWeightNumber(value);
+  const best = Math.min(...result.rows.filter(row => row.usable && row.kind !== "none")
+    .map(row => row.design_effect ?? Infinity));
+  body.innerHTML = `<table class="weight-compare-table">
+    <thead><tr><th>Вариант</th><th class="num" title="Эффективная база Киша">Эфф. база</th><th class="num">DEFF</th><th class="num" title="Минимальный и максимальный вес">Размах</th><th class="num" title="Наибольшее отклонение от целей, п.п.">Откл.</th><th></th></tr></thead>
+    <tbody>${result.rows.map(row => `<tr class="${row.applied ? "is-applied" : ""}${row.usable ? "" : " is-broken"}">
+      <td><span class="wc-name">${escapeHtml(row.name)}</span><small>${row.kind === "none" ? "все веса = 1" : row.kind === "ready" ? "готовый из массива" : escapeHtml(variantSummary(configuredWeights().find(item => item.id === row.id)))}</small>${row.error ? `<small class="error">${escapeHtml(row.error)}</small>` : ""}</td>
+      <td class="num">${number(row.effective_base)}</td>
+      <td class="num${row.usable && row.kind !== "none" && row.design_effect === best ? " wc-best" : ""}">${number(row.design_effect)}</td>
+      <td class="num">${row.minimum == null ? "—" : `${number(row.minimum)}–${number(row.maximum)}`}</td>
+      <td class="num">${row.maximum_deviation_pp == null ? "—" : number(row.maximum_deviation_pp)}</td>
+      <td class="wc-act">${row.applied ? '<span class="wc-applied">в отчёте</span>' : row.usable ? `<button type="button" class="text-button" data-weight-apply="${escapeAttribute(row.value)}">Применить</button>` : ""}</td>
+    </tr>`).join("")}</tbody>
+  </table>`;
+}
+
+document.querySelector("#weight-comparison-body").addEventListener("click", async event => {
+  const button = event.target.closest("[data-weight-apply]");
+  if (!button) return;
+  await assignReportWeight(button.dataset.weightApply);
+  renderReportSettings();
+  void loadWeightComparison();
 });

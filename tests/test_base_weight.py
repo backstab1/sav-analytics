@@ -115,3 +115,49 @@ def test_start_weight_needs_weight_role_in_project() -> None:
                   "lower_bound": None, "upper_bound": None}
     result = calculate_weight(_frame(), definition, project)
     assert _shares(result.weights) == pytest.approx(0.4, abs=1e-6)
+
+
+def test_comparison_lists_every_weight_variant_side_by_side(tmp_path) -> None:
+    import pyreadstat
+    from fastapi.testclient import TestClient
+
+    from sav_analytics.api import app, get_repository
+    from sav_analytics.repository import ProjectRepository
+
+    source = tmp_path / "variants.sav"
+    pyreadstat.write_sav(
+        _frame(), source, column_labels={"SEX": "Пол", "W0": "Вес отбора"},
+        variable_value_labels={"SEX": {1: "М", 2: "Ж"}},
+        variable_measure={"SEX": "nominal", "W0": "scale"},
+    )
+    repository = ProjectRepository(tmp_path / "projects", max_upload_bytes=10_000_000)
+    app.dependency_overrides[get_repository] = lambda: repository
+    try:
+        with TestClient(app) as client, source.open("rb") as stream:
+            project_id = client.post(
+                "/api/projects", files={"file": ("v.sav", stream, "application/octet-stream")}
+            ).json()["id"]
+            base = f"/api/projects/{project_id}"
+            assert client.patch(f"{base}/questions/W0", json={"role": "weight"}).status_code == 200
+            plain = {"name": "Пол", "dimensions": [_sex()], "lower_bound": None,
+                     "upper_bound": None}
+            created = client.post(f"{base}/weights", json=plain)
+            assert created.status_code == 201, created.text
+            started = client.post(f"{base}/weights", json={**plain, "name": "Пол от W0",
+                                                          "base_weight": "W0"})
+            assert started.status_code == 201, started.text
+            weight_id = created.json()["configuration"]["calculated_weights"][0]["id"]
+            client.put(f"{base}/report-settings", json={"calculated_weight_id": weight_id})
+
+            rows = client.get(f"{base}/weights/comparison").json()["rows"]
+            names = [row["name"] for row in rows]
+            assert names == ["Без веса", "W0", "Пол", "Пол от W0"]
+            by_name = {row["name"]: row for row in rows}
+            assert by_name["Пол"]["applied"] and not by_name["Без веса"]["applied"]
+            assert by_name["Без веса"]["design_effect"] == 1.0
+            # От веса отбора эффективность ниже: его неравенство остаётся в итоге.
+            assert by_name["Пол от W0"]["design_effect"] > by_name["Пол"]["design_effect"]
+            assert by_name["Пол"]["maximum_deviation_pp"] < 0.1
+            assert by_name["W0"]["kind"] == "ready" and by_name["W0"]["usable"]
+    finally:
+        app.dependency_overrides.clear()

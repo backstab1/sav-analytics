@@ -693,6 +693,7 @@
                 </div>
                 <div class="insp-foot editor-actions">
                   <button id="save-weight" type="submit">Рассчитать</button>
+                  <button id="save-weight-variant" class="secondary" type="button" hidden title="Сохранить текущие настройки редактора отдельным весом, не трогая этот">Как вариант</button>
                   <a id="download-weight" class="secondary link-button" href="#" hidden>Excel</a>
                   <span class="foot-grow"></span>
                   <button id="delete-weight" class="danger-button" type="button" hidden>Удалить</button>
@@ -1009,7 +1010,7 @@
       <!-- Лист остался только про вес: статистику видно и выбирают прямо
            в разделе «Отчёт» (панель .stat-panel), а здесь живёт то, что
            требует разбора распределения и смены роли переменной. -->
-      <form id="report-settings-form" class="sheet" hidden>
+      <form id="report-settings-form" class="sheet wide" hidden>
         <div class="sheet-head">
           <div><h3>Вес отчёта</h3><small>Готовый из массива или рассчитанный raking</small></div>
           <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть настройки веса">×</button>
@@ -1019,6 +1020,10 @@
             <div><strong>Рассчитать вес по целям</strong><small>Raking/IPF или по ячейкам, с ограничением весов и стартовым весом</small></div>
             <button type="button" class="secondary" data-new="weight" id="report-weight-create">Рассчитать вес…</button>
           </div>
+          <section id="weight-comparison" class="weight-compare" hidden>
+            <div class="weight-compare-head"><strong>Варианты веса</strong><small>Чем выше эффективная база и ближе DEFF к 1, тем меньше вес шумит. Отклонение — от целей, в п.п.</small></div>
+            <div id="weight-comparison-body" class="weight-compare-body"></div>
+          </section>
           <label class="f">Вес отчёта<select id="report-weight"><option value="">Без веса</option></select><small id="report-weight-help"></small></label>
           <details id="report-weight-declare" class="declare-weight">
             <summary>Объявить весом другую переменную</summary>

@@ -454,6 +454,7 @@ function openReportSettingsSheet() {
   if (!currentProject) return;
   renderReportSettings();
   openSheet(reportSettingsForm);
+  void loadWeightComparison();
 }
 
 sheetVeil.addEventListener("click", event => {
