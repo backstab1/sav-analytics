@@ -82,11 +82,28 @@ function renderWaveChrome() {
     api(`/api/projects/${projectId}/waves`).then(result => {
       if (currentProject?.id !== projectId) return;
       waveOverview = result;
+      renderWaveContext();
       if (!document.querySelector("#wave-menu").hidden) renderWaveMenu();
       if (currentView === "data" && waveAbsentCodes().size) renderTable();
     }).catch(() => {});
   }
   if (!many) waveOverview = null;
+  renderWaveContext();
+}
+
+// Подпись волны после надзаголовка каждого раздела: «Анализ · Весна 2027 ·
+// 300 анкет». Одна CSS-переменная — подпись переживает перерисовку разделов.
+function renderWaveContext() {
+  const view = currentProject && projectWaveValues().length >= 2 ? currentWaveView() : null;
+  let text = "";
+  if (view) {
+    const count = waveOverview ? ` · ${plural(activeRowCount(), "анкета", "анкеты", "анкет")}` : "";
+    text = view.mode === "compare" ? "Сравнение волн"
+      : `${view.mode === "all" ? "Все волны" : view.label}${count}`;
+  }
+  document.documentElement.style.setProperty(
+    "--wave-context", text ? `" · ${text.replace(/["\\]/g, "'")}"` : '""',
+  );
 }
 
 function renderWaveMenu() {

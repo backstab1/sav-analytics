@@ -3736,3 +3736,5 @@ details.runs:not([open]) { padding-bottom: 6px; }
 .weight-wave-scope small { color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.4; }
 .weight-wave-scope .seg { background: var(--c-surface); justify-self: start; }
 .weight-own-mode [data-remove-weight-dimension], .weight-own-mode #add-weight-dimension { visibility: hidden; }
+/* По какой волне считается раздел — после надзаголовка (waves.js). */
+#workspace .eyebrow::after { content: var(--wave-context, ""); color: var(--c-brand); }
