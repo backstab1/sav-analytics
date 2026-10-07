@@ -26,6 +26,7 @@ function openWeight(weightId = null) {
   if (weight) weight.dimensions.forEach(dimension => addWeightDimension(dimension));
   else addWeightDimension();
   renderWeightMethod();
+  openWeightWaveScope(weight);
   document.querySelector("#delete-weight").hidden = !weight;
   document.querySelector("#save-weight-variant").hidden = !weight;
   const downloadWeight = document.querySelector("#download-weight");
@@ -60,7 +61,10 @@ function calculatedWeightSummary(weight) {
   const summary = weight.method === "cells"
     ? `по ячейкам · ${plural(weight.cells.length, "ячейка", "ячейки", "ячеек")} из ${plural(count, "переменной", "переменных", "переменных")}`
     : `raking / IPF · ${plural(count, "распределение", "распределения", "распределений")}`;
-  return weight.base_weight ? `${summary} · от ${weight.base_weight}` : summary;
+  const own = weight.wave_targets?.length
+    ? ` · свои цели у ${plural(weight.wave_targets.length, "волны", "волн", "волн")}`
+    : "";
+  return `${weight.base_weight ? `${summary} · от ${weight.base_weight}` : summary}${own}`;
 }
 
 /* Стартовый вес — только переменная с ролью «Вес»: её же выбирают готовым
@@ -397,7 +401,10 @@ function renderWeightPreview(preview) {
   const start = preview.start
     ? `<p class="weight-start-note">Стартовый вес: эфф. база <b>${formatWeightNumber(preview.start.effective_base)}</b> · DEFF <b>${formatWeightNumber(preview.start.design_effect)}</b> · ${formatWeightNumber(preview.start.minimum)}–${formatWeightNumber(preview.start.maximum)}. «До» ниже — доли по стартовому весу.</p>`
     : "";
-  return metricGrid + start + waves + cells + distributions;
+  const own = preview.own_targets
+    ? `<p class="weight-start-note">Свои цели волны «${escapeHtml(currentWaveView().label || "")}»: «цель» ниже — её.</p>`
+    : "";
+  return metricGrid + own + start + waves + cells + distributions;
 }
 
 function formatWeightNumber(value) {
@@ -480,6 +487,12 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
     showError(weightError, error);
     return;
   }
+  // Свои цели волны правятся в тех же полях: в общие уходит снимок.
+  if (weightScope === "own") {
+    rememberOwnTargets();
+    dimensions = generalDimensions(dimensions);
+    if (method === "cells") cells = weightGeneral.cells;
+  }
   const trimming = document.querySelector("#weight-trimming").checked;
   const payload = {
     name: document.querySelector("#weight-name").value.trim(),
@@ -487,6 +500,7 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
     dimensions,
     cells,
     base_weight: document.querySelector("#weight-base").value || null,
+    wave_targets: weightWaveTargetsPayload(),
     lower_bound: trimming ? Number(document.querySelector("#weight-lower").value) : null,
     upper_bound: trimming ? Number(document.querySelector("#weight-upper").value) : null,
     tolerance: 0.001,
@@ -599,4 +613,130 @@ document.querySelector("#weight-comparison-body").addEventListener("click", asyn
   await assignReportWeight(button.dataset.weightApply);
   renderReportSettings();
   void loadWeightComparison();
+});
+
+/* Свои цели волны (PQ.19, решение 039). При выбранной в шапке волне
+   редактор правит либо общие цели, либо свои цели этой волны — в тех же
+   полях. Состав распределений и метод общие для всех волн, поэтому, пока
+   правятся свои цели, они заблокированы. Общие проценты на это время
+   хранятся снимком и уходят в сохранение как есть. */
+let weightScope = "general";
+let weightWaveTargets = [];
+let weightGeneral = { dimensions: [], cells: [] };
+
+function readWeightPercents() {
+  return {
+    dimensions: [...document.querySelectorAll("#weight-dimension-list .weight-dimension")].map(element =>
+      Object.fromEntries([...element.querySelectorAll(".weight-target")].map(row =>
+        [row.querySelector(".lbl").textContent, Number(row.querySelector("input").value)]))),
+    cells: [...document.querySelectorAll("#weight-cell-list .weight-cell")].map(row => ({
+      categories: JSON.parse(row.dataset.cell),
+      percent: Number(row.querySelector("input").value) || 0,
+    })),
+  };
+}
+
+function writeWeightPercents(snapshot) {
+  [...document.querySelectorAll("#weight-dimension-list .weight-dimension")].forEach((element, index) => {
+    const shares = snapshot.dimensions?.[index] || {};
+    element.querySelectorAll(".weight-target").forEach(row => {
+      const label = row.querySelector(".lbl").textContent;
+      if (label in shares) row.querySelector("input").value = shares[label];
+    });
+    updateWeightDimensionStatus(element);
+  });
+  const cells = new Map((snapshot.cells || []).map(cell => [JSON.stringify(cell.categories), cell.percent]));
+  document.querySelectorAll("#weight-cell-list .weight-cell").forEach(row => {
+    if (cells.has(row.dataset.cell)) row.querySelector("input").value = cells.get(row.dataset.cell);
+  });
+  if (weightMethod() === "cells") updateWeightCellsStatus();
+}
+
+function currentOwnTargets() {
+  const view = currentWaveView();
+  return weightWaveTargets.find(item => String(Number(item.wave)) === String(Number(view.value))) || null;
+}
+
+function lockWeightStructure(locked) {
+  document.querySelector("#weight-form").classList.toggle("weight-own-mode", locked);
+  document.querySelectorAll("#weight-dimension-list .weight-dimension-source, #weight-method, #add-weight-dimension, [data-remove-weight-dimension]")
+    .forEach(control => { control.disabled = locked; });
+}
+
+function renderWeightWaveScope() {
+  const view = currentWaveView();
+  const section = document.querySelector("#weight-wave-scope");
+  section.hidden = view.mode !== "wave";
+  if (section.hidden) return;
+  document.querySelector("#weight-scope-own").textContent = `Свои у «${view.label}»`;
+  section.querySelectorAll("[data-weight-scope]").forEach(button => {
+    const on = button.dataset.weightScope === weightScope;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-checked", String(on));
+  });
+  const others = weightWaveTargets.filter(item => item !== currentOwnTargets()).length;
+  document.querySelector("#weight-wave-scope-note").textContent = weightScope === "own"
+    ? `Цели только для волны «${view.label}». Распределения и метод общие — меняются в общих целях.`
+    : `Общие цели — для всех волн без своих${others ? `; своих целей у других волн: ${others}` : ""}. У «${view.label}» ${currentOwnTargets() ? "есть свои цели" : "своих целей нет"}.`;
+}
+
+function openWeightWaveScope(weight) {
+  weightWaveTargets = JSON.parse(JSON.stringify(weight?.wave_targets || []));
+  weightScope = "general";
+  lockWeightStructure(false);
+  const own = currentWaveView().mode === "wave" ? currentOwnTargets() : null;
+  if (own) {
+    weightGeneral = readWeightPercents();
+    weightScope = "own";
+    writeWeightPercents(own);
+    lockWeightStructure(true);
+  }
+  renderWeightWaveScope();
+}
+
+function rememberOwnTargets() {
+  const view = currentWaveView();
+  const current = readWeightPercents();
+  const entry = { wave: Number(view.value), label: view.label };
+  if (weightMethod() === "cells") entry.cells = current.cells;
+  else entry.dimensions = current.dimensions;
+  weightWaveTargets = weightWaveTargets.filter(item => item !== currentOwnTargets()).concat(entry);
+}
+
+function generalDimensions(dimensions) {
+  return dimensions.map((dimension, index) => ({
+    ...dimension,
+    targets: dimension.targets.map(target => ({
+      ...target,
+      percent: weightGeneral.dimensions[index]?.[target.label] ?? target.percent,
+    })),
+  }));
+}
+
+function weightWaveTargetsPayload() {
+  return weightWaveTargets.map(item => ({
+    wave: item.wave, label: item.label || "",
+    ...(item.dimensions ? { dimensions: item.dimensions } : {}),
+    ...(item.cells ? { cells: item.cells } : {}),
+  }));
+}
+
+document.querySelector("#weight-wave-scope").addEventListener("click", event => {
+  const button = event.target.closest("[data-weight-scope]");
+  if (!button || button.dataset.weightScope === weightScope) return;
+  if (button.dataset.weightScope === "own") {
+    weightGeneral = readWeightPercents();
+    const own = currentOwnTargets();
+    if (own) writeWeightPercents(own);
+    weightScope = "own";
+    lockWeightStructure(true);
+  } else {
+    if (currentOwnTargets() && !confirm(`Убрать свои цели волны «${currentWaveView().label}»? Она будет считаться по общим целям.`)) return;
+    weightWaveTargets = weightWaveTargets.filter(item => item !== currentOwnTargets());
+    writeWeightPercents(weightGeneral);
+    weightScope = "general";
+    lockWeightStructure(false);
+  }
+  markInspectorDirty?.(weightEditor);
+  renderWeightWaveScope();
 });

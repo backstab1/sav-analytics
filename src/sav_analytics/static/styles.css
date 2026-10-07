@@ -3729,3 +3729,10 @@ details.runs:not([open]) { padding-bottom: 6px; }
 
 /* Вопрос без ответов в выбранной волне («не задавался»). */
 .q-absent { display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: var(--r-pill); background: var(--c-surface-soft); color: var(--c-ink-3); font-size: var(--t-micro); font-weight: 600; vertical-align: middle; white-space: nowrap; }
+
+/* Чьи цели правятся: общие или свои у выбранной волны. */
+.weight-wave-scope { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--r-2); background: var(--c-brand-tint); }
+.weight-wave-scope[hidden] { display: none; }
+.weight-wave-scope small { color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.4; }
+.weight-wave-scope .seg { background: var(--c-surface); justify-self: start; }
+.weight-own-mode [data-remove-weight-dimension], .weight-own-mode #add-weight-dimension { visibility: hidden; }

@@ -319,3 +319,77 @@ def test_raking_target_can_be_a_saved_recoding(tmp_path: Path) -> None:
             assert "рассчитанный вес" in blocked.json()["detail"]
     finally:
         app.dependency_overrides.clear()
+
+
+def _sex_definition(men: float) -> dict:
+    return {
+        "name": "Пол",
+        "dimensions": [
+            {
+                "variable": "SEX",
+                "label": "Пол",
+                "targets": [
+                    {"label": "М", "values": [1], "percent": men},
+                    {"label": "Ж", "values": [2], "percent": 100 - men},
+                ],
+            }
+        ],
+        "lower_bound": None,
+        "upper_bound": None,
+    }
+
+
+def _men_share(weights: pd.Series, frame: pd.DataFrame, wave: int) -> float:
+    part = frame["WAVE"] == wave
+    return float(weights[part & (frame["SEX"] == 1)].sum() / weights[part].sum())
+
+
+WAVE_FRAME = pd.DataFrame(
+    {"WAVE": [1] * 10 + [2] * 10, "SEX": [1] * 8 + [2] * 2 + [1] * 2 + [2] * 8}
+)
+
+
+def test_wave_with_own_targets_uses_them_and_others_use_common() -> None:
+    """Осенью генсовокупность другая: мужчин 40%, а не 50%."""
+    definition = {
+        **_sex_definition(50),
+        "wave_targets": [{"wave": 2, "label": "Осень", "dimensions": [{"М": 40, "Ж": 60}]}],
+    }
+    result = calculate_weight(WAVE_FRAME, definition, _wave_project())
+    assert _men_share(result.weights, WAVE_FRAME, 1) == pytest.approx(0.5)
+    assert _men_share(result.weights, WAVE_FRAME, 2) == pytest.approx(0.4)
+    waves = {item["label"]: item for item in result.diagnostics["waves"]}
+    assert not waves["Весна"]["own_targets"] and waves["Осень"]["own_targets"]
+    autumn = waves["Осень"]["distributions"][0]["categories"][0]
+    assert autumn["target_percent"] == pytest.approx(40)
+
+
+def test_single_wave_frame_applies_its_own_targets() -> None:
+    """Выбрана одна волна: в массиве только её строки, цели — её свои."""
+    definition = {
+        **_sex_definition(50),
+        "wave_targets": [{"wave": 2, "label": "Осень", "dimensions": [{"М": 40, "Ж": 60}]}],
+    }
+    autumn = WAVE_FRAME[WAVE_FRAME["WAVE"] == 2]
+    result = calculate_weight(autumn, definition, _wave_project())
+    assert _men_share(result.weights, autumn, 2) == pytest.approx(0.4)
+    assert result.diagnostics["own_targets"] is True
+
+
+def test_wave_targets_are_checked_with_wave_name() -> None:
+    broken = {
+        **_sex_definition(50),
+        "wave_targets": [{"wave": 2, "label": "Осень", "dimensions": [{"М": 40, "Ж": 50}]}],
+    }
+    with pytest.raises(WeightingError, match="У волны «Осень» цели «Пол» дают 90"):
+        calculate_weight(WAVE_FRAME, broken, _wave_project())
+    missing = {
+        **_sex_definition(50),
+        "wave_targets": [{"wave": 2, "label": "Осень", "dimensions": [{"М": 40}]}],
+    }
+    with pytest.raises(WeightingError, match="нет цели для «Ж»"):
+        calculate_weight(WAVE_FRAME, missing, _wave_project())
+    stranger = {**_sex_definition(50), "wave_targets": [{"wave": 9, "label": "Лето",
+                                                         "dimensions": [{"М": 50, "Ж": 50}]}]}
+    with pytest.raises(WeightingError, match="«Лето»"):
+        calculate_weight(WAVE_FRAME, stranger, _wave_project())

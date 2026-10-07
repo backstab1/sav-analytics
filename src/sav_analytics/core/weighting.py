@@ -34,10 +34,11 @@ def calculate_weight(
     """Рассчитанный вес проекта тем методом, который в нём выбран.
 
     Если в проекте есть переменная с ролью «Волна» и в массиве больше одной
-    волны, вес считается отдельно внутри каждой волны с теми же целями и
-    нормируется к среднему 1 внутри волны (`requirements.md` §10). Иначе
-    волна с другим составом выборки перетягивала бы цели соседней, и
-    сравнение волн мерило бы разницу весов, а не мнений.
+    волны, вес считается отдельно внутри каждой волны и нормируется к
+    среднему 1 внутри волны (`requirements.md` §10). Иначе волна с другим
+    составом выборки перетягивала бы цели соседней, и сравнение волн мерило
+    бы разницу весов, а не мнений. Цели общие, если у волны нет своих в
+    `wave_targets`: генсовокупность между волнами может измениться.
     """
     frame, definition = _with_recoding_dimensions(frame, definition, project)
     if definition.get("base_weight") and project is not None:
@@ -54,8 +55,27 @@ def calculate_weight(
             "вес считается внутри каждой волны."
         )
     values = list(dict.fromkeys(series.tolist()))
+    overrides = definition.get("wave_targets") or []
+    from .waves import wave_values
+
+    known = [item["value"] for item in wave_values(project)]
+    unknown = [
+        item for item in overrides
+        if not any(_equal(item.get("wave"), value) for value in known)
+    ]
+    if unknown:
+        name = unknown[0].get("label") or unknown[0].get("wave")
+        raise WeightingError(f"Своих целей у волны «{name}» нет в массиве: волны с ней нет.")
     if len(values) < 2:
-        return _calculate_single(frame, definition)
+        # Одна волна в массиве (в том числе выбранная в шапке) — со своими
+        # целями, если они у неё есть.
+        override = next(
+            (item for item in overrides if values and _equal(item.get("wave"), values[0])),
+            None,
+        )
+        result = _calculate_single(frame, _wave_definition(definition, override))
+        result.diagnostics["own_targets"] = override is not None
+        return result
     labels = _value_labels(project, wave)
     weights = pd.Series(0.0, index=frame.index)
     waves = []
@@ -64,8 +84,11 @@ def calculate_weight(
     for value in values:
         mask = series.map(lambda item, expected=value: _equal(item, expected))
         label = labels.get(str(_scalar(value)), str(_scalar(value)))
+        override = next(
+            (item for item in overrides if _equal(item.get("wave"), value)), None
+        )
         try:
-            part = _calculate_single(frame[mask], definition)
+            part = _calculate_single(frame[mask], _wave_definition(definition, override))
         except WeightingError as exc:
             raise WeightingError(f"Волна «{label}»: {exc}") from exc
         weights.loc[mask] = part.weights
@@ -78,9 +101,13 @@ def calculate_weight(
                 "iterations": part.iterations,
                 "effective_base": part.diagnostics["effective_base"],
                 "design_effect": part.diagnostics["design_effect"],
+                "own_targets": override is not None,
+                "distributions": part.diagnostics["distributions"],
             }
         )
-    cells = definition.get("method", "raking") == "cells"
+    # Со своими целями у волн общей цели у массива нет: как у ячеек, цель
+    # в сводной диагностике — достигнутая доля, а сверка с целями — по волнам.
+    cells = definition.get("method", "raking") == "cells" or bool(overrides)
     prepared = [
         _prepare_dimension(frame, dimension, shares=not cells)
         for dimension in definition.get("dimensions", [])
@@ -96,6 +123,50 @@ def calculate_weight(
     return RakingResult(
         weights=weights, iterations=iterations, maximum_deviation=deviation, diagnostics=diagnostics
     )
+
+
+def _wave_definition(
+    definition: dict[str, Any], override: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Определение веса с целями волны вместо общих.
+
+    Распределение подменяется по подписям категорий: проценты должны быть
+    у каждой категории и в сумме давать 100, иначе это ошибка с именем
+    распределения, а не молчаливое смешение общих и своих целей.
+    """
+    if override is None:
+        return definition
+    name = override.get("label") or override.get("wave")
+    result = dict(definition)
+    if definition.get("method", "raking") == "cells":
+        if not override.get("cells"):
+            raise WeightingError(f"У волны «{name}» не заданы цели ячеек.")
+        result["cells"] = override["cells"]
+        return result
+    percents = override.get("dimensions") or []
+    dimensions = definition.get("dimensions", [])
+    if len(percents) != len(dimensions):
+        raise WeightingError(
+            f"У волны «{name}» цели заданы не для всех распределений веса."
+        )
+    replaced = []
+    for dimension, shares in zip(dimensions, percents, strict=True):
+        label = dimension.get("label") or dimension.get("variable")
+        targets = []
+        for target in dimension.get("targets", []):
+            if target["label"] not in shares:
+                raise WeightingError(
+                    f"У волны «{name}» нет цели для «{target['label']}» в «{label}»."
+                )
+            targets.append({**target, "percent": float(shares[target["label"]])})
+        total = sum(target["percent"] for target in targets)
+        if not 99.9 <= total <= 100.1:
+            raise WeightingError(
+                f"У волны «{name}» цели «{label}» дают {total:.2f}%, а не 100%."
+            )
+        replaced.append({**dimension, "targets": targets})
+    result["dimensions"] = replaced
+    return result
 
 
 def weight_columns(definition: dict[str, Any], project: dict[str, Any]) -> list[str]:

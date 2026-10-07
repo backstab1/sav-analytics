@@ -514,6 +514,19 @@ class WeightTargetTemplateRequest(BaseModel):
     cells: list[WeightCell] = Field(default_factory=list, max_length=1000)
 
 
+class WaveTargets(BaseModel):
+    """Свои цели веса у одной волны; волна без записи берёт общие цели.
+
+    `dimensions` — по распределению на измерение веса, в том же порядке:
+    подпись категории → процент. `cells` — свой набор целей ячеек.
+    """
+
+    wave: str | int | float
+    label: str = Field(default="", max_length=250)
+    dimensions: list[dict[str, float]] | None = Field(default=None, max_length=20)
+    cells: list[WeightCell] | None = Field(default=None, max_length=1000)
+
+
 class CalculatedWeightDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
     method: Literal["raking", "cells"] = "raking"
@@ -522,6 +535,7 @@ class CalculatedWeightDefinition(BaseModel):
     # Стартовый вес — переменная с ролью «Вес» (вес отбора, дизайн-вес):
     # raking и ячейки подгоняют поправку к нему, а не к единицам.
     base_weight: str | None = Field(default=None, min_length=1, max_length=64)
+    wave_targets: list[WaveTargets] = Field(default_factory=list, max_length=50)
     lower_bound: float | None = Field(default=0.3, gt=0)
     upper_bound: float | None = Field(default=3.0, gt=0)
     tolerance: float = Field(default=0.001, gt=0, lt=1)
