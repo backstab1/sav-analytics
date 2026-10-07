@@ -24,6 +24,7 @@ from ..banner import BannerError, banner_columns
 from ..filtering import FilterError, filter_columns
 from ..multiple_response import is_multiple, response_options
 from ..report_settings import resolved_report_settings
+from ..waves import wave_view
 from .builder import build_topline_artifacts
 from .data import prepare_report_data
 from .excel_layout import banner_blocks, excel_column_name, write_topline
@@ -272,7 +273,11 @@ def _live_project(
         # Экран показывает протокол теста по щелчку, поэтому примечание
         # собирается полным. На числа и решение теста это не влияет.
         settings["show_p_values"] = True
-    if settings.get("wave_comparison", "none") != "none" and not _has_wave_column(configuration):
+    if (
+        settings.get("wave_comparison", "none") != "none"
+        and not _has_wave_column(configuration)
+        and wave_view(live)["mode"] == "all"
+    ):
         settings["wave_comparison"] = "none"
         settings["wave_control_value"] = None
     configuration["report_settings"] = settings

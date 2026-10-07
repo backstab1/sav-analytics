@@ -1219,7 +1219,10 @@ def _rounding_hides_difference(
     for position, cell in enumerate(cells):
         if cell.result is not None and cell.result.significant:
             pairs.append((position, 0))
-        if cell.wave_target is not None and cell.wave_result is not None:
+        # Волна сравнения при одной выбранной волне — «тень», её на листе
+        # нет: сравнивать на глаз читателю не с чем.
+        on_sheet = any(column is cell.wave_target for column in columns)
+        if cell.wave_target is not None and cell.wave_result is not None and on_sheet:
             if cell.wave_result.significant:
                 pairs.append((position, column_position(columns, cell.wave_target)))
     return any(

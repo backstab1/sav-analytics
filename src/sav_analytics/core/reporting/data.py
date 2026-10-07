@@ -17,7 +17,13 @@ from ..multiple_response import response_definition
 from ..not_applicable import not_applicable_values
 from ..ranking import RankingError, ranking_items
 from ..report_settings import resolved_report_settings
-from ..waves import compare_wave_block, wave_variable_of, with_wave_block
+from ..waves import (
+    compare_wave_block,
+    comparison_wave,
+    wave_variable_of,
+    wave_view,
+    with_wave_block,
+)
 from ..weight_validation import assess_ready_weight, weight_role
 from ..weighting import WeightingError, calculate_weight, weight_method_label
 from .models import ReportError
@@ -55,16 +61,35 @@ def prepare_report_data(
     # Режим «Сравнение волн»: волна — первый блок разреза везде, где
     # строится отчёт, без ручной настройки баннера.
     wave_block = compare_wave_block(project)
-    wave_variable = wave_variable_of(project) if wave_block else None
+    configuration = project["configuration"]
+    # Одна выбранная волна со сравнением «с предыдущей» или «с контрольной»:
+    # читаются обе волны, колонки считаются по выбранной, а у каждой колонки
+    # есть «тень» — та же подгруппа в волне сравнения, с ней идёт тест.
+    shadow_wave = comparison_wave(
+        project, resolved_report_settings(configuration, _active_banner(configuration))
+    )
+    wave_variable = wave_variable_of(project) if wave_block or shadow_wave else None
     if wave_variable and columns is not None and wave_variable not in columns:
         columns = [*columns, wave_variable]
-    frame = read_project_frame(path, project, columns)
-    configuration = project["configuration"]
+    if shadow_wave is not None and wave_variable:
+        active_value = wave_view(project)["value"]
+        frame = read_project_frame(path, project, columns, all_waves=True)
+        frame = frame[
+            frame[wave_variable].map(
+                lambda item: _same_value(item, active_value)
+                or _same_value(item, shadow_wave["value"])
+            )
+        ]
+        active_rows = frame[wave_variable].map(lambda item: _same_value(item, active_value))
+    else:
+        frame = read_project_frame(path, project, columns)
+        active_rows = None
     try:
         validate_configuration_references(configuration)
     except ConfigurationIntegrityError as exc:
         raise ReportError(str(exc)) from exc
-    global_mask = _report_filter_mask(frame, project)
+    filter_mask = _report_filter_mask(frame, project)
+    global_mask = filter_mask if active_rows is None else filter_mask & active_rows
 
     active_banner = with_wave_block(_active_banner(configuration), wave_block)
     report_settings = resolved_report_settings(configuration, active_banner)
@@ -72,7 +97,16 @@ def prepare_report_data(
         # Comparison metadata belongs to the report, but banner-column building
         # still needs it to annotate each generated subgroup.
         active_banner = {**active_banner, **report_settings}
-    report_columns, empty_columns = _report_columns(frame, active_banner, project, global_mask)
+    report_columns, empty_columns = _report_columns(
+        frame,
+        active_banner,
+        project,
+        global_mask,
+        shadow=(
+            None if active_rows is None or shadow_wave is None
+            else (filter_mask & ~active_rows, shadow_wave, report_settings["wave_comparison"])
+        ),
+    )
 
     questions = [
         question for question in configuration["questions"] if question["included_in_report"]
@@ -134,13 +168,27 @@ def _active_banner(configuration: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _same_value(item: Any, value: Any) -> bool:
+    try:
+        return bool(float(item) == float(value))
+    except (TypeError, ValueError):
+        return str(item) == str(value)
+
+
 def _report_columns(
     frame: pd.DataFrame,
     active_banner: dict[str, Any],
     project: dict[str, Any],
     global_mask: pd.Series,
+    *,
+    shadow: tuple[pd.Series, dict[str, Any], str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Колонки под общим фильтром и подписи тех, что остались без базы."""
+    """Колонки под общим фильтром и подписи тех, что остались без базы.
+
+    `shadow` — маска строк волны сравнения, сама волна и режим: у каждой
+    колонки появляется `wave_shadow` с той же подгруппой в этой волне.
+    Тени в книгу не выводятся, это только цель теста изменения.
+    """
     if active_banner:
         try:
             columns = build_banner_columns(frame, active_banner, project)
@@ -158,6 +206,17 @@ def _report_columns(
             }
         ]
     for column in columns:
+        if shadow is not None:
+            shadow_rows, wave, mode = shadow
+            shadow_mask = column["mask"] & shadow_rows
+            column["wave_shadow"] = {
+                **{key: value for key, value in column.items() if key != "mask"},
+                "mask": shadow_mask,
+                "base": int(shadow_mask.sum()),
+                "label": f"{wave['label']} · {column['label']}",
+                "wave_value": wave["value"],
+            }
+            column["wave_comparison"] = mode
         column["mask"] = column["mask"] & global_mask
         column["base"] = int(column["mask"].sum())
     empty_columns = [

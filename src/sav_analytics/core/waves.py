@@ -172,6 +172,34 @@ def with_wave_block(banner: dict[str, Any], block: dict[str, Any] | None) -> dic
     return {**banner, "name": banner.get("name") or "Волны", "blocks": [block, *blocks]}
 
 
+def comparison_wave(
+    project: dict[str, Any] | None, settings: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Волна, с которой сравнивается выбранная одна волна, или None.
+
+    «С предыдущей» — волна перед выбранной по порядку кода; «с контрольной» —
+    контрольная, если это не сама выбранная волна.
+    """
+    view = wave_view(project)
+    mode = settings.get("wave_comparison", "none")
+    if view["mode"] != "wave" or mode == "none":
+        return None
+    values = wave_values(project)
+    position = next(
+        index for index, item in enumerate(values)
+        if value_key(item["value"]) == value_key(view["value"])
+    )
+    if mode == "previous":
+        return values[position - 1] if position > 0 else None
+    control = settings.get("wave_control_value")
+    target = next(
+        (item for item in values if value_key(item["value"]) == value_key(control)), None
+    )
+    if target is None or value_key(target["value"]) == value_key(view["value"]):
+        return None
+    return target
+
+
 def active_wave_filter(project: dict[str, Any] | None) -> tuple[str, Any] | None:
     """Переменная и значение, по которым сужается массив, или None."""
     view = wave_view(project)

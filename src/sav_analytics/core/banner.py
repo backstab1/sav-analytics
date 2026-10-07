@@ -37,7 +37,9 @@ def validate_banner(definition: dict[str, Any], project: dict[str, Any]) -> None
         for source in block["sources"]
         if _source_is_wave(source, project)
     ]
-    if wave_mode != "none" and not wave_sources:
+    # При волнах проекта сравнение идёт с соседней выбранной волной или
+    # колонкой волны в режиме сравнения — баннер с волной не обязателен.
+    if wave_mode != "none" and not wave_sources and not _project_has_waves(project):
         raise BannerError("Для сравнения волн добавьте переменную с ролью «Волна» в баннер.")
     if wave_mode == "control" and definition.get("wave_control_value") is None:
         raise BannerError("Для контрольного сравнения выберите контрольную волну.")
@@ -274,13 +276,19 @@ def build_banner_columns(
                     "mask": mask,
                 }
             )
-    if definition.get("wave_comparison") == "control" and not any(
-        column.get("wave_value") is not None
-        and _values_equal(column["wave_value"], definition.get("wave_control_value"))
-        for column in columns
+    wave_columns = [column for column in columns if column.get("wave_value") is not None]
+    if definition.get("wave_comparison") == "control" and wave_columns and not any(
+        _values_equal(column["wave_value"], definition.get("wave_control_value"))
+        for column in wave_columns
     ):
         raise BannerError("Выбранная контрольная волна отсутствует в баннере.")
     return columns
+
+
+def _project_has_waves(project: dict[str, Any]) -> bool:
+    from .waves import wave_values
+
+    return len(wave_values(project)) >= 2
 
 
 def _resolve_source(source: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:

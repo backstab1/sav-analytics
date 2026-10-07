@@ -167,3 +167,68 @@ def test_compare_mode_adds_wave_columns_without_banner_setup(context) -> None:
     single = build_live_table(path, project, questions=["SEX"])
     assert [column["label"] for column in single["columns"]] == ["Total"]
     assert single["columns"][0]["base"] == 3
+
+
+def _waves_project(tmp_path: Path) -> tuple[ProjectRepository, UUID]:
+    """Весной «Да» у 30%, осенью у 70% — изменение значимо."""
+    repository = ProjectRepository(tmp_path / "shadow", max_upload_bytes=10_000_000)
+    source = tmp_path / "shadow.sav"
+    _write(
+        source,
+        {"WAVE": [1] * 100 + [2] * 100, "YES": [1] * 30 + [2] * 70 + [1] * 70 + [2] * 30},
+        {"WAVE": "Волна", "YES": "Нравится?"},
+        {"WAVE": {1: "Весна", 2: "Осень"}, "YES": {1: "Да", 2: "Нет"}},
+    )
+    with source.open("rb") as stream:
+        project = repository.create("Тени", "shadow.sav", stream)
+    project_id = UUID(project["id"])
+    repository.update_question(project_id, "WAVE", {"role": "wave"})
+    stored = repository.get(project_id)
+    settings = {**stored["configuration"]["report_settings"], "wave_comparison": "previous"}
+    repository.update_report_settings(project_id, settings)
+    return repository, project_id
+
+
+def _yes_row(table: dict) -> list[dict]:
+    question = next(item for item in table["questions"] if item["code"] == "YES")
+    return next(row for row in question["rows"] if row["label"] == "Да")["cells"]
+
+
+def test_single_wave_compares_with_previous_like_compare_mode(tmp_path: Path) -> None:
+    repository, project_id = _waves_project(tmp_path)
+    path = repository.source_path(project_id)
+
+    compare = build_live_table(
+        path, repository.set_wave_view(project_id, "compare"), questions=["YES"]
+    )
+    labels = [column["label"] for column in compare["columns"]]
+    autumn_in_compare = _yes_row(compare)[labels.index("Осень")]
+
+    single = build_live_table(
+        path, repository.set_wave_view(project_id, "wave", 2), questions=["YES"]
+    )
+    # Одна волна: колонка одна — Total осени, база 100, а не 200.
+    assert [column["label"] for column in single["columns"]] == ["Total"]
+    assert single["columns"][0]["base"] == 100
+    total = _yes_row(single)[0]
+    assert total["value"] == pytest.approx(70)
+    # Стрелка та же, что у осени против весны в режиме сравнения.
+    assert total["wave"] == autumn_in_compare["wave"] == "higher"
+
+    first = build_live_table(
+        path, repository.set_wave_view(project_id, "wave", 1), questions=["YES"]
+    )
+    # У первой волны предыдущей нет — стрелки нет.
+    assert _yes_row(first)[0]["wave"] is None
+
+
+def test_single_wave_book_and_audit_name_the_compared_wave(tmp_path: Path) -> None:
+    from sav_analytics.core.report import build_statistics_txt, build_topline_xlsx
+
+    repository, project_id = _waves_project(tmp_path)
+    project = repository.set_wave_view(project_id, "wave", 2)
+    path = repository.source_path(project_id)
+    assert build_topline_xlsx(path, project)
+    audit = build_statistics_txt(path, project)
+    # Тест изменения — против той же колонки в предыдущей волне.
+    assert "Весна · Total" in audit

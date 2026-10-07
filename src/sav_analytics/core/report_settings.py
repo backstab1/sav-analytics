@@ -73,6 +73,11 @@ def validate_report_settings(settings: dict[str, Any], project: dict[str, Any]) 
 
     if settings.get("wave_comparison", "none") == "none":
         return
+    # Волны выбираются в шапке: при одной волне сравнение идёт с соседней
+    # волной, при сравнении волна сама становится колонкой. Баннер с волной
+    # нужен, только если волн в проекте нет вовсе.
+    if _has_waves(project):
+        return
     active_banner_id = configuration.get("report_banner_id")
     active_banner = next(
         (
@@ -96,6 +101,12 @@ def validate_report_settings(settings: dict[str, Any], project: dict[str, Any]) 
         raise ReportSettingsError(
             "Для сравнения волн выберите для Excel баннер с переменной в роли «Волна»."
         )
+
+
+def _has_waves(project: dict[str, Any] | None) -> bool:
+    from .waves import wave_values
+
+    return len(wave_values(project)) >= 2
 
 
 def resolved_report_settings(

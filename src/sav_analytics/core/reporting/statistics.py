@@ -421,7 +421,12 @@ def find_wave_target(
     settings: dict[str, Any],
 ) -> dict[str, Any] | None:
     mode = settings.get("wave_comparison", "none")
-    if mode == "none" or column.get("wave_value") is None:
+    if mode == "none":
+        return None
+    if column.get("wave_shadow") is not None:
+        # Выбрана одна волна: цель — та же подгруппа в волне сравнения.
+        return column["wave_shadow"]
+    if column.get("wave_value") is None:
         return None
     peers = [
         item
@@ -537,7 +542,10 @@ def record_wave_comparison(
         row_label=row_label,
         comparison="Wave",
         group_a=_worksheet_column_title(column_position(columns, column), column),
-        group_b=_worksheet_column_title(column_position(columns, target), target),
+        group_b=(
+            target["label"] if any(item.get("wave_shadow") is target for item in columns)
+            else _worksheet_column_title(column_position(columns, target), target)
+        ),
         result=result,
         reason="Пустая сравниваемая волна." if result is None else None,
     )
