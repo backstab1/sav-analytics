@@ -3661,3 +3661,25 @@ details.runs:not([open]) { padding-bottom: 6px; }
   .weight-compare-table th:nth-child(2) { width: 62px; }
   .weight-compare-table th:nth-child(6) { width: 82px; }
 }
+/* Узкий экран: вердикт проверки — строкой сверху, кнопки — парой под ним. */
+@media (max-width: 640px) {
+  .launch { flex-wrap: wrap; row-gap: 8px; }
+  .launch-status { flex: 1 0 100%; }
+  .launch .toolbar-grow { display: none; }
+  .launch .btn { flex: 1 1 0; min-width: 0; }
+}
+/* Узкая шапка: название проекта сжимается с многоточием, а не выползает
+   поверх ссылок; «Главная» дублирует логотип и на телефоне не нужна. */
+@media (max-width: 620px) {
+  .project-chrome { flex: 1 1 auto; overflow: hidden; }
+  .chip-project { flex: 0 1 auto; }
+  .screens [data-screen="home"] { display: none; }
+  /* От логотипа остаётся значок: слово съедало место названия проекта. */
+  .brand { font-size: 0; gap: 0; }
+  .brand span { display: none; }
+}
+@media (max-width: 640px) {
+  .stat-col .seg { flex-wrap: wrap; max-width: 100%; height: auto; }
+  .stat-col .sf-controls { min-width: 0; }
+  .stat-col .opt { white-space: normal; text-align: left; max-width: 100%; }
+}
