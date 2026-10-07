@@ -671,7 +671,10 @@
               <form id="weight-form">
                 <div class="insp-body editor-scroll scroll">
                   <label class="f">Название веса<input id="weight-name" required maxlength="500" placeholder="Например, Вес по полу и возрасту" /></label>
+                  <div class="weight-head-row">
                   <label class="f">Метод<select id="weight-method"><option value="raking">Raking — цели по каждой переменной</option><option value="cells">По ячейкам — цель каждому сочетанию</option></select><small id="weight-method-note">Подгоняет маргинальные распределения по очереди, пока все не сойдутся.</small></label>
+                  <label class="f weight-start-field">Стартовый вес<select id="weight-base"><option value="">Нет — от равных весов</option></select><small id="weight-base-note">Поправка подгоняется к целям поверх готового веса отбора. Итог = стартовый вес × поправка.</small></label>
+                  </div>
                   <section class="weight-limit-card">
                     <label class="tgl-row boxed weight-toggle-setting"><span><strong>Ограничивать веса</strong><small id="weight-trimming-note">Обрезать экстремумы и подогнать цели заново</small></span><span class="tgl"><input id="weight-trimming" type="checkbox" checked /><span class="track"></span><span class="knob"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></span></span></label>
                     <div id="weight-bound-fields" class="weight-bound-fields">
@@ -1012,6 +1015,10 @@
           <button type="button" class="icon-button" data-close-sheet aria-label="Закрыть настройки веса">×</button>
         </div>
         <div class="sheet-body scroll">
+          <div class="weight-create-card">
+            <div><strong>Рассчитать вес по целям</strong><small>Raking/IPF или по ячейкам, с ограничением весов и стартовым весом</small></div>
+            <button type="button" class="secondary" data-new="weight" id="report-weight-create">Рассчитать вес…</button>
+          </div>
           <label class="f">Вес отчёта<select id="report-weight"><option value="">Без веса</option></select><small id="report-weight-help"></small></label>
           <details id="report-weight-declare" class="declare-weight">
             <summary>Объявить весом другую переменную</summary>

@@ -18,6 +18,7 @@ function openWeight(weightId = null) {
   document.querySelector("#weight-upper").value = weight?.upper_bound ?? 3;
   renderWeightTrimming();
   document.querySelector("#weight-method").value = weight?.method || "raking";
+  renderWeightBaseOptions(weight?.base_weight || "");
   savedWeightCells = weight?.cells || [];
   document.querySelector("#weight-cell-list").innerHTML = "";
   const list = document.querySelector("#weight-dimension-list");
@@ -55,9 +56,31 @@ let savedWeightCells = [];
 // Строка метода для сводки отчёта и выбора веса.
 function calculatedWeightSummary(weight) {
   const count = weight.dimensions.length;
-  return weight.method === "cells"
+  const summary = weight.method === "cells"
     ? `по ячейкам · ${plural(weight.cells.length, "ячейка", "ячейки", "ячеек")} из ${plural(count, "переменной", "переменных", "переменных")}`
     : `raking / IPF · ${plural(count, "распределение", "распределения", "распределений")}`;
+  return weight.base_weight ? `${summary} · от ${weight.base_weight}` : summary;
+}
+
+/* Стартовый вес — только переменная с ролью «Вес»: её же выбирают готовым
+   весом отчёта. Сохранённый, но разобъявленный вес остаётся в списке с
+   пометкой, чтобы сервер объяснил ошибку, а не редактор молча сбросил выбор. */
+function renderWeightBaseOptions(selected) {
+  const select = document.querySelector("#weight-base");
+  const names = declaredWeightVariables().map(variable => variable.name);
+  const options = names.map(name => {
+    const label = currentProject.inspection.variables.find(variable => variable.name === name)?.label || "";
+    return `<option value="${escapeAttribute(name)}">${escapeHtml(name)}${label ? ` — ${escapeHtml(label)}` : ""}</option>`;
+  });
+  if (selected && !names.includes(selected)) {
+    options.push(`<option value="${escapeAttribute(selected)}">${escapeHtml(selected)} — роль «Вес» снята</option>`);
+  }
+  select.innerHTML = '<option value="">Нет — от равных весов</option>' + options.join("");
+  select.value = selected;
+  select.disabled = !options.length;
+  document.querySelector("#weight-base-note").textContent = options.length
+    ? "Поправка подгоняется к целям поверх готового веса отбора. Итог = стартовый вес × поправка."
+    : "В массиве нет переменной с ролью «Вес». Объявите её в «Данных», если вес отбора есть.";
 }
 
 function weightMethod() {
@@ -71,8 +94,8 @@ function renderWeightMethod() {
     ? "Точный вес ячейки — цель, делённая на её долю в выборке. До трёх переменных."
     : "Подгоняет маргинальные распределения по очереди, пока все не сойдутся.";
   document.querySelector("#weight-trimming-note").textContent = cells
-    ? "Вес ячейки вне границ — ошибка, а не обрезка: ячейку придётся объединить"
-    : "Обрезать экстремумы и подогнать цели заново";
+    ? "Поправка ячейки вне границ — ошибка, а не обрезка: ячейку придётся объединить"
+    : "Обрезать экстремумы поправки и подогнать цели заново";
   document.querySelector("#weight-dimensions-title").textContent = cells ? "Переменные ячеек" : "Целевые распределения";
   document.querySelector("#weight-dimensions-note").textContent = cells ? "категории образуют сочетания" : "сумма = 100%";
   document.querySelector("#add-weight-dimension").textContent = cells ? "+ Добавить переменную" : "+ Добавить распределение";
@@ -368,7 +391,12 @@ function renderWeightPreview(preview) {
   const waves = preview.waves
     ? `<section class="weight-distribution"><div class="weight-distribution-head"><strong>Внутри волн</strong><span>База · эфф. база · DEFF</span></div>${preview.waves.map(wave => `<div class="weight-result-row"><span title="${escapeAttribute(wave.label)}">${escapeHtml(wave.label)}</span><em>${wave.base.toLocaleString("ru-RU")} · ${formatWeightNumber(wave.effective_base)} · <b>${formatWeightNumber(wave.design_effect)}</b></em></div>`).join("")}</section>`
     : "";
-  return metricGrid + waves + cells + distributions;
+  // Со стартовым весом «до» — доли по нему, и видно, сколько эффективной
+  // базы отнял уже вес отбора, а сколько — поправка.
+  const start = preview.start
+    ? `<p class="weight-start-note">Стартовый вес: эфф. база <b>${formatWeightNumber(preview.start.effective_base)}</b> · DEFF <b>${formatWeightNumber(preview.start.design_effect)}</b> · ${formatWeightNumber(preview.start.minimum)}–${formatWeightNumber(preview.start.maximum)}. «До» ниже — доли по стартовому весу.</p>`
+    : "";
+  return metricGrid + start + waves + cells + distributions;
 }
 
 function formatWeightNumber(value) {
@@ -457,6 +485,7 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
     method,
     dimensions,
     cells,
+    base_weight: document.querySelector("#weight-base").value || null,
     lower_bound: trimming ? Number(document.querySelector("#weight-lower").value) : null,
     upper_bound: trimming ? Number(document.querySelector("#weight-upper").value) : null,
     tolerance: 0.001,
@@ -472,17 +501,29 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!currentWeightId) {
+    const created = !currentWeightId;
+    if (created) {
       currentWeightId = configuredWeights().find(item => item.name === payload.name)?.id;
     }
     markInspectorClean(weightEditor);
-    renderProject();
+    // Новый вес в отчёте без веса сразу становится весом отчёта: его ради
+    // этого и считали. Уже выбранный вес новый расчёт не подменяет.
+    const settings = configuredReportSettings();
+    const adopt = created && currentWeightId && !settings.weight_variable && !settings.calculated_weight_id;
+    if (adopt) await assignReportWeight(`calculated:${currentWeightId}`);
+    else renderProject();
     openWeight(currentWeightId);
     await loadWeightPreview();
-    showToast("Вес рассчитан и сохранён");
+    showToast(adopt ? "Вес рассчитан и применён к отчёту" : "Вес рассчитан и сохранён");
   } catch (error) {
     showError(weightError, error);
   } finally {
     setBusy(saveButton, false, "Рассчитать и сохранить");
   }
+});
+
+// Лист «Вес отчёта»: кнопка расчёта закрывает лист и открывает редактор.
+document.querySelector("#report-weight-create").addEventListener("click", () => {
+  closeSheet();
+  openWeight();
 });

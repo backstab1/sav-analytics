@@ -519,6 +519,9 @@ class CalculatedWeightDefinition(BaseModel):
     method: Literal["raking", "cells"] = "raking"
     dimensions: list[WeightDimension] = Field(min_length=1, max_length=20)
     cells: list[WeightCell] = Field(default_factory=list, max_length=1000)
+    # Стартовый вес — переменная с ролью «Вес» (вес отбора, дизайн-вес):
+    # raking и ячейки подгоняют поправку к нему, а не к единицам.
+    base_weight: str | None = Field(default=None, min_length=1, max_length=64)
     lower_bound: float | None = Field(default=0.3, gt=0)
     upper_bound: float | None = Field(default=3.0, gt=0)
     tolerance: float = Field(default=0.001, gt=0, lt=1)

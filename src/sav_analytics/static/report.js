@@ -135,7 +135,8 @@ function reportWeightRow(settings) {
   const ready = settings.weight_variable || null;
   let value = "Без веса";
   let meta = "Показатели и базы невзвешенные";
-  let action = '<button type="button" class="prop-act" data-open-sheet="report-settings">Настроить</button>';
+  // Без веса — две дороги: рассчитать по целям или выбрать готовый.
+  let action = '<span class="prop-acts"><button type="button" class="prop-act" data-new="weight">Рассчитать</button><button type="button" class="prop-act" data-open-sheet="report-settings">Выбрать</button></span>';
   if (calculated) {
     value = escapeHtml(calculated.name);
     const bounds = calculated.lower_bound == null
@@ -144,6 +145,7 @@ function reportWeightRow(settings) {
     meta = `${calculatedWeightSummary(calculated)}${bounds}`;
     action = `<button type="button" class="prop-act" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">Изменить</button>`;
   } else if (ready) {
+    action = '<button type="button" class="prop-act" data-open-sheet="report-settings">Настроить</button>';
     value = escapeHtml(ready);
     const diagnostics = readyWeightCache.get(ready)?.diagnostics;
     meta = diagnostics

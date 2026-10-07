@@ -3579,3 +3579,14 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 /* Группа по анкете: пункты, которые станут одним вопросом. */
 .qn-table .qn-members code { display: inline-block; margin: 0 4px 2px 0; color: var(--c-ink-2); }
 .qn-table .qn-type { display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: var(--r-pill); background: var(--c-brand-tint); color: var(--c-brand); font-weight: 600; }
+/* Вес: вход в расчёт из листа «Вес отчёта» и сводка стартового веса. */
+.weight-create-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--c-border); border-radius: var(--r-2); background: var(--c-surface-soft); }
+.weight-create-card > div { display: grid; gap: 2px; min-width: 0; }
+.weight-create-card small { color: var(--c-ink-3); font-size: var(--t-xs); }
+.weight-create-card button { flex: 0 0 auto; }
+.weight-start-note { margin: 8px 0; font-size: var(--t-xs); color: var(--c-ink-2); }
+.prop-acts { display: inline-flex; gap: 2px; flex: 0 0 auto; }
+/* Шапка редактора веса: название во всю ширину, метод и стартовый вес — парой. */
+.weight-editor .insp-body { grid-template-columns: minmax(0, 1fr); }
+.weight-head-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; align-items: start; }
+.weight-head-row select { width: 100%; min-width: 0; }

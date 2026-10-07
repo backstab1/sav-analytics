@@ -40,6 +40,8 @@ def calculate_weight(
     сравнение волн мерило бы разницу весов, а не мнений.
     """
     frame, definition = _with_recoding_dimensions(frame, definition, project)
+    if definition.get("base_weight") and project is not None:
+        _check_base_weight(definition["base_weight"], project)
     wave = project_wave_variable(project) if project else None
     if wave is None:
         return _calculate_single(frame, definition)
@@ -88,7 +90,8 @@ def calculate_weight(
         for dimension in prepared:
             for category in dimension["categories"]:
                 category["target_share"] = float(weights[category["mask"]].sum()) / total
-    diagnostics = _diagnostics(weights, prepared, iterations, deviation)
+    start = _start_weights(frame, definition) if definition.get("base_weight") else None
+    diagnostics = _diagnostics(weights, prepared, iterations, deviation, start)
     diagnostics["waves"] = waves
     return RakingResult(
         weights=weights, iterations=iterations, maximum_deviation=deviation, diagnostics=diagnostics
@@ -107,6 +110,8 @@ def weight_columns(definition: dict[str, Any], project: dict[str, Any]) -> list[
                 raise WeightingError(str(exc)) from exc
         else:
             columns.append(dimension["variable"])
+    if definition.get("base_weight"):
+        columns.append(definition["base_weight"])
     wave = project_wave_variable(project)
     if wave:
         columns.append(wave)
@@ -151,6 +156,35 @@ def _calculate_single(frame: pd.DataFrame, definition: dict[str, Any]) -> Raking
     if definition.get("method", "raking") == "cells":
         return calculate_cell_weighting(frame, definition)
     return calculate_raking(frame, definition)
+
+
+def _check_base_weight(variable: str, project: dict[str, Any]) -> None:
+    for question in project.get("configuration", {}).get("questions", []):
+        if question.get("role") == "weight" and question.get("source_variables") == [variable]:
+            return
+    raise WeightingError(
+        f"Стартовым весом может быть только переменная с ролью «Вес», а {variable} её не имеет."
+    )
+
+
+def _start_weights(frame: pd.DataFrame, definition: dict[str, Any]) -> pd.Series:
+    """Стартовый вес, нормированный к среднему 1; без него — единицы.
+
+    Пропуск или неположительное значение — ошибка: такой респондент выпал
+    бы из выборки молча, а цели считались бы без него.
+    """
+    variable = definition.get("base_weight")
+    if not variable:
+        return pd.Series(1.0, index=frame.index)
+    if variable not in frame.columns:
+        raise WeightingError(f"Стартовый вес {variable} не найден в SAV.")
+    values = pd.to_numeric(frame[variable], errors="coerce")
+    bad = int((values.isna() | (values <= 0)).sum())
+    if bad:
+        raise WeightingError(
+            f"У {bad} респондентов стартовый вес {variable} пуст или не больше нуля."
+        )
+    return values.astype(float) / float(values.mean())
 
 
 def project_wave_variable(project: dict[str, Any]) -> str | None:
@@ -340,7 +374,11 @@ def calculate_raking(
         raise WeightingError("Нижняя граница веса должна быть меньше верхней.")
 
     prepared = [_prepare_dimension(frame, dimension) for dimension in dimensions]
-    weights = pd.Series(1.0, index=frame.index)
+    # Вес = стартовый × поправка. Границы ограничивают поправку, а не итог:
+    # иначе обрезка спорила бы с весом отбора, а не с перекосом выборки.
+    start = _start_weights(frame, definition)
+    factors = pd.Series(1.0, index=frame.index)
+    weights = start.copy()
     maximum_deviation = float("inf")
     for iteration in range(1, maximum_iterations + 1):
         for dimension in prepared:
@@ -353,17 +391,23 @@ def calculate_raking(
                         f"«{category['label']}» с ненулевой базой."
                     )
                 desired = total_weight * category["target_share"]
-                weights.loc[category["mask"]] *= desired / current
+                factors.loc[category["mask"]] *= desired / current
+                weights = start * factors
         if lower is not None or upper is not None:
-            weights = weights.clip(lower=lower, upper=upper)
-        weights /= float(weights.mean())
+            factors = factors.clip(lower=lower, upper=upper)
+        factors /= float((start * factors).mean())
+        weights = start * factors
         maximum_deviation = _maximum_deviation(weights, prepared)
         if maximum_deviation < tolerance:
+            diagnostics = _diagnostics(
+                weights, prepared, iteration, maximum_deviation,
+                start if definition.get("base_weight") else None,
+            )
             return RakingResult(
                 weights=weights,
                 iterations=iteration,
                 maximum_deviation=maximum_deviation,
-                diagnostics=_diagnostics(weights, prepared, iteration, maximum_deviation),
+                diagnostics=diagnostics,
             )
     raise WeightingError(
         "Raking не сошёлся за "
@@ -408,8 +452,9 @@ def calculate_cell_weighting(
         raise WeightingError(f"Цели ячеек должны давать 100%. Сейчас {total_percent:.2f}%.")
     lower = definition.get("lower_bound")
     upper = definition.get("upper_bound")
+    start = _start_weights(frame, definition)
 
-    size = len(frame)
+    size = float(start.sum())
     weights = pd.Series(0.0, index=frame.index)
     cells = []
     for combination in product(*(dimension["categories"] for dimension in prepared)):
@@ -431,7 +476,8 @@ def calculate_cell_weighting(
             )
         if base == 0:
             continue
-        weight = share * size / base
+        # Поправка ячейки: её цель к её доле по стартовому весу.
+        weight = share * size / float(start[mask].sum())
         if (lower is not None and weight < float(lower)) or (
             upper is not None and weight > float(upper)
         ):
@@ -440,12 +486,12 @@ def calculate_cell_weighting(
                 f"{_bound(lower)}–{_bound(upper)}. Объедините её с соседней "
                 "или ослабьте ограничения."
             )
-        weights.loc[mask] = weight
+        weights.loc[mask] = start[mask] * weight
         cells.append(
             {
                 "label": label,
                 "base": base,
-                "before_percent": base / size * 100,
+                "before_percent": float(start[mask].sum()) / size * 100,
                 "target_percent": share * 100,
                 "weight": weight,
             }
@@ -459,7 +505,9 @@ def calculate_cell_weighting(
     for dimension in prepared:
         for category in dimension["categories"]:
             category["target_share"] = float(weights[category["mask"]].sum()) / total
-    diagnostics = _diagnostics(weights, prepared, 1, 0.0)
+    diagnostics = _diagnostics(
+        weights, prepared, 1, 0.0, start if definition.get("base_weight") else None
+    )
     diagnostics["cells"] = cells
     return RakingResult(
         weights=weights, iterations=1, maximum_deviation=0.0, diagnostics=diagnostics
@@ -548,8 +596,11 @@ def _diagnostics(
     dimensions: list[dict[str, Any]],
     iterations: int,
     maximum_deviation: float,
+    start: pd.Series | None = None,
 ) -> dict[str, Any]:
+    """`before_percent` — доля до перевзвешивания: по стартовому весу, если он есть."""
     effective_base = effective_sample_size(weights)
+    before = start if start is not None else pd.Series(1.0, index=weights.index)
     distributions = []
     for dimension in dimensions:
         categories = []
@@ -559,7 +610,7 @@ def _diagnostics(
                 {
                     "label": category["label"],
                     "target_percent": category["target_share"] * 100,
-                    "before_percent": float(mask.mean()) * 100,
+                    "before_percent": float(before[mask].sum() / before.sum()) * 100,
                     "after_percent": float(weights[mask].sum() / weights.sum()) * 100,
                     "base": int(mask.sum()),
                 }
@@ -582,6 +633,18 @@ def _diagnostics(
         "design_effect": len(weights) / effective_base,
         "efficiency_percent": effective_base / len(weights) * 100,
         "distributions": distributions,
+        **({"start": _start_summary(start)} if start is not None else {}),
+    }
+
+
+def _start_summary(start: pd.Series) -> dict[str, Any]:
+    """Сколько эффективности съел уже стартовый вес — до поправки."""
+    effective_base = effective_sample_size(start)
+    return {
+        "minimum": float(start.min()),
+        "maximum": float(start.max()),
+        "effective_base": effective_base,
+        "design_effect": len(start) / effective_base,
     }
 
 
