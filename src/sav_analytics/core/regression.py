@@ -332,7 +332,14 @@ def _logistic(x: np.ndarray, y: np.ndarray, w: np.ndarray, *, weighted: bool) ->
         method = "Логистическая регрессия"
     errors = np.sqrt(np.diag(covariance))
     statistics_ = beta / errors
-    p_values = 2 * stats.norm.sf(np.abs(statistics_))
+    if weighted:
+        # Как `summary.svyglm` и `confint.svyglm`: на весе — t с n − p
+        # степенями свободы (квазибиномиальная модель), без веса — z, как glm.
+        p_values = 2 * stats.t.sf(np.abs(statistics_), n - p)
+        critical = float(stats.t.ppf(0.975, n - p))
+    else:
+        p_values = 2 * stats.norm.sf(np.abs(statistics_))
+        critical = 1.959963984540054
     log_likelihood = float(
         (w * (y * np.log(probability) + (1 - y) * np.log(1 - probability))).sum()
     )
@@ -349,8 +356,8 @@ def _logistic(x: np.ndarray, y: np.ndarray, w: np.ndarray, *, weighted: bool) ->
                 "statistic": float(statistics_[index]),
                 "p_value": float(p_values[index]),
                 "odds_ratio": float(math.exp(beta[index])),
-                "ci_low": float(math.exp(beta[index] - 1.959963984540054 * errors[index])),
-                "ci_high": float(math.exp(beta[index] + 1.959963984540054 * errors[index])),
+                "ci_low": float(math.exp(beta[index] - critical * errors[index])),
+                "ci_high": float(math.exp(beta[index] + critical * errors[index])),
             }
             for index in range(p)
         ],

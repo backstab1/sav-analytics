@@ -65,6 +65,7 @@ def excel_column_name(index: int) -> str:
         result = chr(65 + remainder) + result
     return result
 
+
 def unweighted_proportion_context(
     outcome: pd.Series,
     eligible_mask: pd.Series,
@@ -72,14 +73,10 @@ def unweighted_proportion_context(
 ) -> _UnweightedProportionContext:
     selected = outcome.fillna(False).to_numpy(dtype=bool, copy=False)
     eligible = eligible_mask.to_numpy(dtype=bool, copy=False)
-    column_masks = tuple(
-        column["mask"].to_numpy(dtype=bool, copy=False) for column in columns
-    )
+    column_masks = tuple(column["mask"].to_numpy(dtype=bool, copy=False) for column in columns)
     effective_masks = tuple(mask & eligible for mask in column_masks)
     bases = tuple(int(np.count_nonzero(mask)) for mask in effective_masks)
-    successes = tuple(
-        int(np.count_nonzero(selected & mask)) for mask in effective_masks
-    )
+    successes = tuple(int(np.count_nonzero(selected & mask)) for mask in effective_masks)
     return _UnweightedProportionContext(
         selected,
         eligible,
@@ -88,6 +85,7 @@ def unweighted_proportion_context(
         bases,
         successes,
     )
+
 
 def comparison_scheme_line(banner: dict[str, Any]) -> str:
     """Строка шапки аудита: с кем сравнивались подгруппы."""
@@ -154,6 +152,7 @@ def unweighted_proportion_test(
     except ValueError:
         return None
 
+
 def unweighted_mean_context(
     series: pd.Series,
     base_mask: pd.Series,
@@ -163,11 +162,10 @@ def unweighted_mean_context(
     values = numeric.to_numpy(dtype=float, na_value=np.nan)
     valid = np.isfinite(values)
     base = base_mask.to_numpy(dtype=bool, copy=False)
-    column_masks = tuple(
-        column["mask"].to_numpy(dtype=bool, copy=False) for column in columns
-    )
+    column_masks = tuple(column["mask"].to_numpy(dtype=bool, copy=False) for column in columns)
     samples = tuple(values[mask & base & valid] for mask in column_masks)
     return _UnweightedMeanContext(values, valid, base, column_masks, samples)
+
 
 def unweighted_mean_test(
     context: _UnweightedMeanContext,
@@ -180,10 +178,7 @@ def unweighted_mean_test(
         return None
     subgroup = context.samples[position]
     rest_mask = (
-        context.column_masks[0]
-        & ~context.column_masks[position]
-        & context.base
-        & context.valid
+        context.column_masks[0] & ~context.column_masks[position] & context.base & context.valid
     )
     rest = context.values[rest_mask]
     if not subgroup.size or not rest.size:
@@ -196,6 +191,7 @@ def unweighted_mean_test(
         comparisons=comparisons,
         minimum_base=settings["minimum_base"],
     )
+
 
 def balance_result(
     scores: pd.Series,
@@ -222,6 +218,7 @@ def balance_result(
         comparisons=comparisons,
         minimum_base=settings["minimum_base"],
     )
+
 
 OVERLAP_REASON = (
     "Колонки блока пересекаются: один респондент может быть в обеих. Попарный тест "
@@ -284,6 +281,7 @@ def _pairwise_note(
             audit_entries.append(entry)
     return entries
 
+
 def pairwise_balance_entries(
     scores: pd.Series,
     column: dict[str, Any],
@@ -296,9 +294,7 @@ def pairwise_balance_entries(
     method: str,
     cache: dict[tuple[int, int], StatisticalTestResult | None],
 ) -> list[StatisticalAuditEntry]:
-    def run_pair(
-        left_position: int, right_position: int
-    ) -> StatisticalTestResult | None:
+    def run_pair(left_position: int, right_position: int) -> StatisticalTestResult | None:
         left, right = (columns[left_position], columns[right_position])
         return balance_result(
             scores,
@@ -310,9 +306,8 @@ def pairwise_balance_entries(
             method,
         )
 
-    return _pairwise_note(
-        column, columns, audit_entries, audit_context, row_label, cache, run_pair
-    )
+    return _pairwise_note(column, columns, audit_entries, audit_context, row_label, cache, run_pair)
+
 
 def proportion_test(
     outcome: pd.Series,
@@ -329,9 +324,7 @@ def proportion_test(
         weights = settings["weights"]
         if weights is not None:
             subgroup_mask = total_mask & column["mask"] & eligible_mask
-            reference_mask = _reference_mask(
-                total_mask, column["mask"], eligible_mask, column
-            )
+            reference_mask = _reference_mask(total_mask, column["mask"], eligible_mask, column)
             return weighted_proportion_z_test(
                 outcome[subgroup_mask],
                 weights[subgroup_mask],
@@ -342,9 +335,7 @@ def proportion_test(
                 minimum_base=settings["minimum_base"],
             )
         compare = (
-            subgroup_vs_total_z_test
-            if _compares_with_total(column)
-            else subgroup_vs_rest_z_test
+            subgroup_vs_total_z_test if _compares_with_total(column) else subgroup_vs_rest_z_test
         )
         return compare(
             outcome.fillna(False),
@@ -357,6 +348,7 @@ def proportion_test(
         )
     except ValueError:
         return None
+
 
 def mean_test(
     series: pd.Series,
@@ -394,11 +386,10 @@ def mean_test(
         minimum_base=settings["minimum_base"],
     )
 
+
 def _comparison_count(column: dict[str, Any], columns: list[dict[str, Any]]) -> int:
     block_columns = [
-        item
-        for item in columns
-        if item.get("block_index") == column.get("block_index")
+        item for item in columns if item.get("block_index") == column.get("block_index")
     ]
     total_comparisons = len(block_columns) if column.get("compare_to_total") else 0
     pairwise_comparisons = (
@@ -414,6 +405,7 @@ def _comparison_count(column: dict[str, Any], columns: list[dict[str, Any]]) -> 
         else 0
     )
     return max(1, total_comparisons + pairwise_comparisons + wave_comparisons)
+
 
 def find_wave_target(
     column: dict[str, Any],
@@ -447,6 +439,7 @@ def find_wave_target(
         ),
         None,
     )
+
 
 def wave_proportion_test(
     outcome: pd.Series,
@@ -488,6 +481,7 @@ def wave_proportion_test(
         result = None
     return target, result
 
+
 def wave_mean_test(
     series: pd.Series,
     column: dict[str, Any],
@@ -524,6 +518,7 @@ def wave_mean_test(
         )
     return target, result
 
+
 def record_wave_comparison(
     audit_entries: list[StatisticalAuditEntry],
     audit_context: tuple[str, str, str],
@@ -543,7 +538,8 @@ def record_wave_comparison(
         comparison="Wave",
         group_a=_worksheet_column_title(column_position(columns, column), column),
         group_b=(
-            target["label"] if any(item.get("wave_shadow") is target for item in columns)
+            target["label"]
+            if any(item.get("wave_shadow") is target for item in columns)
             else _worksheet_column_title(column_position(columns, target), target)
         ),
         result=result,
@@ -552,11 +548,13 @@ def record_wave_comparison(
     audit_entries.append(entry)
     return entry
 
+
 def _values_equal(left: Any, right: Any) -> bool:
     try:
         return bool(left == right) or str(left) == str(right)
     except (TypeError, ValueError):
         return False
+
 
 def pairwise_proportion_entries(
     outcome: pd.Series,
@@ -573,9 +571,7 @@ def pairwise_proportion_entries(
     selected = outcome.fillna(False).astype(bool) if vectorized is None else None
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
 
-    def run_pair(
-        left_position: int, right_position: int
-    ) -> StatisticalTestResult | None:
+    def run_pair(left_position: int, right_position: int) -> StatisticalTestResult | None:
         if vectorized is not None:
             if not vectorized.bases[left_position] or not vectorized.bases[right_position]:
                 return None
@@ -613,9 +609,8 @@ def pairwise_proportion_entries(
             minimum_base=settings["minimum_base"],
         )
 
-    return _pairwise_note(
-        column, columns, audit_entries, audit_context, row_label, cache, run_pair
-    )
+    return _pairwise_note(column, columns, audit_entries, audit_context, row_label, cache, run_pair)
+
 
 def pairwise_mean_entries(
     series: pd.Series,
@@ -631,9 +626,7 @@ def pairwise_mean_entries(
 ) -> list[StatisticalAuditEntry]:
     comparisons = _comparison_count(column, columns) if settings["bonferroni"] else 1
 
-    def run_pair(
-        left_position: int, right_position: int
-    ) -> StatisticalTestResult | None:
+    def run_pair(left_position: int, right_position: int) -> StatisticalTestResult | None:
         if vectorized is not None:
             left = vectorized.samples[left_position]
             right = vectorized.samples[right_position]
@@ -667,13 +660,10 @@ def pairwise_mean_entries(
             minimum_base=settings["minimum_base"],
         )
 
-    return _pairwise_note(
-        column, columns, audit_entries, audit_context, row_label, cache, run_pair
-    )
+    return _pairwise_note(column, columns, audit_entries, audit_context, row_label, cache, run_pair)
 
-def secondary_significant(
-    result: StatisticalTestResult | None, settings: dict[str, Any]
-) -> bool:
+
+def secondary_significant(result: StatisticalTestResult | None, settings: dict[str, Any]) -> bool:
     """Значимо ли различие на втором уровне доверия, но не на основном.
 
     Второй тест не выполняется. Порог выводится из скорректированного alpha
@@ -773,15 +763,14 @@ def cell_note(
         )
     return "\n\n".join(blocks) or None
 
+
 def _reverse_test_result(
     result: StatisticalTestResult | None,
 ) -> StatisticalTestResult | None:
     """Return the same pairwise test viewed from group B instead of group A."""
     if result is None:
         return None
-    direction = {"higher": "lower", "lower": "higher"}.get(
-        result.direction, result.direction
-    )
+    direction = {"higher": "lower", "lower": "higher"}.get(result.direction, result.direction)
     interval = result.confidence_interval
     expected = result.expected_frequencies
     return replace(
@@ -801,8 +790,10 @@ def _reverse_test_result(
         effective_bases=_swap_pair(result.effective_bases),
     )
 
+
 def _swap_pair(pair: tuple[Any, Any] | None) -> tuple[Any, Any] | None:
     return (pair[1], pair[0]) if pair is not None else None
+
 
 def record_total_comparison(
     audit_entries: list[StatisticalAuditEntry],
@@ -842,14 +833,18 @@ def record_total_comparison(
     audit_entries.append(entry)
     return entry
 
+
 def _column_title(position: int, column: dict[str, Any]) -> str:
     return f"{excel_column_name(position + 1)} — {column['label']}"
+
 
 def _worksheet_column_title(position: int, column: dict[str, Any]) -> str:
     return f"{excel_column_name(position + 2)} — {column['label']}"
 
+
 def column_position(columns: list[dict[str, Any]], target: dict[str, Any]) -> int:
     return next(index for index, column in enumerate(columns) if column is target)
+
 
 class StatisticsAuditWriter:
     def __init__(
@@ -876,7 +871,8 @@ class StatisticsAuditWriter:
             f"Общий фильтр: {report_filter}",
             f"Вес: {settings['weight_label'] or 'не используется'}",
             f"Уровень доверия: {audit_number(settings['confidence_level'] * 100)}%",
-            *_secondary_level_lines(settings), *_overall_test_lines(settings),
+            *_secondary_level_lines(settings),
+            *_overall_test_lines(settings),
             f"Bonferroni: {'включена' if settings['bonferroni'] else 'выключена'}",
             f"Порог малой базы: N < {settings['minimum_base']}",
             output_line(settings),
@@ -911,6 +907,7 @@ class StatisticsAuditWriter:
         if self.entry_count == 0:
             self.stream.write("\nСтатистические сравнения не включены.\n")
 
+
 _OUTPUT_LABELS = {
     "distribution": "распределение",
     "mean": "среднее",
@@ -940,7 +937,11 @@ def _render_overall(result: Any) -> list[str]:
     if not result.performed:
         lines.append(f"      Статус: пропущен. Причина: {result.reason}")
         return lines
-    statistic = "χ²" if result.method.startswith("Хи") else "F"
+    if getattr(result, "pearson_statistic", None) is not None:
+        pearson = audit_number(result.pearson_statistic)
+        lines.append(f"      χ² Пирсона по взвешенной таблице: {pearson}")
+        lines.append(f"      Средний дизайн-эффект: {audit_number(result.design_effect)}")
+    statistic = "χ²" if result.method == "Хи-квадрат Пирсона" else "F"
     lines.append(f"      {statistic}={audit_number(result.statistic)}")
     degrees = "; ".join(audit_number(value) for value in result.degrees_of_freedom)
     lines.append(f"      df={degrees}")
@@ -955,7 +956,8 @@ def _overall_test_lines(settings: dict[str, Any]) -> list[str]:
         return []
     return [
         "Общие тесты: хи-квадрат Пирсона для распределений, Welch ANOVA для средних; "
-        "на взвешенных данных хи-квадрат не выполняется, Welch ANOVA приближённый по n_eff"
+        "на взвешенных данных хи-квадрат с поправкой Rao–Scott (F, как survey::svychisq), "
+        "Welch ANOVA приближённый по n_eff"
     ]
 
 
@@ -1003,10 +1005,15 @@ def output_line(settings: dict[str, Any]) -> str:
         + ("; под долями — число ответивших, N" if settings.get("show_counts") else "")
         + ("; % по строке" if settings.get("row_percents") else "")
         + ("; % от общего" if settings.get("table_percents") else "")
-        + ("; ранжирование — " + ", ".join(
-            "средний ранг" if metric == "mean" else "распределение мест"
-            for metric in settings.get("ranking_metrics", ("distribution", "mean"))
-        ) if settings.get("ranking_present") else "")
+        + (
+            "; ранжирование — "
+            + ", ".join(
+                "средний ранг" if metric == "mean" else "распределение мест"
+                for metric in settings.get("ranking_metrics", ("distribution", "mean"))
+            )
+            if settings.get("ranking_present")
+            else ""
+        )
     )
 
 
@@ -1022,9 +1029,7 @@ def report_filter_line(project: dict[str, Any], configuration: dict[str, Any]) -
     if selected_filter is None:
         return str(report_filter_id)
     try:
-        rule = describe_rule(
-            selected_filter["rule"], {**project, "configuration": configuration}
-        )
+        rule = describe_rule(selected_filter["rule"], {**project, "configuration": configuration})
     except FilterError:
         return str(selected_filter["name"])
     return f"{selected_filter['name']} — {rule}"
@@ -1118,13 +1123,14 @@ def render_audit_entry(entry: StatisticalAuditEntry) -> list[str]:
         lines.append("      Характер теста: приближённый")
     return lines
 
+
 def audit_number(value: float | int | None) -> str:
     if value is None:
         return "—"
     return f"{value:.6f}"
 
+
 def _p_value(value: float | None) -> str:
     if value is None:
         return "—"
     return "<0.000001" if value < 0.000001 else audit_number(value)
-

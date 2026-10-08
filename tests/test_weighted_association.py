@@ -124,11 +124,12 @@ def _categorical(values: np.ndarray, label: str) -> Variable:
     )
 
 
-def test_weighted_chi_square_waits_for_rao_scott_but_shows_the_weighted_v() -> None:
-    """Взвешенный хи-квадрат без Rao–Scott не выводится — как общий тест книги.
+def test_weighted_chi_square_is_rao_scott_and_shows_the_weighted_v() -> None:
+    """Взвешенный хи-квадрат — с поправкой Rao–Scott, как общий тест книги.
 
-    V Крамера при этом считается по взвешенной таблице. Эталон: SciPy на
-    таблице, размноженной частотными весами.
+    V Крамера считается по взвешенной таблице. Эталон V: SciPy на таблице,
+    размноженной частотными весами; p-value Rao–Scott сверен с R в
+    `test_golden_survey.py`.
     """
     first = _categorical((X > 10).astype(int), "Выше 10")
     second = _categorical((Y > 5).astype(int), "Выше 5")
@@ -140,8 +141,9 @@ def test_weighted_chi_square_waits_for_rao_scott_but_shows_the_weighted_v() -> N
         np.repeat(first.series.to_numpy(), FREQUENCY.astype(int)),
         np.repeat(second.series.to_numpy(), FREQUENCY.astype(int)),
     ).to_numpy()
-    assert not result["performed"]
-    assert "Rao–Scott" in result["reason"]
+    assert result["performed"]
+    assert "Rao–Scott" in result["method"]
+    assert len(result["degrees_of_freedom"]) == 2
     assert result["effect"] == pytest.approx(
         stats.contingency.association(replicated, method="cramer", correction=False)
     )

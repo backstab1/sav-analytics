@@ -496,7 +496,7 @@ class WeightDimension(BaseModel):
 class WeightTargetTemplateRequest(BaseModel):
     """Что стоит в редакторе веса: по этому строится шаблон целей."""
 
-    method: Literal["raking", "cells"] = "raking"
+    method: Literal["raking", "cells", "greg"] = "raking"
     dimensions: list[WeightDimension] = Field(min_length=1, max_length=20)
     cells: list[WeightCell] = Field(default_factory=list, max_length=1000)
 
@@ -516,7 +516,7 @@ class WaveTargets(BaseModel):
 
 class CalculatedWeightDefinition(BaseModel):
     name: str = Field(min_length=1, max_length=500)
-    method: Literal["raking", "cells"] = "raking"
+    method: Literal["raking", "cells", "greg"] = "raking"
     dimensions: list[WeightDimension] = Field(min_length=1, max_length=20)
     cells: list[WeightCell] = Field(default_factory=list, max_length=1000)
     # Стартовый вес — переменная с ролью «Вес» (вес отбора, дизайн-вес):
@@ -527,6 +527,9 @@ class CalculatedWeightDefinition(BaseModel):
     upper_bound: float | None = Field(default=3.0, gt=0)
     tolerance: float = Field(default=0.001, gt=0, lt=1)
     maximum_iterations: int = Field(default=500, ge=1, le=5000)
+    # Проекция на генсовокупность: сумма весов (у каждой волны) равна
+    # численности. Пусто — вес нормирован к среднему 1.
+    population_size: float | None = Field(default=None, gt=0, le=1e10)
 
     @model_validator(mode="after")
     def validate_limits(self) -> CalculatedWeightDefinition:
@@ -536,10 +539,10 @@ class CalculatedWeightDefinition(BaseModel):
             and self.lower_bound >= self.upper_bound
         ):
             raise ValueError("Нижняя граница веса должна быть меньше верхней.")
-        if self.method == "raking" and any(
+        if self.method in ("raking", "greg") and any(
             target.percent is None for dimension in self.dimensions for target in dimension.targets
         ):
-            raise ValueError("Для raking задайте цель каждой категории распределения.")
+            raise ValueError("Для raking и GREG задайте цель каждой категории распределения.")
         if self.method == "cells":
             if len(self.dimensions) > 3:
                 raise ValueError("Ячейки строятся не более чем по трём переменным.")

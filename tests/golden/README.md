@@ -68,3 +68,34 @@ z-тест, а проект отказывается при ожидаемой �
 реализация, но не R: при появлении R эталон стоит продублировать через
 `chisq.test(correct = FALSE)` и `oneway.test(var.equal = FALSE)`.
 
+
+## Эталоны пакета `survey`
+
+`survey_reference.R` читает `survey_reference_data.csv` (400 синтетических
+респондентов, генератор — `survey_reference_data.py`) и пишет
+`survey_reference.json` через `jsonlite`, без переноса чисел руками.
+Нужны R 4.6 и пакеты `survey`, `jsonlite`:
+
+```text
+Rscript tests/golden/survey_reference.R
+pytest tests/test_golden_survey.py
+```
+
+Набор покрывает `svychisq(statistic = "F")` (Rao–Scott), `chisq.test`,
+`oneway.test`, `fisher.test`, `cor.test` (Пирсон и Спирмен), `lm`, `glm`,
+`svyglm` (линейная и квазибиномиальная, с `confint`), `rake`, `postStratify`
+и `calibrate(calfun = "linear")` без границ и с границами. Правила
+обновления — те же, что выше: JSON не правится под Python.
+
+Что выяснилось при первом прогоне 9 октября 2026 года (R 4.6.1, survey 4.5):
+
+- взвешенная логистическая модель считала p-value и интервалы по нормальному
+  распределению, а `summary.svyglm` и `confint.svyglm` берут t с n − p
+  степенями свободы. Исправлено в коде;
+- `glm` по умолчанию останавливается при `epsilon = 1e-8`, и коэффициенты
+  точны лишь до ~1e-8; скрипт задаёт `glm.control(epsilon = 1e-14)`;
+- `calibrate` с границами (0,5; 1,8) на этих данных выдаёт «Failed to
+  converge», хотя печатает те же веса, что находит приложение: решение
+  попадает в цели точно и не выходит за границы. В эталон взяты границы
+  (0,6; 1,8), на которых R сходится; отказ приложения проверяется на
+  заведомо недостижимых (0,9; 1,1).

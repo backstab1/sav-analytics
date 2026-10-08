@@ -6,6 +6,7 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import xlsxwriter
 
@@ -27,6 +28,53 @@ class RakingResult:
 
 
 def calculate_weight(
+    frame: pd.DataFrame,
+    definition: dict[str, Any],
+    project: dict[str, Any] | None = None,
+) -> RakingResult:
+    """Рассчитанный вес с проекцией на генсовокупность, если она задана.
+
+    Проекция — только масштаб: у каждой волны (или у всего массива) сумма
+    весов становится численностью генсовокупности `population_size`. Доли,
+    средние, эффективная база и все тесты от масштаба веса не зависят;
+    меняются взвешенные базы — они становятся оценкой численности.
+    Диагностика остаётся в единицах поправки: среднее 1, границы и DEFF те же.
+    """
+    result = _calculate_weight(frame, definition, project)
+    population = definition.get("population_size")
+    if not population:
+        return result
+    population = float(population)
+    if population <= 0:
+        raise WeightingError("Численность генсовокупности должна быть положительной.")
+    wave = project_wave_variable(project) if project else None
+    if wave is not None and wave in frame.columns:
+        groups = [
+            frame[wave].map(lambda item, expected=value: _equal(item, expected))
+            for value in dict.fromkeys(frame[wave].tolist())
+        ]
+    else:
+        groups = [pd.Series(True, index=frame.index)]
+    weights = result.weights.copy()
+    for mask in groups:
+        weights.loc[mask] = weights[mask] * population / float(weights[mask].sum())
+    diagnostics = {
+        **result.diagnostics,
+        "projection": {
+            "population_size": population,
+            "per_wave": len(groups) > 1,
+            "weighted_total": float(weights.sum()),
+        },
+    }
+    return RakingResult(
+        weights=weights,
+        iterations=result.iterations,
+        maximum_deviation=result.maximum_deviation,
+        diagnostics=diagnostics,
+    )
+
+
+def _calculate_weight(
     frame: pd.DataFrame,
     definition: dict[str, Any],
     project: dict[str, Any] | None = None,
@@ -60,8 +108,7 @@ def calculate_weight(
 
     known = [item["value"] for item in wave_values(project)]
     unknown = [
-        item for item in overrides
-        if not any(_equal(item.get("wave"), value) for value in known)
+        item for item in overrides if not any(_equal(item.get("wave"), value) for value in known)
     ]
     if unknown:
         name = unknown[0].get("label") or unknown[0].get("wave")
@@ -84,9 +131,7 @@ def calculate_weight(
     for value in values:
         mask = series.map(lambda item, expected=value: _equal(item, expected))
         label = labels.get(str(_scalar(value)), str(_scalar(value)))
-        override = next(
-            (item for item in overrides if _equal(item.get("wave"), value)), None
-        )
+        override = next((item for item in overrides if _equal(item.get("wave"), value)), None)
         try:
             part = _calculate_single(frame[mask], _wave_definition(definition, override))
         except WeightingError as exc:
@@ -125,9 +170,7 @@ def calculate_weight(
     )
 
 
-def _wave_definition(
-    definition: dict[str, Any], override: dict[str, Any] | None
-) -> dict[str, Any]:
+def _wave_definition(definition: dict[str, Any], override: dict[str, Any] | None) -> dict[str, Any]:
     """Определение веса с целями волны вместо общих.
 
     Распределение подменяется по подписям категорий: проценты должны быть
@@ -146,9 +189,7 @@ def _wave_definition(
     percents = override.get("dimensions") or []
     dimensions = definition.get("dimensions", [])
     if len(percents) != len(dimensions):
-        raise WeightingError(
-            f"У волны «{name}» цели заданы не для всех распределений веса."
-        )
+        raise WeightingError(f"У волны «{name}» цели заданы не для всех распределений веса.")
     replaced = []
     for dimension, shares in zip(dimensions, percents, strict=True):
         label = dimension.get("label") or dimension.get("variable")
@@ -161,9 +202,7 @@ def _wave_definition(
             targets.append({**target, "percent": float(shares[target["label"]])})
         total = sum(target["percent"] for target in targets)
         if not 99.9 <= total <= 100.1:
-            raise WeightingError(
-                f"У волны «{name}» цели «{label}» дают {total:.2f}%, а не 100%."
-            )
+            raise WeightingError(f"У волны «{name}» цели «{label}» дают {total:.2f}%, а не 100%.")
         replaced.append({**dimension, "targets": targets})
     result["dimensions"] = replaced
     return result
@@ -224,8 +263,11 @@ def _with_recoding_dimensions(
 
 
 def _calculate_single(frame: pd.DataFrame, definition: dict[str, Any]) -> RakingResult:
-    if definition.get("method", "raking") == "cells":
+    method = definition.get("method", "raking")
+    if method == "cells":
         return calculate_cell_weighting(frame, definition)
+    if method == "greg":
+        return calculate_greg(frame, definition)
     return calculate_raking(frame, definition)
 
 
@@ -290,7 +332,12 @@ def _scalar(value: Any) -> Any:
 
 
 def weight_method_label(definition: dict[str, Any]) -> str:
-    return "по ячейкам" if definition.get("method", "raking") == "cells" else "raking/IPF"
+    method = definition.get("method", "raking")
+    label = {"cells": "по ячейкам", "greg": "GREG"}.get(method, "raking/IPF")
+    if definition.get("population_size"):
+        size = f"{float(definition['population_size']):,.0f}".replace(",", " ")
+        label += f", проекция на {size}"
+    return label
 
 
 def build_raking_export(
@@ -346,9 +393,7 @@ def build_raking_export(
         }
     )
     text_format = workbook.add_format({"font_name": "Arial", "font_size": 9})
-    integer_format = workbook.add_format(
-        {"font_name": "Arial", "font_size": 9, "num_format": "0"}
-    )
+    integer_format = workbook.add_format({"font_name": "Arial", "font_size": 9, "num_format": "0"})
     weight_format = workbook.add_format(
         {"font_name": "Arial", "font_size": 9, "num_format": "0.000000"}
     )
@@ -472,7 +517,10 @@ def calculate_raking(
         maximum_deviation = _maximum_deviation(weights, prepared)
         if maximum_deviation < tolerance:
             diagnostics = _diagnostics(
-                weights, prepared, iteration, maximum_deviation,
+                weights,
+                prepared,
+                iteration,
+                maximum_deviation,
                 start if definition.get("base_weight") else None,
             )
             return RakingResult(
@@ -485,6 +533,93 @@ def calculate_raking(
         "Raking не сошёлся за "
         f"{maximum_iterations} итераций; максимальное отклонение "
         f"{maximum_deviation * 100:.3f} п.п."
+    )
+
+
+def calculate_greg(
+    frame: pd.DataFrame,
+    definition: dict[str, Any],
+) -> RakingResult:
+    """Линейная калибровка (GREG) к маргинальным целям, как `survey::calibrate`.
+
+    Поправка респондента `g = 1 + xᵀλ`, где `x` — константа и индикаторы
+    категорий всех измерений, кроме первой; `λ` подбирается так, чтобы
+    взвешенные доли категорий точно совпали с целями. В отличие от raking
+    поправка линейна, поэтому без границ может стать отрицательной — такой
+    вес отклоняется. С границами поправка обрезается, и уравнения решаются
+    методом Ньютона тем же путём, что `grake` в `survey` (`calfun =
+    "linear"`, `bounds`). Если при этих границах цели недостижимы, расчёт
+    останавливается с ошибкой, а не обрезает молча.
+    """
+    dimensions = definition.get("dimensions", [])
+    if not dimensions:
+        raise WeightingError("Добавьте хотя бы одно целевое распределение.")
+    lower_setting = definition.get("lower_bound", 0.3)
+    upper_setting = definition.get("upper_bound", 3.0)
+    lower = -np.inf if lower_setting is None else float(lower_setting)
+    upper = np.inf if upper_setting is None else float(upper_setting)
+    if lower >= upper:
+        raise WeightingError("Нижняя граница веса должна быть меньше верхней.")
+    tolerance = float(definition.get("tolerance", 0.001))
+    maximum_iterations = int(definition.get("maximum_iterations", 500))
+    prepared = [_prepare_dimension(frame, dimension) for dimension in dimensions]
+    start = _start_weights(frame, definition)
+    design = start.to_numpy(dtype=float)
+    total = float(design.sum())
+    columns = [np.ones(len(frame))]
+    population = [total]
+    for dimension in prepared:
+        for category in dimension["categories"][1:]:
+            columns.append(category["mask"].to_numpy(dtype=float))
+            population.append(total * category["target_share"])
+    matrix = np.column_stack(columns)
+    targets = np.asarray(population)
+    if np.isinf(lower) and np.isinf(upper):
+        crossed = matrix.T @ (design[:, None] * matrix)
+        coefficients = np.linalg.pinv(crossed) @ (targets - matrix.T @ design)
+        factors = 1 + matrix @ coefficients
+        iterations = 1
+    else:
+        coefficients = np.zeros(matrix.shape[1])
+        iterations = 0
+        while True:
+            linear = matrix @ coefficients
+            factors = np.clip(1 + linear, lower, upper)
+            misfit = targets - matrix.T @ (design * factors)
+            if np.max(np.abs(misfit) / (targets + 1e-5)) < 1e-12:
+                break
+            iterations += 1
+            if iterations > maximum_iterations:
+                raise WeightingError(
+                    "GREG не достигает целей при границах поправки "
+                    f"{_bound(lower_setting)}–{_bound(upper_setting)}: ослабьте "
+                    "границы или объедините категории."
+                )
+            free = ((linear < upper - 1) & (linear > lower - 1)).astype(float)
+            jacobian = matrix.T @ ((design * free)[:, None] * matrix)
+            coefficients = coefficients + np.linalg.pinv(jacobian) @ misfit
+    if np.any(factors <= 0):
+        raise WeightingError(
+            f"Линейная поправка GREG у {int((factors <= 0).sum())} респондентов не больше "
+            "нуля. Задайте нижнюю границу поправки или выберите raking."
+        )
+    weights = pd.Series(design * factors, index=frame.index)
+    weights /= float(weights.mean())
+    deviation = _maximum_deviation(weights, prepared)
+    if deviation >= tolerance:
+        raise WeightingError(f"GREG не сошёлся: максимальное отклонение {deviation * 100:.3f} п.п.")
+    diagnostics = _diagnostics(
+        weights,
+        prepared,
+        iterations,
+        deviation,
+        start if definition.get("base_weight") else None,
+    )
+    return RakingResult(
+        weights=weights,
+        iterations=iterations,
+        maximum_deviation=deviation,
+        diagnostics=diagnostics,
     )
 
 
@@ -626,17 +761,13 @@ def _prepare_dimension(
             lambda value, expected=values: any(_equal(value, item) for item in expected)
         )
         if not mask.any():
-            raise WeightingError(
-                f"В массиве отсутствует целевая категория «{target['label']}»."
-            )
+            raise WeightingError(f"В массиве отсутствует целевая категория «{target['label']}».")
         coverage += mask.astype(int)
         categories.append(
             {
                 "label": target["label"],
                 "mask": mask,
-                "target_share": (
-                    float(target["percent"]) / total_percent if shares else 0.0
-                ),
+                "target_share": (float(target["percent"]) / total_percent if shares else 0.0),
             }
         )
     if (coverage == 0).any():

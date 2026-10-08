@@ -216,8 +216,7 @@ def welch_t_test(
 
     standard_error = math.sqrt(standard_error_squared)
     degrees_of_freedom = standard_error_squared**2 / (
-        variance_terms[0] ** 2 / (len(sample_a) - 1)
-        + variance_terms[1] ** 2 / (len(sample_b) - 1)
+        variance_terms[0] ** 2 / (len(sample_a) - 1) + variance_terms[1] ** 2 / (len(sample_b) - 1)
     )
     statistic = difference / standard_error
     p_value = float(2 * student_t.sf(abs(statistic), degrees_of_freedom))
@@ -285,19 +284,25 @@ def weighted_proportion_z_test(
     }
     if min(bases) < minimum_base:
         return _skipped_result(
-            "z-test", alpha, difference, estimates,
+            "z-test",
+            alpha,
+            difference,
+            estimates,
             "Невзвешенная база одной из групп ниже установленного порога.",
             **common,
         )
     if min(effective_bases) < minimum_base:
         return _skipped_result(
-            "z-test", alpha, difference, estimates,
+            "z-test",
+            alpha,
+            difference,
+            estimates,
             "Эффективная база одной из групп ниже установленного порога.",
             **common,
         )
-    pooled = (
-        estimates[0] * effective_bases[0] + estimates[1] * effective_bases[1]
-    ) / sum(effective_bases)
+    pooled = (estimates[0] * effective_bases[0] + estimates[1] * effective_bases[1]) / sum(
+        effective_bases
+    )
     return _pooled_proportion_test(alpha, difference, estimates, effective_bases, pooled, **common)
 
 
@@ -332,13 +337,21 @@ def weighted_welch_t_test(
     }
     if min(bases) < minimum_base:
         return _skipped_result(
-            "Welch t-test", alpha, difference, means,
-            "Невзвешенная база одной из групп ниже установленного порога.", **common,
+            "Welch t-test",
+            alpha,
+            difference,
+            means,
+            "Невзвешенная база одной из групп ниже установленного порога.",
+            **common,
         )
     if min(effective_bases) < minimum_base:
         return _skipped_result(
-            "Welch t-test", alpha, difference, means,
-            "Эффективная база одной из групп ниже установленного порога.", **common,
+            "Welch t-test",
+            alpha,
+            difference,
+            means,
+            "Эффективная база одной из групп ниже установленного порога.",
+            **common,
         )
     variances = (
         _weighted_variance(sample_a, sample_weights_a, means[0]),
@@ -351,9 +364,13 @@ def weighted_welch_t_test(
     standard_error_squared = sum(variance_terms)
     if standard_error_squared == 0:
         return _skipped_result(
-            "Welch t-test", alpha, difference, means,
+            "Welch t-test",
+            alpha,
+            difference,
+            means,
             "Нулевая дисперсия обеих групп не позволяет выполнить Welch t-test.",
-            group_variances=variances, **common,
+            group_variances=variances,
+            **common,
         )
     degrees_of_freedom = standard_error_squared**2 / (
         variance_terms[0] ** 2 / (effective_bases[0] - 1)
@@ -368,11 +385,19 @@ def weighted_welch_t_test(
     )
     significant = p_value < alpha
     return StatisticalTestResult(
-        method="Welch t-test", performed=True, significant=significant,
-        direction=_direction(difference, significant), alpha=alpha,
-        statistic=statistic, p_value=p_value, difference=difference,
-        confidence_interval=interval, degrees_of_freedom=degrees_of_freedom,
-        group_estimates=means, group_variances=variances, **common,
+        method="Welch t-test",
+        performed=True,
+        significant=significant,
+        direction=_direction(difference, significant),
+        alpha=alpha,
+        statistic=statistic,
+        p_value=p_value,
+        difference=difference,
+        confidence_interval=interval,
+        degrees_of_freedom=degrees_of_freedom,
+        group_estimates=means,
+        group_variances=variances,
+        **common,
     )
 
 
@@ -426,7 +451,9 @@ def balance_z_test(
         "group_weight_sums": (
             float(weight_a.sum()),
             float(weight_b.sum()),
-        ) if weighted else None,
+        )
+        if weighted
+        else None,
         "effective_bases": effective_bases if weighted else None,
         "approximate": weighted,
     }
@@ -460,8 +487,13 @@ def balance_z_test(
         )
     standard_error = math.sqrt(variance)
     return _normal_test_result(
-        method, alpha, difference, standard_error, standard_error,
-        group_estimates=estimates, **common,
+        method,
+        alpha,
+        difference,
+        standard_error,
+        standard_error,
+        group_estimates=estimates,
+        **common,
     )
 
 
@@ -486,7 +518,10 @@ def _pooled_proportion_test(
     )
     if any(value < 5 for value in expected):
         return _skipped_result(
-            "z-test", alpha, difference, estimates,
+            "z-test",
+            alpha,
+            difference,
+            estimates,
             "Хотя бы одна ожидаемая частота таблицы 2×2 меньше 5.",
             expected_frequencies=expected,
             **fields,
@@ -494,14 +529,16 @@ def _pooled_proportion_test(
     pooled_standard_error = math.sqrt(pooled * (1 - pooled) * (1 / sizes[0] + 1 / sizes[1]))
     if pooled_standard_error == 0:
         return _skipped_result(
-            "z-test", alpha, difference, estimates,
+            "z-test",
+            alpha,
+            difference,
+            estimates,
             "Нулевая дисперсия не позволяет выполнить z-test.",
             expected_frequencies=expected,
             **fields,
         )
     interval_standard_error = math.sqrt(
-        estimates[0] * (1 - estimates[0]) / sizes[0]
-        + estimates[1] * (1 - estimates[1]) / sizes[1]
+        estimates[0] * (1 - estimates[0]) / sizes[0] + estimates[1] * (1 - estimates[1]) / sizes[1]
     )
     return _normal_test_result(
         "z-test",
@@ -678,9 +715,14 @@ class OverallTestResult:
     min_expected: float | None = None
     # На весах: размер колонки — эффективная база Киша, p-value приближённый.
     effective_bases: tuple[float, ...] | None = None
+    # Rao–Scott: хи-квадрат Пирсона по взвешенной таблице до поправки и
+    # средний дизайн-эффект — след матрицы Δ на число степеней свободы.
+    pearson_statistic: float | None = None
+    design_effect: float | None = None
 
 
 CHI_SQUARE = "Хи-квадрат Пирсона"
+RAO_SCOTT = "Хи-квадрат Пирсона с поправкой Rao–Scott"
 WELCH_ANOVA = "Welch ANOVA"
 
 
@@ -761,6 +803,125 @@ def chi_square_test(
         p_value=p_value,
         bases=bases,
         min_expected=min_expected,
+    )
+
+
+def rao_scott_chi_square(
+    row_codes: Iterable[int],
+    column_codes: Iterable[int],
+    weights: Iterable[float],
+    *,
+    confidence_level: float,
+    minimum_base: int,
+    column_count: int | None = None,
+) -> OverallTestResult:
+    """Хи-квадрат на весах с поправкой Rao–Scott второго порядка (F-форма).
+
+    Повторяет `survey::svychisq(statistic = "F")` для дизайна
+    `svydesign(ids = ~1, weights = ~w)` на респондентах таблицы: хи-квадрат
+    Пирсона считается по взвешенной таблице, приведённой к числу
+    респондентов `n`, и делится на след матрицы дизайн-эффектов Δ;
+    F сравнивается с распределением `F(d, d·(n − 1))`, где
+    `d = (tr Δ)² / tr Δ²`. Ковариация долей ячеек — линеаризация с
+    поправкой `n/(n − 1)`, как у `svymean`. Строки `row_codes` — номер
+    ответа, `column_codes` — номер колонки; каждый респондент ровно в одной
+    ячейке. Пороги базы и правило Кокрена — те же, что у невзвешенного теста,
+    ожидаемые частоты берутся по приведённой таблице.
+    """
+    rows = np.asarray(list(row_codes), dtype=int)
+    columns = np.asarray(list(column_codes), dtype=int)
+    w = np.asarray(list(weights), dtype=float)
+    if not (len(rows) == len(columns) == len(w)):
+        raise ValueError("Коды строк, колонок и веса должны быть одной длины.")
+    total_columns = column_count if column_count is not None else int(columns.max(initial=-1)) + 1
+    bases = tuple(int((columns == index).sum()) for index in range(total_columns))
+    if any(base < minimum_base for base in bases):
+        return skipped_overall(
+            RAO_SCOTT, confidence_level, bases, f"База колонки меньше {minimum_base}."
+        )
+    if np.any(~np.isfinite(w)) or np.any(w <= 0):
+        raise ValueError("Веса должны быть положительными и конечными.")
+    _, row_index = np.unique(rows, return_inverse=True)
+    _, column_index = np.unique(columns, return_inverse=True)
+    row_levels = int(row_index.max(initial=-1)) + 1
+    column_levels = int(column_index.max(initial=-1)) + 1
+    if row_levels < 2 or column_levels < 2:
+        return skipped_overall(
+            RAO_SCOTT,
+            confidence_level,
+            bases,
+            "Нужны хотя бы два ответа и две колонки с респондентами.",
+        )
+    size = len(w)
+    cells = row_levels * column_levels
+    # Ячейка нумеруется со строкой, меняющейся быстрее, как interaction() в R.
+    cell = row_index + row_levels * column_index
+    weight_total = float(w.sum())
+    shares = np.bincount(cell, weights=w, minlength=cells) / weight_total
+    table = (shares * size).reshape(column_levels, row_levels).T
+    expected = np.outer(table.sum(axis=1), table.sum(axis=0)) / size
+    min_expected = float(expected.min())
+    if min_expected < 1 or float((expected < 5).mean()) > 0.2:
+        return skipped_overall(
+            RAO_SCOTT,
+            confidence_level,
+            bases,
+            "Ожидаемые частоты малы: есть меньше 1 или больше 20% ячеек меньше 5.",
+            min_expected=min_expected,
+        )
+    pearson = float(((table - expected) ** 2 / expected).sum())
+
+    squared = np.bincount(cell, weights=w**2, minlength=cells)
+    variance = (
+        (
+            np.diag(squared)
+            - np.outer(squared, shares)
+            - np.outer(shares, squared)
+            + float((w**2).sum()) * np.outer(shares, shares)
+        )
+        / weight_total**2
+        * size
+        / (size - 1)
+    )
+
+    cell_rows = np.tile(np.arange(row_levels), column_levels)
+    cell_columns = np.repeat(np.arange(column_levels), row_levels)
+    main = np.column_stack(
+        [np.ones(cells)]
+        + [(cell_rows == level).astype(float) for level in range(1, row_levels)]
+        + [(cell_columns == level).astype(float) for level in range(1, column_levels)]
+    )
+    interaction = np.column_stack(
+        [
+            ((cell_rows == first) & (cell_columns == second)).astype(float)
+            for second in range(1, column_levels)
+            for first in range(1, row_levels)
+        ]
+    )
+    coefficients, *_ = np.linalg.lstsq(main, interaction, rcond=None)
+    contrast = interaction - main @ coefficients
+    inverse = np.diag(np.divide(1.0, shares, out=np.zeros_like(shares), where=shares > 0))
+    denominator = contrast.T @ (inverse / size) @ contrast
+    numerator = contrast.T @ inverse @ variance @ inverse @ contrast
+    delta = np.linalg.solve(denominator, numerator)
+    trace = float(np.trace(delta))
+    degrees = trace**2 / float(np.trace(delta @ delta))
+    statistic = pearson / trace
+    denominator_degrees = degrees * (size - 1)
+    p_value = float(fisher_f.sf(statistic, degrees, denominator_degrees))
+    alpha = 1 - confidence_level
+    return OverallTestResult(
+        method=RAO_SCOTT,
+        performed=True,
+        significant=p_value < alpha,
+        alpha=alpha,
+        statistic=statistic,
+        degrees_of_freedom=(degrees, denominator_degrees),
+        p_value=p_value,
+        bases=bases,
+        min_expected=min_expected,
+        pearson_statistic=pearson,
+        design_effect=trace / delta.shape[0],
     )
 
 
@@ -865,7 +1026,6 @@ def _welch_anova_result(
         p_value=p_value,
         bases=bases,
     )
-
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,7 @@ from scipy.stats import chi2_contingency, f_oneway
 
 from sav_analytics.core.report import build_statistics_txt, build_topline_xlsx
 from sav_analytics.core.sav_reader import inspect_sav
-from sav_analytics.core.statistics import chi_square_test, welch_anova
+from sav_analytics.core.statistics import chi_square_test, rao_scott_chi_square, welch_anova
 from tests.test_report import _cell_comment, _cell_value, _cell_values, _row_labels, declare_weight
 
 
@@ -144,11 +144,25 @@ def test_workbook_writes_overall_tests_per_banner_block(tmp_path: Path) -> None:
     assert "Метод: Welch ANOVA" in audit
 
 
-def test_overall_tests_are_not_run_on_weighted_data(tmp_path: Path) -> None:
+def test_weighted_chi_square_in_the_workbook_is_rao_scott(tmp_path: Path) -> None:
+    """На весе общий тест — хи-квадрат с поправкой Rao–Scott (PQ.6).
+
+    Сама функция сверена с `survey::svychisq` в `test_golden_survey.py`;
+    здесь — что книга передаёт ей респондентов блока и вес отчёта.
+    """
     source = tmp_path / "weighted.sav"
     content = build_topline_xlsx(source, _project(source, weighted=True))
 
-    assert "Rao–Scott" in (_cell_comment(content, "Хи-квадрат, p", "C") or "")
+    weights = np.array([1.0, 1.2] * 50)
+    groups = np.array([0] * 60 + [1] * 40)
+    outcome = np.array([0] * 42 + [1] * 18 + [0] * 20 + [1] * 20)
+    expected = rao_scott_chi_square(
+        outcome, groups, weights / weights.mean(), confidence_level=0.95, minimum_base=30
+    )
+    assert expected.performed
+    assert _cell_values(content, "Хи-квадрат, p", "C")[1] == pytest.approx(expected.p_value)
+    comment = _cell_comment(content, "Хи-квадрат, p", "C") or ""
+    assert "Rao–Scott" in comment
 
 
 def test_weighted_welch_anova_is_run_with_effective_bases(tmp_path: Path) -> None:
@@ -162,7 +176,7 @@ def test_weighted_welch_anova_is_run_with_effective_bases(tmp_path: Path) -> Non
     assert "Эффективные базы" in anova
     assert "p-value приближённый" in anova
     assert "пропущен" not in anova
-    assert "хи-квадрат не выполняется" in audit
+    assert "хи-квадрат с поправкой Rao–Scott" in audit
 
 
 def test_overall_tests_are_off_by_default(tmp_path: Path) -> None:

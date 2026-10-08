@@ -38,6 +38,7 @@ from .statistics import (
     chi_square_test,
     effective_sample_size,
     games_howell,
+    rao_scott_chi_square,
     weighted_correlation,
     weighted_welch_anova,
     weighted_welch_t_test,
@@ -97,9 +98,7 @@ def resolve_variable(
         raise AssociationError(f"Вопрос {source['ref']} не найден.")
     sources = question.get("source_variables") or []
     if len(sources) != 1:
-        raise AssociationError(
-            f"{question['code']}: для связи нужен вопрос из одной переменной."
-        )
+        raise AssociationError(f"{question['code']}: для связи нужен вопрос из одной переменной.")
     series = applicable_series(frame[sources[0]], question)
     label = f"{question['code']} {question['label']}"
     if question["question_type"] in CATEGORICAL_TYPES:
@@ -126,8 +125,7 @@ def _categorical(
     series: pd.Series | None = None,
 ) -> Variable:
     pairs = [
-        (category["label"], category["mask"].fillna(False).astype(bool))
-        for category in categories
+        (category["label"], category["mask"].fillna(False).astype(bool)) for category in categories
     ]
     assigned = pd.Series(False, index=index)
     for _, mask in pairs:
@@ -244,9 +242,7 @@ def analyse_cards(
             results.append(_failed(card, data.problems.get(position) or str(data.weight_problem)))
             continue
         try:
-            results.append(
-                analyse_pair(card, project, data.frame, data.mask, weights=data.weights)
-            )
+            results.append(analyse_pair(card, project, data.frame, data.mask, weights=data.weights))
         except AssociationError as exc:
             results.append(_failed(card, str(exc)))
     adjust_benjamini_hochberg(results)
@@ -358,26 +354,12 @@ def _categorical_pair(
         )
     table = counts
     if weights is not None:
-        # Взвешенный хи-квадрат выводится только с поправкой Rao–Scott, как
-        # общий тест книги (PQ.6): приближение через n_eff для него не принято.
-        # Сила связи по взвешенной таблице от этого не зависит и показывается.
-        sums = np.array(
-            [
-                [
-                    float(weights[rows & row_mask & column_mask].sum())
-                    for _, column_mask in second.categories
-                ]
-                for _, row_mask in first.categories
-            ]
-        )[keep_rows][:, keep_columns]
-        return {
-            **_table_summary(first, second, counts, keep_rows, keep_columns, n),
-            "effect": _cramers_v(sums),
-            "performed": False,
-            "method": "Хи-квадрат Пирсона",
-            "reason": "Данные взвешены: хи-квадрату нужна поправка Rao–Scott, она ещё "
-            "не реализована. V Крамера посчитан по взвешенной таблице.",
-        }
+        # На весе — хи-квадрат с поправкой Rao–Scott, как общий тест книги
+        # (PQ.6): приближение через n_eff для него не принято. Сила связи —
+        # по взвешенной таблице, таблица в карточке — числа респондентов.
+        return _weighted_categorical_pair(
+            first, second, rows, weights, counts, keep_rows, keep_columns, n
+        )
     chi = chi_square_test(table, confidence_level=0.95, minimum_base=1)
     result: dict[str, Any] = {
         **_table_summary(first, second, counts, keep_rows, keep_columns, n),
@@ -408,6 +390,62 @@ def _categorical_pair(
         "performed": False,
         "method": "Хи-квадрат Пирсона",
         "reason": chi.reason + " Объедините редкие категории перекодировкой.",
+    }
+
+
+def _weighted_categorical_pair(
+    first: Variable,
+    second: Variable,
+    rows: pd.Series,
+    weights: pd.Series,
+    counts: np.ndarray,
+    keep_rows: np.ndarray,
+    keep_columns: np.ndarray,
+    n: int,
+) -> dict[str, Any]:
+    row_masks = [mask for (_, mask), keep in zip(first.categories, keep_rows, strict=True) if keep]
+    column_masks = [
+        mask for (_, mask), keep in zip(second.categories, keep_columns, strict=True) if keep
+    ]
+    row_codes = pd.Series(-1, index=rows.index)
+    column_codes = pd.Series(-1, index=rows.index)
+    for index, mask in enumerate(row_masks):
+        row_codes[rows & mask] = index
+    for index, mask in enumerate(column_masks):
+        column_codes[rows & mask] = index
+    inside = (row_codes >= 0) & (column_codes >= 0)
+    sums = np.array(
+        [
+            [float(weights[rows & row_mask & column_mask].sum()) for column_mask in column_masks]
+            for row_mask in row_masks
+        ]
+    )
+    result: dict[str, Any] = {
+        **_table_summary(first, second, counts, keep_rows, keep_columns, n),
+        "effect": _cramers_v(sums),
+        "method": "Хи-квадрат Rao–Scott",
+        "note": "Взвешено; p-value — хи-квадрат Пирсона с поправкой Rao–Scott на "
+        "дизайн-эффект веса (F, как survey::svychisq).",
+    }
+    chi = rao_scott_chi_square(
+        row_codes[inside].to_numpy(),
+        column_codes[inside].to_numpy(),
+        weights[inside].to_numpy(),
+        confidence_level=0.95,
+        minimum_base=1,
+    )
+    if not chi.performed:
+        return {
+            **result,
+            "performed": False,
+            "reason": (chi.reason or "") + " Объедините редкие категории перекодировкой.",
+        }
+    return {
+        **result,
+        "performed": True,
+        "statistic": chi.statistic,
+        "degrees_of_freedom": list(chi.degrees_of_freedom or ()),
+        "p_value": chi.p_value,
     }
 
 
@@ -481,9 +519,7 @@ def _means_pair(
         if weights is None:
             result = welch_t_test(a, b, minimum_base=MINIMUM_GROUP)
         else:
-            result = weighted_welch_t_test(
-                a, weights_a, b, weights_b, minimum_base=MINIMUM_GROUP
-            )
+            result = weighted_welch_t_test(a, weights_a, b, weights_b, minimum_base=MINIMUM_GROUP)
         (_, mean_a, var_a), (_, mean_b, var_b) = stats_by_group
         pooled = math.sqrt((var_a + var_b) / 2)
         cohens_d = float((mean_a - mean_b) / pooled) if pooled else 0.0
@@ -584,9 +620,7 @@ def numeric_correlation(
     spearman = outliers > OUTLIER_SHARE
     method = "Корреляция Спирмена" if spearman else "Корреляция Пирсона"
     note = (
-        f"Выбросов больше {OUTLIER_SHARE:.0%} — выбрана ранговая корреляция."
-        if spearman
-        else None
+        f"Выбросов больше {OUTLIER_SHARE:.0%} — выбрана ранговая корреляция." if spearman else None
     )
     effective = None
     if weights is None:
@@ -772,4 +806,3 @@ def variable_profile(
             "q3": float(values.quantile(0.75)),
         },
     }
-

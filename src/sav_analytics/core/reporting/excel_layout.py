@@ -14,11 +14,12 @@ from ..multiple_response import answered_mask, is_multiple, response_options, se
 from ..not_applicable import applicable_series, excludes
 from ..ranking import ranking_items
 from ..statistics import (
-    CHI_SQUARE,
+    RAO_SCOTT,
     OverallTestResult,
     StatisticalTestResult,
     chi_square_test,
     effective_sample_size,
+    rao_scott_chi_square,
     skipped_overall,
     weighted_welch_anova,
     welch_anova,
@@ -638,9 +639,9 @@ def _write_distribution(
     )
 
 
-WEIGHTED_OVERALL_REASON = (
-    "Данные взвешены: хи-квадрату нужна поправка Rao–Scott; она ещё не "
-    "реализована, поэтому тест не выполняется."
+OVERLAPPING_OVERALL_REASON = (
+    "Колонки блока пересекаются: один респондент попадает в несколько колонок, "
+    "а поправке Rao–Scott нужна одна ячейка на респондента."
 )
 
 
@@ -652,10 +653,7 @@ def _chi_square_runner(
     def run(members: list[dict[str, Any]]) -> OverallTestResult:
         settings = context.settings
         if settings["weights"] is not None:
-            bases = tuple(int((column["mask"] & eligible).sum()) for column in members)
-            return skipped_overall(
-                CHI_SQUARE, settings["confidence_level"], bases, WEIGHTED_OVERALL_REASON
-            )
+            return _rao_scott_block(settings, series, values, eligible, members)
         table = [
             [
                 int((_equal_series(series, value) & eligible & column["mask"]).sum())
@@ -670,6 +668,39 @@ def _chi_square_runner(
         )
 
     return run
+
+
+def _rao_scott_block(
+    settings: dict[str, Any],
+    series: pd.Series,
+    values: list[Any],
+    eligible: pd.Series,
+    members: list[dict[str, Any]],
+) -> OverallTestResult:
+    """Взвешенный общий тест: респондент — ответ и колонка блока, вес отчёта."""
+    masks = [column["mask"] & eligible for column in members]
+    bases = tuple(int(mask.sum()) for mask in masks)
+    membership = sum(mask.astype(int) for mask in masks)
+    if any(column.get("overlapping") for column in members) or bool((membership > 1).any()):
+        return skipped_overall(
+            RAO_SCOTT, settings["confidence_level"], bases, OVERLAPPING_OVERALL_REASON
+        )
+    inside = membership == 1
+    column_codes = pd.Series(-1, index=series.index)
+    for index, mask in enumerate(masks):
+        column_codes[mask] = index
+    row_codes = pd.Series(-1, index=series.index)
+    for index, value in enumerate(values):
+        row_codes[_equal_series(series, value) & inside] = index
+    inside &= row_codes >= 0
+    return rao_scott_chi_square(
+        row_codes[inside].to_numpy(),
+        column_codes[inside].to_numpy(),
+        settings["weights"][inside[inside].index].to_numpy(),
+        confidence_level=settings["confidence_level"],
+        minimum_base=settings["minimum_base"],
+        column_count=len(members),
+    )
 
 
 def _welch_runner(
