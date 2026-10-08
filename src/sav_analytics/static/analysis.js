@@ -30,13 +30,11 @@ const ANALYSIS_TOOLS = {
   turf: { pane: "method", title: "TURF", subtitle: "Охват портфеля вариантов" },
   "van-westendorp": { pane: "method", title: "Van Westendorp", subtitle: "Ценовая чувствительность по четырём вопросам о цене" },
   "gabor-granger": { pane: "method", title: "Gabor–Granger", subtitle: "Спрос и выручка по ценовым ступеням" },
-  maxdiff: { pane: "method", title: "MaxDiff", subtitle: "Счётные оценки по выборам «лучший / худший»" },
 };
 const METHOD_HINTS = {
   turf: "Перебирает портфели из вариантов вопроса с несколькими ответами и находит тот, что охватывает больше всего респондентов. Результат в проект не сохраняется.",
   "van-westendorp": "Четыре числовых вопроса о цене: слишком дёшево, дёшево, дорого, слишком дорого. Непоследовательные ответы исключаются. Результат в проект не сохраняется.",
   "gabor-granger": "Для каждой цены — вопрос о готовности купить и ответы, которые считаются «куплю». Нужно не меньше двух цен. Результат в проект не сохраняется.",
-  maxdiff: "Каждое задание — пара вопросов «лучший» и «худший» и показанные в нём варианты. Результат в проект не сохраняется.",
 };
 const analysisWindow = document.querySelector("#analysis-window");
 let analysisTool = null;
@@ -161,31 +159,12 @@ function renderMethodFields() {
     box.innerHTML = '<div id="gg-steps" class="gg-steps"></div><button id="add-gg-step" class="aw-add" type="button">+ Ещё цена</button>';
     addGaborStep();
     addGaborStep();
-  } else {
-    box.innerHTML = '<div id="md-tasks" class="gg-steps"></div><button id="add-md-task" class="aw-add" type="button">+ Ещё задание</button><label>Вариантов на экране<input id="md-per-task" type="number" min="2" max="20" /><small>Нужно, только если показанные варианты не записаны в массив.</small></label>';
-    addMaxDiffTask();
   }
 }
 
-function addMaxDiffTask() {
-  const single = questionOptions(question => question.question_type === "single_choice" && question.source_variables.length === 1);
-  const row = document.createElement("div");
-  row.className = "gg-step md-task";
-  const number = document.querySelectorAll("#md-tasks .md-task").length + 1;
-  row.innerHTML = `${stepHead("Задание")}<label>Лучший<select class="md-best">${single}</select></label><label>Худший<select class="md-worst">${single}</select></label><label>Показанные варианты<select class="md-shown" multiple size="4">${single}</select><small>Несколько — с Ctrl или ⌘.</small></label>`;
-  document.querySelector("#md-tasks").append(row);
-  renumberSteps("#md-tasks");
-  const selects = row.querySelectorAll(".md-best, .md-worst");
-  selects.forEach((select, index) => {
-    const position = (number - 1) * 2 + index;
-    if (select.options.length > position) select.selectedIndex = position;
-  });
-}
-
 /* Шапка шага: номер и удаление. Меньше минимума шагов не удаляется:
-   Gabor–Granger без двух цен не строит кривую спроса, MaxDiff без задания
-   нечего считать. */
-const STEP_MINIMUM = { "gg-steps": 2, "md-tasks": 1 };
+   Gabor–Granger без двух цен не строит кривую спроса. */
+const STEP_MINIMUM = { "gg-steps": 2 };
 function stepHead(noun) {
   return `<div class="gg-step-head"><strong data-noun="${noun}"></strong><button type="button" class="icon-button" data-remove-step aria-label="Удалить">×</button></div>`;
 }
@@ -232,7 +211,6 @@ function methodPayload(kind) {
     if (new Set(Object.values(payload)).size < 4) throw new Error("Для четырёх ценовых вопросов нужны четыре разных вопроса.");
     return payload;
   }
-  if (kind === "maxdiff") return maxDiffPayload();
   const steps = [...document.querySelectorAll("#gg-steps .gg-step")].map(row => ({
     code: row.querySelector(".gg-question").value,
     price: Number(row.querySelector(".gg-price").value),
@@ -241,20 +219,6 @@ function methodPayload(kind) {
   if (steps.some(step => !step.price)) throw new Error("Укажите цену у каждого вопроса.");
   if (steps.some(step => !step.buy_values.length)) throw new Error("Отметьте ответы «куплю» у каждого вопроса.");
   return { steps };
-}
-
-function maxDiffPayload() {
-  const tasks = [...document.querySelectorAll("#md-tasks .md-task")].map(row => ({
-    best: row.querySelector(".md-best").value,
-    worst: row.querySelector(".md-worst").value,
-    shown: [...row.querySelector(".md-shown").selectedOptions].map(option => option.value),
-  }));
-  if (tasks.some(task => task.best === task.worst)) throw new Error("У задания вопросы «лучший» и «худший» должны быть разными.");
-  const perTask = Number(document.querySelector("#md-per-task").value) || null;
-  if (tasks.some(task => !task.shown.length) && !perTask) {
-    throw new Error("Отметьте показанные варианты у каждого задания или укажите, сколько вариантов было на экране.");
-  }
-  return { tasks, items_per_task: perTask };
 }
 
 function percent(value) {
@@ -280,12 +244,6 @@ function renderMethodResult(kind, result) {
         <tr><td>Безразличная цена (IPP)</td><td>${money(points.indifference)}</td></tr>
         <tr><td>Верхняя граница приемлемого (PME)</td><td>${money(points.marginal_expensiveness)}</td></tr>
       </table>${priceCurves(result.curves)}</article>`;
-  }
-  if (kind === "maxdiff") {
-    return `<article class="analysis-card method-card"><header><span><strong>MaxDiff</strong> · счётная оценка</span></header>
-      <p class="analysis-facts"><span>База <b>${result.base.toLocaleString("ru-RU")}</b></span><span>заданий <b>${result.tasks}</b></span><span>показы: <b>${escapeHtml(result.exposures)}</b></span></p>${weighted}
-      <table class="model-table"><tr><th>Вариант</th><th>Лучший</th><th>Худший</th><th>Показов</th><th>Оценка</th></tr>${result.items.map(item => `<tr><td>${escapeHtml(item.label)}</td><td>${analysisNumber(item.best)}</td><td>${analysisNumber(item.worst)}</td><td>${analysisNumber(item.shown)}</td><td><b>${item.score == null ? "—" : analysisNumber(item.score)}</b></td></tr>`).join("")}</table>
-      <p class="analysis-note">Оценка — (лучший − худший) на один показ, от −1 до 1. Числа выбора и показов — на респондента. Иерархическая байесовская оценка здесь не выполняется.</p></article>`;
   }
   return `<article class="analysis-card method-card"><header><span><strong>Gabor–Granger</strong></span></header>${weighted}
     <table class="model-table"><tr><th>Цена</th><th>Ответили</th><th>Спрос</th><th>Индекс выручки</th></tr>${result.points.map(point => `<tr class="${point.price === result.optimal_price ? "significant" : ""}"><td>${analysisNumber(point.price, 2)}</td><td>${point.base}</td><td>${percent(point.demand)}</td><td>${analysisNumber(point.revenue, 2)}</td></tr>`).join("")}</table>
@@ -315,7 +273,6 @@ function priceCurves(curves) {
 
 document.querySelector("#method-fields").addEventListener("click", event => {
   if (event.target.closest("#add-gg-step")) addGaborStep();
-  if (event.target.closest("#add-md-task")) addMaxDiffTask();
   const remove = event.target.closest("[data-remove-step]");
   if (remove) {
     const list = remove.closest(".gg-steps");
