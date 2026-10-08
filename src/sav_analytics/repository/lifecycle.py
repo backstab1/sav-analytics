@@ -17,6 +17,7 @@ from ..core.configuration_integrity import (
 from ..core.formulas import (
     formula_variable,
 )
+from ..core.report_books import ensure_books
 from ..core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
 )
@@ -94,6 +95,7 @@ class ProjectLifecycle(ProjectStore):
                     "updated_at": created_at,
                 },
             }
+            ensure_books(project["configuration"])
             validate_stored_project(project)
             (temporary / "project.json").write_text(
                 json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"

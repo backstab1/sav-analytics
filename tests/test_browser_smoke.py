@@ -560,6 +560,44 @@ def test_greg_weight_projects_onto_the_population(
     assert saved["population_size"] == 1_200_000
 
 
+def test_report_books_are_created_switched_and_renamed(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Меню «Книга» в «Ручном отчёте»: у каждой книги свои настройки (PQ.7)."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    project_id = page.url.split("#/projects/")[1].split("/")[0]
+    project = page.request.get(f"{live_server}/api/projects/{project_id}").json()
+    settings = {**project["configuration"]["report_settings"], "confidence_level": 0.9}
+    assert page.request.put(
+        f"{live_server}/api/projects/{project_id}/report-settings", data=settings
+    ).ok
+    page.reload()
+    expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
+    _open_view(page, "reports")
+    expect(page.locator("#book-name")).to_have_text("Отчёт")
+
+    page.click("#book-switch")
+    page.click('[data-book-action="new"]')
+    expect(page.locator("#book-name")).to_have_text("Отчёт 2", timeout=UI_TIMEOUT)
+    page.click('[data-book-action="rename"]')
+    page.fill("#book-rename-input", "Для клиента")
+    page.click("#book-rename button[type=submit]")
+    expect(page.locator("#book-name")).to_have_text("Для клиента", timeout=UI_TIMEOUT)
+    books = page.locator("#book-list .bld-report-item")
+    expect(books).to_have_count(2)
+
+    books.first.click()
+    expect(page.locator("#book-name")).to_have_text("Отчёт", timeout=UI_TIMEOUT)
+    configuration = page.request.get(f"{live_server}/api/projects/{project_id}").json()[
+        "configuration"
+    ]
+    assert configuration["report_settings"]["confidence_level"] == 0.9
+    other = next(book for book in configuration["reports"] if book["name"] == "Для клиента")
+    assert other["settings"]["confidence_level"] == 0.95
+
+
 def test_raking_dimension_can_be_a_saved_recoding(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

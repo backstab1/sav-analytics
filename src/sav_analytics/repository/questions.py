@@ -17,6 +17,7 @@ from ..core.not_applicable import NotApplicableConfirmationRequired, assess_not_
 from ..core.question_groups import QuestionGroupError, build_group, split_group
 from ..core.questionnaire import apply_label_overrides, record_override, reordered
 from ..core.ranking import RankingError, ranking_items
+from ..core.report_books import book_settings
 from ..core.review import CONFIRMED_RECOGNITIONS
 from ..core.sav_reader import spss_missing_mask
 from .store import (
@@ -230,8 +231,10 @@ class QuestionEditing(ProjectStore):
         if (
             question.get("role") == "weight"
             and final_role != "weight"
-            and (project["configuration"].get("report_settings") or {}).get("weight_variable")
-            in question["source_variables"]
+            and any(
+                settings.get("weight_variable") in question["source_variables"]
+                for _, settings in book_settings(project["configuration"])
+            )
         ):
             # Снятие роли с выбранного веса оставило бы в настройках отчёта
             # переменную, которую сборка уже отвергнет: отказ пришёл бы позже

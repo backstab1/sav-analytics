@@ -372,6 +372,17 @@ class TableReportRename(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
 
+class ReportBookCreate(BaseModel):
+    """Пустая книга или копия книги `source_id`; без имени — «Отчёт N» или «… (копия)»."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    source_id: UUID | None = None
+
+
+class ReportBookRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class ReportSettingsDefinition(BaseModel):
     ranking_metrics: list[Literal["distribution", "mean"]] = Field(
         default_factory=lambda: ["distribution", "mean"], min_length=1, max_length=2

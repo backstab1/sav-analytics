@@ -383,6 +383,7 @@ function renderReportBlocks() {
   const columns = activeBanner ? reportBannerColumnCount(activeBanner) : 1;
   document.querySelector("#report-revision").textContent =
     `${plural(included, "вопрос", "вопроса", "вопросов")} · ${plural(columns, "колонка", "колонки", "колонок")}`;
+  renderBookSwitch();
   const filters = configuredFilters();
   if (filters.length) void hydrateFilterCards(filters);
   if (settings.weight_variable) void hydrateReadyWeight(settings.weight_variable);

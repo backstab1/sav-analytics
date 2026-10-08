@@ -33,6 +33,8 @@ SECTION_LABELS = {
     "report_settings": "настройки отчёта",
     "report_banner_id": "баннер отчёта",
     "report_filter_id": "общий фильтр",
+    "reports": "книги отчёта",
+    "active_report_id": "выбранная книга",
     "formulas": "формулы",
     "codeframes": "кодификаторы открытых ответов",
     "analysis_cards": "карточки анализа",

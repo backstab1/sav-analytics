@@ -9,6 +9,7 @@
 from .analysis import AnalysisItems
 from .lifecycle import ProjectLifecycle
 from .questions import QuestionEditing
+from .report_books import ReportBooks
 from .report_setup import ReportSetup
 from .store import (
     ANALYSIS_QUESTION_TYPES,
@@ -35,6 +36,7 @@ class ProjectRepository(
     QuestionEditing,
     DerivedVariables,
     ReportSetup,
+    ReportBooks,
     AnalysisItems,
     TableReports,
     WaveSources,

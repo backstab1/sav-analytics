@@ -33,6 +33,7 @@ from ..core.open_text import (
     tone_variable,
     validate_codeframe,
 )
+from ..core.report_books import book_settings
 from .store import (
     InvalidUploadError,
     ProjectNotFoundError,
@@ -607,10 +608,12 @@ class DerivedVariables(ProjectStore):
             raise ConfigurationIntegrityError(
                 "Формула используется в перекодировке. Сначала удалите перекодировку."
             )
-        if (configuration.get("report_settings") or {}).get("weight_variable") == name:
-            raise ConfigurationIntegrityError(
-                "Формула выбрана весом отчёта. Сначала смените вес в настройках отчёта."
-            )
+        for book_name, settings in book_settings(configuration):
+            if settings.get("weight_variable") == name:
+                raise ConfigurationIntegrityError(
+                    f"Формула выбрана весом книги «{book_name}». "
+                    "Сначала смените вес в настройках этой книги."
+                )
         configuration["formulas"] = [
             item for item in configuration["formulas"] if item["id"] != identifier
         ]

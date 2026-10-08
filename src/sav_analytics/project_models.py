@@ -12,7 +12,10 @@ from .core.models import QuestionType, VariableRole
 # 2 — они живут только в configuration.report_settings, баннер несёт название и блоки.
 # 3 — колонки сохранённой таблицы — явные блоки вместо списка переменных с флагом
 #     вложенности, который делил список на пары по порядку.
-CONFIGURATION_SCHEMA_VERSION = 3
+# 4 — несколько книг отчёта: `reports` и `active_report_id`. Активная книга
+#     по-прежнему в report_banner_id / report_filter_id / report_settings,
+#     у остальных значения в их записи (core/report_books.py).
+CONFIGURATION_SCHEMA_VERSION = 4
 
 
 class InvalidStoredProjectError(ValueError):

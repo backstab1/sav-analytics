@@ -18,6 +18,7 @@ from ..configuration_revision import (
 )
 from ..core.question_groups import carry_manual_groups
 from ..core.questionnaire import apply_label_overrides
+from ..core.report_books import ensure_books
 from ..core.report_settings import (
     REPORT_SETTING_KEYS,
     resolved_report_settings,
@@ -120,6 +121,8 @@ class ProjectStore:
         if stored_schema < 3:
             for report in project["configuration"].get("table_reports", []):
                 report["cols"] = _column_blocks(report.get("cols", []), report.pop("nested", False))
+        # Схема 4: настроенная книга становится первой книгой списка.
+        ensure_books(project["configuration"])
         project["configuration"]["schema_version"] = CONFIGURATION_SCHEMA_VERSION
         # Снимки прежней схемы отменой возвращать нельзя: история начинается заново.
         self._write_project(project_id, project, history="reset")
@@ -282,6 +285,8 @@ class ProjectStore:
             "schema_version", CONFIGURATION_SCHEMA_VERSION
         )
         project["configuration"].setdefault("revision", 1)
+        if project["configuration"].get("reports"):
+            ensure_books(project["configuration"])
         for recoding in project["configuration"]["recodings"]:
             recoding.setdefault("mode", "ranges")
 

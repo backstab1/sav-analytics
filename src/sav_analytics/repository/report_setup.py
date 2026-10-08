@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from ..core.configuration_integrity import (
     ensure_not_referenced,
 )
+from ..core.report_books import inactive_books
 from ..core.report_settings import (
     REPORT_SETTING_KEYS,
 )
@@ -59,8 +60,11 @@ class ReportSetup(ProjectStore):
             project["configuration"]["report_banner_id"] = (
                 filtered[-1]["id"] if filtered else None
             )
-        # Таблица с удалённым баннером остаётся, как отчёт: без разреза,
-        # только с колонкой Total.
+        # Таблица и неактивная книга с удалённым баннером остаются, как
+        # отчёт: без разреза, только с колонкой Total.
+        for book in inactive_books(project["configuration"]):
+            if book.get("banner_id") == str(banner_id):
+                book["banner_id"] = None
         for report in project["configuration"].get("table_reports", []):
             if report.get("banner_id") == str(banner_id):
                 report["banner_id"] = None

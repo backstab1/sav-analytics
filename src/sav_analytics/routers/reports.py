@@ -145,11 +145,24 @@ def _prepared_artifact(
     return project, prepared
 
 
+def _file_stem(project: dict) -> str:
+    """Имя файла книги: при нескольких книгах к проекту добавляется выбранная."""
+    configuration = project["configuration"]
+    books = configuration.get("reports") or []
+    if len(books) < 2:
+        return str(project["name"])
+    active = next(
+        (book["name"] for book in books if book["id"] == configuration.get("active_report_id")),
+        None,
+    )
+    return f"{project['name']}_{active}" if active else str(project["name"])
+
+
 def _topline_response(project: dict, prepared: PreparedReport) -> FileResponse:
     return FileResponse(
         prepared.topline_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=f"{project['name']}_topline.xlsx",
+        filename=f"{_file_stem(project)}_topline.xlsx",
     )
 
 
@@ -157,5 +170,5 @@ def _statistics_response(project: dict, prepared: PreparedReport) -> FileRespons
     return FileResponse(
         prepared.statistics_path,
         media_type="text/plain; charset=utf-8",
-        filename=f"{project['name']}_statistics.txt",
+        filename=f"{_file_stem(project)}_statistics.txt",
     )

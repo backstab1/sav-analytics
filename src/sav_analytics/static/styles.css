@@ -1160,6 +1160,17 @@ button.prop-val:hover { background: transparent; transform: none; }
   font-size: var(--t-md); font-weight: 700; letter-spacing: -0.02em;
 }
 .toolbar-grow { flex: 1 1 auto; min-width: 4px; }
+/* Выбор книги отчёта: название выбранной книги и стрелка меню. */
+.book-switch {
+  display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; min-width: 0;
+  height: 28px; padding: 0 9px 0 11px; border: 1px solid var(--c-border); border-radius: var(--r-pill);
+  background: var(--c-surface); color: var(--c-ink); font-size: var(--t-xs); font-weight: 600;
+}
+.book-switch span { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-switch svg { width: 12px; height: 12px; flex: 0 0 auto; color: var(--c-ink-3); }
+.book-switch:hover { background: var(--c-surface-soft); transform: none; }
+.book-switch[aria-expanded="true"] { border-color: var(--c-brand); }
+.book-menu .error { margin: 0; font-size: var(--t-xs); }
 .toolbar-count {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500;

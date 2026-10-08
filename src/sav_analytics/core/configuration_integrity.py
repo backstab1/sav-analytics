@@ -9,6 +9,12 @@ class ConfigurationIntegrityError(ValueError):
     """Raised when a project change would leave dangling configuration links."""
 
 
+def _inactive_books(configuration: dict[str, Any]) -> list[dict[str, Any]]:
+    """Книги, чьи значения лежат в их записи, а не в полях активной книги."""
+    active = configuration.get("active_report_id")
+    return [book for book in configuration.get("reports", []) if book.get("id") != active]
+
+
 @dataclass(frozen=True, slots=True)
 class ConfigurationReference:
     target_kind: str
@@ -53,6 +59,11 @@ def find_references(
         if configuration.get("report_filter_id") == identifier:
             locations.append("общий фильтр отчёта")
         locations.extend(
+            f"общий фильтр книги «{book.get('name')}»"
+            for book in _inactive_books(configuration)
+            if book.get("filter_id") == identifier
+        )
+        locations.extend(
             f"таблица «{report.get('name')}»"
             for report in configuration.get("table_reports", [])
             if report.get("filter_id") == identifier
@@ -64,6 +75,11 @@ def find_references(
             (configuration.get("report_settings") or {}).get("calculated_weight_id") or ""
         ) == identifier:
             locations.append("настройка отчёта")
+        locations.extend(
+            f"книга «{book.get('name')}»"
+            for book in _inactive_books(configuration)
+            if str((book.get("settings") or {}).get("calculated_weight_id") or "") == identifier
+        )
     unique = dict.fromkeys(locations)
     return [ConfigurationReference(target_kind, identifier, location) for location in unique]
 
@@ -134,6 +150,15 @@ def validate_configuration_references(configuration: dict[str, Any]) -> None:
     )
     if report_weight_id and str(report_weight_id) not in weights:
         problems.append("рассчитанный вес в настройках отчёта не найден")
+    for book in _inactive_books(configuration):
+        name = book.get("name")
+        if book.get("banner_id") and str(book["banner_id"]) not in banners:
+            problems.append(f"баннер книги «{name}» не найден")
+        if book.get("filter_id") and str(book["filter_id"]) not in filters:
+            problems.append(f"общий фильтр книги «{name}» не найден")
+        weight_id = (book.get("settings") or {}).get("calculated_weight_id")
+        if weight_id and str(weight_id) not in weights:
+            problems.append(f"рассчитанный вес книги «{name}» не найден")
     for report in configuration.get("table_reports", []):
         if report.get("banner_id") and str(report["banner_id"]) not in banners:
             problems.append(f"баннер таблицы «{report.get('name')}» не найден")
