@@ -2,7 +2,39 @@
    уведомления, форматирование и экранирование. Грузится первым: функции
    отсюда зовут все разделы, а сам файл ни от кого не зависит при загрузке. */
 
+/* Свои записи вкладки. Две записи, ушедшие разом (отложенное сохранение
+   «Таблиц» и «Сохранить» вопроса), несут одну ревизию, и вторая получает 409,
+   хотя никакого другого окна нет. Здесь помнятся ревизии, которые создали
+   записи этой вкладки, и записи ещё в пути: конфликт, целиком вызванный
+   своими же записями, разбирается без диалога. */
+const ownWrites = { projectId: null, revisions: new Set(), pending: new Map() };
+
 async function api(url, options = {}, retried = false) {
+  const method = (options.method || "GET").toUpperCase();
+  const projectPrefix = currentProject ? `/api/projects/${currentProject.id}` : null;
+  if (!projectPrefix || !url.startsWith(projectPrefix) || method === "GET" || retried) {
+    return sendApi(url, options, retried);
+  }
+  const projectId = currentProject.id;
+  if (ownWrites.projectId !== projectId) {
+    ownWrites.projectId = projectId;
+    ownWrites.revisions.clear();
+  }
+  const token = {};
+  const write = sendApi(url, options, false, token).then(payload => {
+    const revision = payload?.configuration?.revision;
+    if (payload?.id === projectId && revision && ownWrites.projectId === projectId) {
+      ownWrites.revisions.add(revision);
+    }
+    return payload;
+  });
+  const settled = write.catch(() => {});
+  ownWrites.pending.set(token, settled);
+  settled.then(() => ownWrites.pending.delete(token));
+  return write;
+}
+
+async function sendApi(url, options = {}, retried = false, token = null) {
   const method = (options.method || "GET").toUpperCase();
   const projectPrefix = currentProject ? `/api/projects/${currentProject.id}` : null;
   const revision = currentProject?.configuration?.revision;
@@ -20,7 +52,7 @@ async function api(url, options = {}, retried = false) {
     payload = { detail: responseText || `Ошибка сервера ${response.status}` };
   }
   if (response.status === 409 && payload.error_code === "CONFIGURATION_CONFLICT" && currentProject && !retried) {
-    return resolveRevisionConflict(url, options, payload);
+    return resolveRevisionConflict(url, options, payload, token);
   }
   if (!response.ok) {
     // Код ошибки нужен тем, кто предлагает следующий шаг по её виду.
@@ -84,10 +116,21 @@ function askConflictChoice(sections, mine, theirs) {
   });
 }
 
-async function resolveRevisionConflict(url, options, payload) {
+async function resolveRevisionConflict(url, options, payload, token) {
+  // Сначала дождаться своих записей в пути: ревизию, которую создала уже
+  // применённая сервером своя запись, вкладка узнает только из её ответа.
+  const sent = Number(new Headers(options.headers).get("If-Match"));
+  const others = [...ownWrites.pending].filter(([key]) => key !== token).map(([, settled]) => settled);
+  await Promise.all(others.map(settled => Promise.race([settled, delay(5000)])));
   const response = await fetch(`/api/projects/${currentProject.id}`);
   if (!response.ok) throw new Error(payload.detail || "Проект изменён в другом окне.");
   const fresh = await response.json();
+  if (ownChangesOnly(fresh, sent)) {
+    // Проект менялся только этой вкладкой: повтор на новой ревизии ничего
+    // чужого не перезапишет.
+    currentProject = fresh;
+    return sendApi(url, options, false, token);
+  }
   const choice = await askConflictChoice(
     changedConfigurationSections(currentProject.configuration, fresh.configuration),
     currentProject.configuration.revision,
@@ -105,6 +148,19 @@ async function resolveRevisionConflict(url, options, payload) {
     throw new Error("Проект перезагружен с изменениями из другого окна. Ваш ввод остался в редакторе — проверьте и сохраните снова.");
   }
   throw new Error(payload.detail || "Сохранение отменено: проект изменён в другом окне.");
+}
+
+function ownChangesOnly(fresh, sent) {
+  const latest = fresh.configuration?.revision;
+  if (!sent || !latest || latest <= sent || ownWrites.projectId !== fresh.id) return false;
+  for (let revision = sent + 1; revision <= latest; revision += 1) {
+    if (!ownWrites.revisions.has(revision)) return false;
+  }
+  return true;
+}
+
+function delay(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
 }
 
 function setBusy(button, busy, text) {
