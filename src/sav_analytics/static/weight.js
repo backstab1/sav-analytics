@@ -18,6 +18,7 @@ function openWeight(weightId = null) {
   document.querySelector("#weight-upper").value = weight?.upper_bound ?? 3;
   renderWeightTrimming();
   document.querySelector("#weight-method").value = weight?.method || "raking";
+  document.querySelector("#weight-population").value = weight?.population_size ?? "";
   renderWeightBaseOptions(weight?.base_weight || "");
   savedWeightCells = weight?.cells || [];
   document.querySelector("#weight-cell-list").innerHTML = "";
@@ -58,9 +59,11 @@ let savedWeightCells = [];
 // Строка метода для сводки отчёта и выбора веса.
 function calculatedWeightSummary(weight) {
   const count = weight.dimensions.length;
-  const summary = weight.method === "cells"
+  const distributions = plural(count, "распределение", "распределения", "распределений");
+  let summary = weight.method === "cells"
     ? `по ячейкам · ${plural(weight.cells.length, "ячейка", "ячейки", "ячеек")} из ${plural(count, "переменной", "переменных", "переменных")}`
-    : `raking / IPF · ${plural(count, "распределение", "распределения", "распределений")}`;
+    : `${weight.method === "greg" ? "GREG" : "raking / IPF"} · ${distributions}`;
+  if (weight.population_size) summary += ` · проекция на ${Number(weight.population_size).toLocaleString("ru-RU")}`;
   const own = weight.wave_targets?.length
     ? ` · свои цели у ${plural(weight.wave_targets.length, "волны", "волн", "волн")}`
     : "";
@@ -92,15 +95,30 @@ function weightMethod() {
   return document.querySelector("#weight-method").value;
 }
 
+const WEIGHT_METHODS = {
+  raking: {
+    kicker: "Raking / IPF",
+    note: "Подгоняет маргинальные распределения по очереди, пока все не сойдутся.",
+    trimming: "Обрезать экстремумы поправки и подогнать цели заново",
+  },
+  greg: {
+    kicker: "GREG · линейная калибровка",
+    note: "Поправка линейна по категориям и попадает в цели точно, как survey::calibrate. Без границ может стать отрицательной.",
+    trimming: "Ограничить поправку; если цели при границах недостижимы, расчёт остановится",
+  },
+  cells: {
+    kicker: "Взвешивание по ячейкам",
+    note: "Точный вес ячейки — цель, делённая на её долю в выборке. До трёх переменных.",
+    trimming: "Поправка ячейки вне границ — ошибка, а не обрезка: ячейку придётся объединить",
+  },
+};
+
 function renderWeightMethod() {
   const cells = weightMethod() === "cells";
-  document.querySelector("#weight-editor-kicker").textContent = cells ? "Взвешивание по ячейкам" : "Raking / IPF";
-  document.querySelector("#weight-method-note").textContent = cells
-    ? "Точный вес ячейки — цель, делённая на её долю в выборке. До трёх переменных."
-    : "Подгоняет маргинальные распределения по очереди, пока все не сойдутся.";
-  document.querySelector("#weight-trimming-note").textContent = cells
-    ? "Поправка ячейки вне границ — ошибка, а не обрезка: ячейку придётся объединить"
-    : "Обрезать экстремумы поправки и подогнать цели заново";
+  const method = WEIGHT_METHODS[weightMethod()] || WEIGHT_METHODS.raking;
+  document.querySelector("#weight-editor-kicker").textContent = method.kicker;
+  document.querySelector("#weight-method-note").textContent = method.note;
+  document.querySelector("#weight-trimming-note").textContent = method.trimming;
   document.querySelector("#weight-dimensions-title").textContent = cells ? "Переменные ячеек" : "Целевые распределения";
   document.querySelector("#weight-dimensions-note").textContent = cells ? "категории образуют сочетания" : "сумма = 100%";
   document.querySelector("#add-weight-dimension").textContent = cells ? "+ Добавить переменную" : "+ Добавить распределение";
@@ -404,7 +422,11 @@ function renderWeightPreview(preview) {
   const own = preview.own_targets
     ? `<p class="weight-start-note">Свои цели волны «${escapeHtml(currentWaveView().label || "")}»: «цель» ниже — её.</p>`
     : "";
-  return metricGrid + own + start + waves + cells + distributions;
+  // Проекция — только масштаб: диагностика выше в единицах поправки.
+  const projection = preview.projection
+    ? `<p class="weight-start-note">Проекция на генсовокупность <b>${formatWeightNumber(preview.projection.population_size)}</b>${preview.projection.per_wave ? " у каждой волны" : ""}: сумма весов равна численности. Минимум, максимум и среднее выше — до проекции.</p>`
+    : "";
+  return metricGrid + projection + own + start + waves + cells + distributions;
 }
 
 function formatWeightNumber(value) {
@@ -505,6 +527,7 @@ document.querySelector("#weight-form").addEventListener("submit", async event =>
     upper_bound: trimming ? Number(document.querySelector("#weight-upper").value) : null,
     tolerance: 0.001,
     maximum_iterations: 500,
+    population_size: Number(document.querySelector("#weight-population").value) || null,
   };
   setBusy(saveButton, true, "Рассчитываем…");
   try {

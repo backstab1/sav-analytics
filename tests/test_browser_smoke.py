@@ -531,6 +531,35 @@ def test_cell_weight_is_built_from_combinations(
     expect(page.locator("#weight-editor-kicker")).to_have_text("Взвешивание по ячейкам")
 
 
+def test_greg_weight_projects_onto_the_population(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """GREG по целям пола и проекция суммы весов на численность."""
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+
+    page.click('[data-picker="weight"]')
+    page.click('#picker [data-new="weight"]')
+    expect(page.locator("#weight-editor")).to_be_visible(timeout=UI_TIMEOUT)
+    page.select_option("#weight-method", "greg")
+    expect(page.locator("#weight-editor-kicker")).to_have_text("GREG · линейная калибровка")
+    expect(page.locator("#weight-cells")).to_be_hidden()
+    page.fill("#weight-population", "1200000")
+    page.fill("#weight-name", "GREG по полу")
+    page.click("#save-weight")
+
+    preview = page.locator("#weight-preview")
+    expect(preview).to_contain_text("Проекция на генсовокупность", timeout=UI_TIMEOUT)
+    expect(preview).to_contain_text("1 200 000")
+    project_id = page.url.split("#/projects/")[1].split("/")[0]
+    project = page.request.get(f"{live_server}/api/projects/{project_id}").json()
+    saved = project["configuration"]["calculated_weights"][0]
+    assert saved["method"] == "greg"
+    assert saved["population_size"] == 1_200_000
+
+
 def test_raking_dimension_can_be_a_saved_recoding(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

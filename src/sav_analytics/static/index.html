@@ -705,7 +705,7 @@
                 <div class="insp-body editor-scroll scroll">
                   <label class="f">Название веса<input id="weight-name" required maxlength="500" placeholder="Например, Вес по полу и возрасту" /></label>
                   <div class="weight-head-row">
-                  <label class="f">Метод<select id="weight-method"><option value="raking">Raking — цели по каждой переменной</option><option value="cells">По ячейкам — цель каждому сочетанию</option></select><small id="weight-method-note">Подгоняет маргинальные распределения по очереди, пока все не сойдутся.</small></label>
+                  <label class="f">Метод<select id="weight-method"><option value="raking">Raking — цели по каждой переменной</option><option value="cells">По ячейкам — цель каждому сочетанию</option><option value="greg">GREG — линейная калибровка к целям</option></select><small id="weight-method-note">Подгоняет маргинальные распределения по очереди, пока все не сойдутся.</small></label>
                   <label class="f weight-start-field">Стартовый вес<select id="weight-base"><option value="">Нет — от равных весов</option></select><small id="weight-base-note">Поправка подгоняется к целям поверх готового веса отбора. Итог = стартовый вес × поправка.</small></label>
                   </div>
                   <section class="weight-limit-card">
@@ -716,6 +716,7 @@
                       <label><span>Максимум</span><span class="weight-bound-input"><input id="weight-upper" type="number" min="0.01" step="0.01" value="3" /><em>×</em></span></label>
                     </div>
                   </section>
+                  <label class="f weight-population-field">Проекция на генсовокупность<input id="weight-population" type="number" min="1" step="1" placeholder="Нет — среднее веса 1" /><small>Сумма весов (у каждой волны) станет этой численностью, взвешенные базы — оценкой численности. Доли и тесты не меняются.</small></label>
                   <section id="weight-wave-scope" class="weight-wave-scope" hidden>
                     <span class="seg" role="radiogroup" aria-label="Чьи цели правятся">
                       <button type="button" role="radio" data-weight-scope="general">Общие цели</button>
@@ -1287,7 +1288,7 @@
     <script src="/bulk.js?v=20260930-question-tune" defer></script>
     <script src="/question.js?v=20261001-uiux" defer></script>
     <script src="/recode.js?v=20261001-uiux" defer></script>
-    <script src="/weight.js?v=20261008-waves" defer></script>
+    <script src="/weight.js?v=20261009-greg" defer></script>
     <script src="/filter.js?v=20260930-question-tune" defer></script>
     <script src="/report.js?v=20261007-waves" defer></script>
     <script src="/launch.js?v=20260930-question-tune" defer></script>
