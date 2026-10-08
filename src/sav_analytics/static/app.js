@@ -209,8 +209,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   writeRoute();
   window.scrollTo(0, 0);
   form.reset();
-  fileTitle.textContent = "Перетащите SAV, CSV или XLSX сюда";
-  fileCaption.textContent = "или нажмите, чтобы выбрать файл";
+  updateFileLabel();
   loadProjects();
 });
 
@@ -1486,11 +1485,25 @@ function findQuestion(code) {
   return configuredQuestions().find(item => item.code === code);
 }
 
+/* Выбранный файл показывается в самой зоне: значок формата, имя и размер.
+   Пустое название проекта сервер заменит именем файла — подсказка в поле
+   говорит об этом заранее. */
 function updateFileLabel() {
   const file = fileInput.files[0];
-  if (!file) return;
+  const nameInput = form.elements.name;
+  dropZone.classList.toggle("has-file", Boolean(file));
+  if (!file) {
+    fileTitle.textContent = "Перетащите файл сюда";
+    fileCaption.textContent = "или нажмите, чтобы выбрать на диске";
+    nameInput.placeholder = "Если пусто — по имени файла";
+    return;
+  }
+  const extension = file.name.includes(".") ? file.name.split(".").pop().toUpperCase() : "";
+  const megabytes = file.size / 1024 / 1024;
+  dropZone.querySelector(".drop-icon b").textContent = extension;
   fileTitle.textContent = file.name;
-  fileCaption.textContent = `${(file.size / 1024 / 1024).toFixed(1)} МБ`;
+  fileCaption.textContent = `${megabytes < 0.1 ? "< 0,1" : megabytes.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} МБ · нажмите, чтобы заменить`;
+  nameInput.placeholder = file.name.replace(/\.[^.]+$/, "");
 }
 
 /* Сборка переживает перезагрузку страницы (P2): задание идёт на сервере, а

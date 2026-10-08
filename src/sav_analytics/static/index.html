@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20261008-questionnaire" />
+    <link rel="stylesheet" href="/styles.css?v=20261009-start" />
   </head>
   <body>
     <!-- ================================================================
@@ -239,27 +239,52 @@
       <!-- ================= Экран «Ручной режим» ================= -->
       <section id="screen-manual" class="screen">
 
-        <section id="start" class="hero screen-pad">
-          <p class="eyebrow">НОВЫЙ ПРОЕКТ</p>
-          <h1>Разберите массив SPSS<br />до понятной структуры</h1>
-          <p class="lead">Загрузите SAV — приложение сохранит оригинал, прочитает метаданные и предложит типы вопросов.</p>
-          <form id="upload-form" class="upload-card">
-            <label class="name-field">Название проекта<input name="name" placeholder="Например, Трекер бренда · июль" /></label>
+        <!-- Стартовый экран в один экран без прокрутки страницы: слева
+             загрузка нового массива, справа библиотека — прокручивается
+             только сам список проектов. -->
+        <section id="start" class="start">
+          <form id="upload-form" class="start-new">
+            <div class="start-head">
+              <p class="eyebrow">Новый проект</p>
+              <h1>Загрузите массив</h1>
+              <p class="lead">Оригинал сохранится без изменений. Приложение прочитает метаданные и&nbsp;предложит типы вопросов.</p>
+            </div>
             <label id="drop-zone" class="drop-zone">
               <input id="file" name="file" type="file" accept=".sav,.csv,.tsv,.xlsx" required />
-              <span class="upload-icon">↑</span>
-              <strong id="file-title">Перетащите SAV, CSV или XLSX сюда</strong>
-              <small id="file-caption">или нажмите, чтобы выбрать файл</small>
+              <span id="drop-icon" class="drop-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" /><path d="M4.5 14.5v2.5a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-2.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" /></svg>
+                <b></b>
+              </span>
+              <span class="drop-text">
+                <strong id="file-title">Перетащите файл сюда</strong>
+                <small id="file-caption">или нажмите, чтобы выбрать на диске</small>
+              </span>
+              <span class="drop-formats" aria-label="Поддерживаемые форматы"><i>SAV</i><i>CSV</i><i>TSV</i><i>XLSX</i></span>
             </label>
+            <label class="name-field">Название проекта<input name="name" placeholder="Если пусто — по имени файла" autocomplete="off" /></label>
             <button id="submit" type="submit">Создать проект</button>
             <p id="form-error" class="error" hidden></p>
+            <ul class="start-notes">
+              <li>Метки, пропуски и наборы multiple response читаются из SPSS</li>
+              <li>Матрицы и дихотомии собираются в вопросы</li>
+              <li>Спорные места помечаются для проверки</li>
+            </ul>
           </form>
-          <section id="project-library" class="project-library" hidden>
-            <div class="section-title"><p class="eyebrow">ПРОЕКТЫ</p><button id="refresh-projects" class="text-button" type="button">Обновить</button></div>
+
+          <section id="project-library" class="project-library" aria-labelledby="library-title">
+            <div class="library-head">
+              <h2 id="library-title">Проекты <span id="project-count" class="library-count"></span></h2>
+              <button id="refresh-projects" class="lib-icon" type="button" title="Обновить список" aria-label="Обновить список">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15.5 8.5A5.8 5.8 0 0 0 5 6.2M4.5 11.5A5.8 5.8 0 0 0 15 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><path d="M5 3v3.4h3.4M15 17v-3.4h-3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
+            </div>
             <div class="library-tools">
-              <input id="project-search" type="search" placeholder="Найти по названию или файлу" aria-label="Найти проект" autocomplete="off" />
-              <select id="project-sort" aria-label="Порядок проектов"><option value="new">Сначала новые</option><option value="old">Сначала старые</option><option value="name">По названию</option></select>
-              <button id="project-trash-toggle" class="text-button" type="button" aria-pressed="false">Корзина</button>
+              <label class="library-search">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.6" /><path d="m13.2 13.2 3.3 3.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+                <input id="project-search" type="search" placeholder="Найти по названию или файлу" aria-label="Найти проект" autocomplete="off" />
+              </label>
+              <select id="project-sort" class="library-sort" aria-label="Порядок проектов"><option value="new">Сначала новые</option><option value="old">Сначала старые</option><option value="name">По названию</option></select>
+              <button id="project-trash-toggle" class="library-trash" type="button" aria-pressed="false">Корзина</button>
             </div>
             <div id="project-list" class="project-list"></div>
           </section>
@@ -1255,10 +1280,10 @@
     <script src="/util.js?v=20261001-uiux" defer></script>
     <script src="/tables.js?v=20260930-nest-button" defer></script>
     <script src="/shell.js?v=20261006-menus" defer></script>
-    <script src="/app.js?v=20261008-waves" defer></script>
+    <script src="/app.js?v=20261009-start" defer></script>
     <script src="/route.js?v=20260930-question-tune" defer></script>
     <script src="/source.js?v=20260930-question-tune" defer></script>
-    <script src="/library.js?v=20260930-question-tune" defer></script>
+    <script src="/library.js?v=20261009-start" defer></script>
     <script src="/bulk.js?v=20260930-question-tune" defer></script>
     <script src="/question.js?v=20261001-uiux" defer></script>
     <script src="/recode.js?v=20261001-uiux" defer></script>

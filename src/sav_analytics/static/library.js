@@ -8,18 +8,15 @@ let libraryTrash = [];
 let libraryShowTrash = false;
 
 async function loadProjects() {
-  const library = document.querySelector("#project-library");
   const list = document.querySelector("#project-list");
   try {
     [libraryProjects, libraryTrash] = await Promise.all([
       api("/api/projects"),
       api("/api/projects/trash"),
     ]);
-    library.hidden = !libraryProjects.length && !libraryTrash.length;
     renderLibrary();
   } catch (error) {
-    library.hidden = false;
-    list.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    list.innerHTML = `<p class="error library-empty">${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -28,6 +25,7 @@ function renderLibrary() {
   const toggle = document.querySelector("#project-trash-toggle");
   toggle.textContent = libraryTrash.length ? `Корзина · ${libraryTrash.length}` : "Корзина";
   toggle.setAttribute("aria-pressed", String(libraryShowTrash));
+  document.querySelector("#project-count").textContent = libraryProjects.length || "";
   const query = document.querySelector("#project-search").value.trim().toLowerCase();
   const order = document.querySelector("#project-sort").value;
   const shown = (libraryShowTrash ? libraryTrash : libraryProjects)
@@ -38,23 +36,47 @@ function renderLibrary() {
       return right.created_at.localeCompare(left.created_at);
     });
   if (!shown.length) {
-    const empty = libraryShowTrash ? "Корзина пуста." : query ? "Ничего не нашлось." : "Проектов пока нет.";
-    list.innerHTML = `<p class="muted library-empty">${empty}</p>`;
+    const [title, hint] = libraryShowTrash
+      ? ["Корзина пуста", "Сюда попадают проекты, убранные из списка. Их можно вернуть."]
+      : query
+        ? ["Ничего не нашлось", "Поиск идёт по названию проекта и имени файла."]
+        : ["Проектов пока нет", "Загрузите первый массив слева — проект появится здесь."];
+    list.innerHTML = `<div class="library-empty"><strong>${title}</strong><span>${hint}</span></div>`;
     return;
   }
   list.innerHTML = shown.map(project => (libraryShowTrash ? trashCard(project) : projectCard(project))).join("");
 }
 
+/* Значок формата берётся из расширения исходного файла: по нему в
+   длинном списке быстрее находится нужный массив, чем по дате. */
+function projectBadge(project) {
+  const extension = (project.original_filename.split(".").pop() || "").toLowerCase();
+  const known = ["sav", "csv", "tsv", "xlsx"].includes(extension) ? extension : "sav";
+  return `<span class="project-badge" data-ext="${known}" aria-hidden="true">${known.toUpperCase()}</span>`;
+}
+
+const PROJECT_ICONS = {
+  rename: '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m12.5 4.5 3 3L7 16H4v-3l8.5-8.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  copy: '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="7" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M13 4.5V4a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  trash: '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 6h12M8 6V4.5h4V6M5.5 6l.7 9.2a1 1 0 0 0 1 .8h5.6a1 1 0 0 0 1-.8L14.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
+function shortDate(value) {
+  return new Date(value).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+}
+
 function projectCard(project) {
-  return `<div class="project-card" data-card-id="${escapeAttribute(project.id)}">
-    <button class="project-open" type="button" data-project-id="${escapeAttribute(project.id)}">
-      <span><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.original_filename)}</small></span>
-      <time>${formatDate(project.created_at)}</time>
+  const id = escapeAttribute(project.id);
+  return `<div class="project-card" data-card-id="${id}">
+    <button class="project-open" type="button" data-project-id="${id}">
+      ${projectBadge(project)}
+      <span class="project-title"><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.original_filename)}</small></span>
+      <time datetime="${escapeAttribute(project.created_at)}" title="${escapeAttribute(formatDate(project.created_at))}">${shortDate(project.created_at)}</time>
     </button>
     <span class="project-actions">
-      <button type="button" class="text-button" data-project-rename="${escapeAttribute(project.id)}">Переименовать</button>
-      <button type="button" class="text-button" data-project-copy="${escapeAttribute(project.id)}">Копия</button>
-      <button type="button" class="text-button danger-text" data-project-trash="${escapeAttribute(project.id)}">В корзину</button>
+      <button type="button" class="project-action" data-project-rename="${id}" title="Переименовать" aria-label="Переименовать">${PROJECT_ICONS.rename}</button>
+      <button type="button" class="project-action" data-project-copy="${id}" title="Создать копию" aria-label="Создать копию">${PROJECT_ICONS.copy}</button>
+      <button type="button" class="project-action danger" data-project-trash="${id}" title="В корзину" aria-label="В корзину">${PROJECT_ICONS.trash}</button>
     </span>
   </div>`;
 }
@@ -62,10 +84,12 @@ function projectCard(project) {
 function trashCard(project) {
   return `<div class="project-card trashed">
     <span class="project-open">
-      <span><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.original_filename)} · в корзине с ${formatDate(project.trashed_at)}</small></span>
+      ${projectBadge(project)}
+      <span class="project-title"><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.original_filename)}</small></span>
+      <time datetime="${escapeAttribute(project.trashed_at)}" title="В корзине с ${escapeAttribute(formatDate(project.trashed_at))}">${shortDate(project.trashed_at)}</time>
     </span>
     <span class="project-actions">
-      <button type="button" class="text-button" data-project-restore="${escapeAttribute(project.id)}">Восстановить</button>
+      <button type="button" class="project-restore" data-project-restore="${escapeAttribute(project.id)}">Восстановить</button>
     </span>
   </div>`;
 }
@@ -76,9 +100,10 @@ function startProjectRename(id) {
   if (!card || !project) return;
   const form = document.createElement("form");
   form.className = "project-rename-form";
-  form.innerHTML = `<input maxlength="200" aria-label="Новое название проекта" value="${escapeAttribute(project.name)}" />
+  form.innerHTML = `${projectBadge(project)}<input maxlength="200" aria-label="Новое название проекта" value="${escapeAttribute(project.name)}" />
     <button type="submit">Сохранить</button>
     <button type="button" class="secondary" data-rename-cancel>Отмена</button>`;
+  card.classList.add("renaming");
   card.querySelector(".project-open").replaceWith(form);
   card.querySelector(".project-actions").hidden = true;
   const input = form.querySelector("input");
