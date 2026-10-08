@@ -254,3 +254,16 @@ def test_single_wave_book_and_audit_name_the_compared_wave(tmp_path: Path) -> No
     audit = build_statistics_txt(path, project)
     # Тест изменения — против той же колонки в предыдущей волне.
     assert "Весна · Total" in audit
+
+
+def test_ai_report_puts_wave_in_banner_only_when_waves_are_compared(context) -> None:
+    from sav_analytics.core import autoreport
+
+    repository = context["repository"]
+    project = repository.get(context["id"])
+    # По умолчанию выбрана одна волна: разрезом она не ставится, в плане — её имя.
+    assert autoreport.wave_variable(project) is None
+    assert autoreport.wave_label(project) == "Осень"
+    project = repository.set_wave_view(context["id"], "compare")
+    assert autoreport.wave_variable(project) == "WAVE"
+    assert autoreport.wave_label(project) is None

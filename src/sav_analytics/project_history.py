@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .atomic_file import replace_file
+from .atomic_file import read_text, replace_file
 
 HISTORY_FILE = "history.json"
 MAX_STEPS = 20
@@ -50,7 +50,7 @@ def load(project_dir: Path) -> dict[str, list[dict[str, Any]]]:
     if not path.is_file():
         return {"undo": [], "redo": []}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(read_text(path))
     except (OSError, ValueError):
         # Испорченная история не мешает работать с проектом — она просто пуста.
         return {"undo": [], "redo": []}

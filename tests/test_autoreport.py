@@ -252,3 +252,22 @@ def test_unverified_numbers_allow_values_and_differences() -> None:
     tables = [{"rows": [{"cells": [{"value": 40.0}, {"value": 52.4}]}]}]
     assert autoreport.unverified_numbers("40% против 52%, разница 12 п.п.", tables) == []
     assert autoreport.unverified_numbers("а 70% — нет", tables) == ["70%"]
+
+
+def test_plan_reads_the_stored_questionnaire(project) -> None:
+    from sav_analytics.core.questionnaire import store_questionnaire
+
+    directory = project["repository"].root / project["project_id"]
+    store_questionnaire(directory, "anketa.docx", "БЛОК А. Оценка сервиса\nQ2. Оцените сервис")
+    view = project["client"].get(project["base"]).json()
+    assert view["questionnaire"] == {"filename": "anketa.docx", "chars": 41}
+    _plan(project)
+    _tool, content = next(item for item in project["model"].requests if item[0] == "submit_plan")
+    assert "<анкета>" in content and "БЛОК А. Оценка сервиса" in content
+
+
+def test_plan_without_questionnaire_has_no_questionnaire_block(project) -> None:
+    assert project["client"].get(project["base"]).json()["questionnaire"] is None
+    _plan(project)
+    _tool, content = next(item for item in project["model"].requests if item[0] == "submit_plan")
+    assert "<анкета>" not in content

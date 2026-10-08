@@ -123,7 +123,10 @@ function briefHtml(state) {
     <label class="f">Описание исследования<textarea rows="3" data-brief="description" placeholder="Кого и как опрашивали, когда, сколько респондентов">${escapeHtml(brief.description)}</textarea></label>
     <label class="f">Объект интереса<input data-brief="object" value="${escapeAttribute(brief.object)}" placeholder="Бренд или продукт заказчика — вокруг него строятся выводы" /></label>
     <div class="ar-actions">
-      <button type="button" class="secondary" data-ar-questionnaire title="Подписать вопросы без названий по анкете — точнее план и текст">Загрузить анкету…</button>
+      <button type="button" class="secondary" data-ar-questionnaire title="Анкета подпишет вопросы без названий, а разделы плана пойдут по её блокам">${state.questionnaire ? "Заменить анкету…" : "Загрузить анкету…"}</button>
+      <span class="ar-source muted">${state.questionnaire
+        ? `Анкета «${escapeHtml(state.questionnaire.filename)}» учитывается в плане`
+        : "Без анкеты план строится по подписям массива"}${state.wave_label ? ` · отчёт по волне «${escapeHtml(state.wave_label)}»` : ""}</span>
       <span class="toolbar-grow"></span>
       <button type="button" data-ar-run="plan">${state.plan ? "Пересоставить план с ИИ" : "Составить план с ИИ"}</button>
     </div>

@@ -5,8 +5,10 @@
 /* Свои записи вкладки. Две записи, ушедшие разом (отложенное сохранение
    «Таблиц» и «Сохранить» вопроса), несут одну ревизию, и вторая получает 409,
    хотя никакого другого окна нет. Здесь помнятся ревизии, которые создали
-   записи этой вкладки, и записи ещё в пути: конфликт, целиком вызванный
-   своими же записями, разбирается без диалога. */
+   записи этой вкладки, и записи ещё в пути: конфликт, вызванный только
+   своими же записями в другие разделы, разбирается без диалога. Свои записи
+   в тот же раздел — повод спросить: многие запросы шлют раздел целиком
+   (настройки отчёта), и повтор молча вернул бы прежнее значение. */
 const ownWrites = { projectId: null, revisions: new Set(), pending: new Map() };
 
 async function api(url, options = {}, retried = false) {
@@ -37,7 +39,8 @@ async function api(url, options = {}, retried = false) {
 async function sendApi(url, options = {}, retried = false, token = null) {
   const method = (options.method || "GET").toUpperCase();
   const projectPrefix = currentProject ? `/api/projects/${currentProject.id}` : null;
-  const revision = currentProject?.configuration?.revision;
+  const basis = currentProject?.configuration;
+  const revision = basis?.revision;
   if (projectPrefix && url.startsWith(projectPrefix) && method !== "GET" && revision) {
     const headers = new Headers(options.headers || {});
     headers.set("If-Match", String(revision));
@@ -52,7 +55,7 @@ async function sendApi(url, options = {}, retried = false, token = null) {
     payload = { detail: responseText || `Ошибка сервера ${response.status}` };
   }
   if (response.status === 409 && payload.error_code === "CONFIGURATION_CONFLICT" && currentProject && !retried) {
-    return resolveRevisionConflict(url, options, payload, token);
+    return resolveRevisionConflict(url, options, payload, token, basis);
   }
   if (!response.ok) {
     // Код ошибки нужен тем, кто предлагает следующий шаг по её виду.
@@ -116,7 +119,7 @@ function askConflictChoice(sections, mine, theirs) {
   });
 }
 
-async function resolveRevisionConflict(url, options, payload, token) {
+async function resolveRevisionConflict(url, options, payload, token, basis) {
   // Сначала дождаться своих записей в пути: ревизию, которую создала уже
   // применённая сервером своя запись, вкладка узнает только из её ответа.
   const sent = Number(new Headers(options.headers).get("If-Match"));
@@ -125,9 +128,9 @@ async function resolveRevisionConflict(url, options, payload, token) {
   const response = await fetch(`/api/projects/${currentProject.id}`);
   if (!response.ok) throw new Error(payload.detail || "Проект изменён в другом окне.");
   const fresh = await response.json();
-  if (ownChangesOnly(fresh, sent)) {
-    // Проект менялся только этой вкладкой: повтор на новой ревизии ничего
-    // чужого не перезапишет.
+  if (ownChangesOnly(fresh, sent) && sectionUntouched(url, basis, fresh)) {
+    // Проект менялся только этой вкладкой и не в том разделе, который пишет
+    // запрос: повтор на новой ревизии ничего не перезапишет.
     currentProject = fresh;
     return sendApi(url, options, false, token);
   }
@@ -157,6 +160,25 @@ function ownChangesOnly(fresh, sent) {
     if (!ownWrites.revisions.has(revision)) return false;
   }
   return true;
+}
+
+// Раздел конфигурации, который пишет запрос, по первому сегменту адреса.
+// Незнакомый адрес — без молчаливого повтора, решает аналитик.
+const WRITTEN_SECTIONS = {
+  questions: "questions",
+  tables: "table_reports",
+  "report-settings": "report_settings",
+  recodings: "recodings",
+  formulas: "formulas",
+  codeframes: "codeframes",
+  weights: "calculated_weights",
+};
+
+function sectionUntouched(url, basis, fresh) {
+  const segment = url.split("?")[0].split("/")[4];
+  const key = WRITTEN_SECTIONS[segment];
+  if (!key || !basis) return false;
+  return JSON.stringify(basis[key]) === JSON.stringify(fresh.configuration?.[key]);
 }
 
 function delay(ms) {

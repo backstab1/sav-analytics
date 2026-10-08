@@ -11,7 +11,7 @@ from threading import Lock
 from uuid import UUID
 
 from .. import project_history
-from ..atomic_file import replace_file
+from ..atomic_file import read_text, replace_file
 from ..configuration_revision import (
     ConfigurationConflictError,
     current_expected_revision,
@@ -239,7 +239,7 @@ class ProjectStore:
 
     @staticmethod
     def _read(path: Path) -> dict:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(read_text(path))
 
     @staticmethod
     def _ensure_configuration(project: dict) -> None:

@@ -396,3 +396,12 @@ def test_questionnaire_group_skips_questions_used_in_banner(project) -> None:
     job = _parsed(project, mapping)
     assert not [row for row in job["result"]["rows"] if row["kind"] == "group"]
     assert any("ссылаются" in item for item in job["result"]["skipped"])
+
+
+def test_uploaded_questionnaire_text_is_kept_for_the_ai_report(project) -> None:
+    from sav_analytics.core.questionnaire import stored_questionnaire
+
+    _parsed(project)
+    stored = stored_questionnaire(project["repository"].root / project["project_id"])
+    assert stored["filename"] == "anketa.txt"
+    assert "Ваш пол?" in stored["text"]

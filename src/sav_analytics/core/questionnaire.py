@@ -17,9 +17,11 @@
 from __future__ import annotations
 
 import io
+import json
 import math
 import re
 import zipfile
+from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
@@ -143,6 +145,36 @@ def _pdf_text(data: bytes) -> str:
         return "\n".join(page.extract_text() or "" for page in reader.pages)
     except PdfReadError as exc:
         raise QuestionnaireError("Файл PDF повреждён.") from exc
+
+
+QUESTIONNAIRE_FILE = "questionnaire.txt"
+QUESTIONNAIRE_META = "questionnaire.json"
+
+
+def store_questionnaire(project_dir: Path, filename: str, text: str) -> None:
+    """Сохранить текст последней загруженной анкеты рядом с проектом.
+
+    Анкета — не конфигурация: в историю отмены и ключ кэша отчёта она не
+    входит. Её читает ИИ отчёт, чтобы строить разделы по блокам анкеты.
+    """
+    (project_dir / QUESTIONNAIRE_FILE).write_text(text, encoding="utf-8")
+    meta = {"filename": filename, "chars": len(text)}
+    (project_dir / QUESTIONNAIRE_META).write_text(
+        json.dumps(meta, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def stored_questionnaire(project_dir: Path) -> dict[str, Any] | None:
+    """Сохранённая анкета: имя файла, длина и текст, или None."""
+    text_path = project_dir / QUESTIONNAIRE_FILE
+    meta_path = project_dir / QUESTIONNAIRE_META
+    if not text_path.is_file() or not meta_path.is_file():
+        return None
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return {**meta, "text": text_path.read_text(encoding="utf-8")}
 
 
 def trimmed_text(text: str) -> tuple[str, bool]:

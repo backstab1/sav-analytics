@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 from uuid import UUID
@@ -16,6 +17,7 @@ from ..assistant.models import ChatModel
 from ..autoreport_jobs import run_build, run_plan
 from ..core import autoreport
 from ..core.docx_report import build_docx
+from ..core.questionnaire import stored_questionnaire
 from ..repository import ProjectNotFoundError, ProjectRepository
 from .ai import ai_refusal
 
@@ -71,9 +73,16 @@ def _directory(repository: ProjectRepository, project_id: UUID):
     return project, repository.root / str(project_id)
 
 
-def _view(state: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
+def _view(
+    state: dict[str, Any], project: dict[str, Any], directory: Path | None = None
+) -> dict[str, Any]:
     labels = {item["code"]: item["label"] for item in project["configuration"]["questions"]}
+    stored = stored_questionnaire(directory) if directory is not None else None
     return {
+        "questionnaire": (
+            {"filename": stored["filename"], "chars": stored["chars"]} if stored else None
+        ),
+        "wave_label": autoreport.wave_label(project),
         **state,
         "catalog": autoreport.plan_catalog(project),
         "weights": autoreport.weight_candidates(project),
@@ -90,7 +99,7 @@ def get_autoreport(
     project_id: UUID, repository: Annotated[ProjectRepository, Depends(get_repository)]
 ) -> dict:
     project, directory = _directory(repository, project_id)
-    return _view(autoreport.load(directory), project)
+    return _view(autoreport.load(directory), project, directory)
 
 
 @router.put("/brief")
@@ -103,7 +112,7 @@ def put_brief(
     state = autoreport.load(directory)
     state["brief"] = brief.model_dump()
     autoreport.save(directory, state)
-    return _view(state, project)
+    return _view(state, project, directory)
 
 
 @router.post("/plan", response_model=None)
@@ -153,7 +162,7 @@ def put_plan(
         key: value.strip()[:2000] for key, value in update.answers.items() if key in known
     }
     autoreport.save(directory, state)
-    return {**_view(state, project), "warnings": warnings}
+    return {**_view(state, project, directory), "warnings": warnings}
 
 
 @router.post("/build", response_model=None)
@@ -220,7 +229,7 @@ def patch_report(
                 if identifier in plan_sections
             ]
     autoreport.save(directory, state)
-    return _view(state, project)
+    return _view(state, project, directory)
 
 
 @router.get("/report.docx")

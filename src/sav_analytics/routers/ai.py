@@ -24,6 +24,7 @@ from ..core.questionnaire import (
     extract_text,
     observed_candidates,
     proposal_rows,
+    store_questionnaire,
     trimmed_text,
 )
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
@@ -154,6 +155,8 @@ async def upload_questionnaire(
     except QuestionnaireError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     assert model is not None
+    # Текст анкеты остаётся у проекта: по нему ИИ отчёт строит разделы.
+    store_questionnaire(repository.root / str(project_id), filename, text)
 
     def run(progress: ai_jobs.Progress) -> dict[str, Any]:
         progress(0, 3, "Читаем значения массива")

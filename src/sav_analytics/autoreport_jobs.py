@@ -39,6 +39,8 @@ def run_plan(
             autoreport.plan_catalog(project),
             autoreport.weight_candidates(project),
             autoreport.wave_variable(project),
+            wave_label=autoreport.wave_label(project),
+            questionnaire=autoreport.plan_questionnaire(directory),
         )
     except ModelError as exc:
         raise JobFailure(f"Модель не ответила: {exc}", "AI_PROVIDER_ERROR") from exc

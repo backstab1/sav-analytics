@@ -3782,3 +3782,4 @@ details.runs:not([open]) { padding-bottom: 6px; }
      меньше своих двух панелей. */
   .bld-side { grid-template-rows: repeat(2, 150px); min-height: 308px; }
 }
+.ar-actions .ar-source { font-size: var(--t-xs); }

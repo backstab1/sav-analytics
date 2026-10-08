@@ -229,6 +229,14 @@ document.querySelector("#questionnaire-file").addEventListener("change", async e
   try {
     const job = await api(`/api/projects/${currentProject.id}/questionnaire`, { method: "POST", body: form });
     questionnaireJobId = job.job_id;
+    // Текст анкеты уже у проекта: мастер ИИ отчёта показывает, что учтёт её.
+    // Только строка состояния: перерисовка брифа стёрла бы несохранённый текст.
+    if (currentView === "aireport") {
+      void loadAutoreport().then(state => {
+        const source = document.querySelector("#ar-body .ar-source");
+        if (source && state?.questionnaire) source.textContent = `Анкета «${state.questionnaire.filename}» учитывается в плане`;
+      });
+    }
     aiJobsKnown.set(job.job_id, job);
     renderQuestionnaireProgress(job);
     await followQuestionnaire(job.job_id);

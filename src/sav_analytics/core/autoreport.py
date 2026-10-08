@@ -102,12 +102,39 @@ def plan_catalog(project: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def wave_variable(project: dict[str, Any]) -> str | None:
-    """Переменная волны, если волн в проекте две и больше: её ставят в разрез."""
-    from .waves import wave_values, wave_variable_of
+    """Переменная волны для разреза: волн две и больше и в шапке выбраны не
+    одна волна, а все или сравнение. При одной выбранной волне колонка
+    волны была бы одна и ничего не сравнивала."""
+    from .waves import wave_values, wave_variable_of, wave_view
 
-    if len(wave_values(project)) < 2:
+    if len(wave_values(project)) < 2 or wave_view(project)["mode"] == "wave":
         return None
     return wave_variable_of(project)
+
+
+def wave_label(project: dict[str, Any]) -> str | None:
+    """Подпись выбранной одной волны, если отчёт строится по ней."""
+    from .waves import wave_view
+
+    view = wave_view(project)
+    return view["label"] if view["mode"] == "wave" else None
+
+
+# Сколько текста анкеты уходит в план ИИ отчёта: начала анкеты хватает на
+# блоки и формулировки, а длинные приложения только дорожают.
+PLAN_QUESTIONNAIRE_CHARS = 60_000
+
+
+def plan_questionnaire(project_dir: Path) -> str | None:
+    from .questionnaire import stored_questionnaire
+
+    stored = stored_questionnaire(project_dir)
+    if not stored:
+        return None
+    text = stored["text"]
+    if len(text) > PLAN_QUESTIONNAIRE_CHARS:
+        text = text[:PLAN_QUESTIONNAIRE_CHARS] + "\n[Анкета обрезана.]"
+    return text
 
 
 def weight_candidates(project: dict[str, Any]) -> list[str]:
