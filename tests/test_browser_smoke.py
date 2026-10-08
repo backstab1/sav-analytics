@@ -1162,32 +1162,42 @@ def test_revision_conflict_is_resolved_without_losing_input(
 def test_own_simultaneous_writes_do_not_raise_a_conflict(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
-    """Две записи одной вкладки разом несут одну ревизию: вторая получает 409,
-    но меняла проект только эта вкладка — повтор без диалога «другого окна».
-    Так отложенное сохранение «Таблиц» сталкивалось с «Сохранить» вопроса."""
+    """Две записи одной вкладки разом несут одну ревизию, и вторая получает 409.
+    В разные разделы — повтор без диалога «другого окна»: так отложенное
+    сохранение «Таблиц» сталкивалось с «Сохранить» вопроса. В один раздел —
+    диалог, как раньше: настройки отчёта шлются целиком, и молчаливый повтор
+    вернул бы прежнее значение."""
     source = tmp_path / "survey.sav"
     _write_survey(source)
     _open_project(page, live_server, source)
     before = page.evaluate("currentProject.configuration.revision")
+    # Диалог конфликта ждал бы щелчка вечно, поэтому ожидание ограничено.
+    simultaneous = """async writes => {
+        const send = ([path, method, body]) => api(
+            `/api/projects/${currentProject.id}/${path}`,
+            { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+        );
+        const timeout = new Promise(resolve => setTimeout(() => resolve(null), 10000));
+        const saved = await Promise.race([Promise.all(writes.map(send)), timeout]);
+        return saved && saved.map(project => project.configuration.revision);
+    }"""
 
     after = page.evaluate(
-        """async () => {
-            const url = `/api/projects/${currentProject.id}/report-settings`;
-            const write = minimum_base => api(url, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ minimum_base }),
-            });
-            // Диалог конфликта ждал бы щелчка вечно: без него обе записи
-            // заканчиваются сразу.
-            const timeout = new Promise(resolve => setTimeout(() => resolve(null), 10000));
-            const saved = await Promise.race([Promise.all([write(40), write(50)]), timeout]);
-            return saved && saved.map(project => project.configuration.revision);
-        }"""
+        simultaneous,
+        [["tables/reports", "POST", {}], ["questions/BRAND", "PATCH", {"label": "Марка разом"}]],
     )
-
     expect(page.locator("#conflict-dialog")).to_be_hidden()
     assert after is not None and sorted(after) == [before + 1, before + 2]
+
+    page.evaluate(
+        f"""() => {{ void ({simultaneous})([
+            ["report-settings", "PUT", {{ minimum_base: 40 }}],
+            ["report-settings", "PUT", {{ minimum_base: 50 }}],
+        ]); }}"""
+    )
+    expect(page.locator("#conflict-dialog")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator("#conflict-sections")).to_contain_text("настройки отчёта")
+    page.click("#conflict-cancel")
 
 
 def test_change_is_undone_with_the_button_and_ctrl_z(
