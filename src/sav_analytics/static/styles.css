@@ -596,13 +596,6 @@ p.library-empty { margin: 0; }
 .wave-group ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: var(--t-xs); color: var(--c-ink-2); }
 .wave-blocking { padding: 8px 10px; border-radius: 8px; background: var(--c-danger-tint, #fdecea); color: var(--c-ink); font-size: var(--t-xs); }
 .wave-rows { font-size: var(--t-xs); color: var(--c-ink-3); }
-.header-preview { margin-top: 10px; padding: 10px 12px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3); }
-.header-preview summary { cursor: pointer; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
-.header-preview-rows { display: grid; gap: 3px; margin-top: 8px; }
-.header-preview-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; font-size: var(--t-xs); }
-.header-preview-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.header-preview-row em { font-style: normal; color: var(--c-ink-3); }
-.header-preview-row.small-base em { color: var(--c-danger, #b3261e); }
 .variable-rows { display: grid; gap: 4px; }
 .variable-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 56px; gap: 8px; align-items: center; font-size: var(--t-xs); }
 .variable-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -722,11 +715,7 @@ p.library-empty { margin: 0; }
   border-radius: var(--r-3);
   box-shadow: var(--shadow-card); overflow: clip;
 }
-/* Конфигурация книги короткая: панель тянется по содержимому, а не на всю
-   высоту рабочей области — иначе под строками остаётся поле пустоты.
-   Сжиматься при этом можно: с открытым редактором содержимое бывает выше
-   холста, и тогда прокручивается редактор, а не страница. */
-.pane:has(.report-blocks:not([hidden])) { flex: 0 1 auto; }
+
 .pane-bar { flex: 0 0 auto; border-bottom: 1px solid var(--c-border); }
 
 /* ================================================================
@@ -766,7 +755,7 @@ p.library-empty { margin: 0; }
 @media (min-width: 1081px) {
   .pane:has(.insp:not([hidden])) {
     display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 36%, 500px);
-    grid-template-rows: auto minmax(0, 1fr); column-gap: 14px;
+    grid-template-rows: auto minmax(0, 1fr) auto; column-gap: 14px;
     background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: visible;
   }
   .pane:has(.insp:not([hidden])) > .pane-body { display: contents; }
@@ -780,21 +769,28 @@ p.library-empty { margin: 0; }
     background: var(--c-surface); border: 1px solid var(--c-border); border-top: 0;
     border-radius: 0 0 var(--r-3) var(--r-3); box-shadow: var(--shadow-card);
   }
+  /* Полоса запуска «Ручного отчёта» — низ левой карточки, а не отдельный
+     серый брусок под ней. */
+  .pane:has(.insp:not([hidden])) > .launch:not([hidden]) {
+    grid-column: 1; grid-row: 3;
+    border: 1px solid var(--c-border); border-radius: 0 0 var(--r-3) var(--r-3);
+  }
+  .pane:has(.insp:not([hidden])):has(> .launch:not([hidden])) .pane-content {
+    border-radius: 0; box-shadow: none;
+  }
   .pane:has(.insp:not([hidden])) .insp-dock {
-    grid-column: 2; grid-row: 1 / 3; min-height: 0;
+    grid-column: 2; grid-row: 1 / 4; min-height: 0;
     background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-3);
     box-shadow: var(--shadow-card); overflow: clip;
   }
 }
 
-/* Раздел «Отчёт»: пока правят свойство, статистика уступает место
-   редактору. Две колонки свойств и редактор рядом не помещаются, а
-   статистика — единственное, что здесь можно убрать без потери: она
-   не про то свойство, которое сейчас правится. */
-.pane-body:has(.insp:not([hidden])) .report-blocks .split {
+/* Раздел «Отчёт»: пока правят свойство, история сборок уступает место
+   редактору — она не про то свойство, которое сейчас правится. */
+.pane-body:has(.insp:not([hidden])) .report-blocks .rep-setup {
   grid-template-columns: minmax(0, 1fr);
 }
-.pane-body:has(.insp:not([hidden])) .report-blocks .stat-col { display: none; }
+.pane-body:has(.insp:not([hidden])) .report-blocks .rep-side { display: none; }
 
 .report-feedback {
   flex: 0 0 auto;
@@ -834,24 +830,44 @@ p.library-empty { margin: 0; }
    под каждый редактор отдельно. */
 
 /* ================================================================
-   РАЗДЕЛ «ОТЧЁТ» — две колонки
+   РАЗДЕЛ «ОТЧЁТ» — две вкладки на один экран
 
-   Не сетка карточек-сущностей и не ярусы во всю ширину: слева узкая
-   колонка со строками-свойствами (чем книга описывается), справа —
-   статистика (как она считается). Холст шириной 1180px, и полосой
-   через весь холст содержимое шло только потому, что раскладку
-   задавал список. Поэтому .report-blocks отменяет сетку .entity-list
-   и раскладывает содержимое сам.
-
-   Разделитель между колонками — фон сетки, а не рамка: колонки
-   растянуты на одну высоту, и линия идёт до низа сама.
+   С 10 октября раздел не прокручивается. Шапка раздела стоит одной
+   строкой с действиями, панель занимает всю оставшуюся высоту, а её
+   содержимое делится вкладками: «Веса, баннеры, фильтры» — свойства
+   книги слева и история сборок справа; «Настройка показателей» — все
+   группы открыты в две колонки. Если колонке не хватает высоты,
+   прокручивается она сама, а полоса запуска остаётся на месте.
    ================================================================ */
-.entity-list.report-blocks {
-  display: block; padding: 0;
+.canvas[data-section="reports"] .canvas-inner {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr); align-items: end;
 }
-.split {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 1px; background: var(--c-border);
+.canvas[data-section="reports"] .canvas-head { grid-column: 1; grid-row: 1; }
+.canvas[data-section="reports"] .canvas-tools { grid-column: 2; grid-row: 1; }
+.canvas[data-section="reports"] .pane { grid-column: 1 / -1; grid-row: 2; align-self: stretch; }
+.canvas-head .lead:empty { display: none; }
+
+.rep-tabs {
+  display: inline-flex; gap: 2px; margin-left: 12px; padding: 2px;
+  background: var(--c-surface-soft); border-radius: 9px;
+}
+.rep-tabs button {
+  height: 28px; padding: 0 14px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--c-ink-3);
+  font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
+}
+.rep-tabs button:hover { background: rgba(0, 0, 0, .04); color: var(--c-ink); transform: none; }
+.rep-tabs button.on {
+  background: var(--c-surface); color: var(--c-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 0 0 1px rgba(0, 0, 0, .04);
+}
+.rep-tabs button:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 1px; }
+
+.entity-list.report-blocks { display: block; height: 100%; padding: 0; }
+.rep-setup, .rep-metrics {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px; height: 100%; background: var(--c-border);
 }
 .col { background: var(--c-surface); min-width: 0; }
 .col-head {
@@ -863,7 +879,30 @@ p.library-empty { margin: 0; }
   text-transform: uppercase; color: var(--c-ink-3); font-weight: 600;
 }
 .col-note { font-size: var(--t-xs); color: var(--c-ink-3); }
+.rep-props { min-height: 0; overflow: auto; }
+.rep-props .prop:first-child { border-top: 0; }
+.rep-side, .rep-side-block { display: flex; flex-direction: column; min-height: 0; }
+.rep-side-block { flex: 1 1 auto; }
+.rep-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; align-content: start; }
+/* В половине панели строка сборки — две строки: время и файлы, под ними состав. */
+.rep-side .run { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+.rep-side .run time { grid-column: 1; grid-row: 1; }
+.rep-side .run-links { grid-column: 2; grid-row: 1; }
+.rep-side .run-meta { grid-column: 1 / -1; grid-row: 2; white-space: normal; }
 
+/* Дополнительные листы — галочками прямо в строке «Листы». */
+.prop-opts { display: flex; flex-wrap: wrap; gap: 0 16px; margin-top: 6px; }
+
+.rep-metrics-col { min-height: 0; overflow: auto; padding: 4px 20px 12px; background: var(--c-surface); }
+.rep-metrics .sf-group { gap: 6px; padding: 12px 0 10px; }
+.rep-metrics .sf-cap { margin: 0 0 2px; }
+.sf-sub { margin-left: 4px; color: var(--c-ink-3); font-size: var(--t-xs); white-space: nowrap; }
+
+/* На узком окне вкладки складываются в одну колонку и прокручиваются целиком. */
+@media (max-width: 1080px) {
+  .rep-setup, .rep-metrics { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .rep-props, .rep-metrics-col, .rep-scroll { overflow: visible; }
+}
 /* История запусков: строка — одна неизменная сборка. */
 .runs { border-top: 1px solid var(--c-border); }
 .runs-list { display: grid; }
@@ -923,9 +962,6 @@ button.prop-val:hover { background: transparent; transform: none; }
 
 /* На узком окне две колонки не читаются: они складываются в одну, и
    статистика встаёт под свойствами — как было до этой раскладки. */
-@media (max-width: 1080px) {
-  .split { grid-template-columns: minmax(0, 1fr); }
-}
 @media (max-width: 560px) {
   .sf-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
@@ -939,7 +975,6 @@ button.prop-val:hover { background: transparent; transform: none; }
    вопрос, под ним ответы, выбранный залит. Каждый щелчок уходит в
    конфигурацию сразу.
    ================================================================ */
-.stat-col .col-head { padding-right: 12px; }
 .stat-saved {
   margin-left: auto; padding: 1px 9px; border-radius: var(--r-pill);
   background: var(--c-brand-tint); color: var(--c-brand);
@@ -2128,7 +2163,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
   /* Колонки на редактор уже не хватает: он выезжает поверх списка
      с той же стороны, где стоял бы. */
   .pane-body:has(.insp:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
-  .pane-body:has(.insp:not([hidden])) .report-blocks .stat-col { display: revert; }
+  .pane-body:has(.insp:not([hidden])) .report-blocks .rep-side { display: revert; }
   .insp-dock { position: static; padding: 0; }
   .pane-body:has(.insp:not([hidden])) .insp-dock { border-left: 0; }
   .insp:not([hidden]) {
@@ -3752,33 +3787,6 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .weight-head-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; align-items: start; }
 .weight-head-row select { width: 100%; min-width: 0; }
 
-/* «Ручной отчёт», 7 октября: группы статистики свёрнуты, в заголовке —
-   текущие значения одной строкой, раскрытая группа — та же форма. */
-details.sf-group { display: block; gap: 0; padding: 0; }
-details.sf-group:first-child { padding-top: 0; }
-details.sf-group > summary {
-  display: grid; grid-template-columns: 124px minmax(0, 1fr) 12px; gap: 12px; align-items: center;
-  padding: 11px 0; cursor: pointer; list-style: none;
-}
-details.sf-group > summary::-webkit-details-marker { display: none; }
-details.sf-group > summary::after {
-  content: ""; width: 8px; height: 5px; background: var(--caret) no-repeat center / contain;
-  transform: rotate(-90deg); transition: transform 120ms var(--ease);
-}
-details.sf-group[open] > summary::after { transform: none; }
-details.sf-group > summary .sf-cap { margin: 0; }
-.sf-sum { min-width: 0; overflow: hidden; color: var(--c-ink-3); font-size: var(--t-xs); text-overflow: ellipsis; white-space: nowrap; }
-details.sf-group[open] > summary .sf-sum { visibility: hidden; }
-details.sf-group > summary:hover .sf-cap { color: var(--c-brand); }
-.sf-body { display: grid; gap: 9px; padding: 0 0 14px; }
-details.runs > summary { cursor: pointer; list-style: none; }
-details.runs > summary::-webkit-details-marker { display: none; }
-details.runs > summary::after {
-  content: ""; width: 8px; height: 5px; margin-left: auto; align-self: center;
-  background: var(--caret) no-repeat center / contain; transform: rotate(-90deg);
-}
-details.runs[open] > summary::after { transform: none; }
-details.runs:not([open]) { padding-bottom: 6px; }
 /* Пояснение под значением свойства читается целиком, в две строки, а не
    обрезается многоточием. */
 .report-blocks .prop-val small { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35; }
@@ -3786,8 +3794,6 @@ details.runs:not([open]) { padding-bottom: 6px; }
 @media (max-width: 640px) {
   .report-blocks .prop { grid-template-columns: 76px minmax(0, 1fr); row-gap: 4px; }
   .report-blocks .prop > .prop-act, .report-blocks .prop > .prop-acts { grid-column: 2; justify-self: start; margin-left: -10px; }
-  details.sf-group > summary { grid-template-columns: minmax(0, 1fr) 12px; }
-  details.sf-group > summary .sf-sum { grid-column: 1; grid-row: 2; }
 }
 
 /* Варианты веса рядом (лист «Вес отчёта»). */
@@ -3840,9 +3846,9 @@ details.runs:not([open]) { padding-bottom: 6px; }
   .brand span { display: none; }
 }
 @media (max-width: 640px) {
-  .stat-col .seg { flex-wrap: wrap; max-width: 100%; height: auto; }
-  .stat-col .sf-controls { min-width: 0; }
-  .stat-col .opt { white-space: normal; text-align: left; max-width: 100%; }
+  .rep-metrics .seg { flex-wrap: wrap; max-width: 100%; height: auto; }
+  .rep-metrics .sf-controls { min-width: 0; }
+  .rep-metrics .opt { white-space: normal; text-align: left; max-width: 100%; }
 }
 
 /* Селектор волны в шапке: «проект › волна». По выбранной волне считается

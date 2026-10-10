@@ -131,13 +131,14 @@ def _open_view(page: Page, view: str) -> None:
     page.click(f".tabs button[data-view='{view}']")
 
 
-def _open_stat_group(page: Page, group: str) -> None:
-    """Раскрыть группу правой колонки «Ручного отчёта»: они свёрнуты, а
-    раскрытая переживает перерисовку раздела."""
-    summary = page.locator(f'details[data-stat-group="{group}"] > summary')
-    expect(summary).to_be_visible(timeout=UI_TIMEOUT)
-    if page.locator(f'details[data-stat-group="{group}"]').get_attribute("open") is None:
-        summary.click()
+def _open_report_tab(page: Page, tab: str) -> None:
+    """Открыть вкладку «Ручного отчёта»: setup — веса, баннеры, фильтры;
+    metrics — настройка показателей."""
+    button = page.locator(f'#report-tabs [data-report-tab="{tab}"]')
+    expect(button).to_be_visible(timeout=UI_TIMEOUT)
+    if button.get_attribute("aria-selected") != "true":
+        button.click()
+    expect(button).to_have_attribute("aria-selected", "true", timeout=UI_TIMEOUT)
 
 
 def _open_analysis_tool(page: Page, tool: str) -> None:
@@ -282,8 +283,9 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
     page.click("#close-banner-editor")
     expect(page.locator('[data-block="banner"]')).to_contain_text("Пол", timeout=UI_TIMEOUT)
 
-    # Статистические параметры видны прямо в разделе и применяются сразу:
-    # схема сравнения — один сегментированный переключатель на два поля.
+    # Статистические параметры — на вкладке «Настройка показателей» и
+    # применяются сразу: схема сравнения — один переключатель на два поля.
+    _open_report_tab(page, "metrics")
     expect(page.locator("#stat-panel")).to_be_visible(timeout=UI_TIMEOUT)
     page.click('#stat-panel [data-stat="scheme"][data-value="rest"]')
     expect(page.locator('#stat-panel [data-stat="scheme"][data-value="rest"]')).to_have_attribute(
@@ -294,18 +296,14 @@ def test_full_analyst_workflow_from_upload_to_downloaded_files(
         "aria-pressed", "true", timeout=UI_TIMEOUT
     )
 
-    # Раздел стоит двумя колонками: слева свойства книги, справа статистика.
-    expect(page.locator("#entity-list .split > .col")).to_have_count(2, timeout=UI_TIMEOUT)
+    # Группы показателей открыты: две колонки, ни одна не свёрнута.
+    expect(page.locator("#stat-panel .rep-metrics-col")).to_have_count(2, timeout=UI_TIMEOUT)
 
-    # Вопросы — первая строка левой колонки. Это итог структуры, а не
+    # Вопросы — первая строка первой вкладки. Это итог структуры, а не
     # настройка книги, поэтому действие у неё одно: переход в «Данные».
+    _open_report_tab(page, "setup")
     expect(page.locator('[data-block="content"]')).to_contain_text(
         "Вопросы", timeout=UI_TIMEOUT
-    )
-    # Свёрнутая группа статистики показывает свой выбор в заголовке.
-    page.click('details[data-stat-group="significance"] > summary')
-    expect(page.locator('details[data-stat-group="significance"] .sf-sum')).to_contain_text(
-        "с остатком", timeout=UI_TIMEOUT
     )
     expect(page.locator('[data-block="content"] [data-goto="data"]')).to_be_visible()
 
@@ -818,8 +816,7 @@ def test_output_profile_is_read_from_the_chosen_metrics(
     _write_survey(source)
     _open_project(page, live_server, source)
     _open_view(page, "reports")
-    for group in ("rows", "format", "extras"):
-        _open_stat_group(page, group)
+    _open_report_tab(page, "metrics")
 
     profile = page.locator('[data-stat="profile"]')
     expect(profile.filter(has_text="Стандарт")).to_have_attribute(
@@ -983,8 +980,7 @@ def test_top_bottom_size_renames_the_scale_toggles(
     _write_survey(source)
     _open_project(page, live_server, source)
     _open_view(page, "reports")
-    for group in ("rows", "extras"):
-        _open_stat_group(page, group)
+    _open_report_tab(page, "metrics")
     # Подробности значимости видны, когда она считается.
     page.click('[data-stat="scheme"][data-value="rest"]')
 
@@ -1000,10 +996,6 @@ def test_top_bottom_size_renames_the_scale_toggles(
     expect(page.locator('[data-stat="row-percents"]')).to_have_attribute(
         "aria-pressed", "true", timeout=UI_TIMEOUT
     )
-    page.click('[data-stat="charts"]')
-    expect(page.locator('[data-stat="charts"]')).to_have_attribute(
-        "aria-pressed", "true", timeout=UI_TIMEOUT
-    )
     page.click('[data-stat="overall"]')
     expect(page.locator('[data-stat="overall"]')).to_have_attribute(
         "aria-pressed", "true", timeout=UI_TIMEOUT
@@ -1011,6 +1003,12 @@ def test_top_bottom_size_renames_the_scale_toggles(
     page.click('[data-stat="secondary"][data-value="0.9"]')
     expect(page.locator('[data-stat="secondary"][data-value="0.9"]')).to_have_attribute(
         "aria-checked", "true", timeout=UI_TIMEOUT
+    )
+    # Дополнительные листы выбираются в строке «Листы» первой вкладки.
+    _open_report_tab(page, "setup")
+    page.click('[data-block="sheets"] [data-stat="charts"]')
+    expect(page.locator('[data-stat="charts"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=UI_TIMEOUT
     )
 
 
@@ -2008,32 +2006,38 @@ def test_open_answers_are_coded_by_ai_and_by_hand(
             app.dependency_overrides.pop(dependency, None)
 
 
-def test_header_preview_shows_columns_and_bases_before_building(
+def test_report_tabs_fit_one_screen_and_remember_the_choice(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
+    """«Ручной отчёт» — две вкладки, и ни одна не прокручивает страницу."""
     source = tmp_path / "survey.sav"
     _write_survey(source)
+    page.set_viewport_size({"width": 1280, "height": 720})
     _open_project(page, live_server, source)
     _open_view(page, "reports")
+    _open_report_tab(page, "setup")
+    expect(page.locator('[data-block="sheets"] [data-stat="charts"]')).to_be_visible()
+    expect(page.locator("#report-runs")).to_be_visible()
 
-    # Без баннера превью честно говорит, что в книге будет только Total.
-    page.click("#header-preview summary")
-    expect(page.locator("#header-preview-body")).to_contain_text(
-        "только колонка Total", timeout=UI_TIMEOUT
-    )
-
+    # Редактор разбивки относится к первой вкладке и закрывается со сменой.
     page.click('[data-block="banner"] [data-new="banner"]')
-    page.fill("#banner-name", "Пол")
-    page.locator("#banner-block-list select").first.select_option("question:SEX")
-    page.click("#save-banner")
-    expect(page.locator("#banner-preview")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
-    page.click("#close-banner-editor")
+    expect(page.locator("#banner-name")).to_be_visible(timeout=UI_TIMEOUT)
+    _open_report_tab(page, "metrics")
+    expect(page.locator("#banner-name")).to_be_hidden()
+    expect(page.locator('#stat-panel [data-stat="scheme"]').first).to_be_visible()
+    expect(page.locator('#stat-panel [data-stat="pvalues"]')).to_be_visible()
 
-    page.click("#header-preview summary")
-    page.click("#header-preview summary")
-    expect(page.locator("#header-preview-body")).to_contain_text("Мужчина", timeout=UI_TIMEOUT)
-    expect(page.locator(".header-preview-row").first).to_contain_text("Total")
+    for tab in ("metrics", "setup"):
+        _open_report_tab(page, tab)
+        assert page.evaluate("document.scrollingElement.scrollHeight") <= 720
+        expect(page.locator("#report-launch")).to_be_in_viewport()
 
+    _open_report_tab(page, "metrics")
+    page.reload()
+    expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
+    expect(page.locator('[data-report-tab="metrics"]')).to_have_attribute(
+        "aria-selected", "true", timeout=UI_TIMEOUT
+    )
 
 def test_net_group_is_built_on_the_table_screen_without_saving(
     page: Page, live_server: str, tmp_path: Path

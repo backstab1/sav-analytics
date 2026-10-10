@@ -479,8 +479,15 @@
                 <div id="report-toolbar" class="toolbar" hidden>
                   <h2>Книга</h2>
                   <button id="book-switch" class="book-switch" type="button" aria-haspopup="dialog" aria-expanded="false"><span id="book-name">Отчёт</span><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
-                  <span id="report-revision" class="toolbar-count"></span>
+                  <!-- Две вкладки во всю ширину панели: что войдёт в книгу и
+                       как считать и показывать числа (10 октября). -->
+                  <div id="report-tabs" class="rep-tabs" role="tablist" aria-label="Настройки книги">
+                    <button type="button" role="tab" data-report-tab="setup" aria-controls="entity-list">Веса, баннеры, фильтры</button>
+                    <button type="button" role="tab" data-report-tab="metrics" aria-controls="entity-list">Настройка показателей</button>
+                  </div>
                   <div class="toolbar-grow"></div>
+                  <span id="stat-saved" class="stat-saved" role="status" hidden>Сохранено</span>
+                  <span id="report-revision" class="toolbar-count"></span>
                 </div>
 
               </div>

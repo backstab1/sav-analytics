@@ -368,7 +368,7 @@ const sectionHeads = {
   reports: {
     eyebrow: "Ручной отчёт",
     title: "Книга Excel",
-    lead: "Слева — что войдёт в книгу, справа — как считаются различия.",
+    lead: "",
   },
 };
 

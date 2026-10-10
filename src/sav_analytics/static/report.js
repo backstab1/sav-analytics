@@ -158,39 +158,41 @@ function reportWeightRow(settings) {
   });
 }
 
-// Листы — не свойство, которое здесь выбирают, а следствие состава:
-// второй топлайн существует ради вопросов, заданных не всем. Правило то
-// же, что на сервере (core/reporting/data.py): объявленный пропуск SPSS
-// или код, помеченный как «не применимо».
-function reportSheetsRow() {
+// Листы. Основные — следствие состава: второй топлайн существует ради
+// вопросов, заданных не всем. Правило то же, что на сервере
+// (core/reporting/data.py): объявленный пропуск SPSS или код, помеченный
+// как «не применимо». Дополнительные листы выбираются здесь же
+// галочками: это вопрос «что войдёт в книгу», а не «как считать».
+function reportSheetsRow(settings) {
   const partial = configuredQuestions().filter(question =>
     question.included_in_report
     && (question.missing_count > 0 || (question.not_applicable_values || []).length > 0)
   ).length;
-  // Листы называются словами, а не именами листов книги: аналитику важно,
-  // что в книге будет, а не как называется лист.
-  const settings = configuredReportSettings();
-  const extras = [
-    settings.show_charts && "графики",
-    settings.counts_sheet && "счётчики",
-    settings.correlations && "корреляции",
-  ].filter(Boolean);
-  return reportPropRow({
-    key: "sheets", title: "Листы", off: true,
-    value: `Содержание и топлайн${partial ? " · топлайн по ответившим" : ""}${extras.length ? ` · ${extras.join(", ")}` : ""}`,
-    meta: partial
-      ? `По ответившим — для <b>${partial}</b> ${plural(partial, "вопроса", "вопросов", "вопросов")}, заданных не всем`
-      : "Все вопросы заданы всем — лист «по ответившим» будет пустым",
-  });
+  const extras = statToggle("charts", "Графики", settings.show_charts,
+    "Лист «Графики»: распределения вопросов родными графиками Excel, связанными с ячейками")
+    + statToggle("counts-sheet", "Счётчики", settings.counts_sheet,
+      "Отдельный лист книги: те же строки числами ответивших, без долей и тестов")
+    + statToggle("correlations", "Корреляции", settings.correlations,
+      "Отдельный лист книги: связи числовых вопросов между собой, с поправкой на множественность");
+  return `<div class="prop prop-sheets" data-block="sheets">
+    <span class="prop-key">Листы</span>
+    <span class="prop-val">
+      <strong>Содержание и топлайн${partial ? " · топлайн по ответившим" : ""}</strong>
+      <small>${partial
+        ? `По ответившим — для <b>${partial}</b> ${plural(partial, "вопроса", "вопросов", "вопросов")}, заданных не всем`
+        : "Все вопросы заданы всем — листа «по ответившим» не будет"}</small>
+      <span class="prop-opts" aria-label="Дополнительные листы">${extras}</span>
+    </span>
+  </div>`;
 }
 
-// Статистика — не строка. У остальных свойств значение одно («этот
-// баннер», «этот фильтр», «этот вес»), а здесь их семь, и прятать их за
-// словом «изменить» значит держать половину настроек отчёта в закрытом
-// ящике. Своей колонкой они помещаются целиком: каждый переключатель
-// виден и уходит в конфигурацию сразу.
-function statSegment(name, options, value) {
-  return `<span class="seg" role="radiogroup">${options.map(option => `
+// Показатели — не строка. У свойств книги значение одно («этот баннер»,
+// «этот фильтр»), а здесь их два десятка. С 10 октября у них своя
+// вкладка во всю ширину панели: группы стоят открытыми в две колонки, и
+// каждый переключатель виден без раскрытия (уточнение решения 038).
+function statSegment(name, options, value, label = "") {
+  const aria = label ? ` aria-label="${escapeAttribute(label)}"` : "";
+  return `<span class="seg" role="radiogroup"${aria}>${options.map(option => `
     <button type="button" role="radio" data-stat="${name}" data-value="${escapeAttribute(option.value)}"
       aria-checked="${option.value === value}" class="${option.value === value ? "on" : ""}">${escapeHtml(option.label)}</button>`).join("")}</span>`;
 }
@@ -201,58 +203,14 @@ function statToggle(name, label, checked, title = "") {
     <span class="opt-mark" aria-hidden="true"></span>${escapeHtml(label)}</button>`;
 }
 
-// Группы правой колонки свёрнуты, но не прячут выбор: в заголовке группы —
-// её текущие значения одной строкой (уточнение решения 004). Открыта
-// значимость — её меняют чаще всего; что человек раскрыл, переживает
-// перерисовку.
-const statOpenGroups = new Set(["significance"]);
-
-function statGroup(key, title, summary, body) {
-  return `<details class="sf-group" data-stat-group="${key}" ${statOpenGroups.has(key) ? "open" : ""}>
-    <summary><span class="sf-cap">${title}</span><span class="sf-sum">${summary}</span></summary>
-    <div class="sf-body">${body}</div>
-  </details>`;
+function statGroup(key, title, body) {
+  return `<section class="sf-group" data-stat-group="${key}">
+    <h4 class="sf-cap">${title}</h4>
+    ${body}
+  </section>`;
 }
 
-function significanceSummary(settings, scheme) {
-  if (scheme === "off") return "не считается";
-  const percent = value => `${Math.round(Number(value) * 100)}%`;
-  return [
-    scheme === "total" ? "с Total" : "с остатком",
-    percent(settings.confidence_level)
-      + (settings.secondary_confidence_level ? ` и ${percent(settings.secondary_confidence_level)}` : ""),
-    `малая база < ${settings.minimum_base}`,
-    settings.compare_pairwise && "попарные",
-    settings.bonferroni && "Bonferroni",
-    settings.overall_tests && "общие тесты",
-    settings.wave_comparison === "previous" && "волны с предыдущей",
-    settings.wave_comparison === "control" && "волны с контрольной",
-  ].filter(Boolean).join(" · ");
-}
-
-function rowsSummary(settings, profile) {
-  const name = profile === "custom" ? "свой набор" : `набор «${outputProfiles[profile]?.label || profile}»`;
-  const scale = scaleMetricOptions
-    .filter(option => settings.scale_metrics.includes(option.value))
-    .map(option => scaleMetricLabel(option, settings.scale_box).toLowerCase());
-  return [name, scale.length ? `шкалы: ${scale.join(", ")}` : "шкалы без строк"].join(" · ");
-}
-
-function extrasSummary(settings) {
-  const on = [
-    settings.show_counts && "N",
-    settings.row_percents && "% по строке",
-    settings.table_percents && "% от общего",
-    settings.show_p_values && "p-value",
-    settings.note_skip_reasons && "причины пропуска",
-    settings.show_charts && "графики",
-    settings.counts_sheet && "счётчики",
-    settings.correlations && "корреляции",
-  ].filter(Boolean);
-  return on.length ? on.join(" · ") : "ничего сверх долей и базы";
-}
-
-function reportStatisticsColumn(settings) {
+function reportMetricsTab(settings) {
   // Схема сравнения — это два поля сразу: считать ли подгруппы и с кем.
   // Раздельно они давали выключенный селект рядом с выключенным флажком.
   const scheme = !settings.compare_to_total
@@ -269,57 +227,62 @@ function reportStatisticsColumn(settings) {
     return `<option value="${escapeAttribute(value)}" ${selected}>${escapeHtml(item.label)}</option>`;
   }).join("");
   const profile = currentOutputProfile(settings);
-  const totalWarning = scheme === "total"
-    ? '<p class="stat-hint warning-hint">Total включает саму подгруппу: выборки пересекаются, различия занижаются. Выбирайте, только если этого требует шаблон заказчика.</p>'
-    : "";
   // Строка формы: подпись слева, выбор справа.
   const row = (label, controls, title = "") =>
     `<div class="sf-row"${title ? ` title="${escapeAttribute(title)}"` : ""}><span class="sf-label">${label}</span><div class="sf-controls">${controls}</div></div>`;
+  const totalWarning = scheme === "total"
+    ? '<p class="stat-hint warning-hint">Total включает саму подгруппу: выборки пересекаются, различия занижаются.</p>'
+    : "";
   // Пока значимость не считается, её подробности не нужны: остаётся
-  // только выбор схемы.
+  // только выбор схемы. Проверки — три независимые галочки одной строкой,
+  // оба уровня доверия — тоже одной: это одна мысль «насколько строго».
   const significance = row("Сравнение", statSegment("scheme", [
     { value: "off", label: "Не считать" },
     { value: "rest", label: "С остатком" },
     { value: "total", label: "С Total" },
   ], scheme))
     + (totalWarning ? row("", totalWarning) : "")
-    + (scheme === "off" ? "" : row("", statToggle("pairwise", "Попарные внутри блока", settings.compare_pairwise,
-      "Каждая колонка блока сравнивается с каждой; результат — буквами в ячейке"))
+    + (scheme === "off" ? "" : row("Проверки",
+      statToggle("pairwise", "Попарные внутри блока", settings.compare_pairwise,
+        "Каждая колонка блока сравнивается с каждой; результат — буквами в ячейке")
+      + statToggle("bonferroni", "Bonferroni", settings.bonferroni,
+        "Корректирует alpha на число сравнений внутри блока")
+      + statToggle("overall", "Общие тесты", settings.overall_tests,
+        "Хи-квадрат для распределений и Welch ANOVA для средних по каждому блоку баннера"))
     + row("Уровень доверия", statSegment("confidence", [
       { value: "0.9", label: "90%" },
       { value: "0.95", label: "95%" },
       { value: "0.99", label: "99%" },
-    ], String(settings.confidence_level)))
-    + row("Второй уровень", statSegment("secondary", [
-      { value: "", label: "Нет" },
-      { value: "0.9", label: "90%" },
-      { value: "0.8", label: "80%" },
-    ], String(settings.secondary_confidence_level ?? "")), "Более слабые различия отмечаются в книге строчной буквой")
+    ], String(settings.confidence_level), "Уровень доверия")
+      + '<span class="sf-sub">второй</span>'
+      + statSegment("secondary", [
+        { value: "", label: "Нет" },
+        { value: "0.9", label: "90%" },
+        { value: "0.8", label: "80%" },
+      ], String(settings.secondary_confidence_level ?? ""), "Второй уровень доверия"),
+    "Второй уровень отмечает более слабые различия строчной буквой")
     + row("Малая база", `<label class="stat-number">меньше<input id="stat-minimum-base" type="number" min="1" max="100000" value="${settings.minimum_base}" /></label>`,
       "Колонки с базой меньше порога не тестируются и приглушаются")
-    + row("Поправки",
-      statToggle("bonferroni", "Bonferroni", settings.bonferroni,
-        "Корректирует alpha на число сравнений внутри блока")
-      + statToggle("overall", "Общие тесты", settings.overall_tests,
-        "Хи-квадрат для распределений и Welch ANOVA для средних по каждому блоку баннера")))
     + (waveQuestion ? row("Волны", statSegment("wave", [
       { value: "none", label: "Не сравнивать" },
       { value: "previous", label: "С предыдущей" },
       { value: "control", label: "С контрольной" },
-    ], settings.wave_comparison)) : "")
-    + (waveQuestion && settings.wave_comparison === "control"
-      ? row("Контрольная", `<label class="stat-number"><select id="stat-wave-control" aria-label="Контрольная волна">${waveOptions}</select></label>`)
-      : "");
+    ], settings.wave_comparison)
+      + (settings.wave_comparison === "control"
+        ? `<label class="stat-number"><select id="stat-wave-control" aria-label="Контрольная волна">${waveOptions}</select></label>`
+        : "")) : ""));
+  const format = row("Знаков у долей", statSegment("percent-decimals", ["0", "1", "2"].map(value => ({ value, label: value })), String(settings.percent_decimals), "Знаков у долей")
+    + '<span class="sf-sub">у средних</span>'
+    + statSegment("mean-decimals", ["0", "1", "2", "3"].map(value => ({ value, label: value })), String(settings.mean_decimals), "Знаков у средних"),
+  "Знаков после запятой у процентов и у средних и других показателей");
   const rows = row("Набор", statSegment("profile", Object.entries(outputProfiles).map(([value, item]) => ({ value, label: item.label })), profile)
       + (profile === "custom" ? '<span class="stat-custom">свой набор</span>' : ""))
-    + row("Шкалы", scaleMetricOptions.map(option => statToggle(`scale:${option.value}`, scaleMetricLabel(option, settings.scale_box), settings.scale_metrics.includes(option.value))).join(""))
-    + row("Top / Bottom", statSegment("scale-box", ["1", "2", "3"].map(value => ({ value, label: value })), String(settings.scale_box)),
-      "Сколько крайних кодов шкалы входит в Top и Bottom")
+    + row("Шкалы", scaleMetricOptions.map(option => statToggle(`scale:${option.value}`, scaleMetricLabel(option, settings.scale_box), settings.scale_metrics.includes(option.value))).join("")
+      + '<span class="sf-sub">Top / Bottom</span>'
+      + statSegment("scale-box", ["1", "2", "3"].map(value => ({ value, label: value })), String(settings.scale_box), "Сколько кодов в Top и Bottom"),
+    "Сколько крайних кодов шкалы входит в Top и Bottom")
     + row("Числовые", numericMetricOptions.map(option => statToggle(`numeric:${option.value}`, option.label, settings.numeric_metrics.includes(option.value))).join(""))
-    + row("Ранжирование", rankingMetricOptions.map(option => statToggle(`ranking:${option.value}`, option.label, settings.ranking_metrics.includes(option.value))).join(""))
-    + '<p class="stat-hint muted">База выводится всегда. NPS и CSAT — полностью.</p>';
-  const format = row("Доли", statSegment("percent-decimals", ["0", "1", "2"].map(value => ({ value, label: value })), String(settings.percent_decimals)), "Знаков после запятой у процентов")
-    + row("Средние", statSegment("mean-decimals", ["0", "1", "2", "3"].map(value => ({ value, label: value })), String(settings.mean_decimals)), "Знаков после запятой у средних и других показателей");
+    + row("Ранжирование", rankingMetricOptions.map(option => statToggle(`ranking:${option.value}`, option.label, settings.ranking_metrics.includes(option.value))).join(""));
   const extras = row("Под долями",
       statToggle("counts", "N", settings.show_counts,
         "Под каждой строкой долей — сколько человек дали этот ответ")
@@ -331,53 +294,88 @@ function reportStatisticsColumn(settings) {
       statToggle("pvalues", "p-value", settings.show_p_values,
         "Полный протокол теста в примечании к ячейке; книга заметно тяжелее")
       + statToggle("skip-reasons", "Причины пропуска", settings.note_skip_reasons,
-        "Только у ячеек, где тест не выполнялся: почему. Легче полного протокола"))
-    + row("Листы",
-      statToggle("charts", "Графики", settings.show_charts,
-        "Лист «Графики»: распределения вопросов родными графиками Excel, связанными с ячейками")
-      + statToggle("counts-sheet", "Счётчики", settings.counts_sheet,
-        "Отдельный лист книги: те же строки числами ответивших, без долей и тестов")
-      + statToggle("correlations", "Корреляции", settings.correlations,
-        "Отдельный лист книги: связи числовых вопросов между собой, с поправкой на множественность"));
-  const formatSummary = `доли — ${plural(settings.percent_decimals, "знак", "знака", "знаков")}, средние — ${plural(settings.mean_decimals, "знак", "знака", "знаков")}`;
-  return `<section class="col stat-col" id="stat-panel">
-    <div class="col-head">
-      <h3>Как считать и показывать</h3>
-      <span class="col-note">для всего отчёта</span>
-      <span id="stat-saved" class="stat-saved" role="status" hidden>Сохранено</span>
+        "Только у ячеек, где тест не выполнялся: почему. Легче полного протокола"));
+  return `<div class="rep-metrics" id="stat-panel">
+    <div class="rep-metrics-col">
+      ${statGroup("significance", "Значимость различий", significance)}
+      ${statGroup("format", "Формат чисел", format)}
     </div>
-    <div class="stat-stack">
-      ${statGroup("significance", "Значимость", significanceSummary(settings, scheme), significance)}
-      ${statGroup("rows", "Строки в таблицах", rowsSummary(settings, profile), rows)}
-      ${statGroup("format", "Формат чисел", formatSummary, format)}
-      ${statGroup("extras", "Дополнительно", extrasSummary(settings), extras)}
+    <div class="rep-metrics-col">
+      ${statGroup("rows", "Строки в таблицах", `${rows}<p class="stat-hint muted">База выводится всегда, NPS и CSAT — полностью.</p>`)}
+      ${statGroup("extras", "Рядом с долями", extras)}
     </div>
-  </section>`;
+  </div>`;
 }
 
-function renderReportBlocks() {
-  const container = document.querySelector("#entity-list");
-  const settings = configuredReportSettings();
-  container.className = "entity-list report-blocks";
-  container.innerHTML = `<div class="split">
-    <section class="col">
-      <div class="col-head"><h3>Что войдёт в книгу</h3><span class="col-note">щёлкните значение, чтобы выбрать другое</span></div>
+// Вкладка «Веса, баннеры, фильтры»: слева свойства книги строками, справа
+// прежние сборки — что из этих настроек уже выходило.
+function reportSetupTab(settings) {
+  return `<div class="rep-setup">
+    <section class="col rep-props" aria-label="Что войдёт в книгу">
       ${[
         reportContentRow(),
         reportColumnsRow(),
         reportBaseRow(),
         reportWeightRow(settings),
-        reportSheetsRow(),
+        reportSheetsRow(settings),
       ].join("")}
     </section>
-    ${reportStatisticsColumn(settings)}
-  </div>
-  <details id="header-preview" class="header-preview"><summary>Превью шапки книги</summary><div id="header-preview-body"><p class="analysis-note">Раскройте — посчитаем колонки и базы до сборки.</p></div></details>
-  <details class="runs" ${statOpenGroups.has("runs") ? "open" : ""} data-stat-group="runs">
-    <summary class="col-head"><h3>История сборок</h3><span class="col-note">каждая скачивается снова</span></summary>
-    <div id="report-runs" class="runs-list"><p class="runs-empty">Загружаем…</p></div>
-  </details>`;
-  void loadRunHistory();
+    <aside class="col rep-side">
+      <section class="rep-side-block">
+        <div class="col-head"><h3>История сборок</h3><span class="col-note">каждая скачивается снова</span></div>
+        <div id="report-runs" class="runs-list rep-scroll"><p class="runs-empty">Загружаем…</p></div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+// Выбранная вкладка помнится в браузере: аналитик обычно настраивает
+// одно, а потом долго правит другое.
+const REPORT_TAB_KEY = "sav-analytics:report-tab";
+let reportTab = "setup";
+try {
+  if (localStorage.getItem(REPORT_TAB_KEY) === "metrics") reportTab = "metrics";
+} catch {
+  // Без хранилища вкладка открывается первой.
+}
+
+function setReportTab(tab) {
+  reportTab = tab === "metrics" ? "metrics" : "setup";
+  try {
+    localStorage.setItem(REPORT_TAB_KEY, reportTab);
+  } catch {
+    // см. выше
+  }
+  // Редактор баннера, фильтра или веса относится к первой вкладке.
+  if (reportTab === "metrics") closeAllInspectors();
+  renderReportBlocks();
+}
+
+document.querySelector("#report-tabs").addEventListener("click", event => {
+  const tab = event.target.closest("[data-report-tab]");
+  if (tab && tab.dataset.reportTab !== reportTab) setReportTab(tab.dataset.reportTab);
+});
+
+function renderReportTabs() {
+  document.querySelectorAll("#report-tabs [data-report-tab]").forEach(button => {
+    const active = button.dataset.reportTab === reportTab;
+    button.classList.toggle("on", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+}
+
+function renderReportBlocks() {
+  const container = document.querySelector("#entity-list");
+  const settings = configuredReportSettings();
+  container.className = `entity-list report-blocks report-tab-${reportTab}`;
+  renderReportTabs();
+  if (reportTab === "metrics") {
+    container.innerHTML = reportMetricsTab(settings);
+  } else {
+    container.innerHTML = reportSetupTab(settings);
+    void loadRunHistory();
+  }
   const activeBanner = configuredBanners().find(item => item.id === selectedReportBannerId());
   const included = configuredQuestions().filter(question => question.included_in_report).length;
   const columns = activeBanner ? reportBannerColumnCount(activeBanner) : 1;
@@ -546,38 +544,6 @@ document.querySelector("#entity-list").addEventListener("change", event => {
   if (wave) void applyStatSetting({ wave_control_value: JSON.parse(wave.value) });
 });
 
-/* Превью шапки книги: какие колонки и базы получит Excel — до сборки.
-   Колонки считает тот же расчёт баннера, что и книга. */
-document.querySelector("#entity-list").addEventListener("toggle", event => {
-  if (event.target?.id === "header-preview" && event.target.open) void loadHeaderPreview();
-}, true);
-
-async function loadHeaderPreview() {
-  const body = document.querySelector("#header-preview-body");
-  const bannerId = selectedReportBannerId();
-  if (!bannerId) {
-    const rows = activeRowCount();
-    body.innerHTML = `<p class="analysis-note">Баннер не выбран: в книге будет только колонка Total, N ${rows.toLocaleString("ru-RU")}.</p>`;
-    return;
-  }
-  body.innerHTML = '<p class="analysis-note">Считаем…</p>';
-  try {
-    const preview = await api(`/api/projects/${currentProject.id}/banners/${bannerId}/preview`);
-    const minimumBase = configuredReportSettings().minimum_base;
-    const wide = preview.columns.length >= 50
-      ? `<p class="analysis-note">Колонок ${preview.columns.length}: книга станет неудобной для чтения.</p>` : "";
-    const overlaps = (preview.overlaps || []).map(item =>
-      `<p class="analysis-note">«${escapeHtml(item.block)}»: колонки пересекаются у ${item.respondents.toLocaleString("ru-RU")} респондентов.</p>`).join("");
-    body.innerHTML = `${wide}${overlaps}<div class="header-preview-rows">${preview.columns.map((column, index) => {
-      const small = column.base > 0 && column.base < minimumBase;
-      const block = index === 0 ? "" : `${escapeHtml(column.block || "")} · `;
-      return `<div class="header-preview-row ${small ? "small-base" : ""}"><span title="${escapeAttribute(column.label)}">${block}${escapeHtml(column.label)}</span><em>${column.base.toLocaleString("ru-RU")}${small ? " · малая база" : ""}</em></div>`;
-    }).join("")}</div>`;
-  } catch (error) {
-    body.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
-  }
-}
-
 /* ---------------- Вес отчёта: выбор, объявление и диагностика ---------------- */
 
 // Роль берётся из конфигурации: её меняет аналитик, а `inspection` хранит
@@ -722,11 +688,3 @@ function renderWeightAssessment(assessment) {
 
 document.querySelector("#report-weight").addEventListener("change", loadReportWeightDiagnostics);
 document.querySelector("#report-weight-declare-button").addEventListener("click", declareSelectedWeight);
-
-// Раскрытые группы помнятся между перерисовками раздела.
-document.querySelector("#entity-list").addEventListener("toggle", event => {
-  const group = event.target.closest?.("[data-stat-group]");
-  if (!group || group !== event.target) return;
-  if (group.open) statOpenGroups.add(group.dataset.statGroup);
-  else statOpenGroups.delete(group.dataset.statGroup);
-}, true);
