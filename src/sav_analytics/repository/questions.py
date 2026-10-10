@@ -18,6 +18,7 @@ from ..core.question_groups import QuestionGroupError, build_group, split_group
 from ..core.questionnaire import apply_label_overrides, record_override, reordered
 from ..core.ranking import RankingError, ranking_items
 from ..core.report_books import book_settings
+from ..core.report_settings import wave_weight_variables
 from ..core.review import CONFIRMED_RECOGNITIONS
 from ..core.sav_reader import spss_missing_mask
 from .store import (
@@ -232,8 +233,9 @@ class QuestionEditing(ProjectStore):
             question.get("role") == "weight"
             and final_role != "weight"
             and any(
-                settings.get("weight_variable") in question["source_variables"]
+                name in question["source_variables"]
                 for _, settings in book_settings(project["configuration"])
+                for name in wave_weight_variables(settings)
             )
         ):
             # Снятие роли с выбранного веса оставило бы в настройках отчёта

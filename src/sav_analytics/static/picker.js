@@ -127,6 +127,11 @@ async function assignReportWeight(value) {
     ...configuredReportSettings(),
     weight_variable: value.startsWith("ready:") ? value.slice(6) : null,
     calculated_weight_id: value.startsWith("calculated:") ? value.slice(11) : null,
+    // Свои веса волн относятся к прежнему весу отчёта: с другим весом
+    // они сбрасываются, а не остаются молча рядом с ним.
+    wave_weights: value === `ready:${configuredReportSettings().weight_variable}`
+      ? configuredReportSettings().wave_weights || []
+      : [],
   });
   try {
     currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {

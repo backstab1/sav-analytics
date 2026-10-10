@@ -34,6 +34,7 @@ from ..core.open_text import (
     validate_codeframe,
 )
 from ..core.report_books import book_settings
+from ..core.report_settings import wave_weight_variables
 from .store import (
     InvalidUploadError,
     ProjectNotFoundError,
@@ -609,7 +610,7 @@ class DerivedVariables(ProjectStore):
                 "Формула используется в перекодировке. Сначала удалите перекодировку."
             )
         for book_name, settings in book_settings(configuration):
-            if settings.get("weight_variable") == name:
+            if name in wave_weight_variables(settings):
                 raise ConfigurationIntegrityError(
                     f"Формула выбрана весом книги «{book_name}». "
                     "Сначала смените вес в настройках этой книги."

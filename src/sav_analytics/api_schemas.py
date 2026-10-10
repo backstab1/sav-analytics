@@ -386,6 +386,13 @@ class ReportBookRename(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
 
+class WaveWeight(BaseModel):
+    """Свой готовый вес волны: значение переменной волны и весовая переменная."""
+
+    wave: str | int | float
+    variable: str = Field(min_length=1, max_length=64)
+
+
 class ReportSettingsDefinition(BaseModel):
     ranking_metrics: list[Literal["distribution", "mean"]] = Field(
         default_factory=lambda: ["distribution", "mean"], min_length=1, max_length=2
@@ -441,9 +448,11 @@ class ReportSettingsDefinition(BaseModel):
     correlations: bool = False
     # Лист «Счётчики»: тот же топлайн числами ответивших.
     counts_sheet: bool = False
-    # Презентация PPTX рядом с книгой: слайд на вопрос — график и значимые
-    # различия, числа из записи листа topline_main.
+    # Презентация PPTX рядом с книгой: слайд на вопрос — Total полосами и
+    # числа по баннеру, из записи листа topline_main.
     presentation: bool = False
+    # Свой готовый вес у волны вместо `weight_variable`.
+    wave_weights: list[WaveWeight] = Field(default_factory=list, max_length=50)
 
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:
@@ -461,6 +470,10 @@ class ReportSettingsDefinition(BaseModel):
     def validate_weight_selection(self) -> Self:
         if self.weight_variable and self.calculated_weight_id:
             raise ValueError("Выберите готовый или рассчитанный вес, но не оба сразу.")
+        if self.wave_weights and not self.weight_variable:
+            raise ValueError(
+                "Свой вес у волны задаётся рядом с готовым весом отчёта: сначала выберите его."
+            )
         if self.wave_comparison == "control" and self.wave_control_value is None:
             raise ValueError("Для контрольного сравнения выберите контрольную волну.")
         if (

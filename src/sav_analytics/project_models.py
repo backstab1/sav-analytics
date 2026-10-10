@@ -92,6 +92,7 @@ class StoredReportSettings(_StoredModel):
     correlations: bool = False
     counts_sheet: bool = False
     presentation: bool = False
+    wave_weights: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class StoredConfiguration(_StoredModel):

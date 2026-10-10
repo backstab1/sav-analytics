@@ -39,6 +39,9 @@ DEFAULT_REPORT_SETTINGS: dict[str, Any] = {
     "correlations": False,
     "counts_sheet": False,
     "presentation": False,
+    # Свой готовый вес у волны: [{"wave": значение волны, "variable": имя}].
+    # Остальные волны взвешиваются `weight_variable`.
+    "wave_weights": [],
 }
 
 REPORT_SETTING_KEYS = tuple(DEFAULT_REPORT_SETTINGS)
@@ -64,6 +67,8 @@ def validate_report_settings(settings: dict[str, Any], project: dict[str, Any]) 
             f"Переменная {weight_variable} не объявлена весом. "
             "Весом может быть только переменная с ролью «Вес»."
         )
+
+    _validate_wave_weights(settings, project)
 
     calculated_weight_id = settings.get("calculated_weight_id")
     if calculated_weight_id and not any(
@@ -102,6 +107,51 @@ def validate_report_settings(settings: dict[str, Any], project: dict[str, Any]) 
         raise ReportSettingsError(
             "Для сравнения волн выберите для Excel баннер с переменной в роли «Волна»."
         )
+
+
+def _validate_wave_weights(settings: dict[str, Any], project: dict[str, Any]) -> None:
+    """Свой готовый вес у волны: та же роль «Вес», что у веса отчёта.
+
+    Переопределение имеет смысл только рядом с готовым весом отчёта: у
+    рассчитанного веса свои цели волны задаются в его редакторе.
+    """
+    overrides = settings.get("wave_weights") or []
+    if not overrides:
+        return
+    if not settings.get("weight_variable"):
+        raise ReportSettingsError(
+            "Свой вес у волны задаётся рядом с готовым весом отчёта: сначала выберите его."
+        )
+    from .questionnaire import value_key
+    from .waves import wave_values
+
+    known = {value_key(item["value"]): item["label"] for item in wave_values(project)}
+    names = {variable["name"] for variable in project["inspection"]["variables"]}
+    seen: set[str] = set()
+    for item in overrides:
+        key = value_key(item.get("wave"))
+        if key not in known:
+            raise ReportSettingsError(f"Волны «{item.get('wave')}» в проекте нет.")
+        if key in seen:
+            raise ReportSettingsError(f"У волны «{known[key]}» вес задан дважды.")
+        seen.add(key)
+        variable = item.get("variable")
+        if variable not in names:
+            raise ReportSettingsError(f"Весовой переменной {variable} нет в SAV.")
+        if weight_role(variable, project) != WEIGHT_ROLE:
+            raise ReportSettingsError(
+                f"Переменная {variable} не объявлена весом. "
+                "Весом может быть только переменная с ролью «Вес»."
+            )
+
+
+def wave_weight_variables(settings: dict[str, Any]) -> list[str]:
+    """Все переменные готового веса отчёта: общая и свои у волн."""
+    names = [settings["weight_variable"]] if settings.get("weight_variable") else []
+    for item in settings.get("wave_weights") or []:
+        if item.get("variable") and item["variable"] not in names:
+            names.append(item["variable"])
+    return names
 
 
 def _has_waves(project: dict[str, Any] | None) -> bool:

@@ -15,6 +15,7 @@ from ..filtering import evaluate_filter_frame
 from ..formulas import read_project_frame
 from ..multiple_response import response_definition
 from ..not_applicable import not_applicable_values
+from ..questionnaire import value_key
 from ..ranking import RankingError, ranking_items
 from ..report_settings import resolved_report_settings
 from ..waves import (
@@ -24,7 +25,12 @@ from ..waves import (
     wave_view,
     with_wave_block,
 )
-from ..weight_validation import assess_ready_weight, weight_role
+from ..weight_validation import (
+    assess_ready_weight,
+    assess_weight_parts,
+    ready_weight_parts,
+    weight_role,
+)
 from ..weighting import WeightingError, calculate_weight, weight_method_label
 from .models import ReportError
 
@@ -322,6 +328,9 @@ def report_weights(
         return result.weights, f"{definition['name']} ({weight_method_label(definition)})"
     if not variable:
         return None, None
+    settings = configuration.get("report_settings") or {}
+    if settings.get("wave_weights"):
+        return _wave_ready_weights(frame, {**settings, "weight_variable": variable}, project)
     if variable not in frame.columns:
         raise ReportError("Весовая переменная не найдена в SAV.", code="WEIGHT_VARIABLE_NOT_FOUND")
     # Ту же оценку до сборки делают интерфейс и API. Здесь она стоит последним
@@ -343,3 +352,33 @@ def report_weights(
     weights = pd.to_numeric(frame[variable], errors="coerce").astype(float)
     normalized = weights / float(weights.mean())
     return normalized, variable
+
+
+def _wave_ready_weights(
+    frame: pd.DataFrame, settings: dict[str, Any], project: dict[str, Any]
+) -> tuple[pd.Series, str]:
+    """Готовый вес, у части волн — своя переменная.
+
+    Каждая часть проверяется на своих строках тем же валидатором, а вес
+    нормируется к среднему 1 внутри каждой волны, как рассчитанный
+    (`requirements.md` §10): разные переменные бывают в разных масштабах, и
+    общая нормировка отдала бы волне с крупными весами лишнюю долю.
+    """
+    try:
+        parts = ready_weight_parts(frame, settings, project)
+    except KeyError as exc:
+        raise ReportError("Переменная волны не прочитана из SAV.") from exc
+    for assessment in assess_weight_parts(frame, settings, project):
+        if not assessment.usable:
+            problem = assessment.problems[0]
+            raise ReportError(
+                " ".join(item.message for item in assessment.problems), code=problem.code
+            )
+    weights = pd.Series(float("nan"), index=frame.index)
+    for part in parts:
+        weights[part.mask] = pd.to_numeric(frame.loc[part.mask, part.variable], errors="coerce")
+    wave = wave_variable_of(project)
+    for _, rows in weights.groupby(frame[wave].map(value_key)):
+        weights[rows.index] = rows / float(rows.mean())
+    own = [f"у «{part.wave}» — {part.variable}" for part in parts if part.wave is not None]
+    return weights.astype(float), f"{settings['weight_variable']}; " + ", ".join(own)

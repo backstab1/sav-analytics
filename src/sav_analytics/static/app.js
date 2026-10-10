@@ -64,6 +64,7 @@ const defaultReportSettings = Object.freeze({
   correlations: false,
   counts_sheet: false,
   presentation: false,
+  wave_weights: [],
 });
 
 const scaleMetricOptions = [

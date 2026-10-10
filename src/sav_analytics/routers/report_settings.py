@@ -30,7 +30,7 @@ def update_report_settings(
             # Раньше проверки: непригодный вес отдаёт собственный код ошибки,
             # а не общий отказ настроек, и интерфейс ведёт аналитика в структуру.
             ensure_project_weight_usable(
-                repository.source_path(project_id), payload["weight_variable"], project
+                repository.source_path(project_id), payload["weight_variable"], project, payload
             )
         validate_report_settings(payload, project)
         return repository.update_report_settings(project_id, payload)

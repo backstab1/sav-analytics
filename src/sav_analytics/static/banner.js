@@ -282,6 +282,7 @@ reportSettingsForm.addEventListener("submit", async event => {
       calculated_weight_id: weightSelection.startsWith("calculated:")
         ? weightSelection.slice(11)
         : null,
+      wave_weights: weightSelection.startsWith("ready:") ? waveWeightsPayload() : [],
     });
     closeSheet();
     showToast("Настройки отчёта сохранены");

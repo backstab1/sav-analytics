@@ -198,9 +198,13 @@ def _needed_columns(live: dict[str, Any]) -> list[str] | None:
                 add(name)
         except BannerError:
             return None
-    weight = settings.get("weight_variable")
-    if weight:
+    from ..report_settings import wave_weight_variables
+    from ..waves import wave_variable_of
+
+    for weight in wave_weight_variables(settings):
         add(weight)
+    if settings.get("wave_weights") and wave_variable_of(live):
+        add(wave_variable_of(live) or "")
     return names
 
 

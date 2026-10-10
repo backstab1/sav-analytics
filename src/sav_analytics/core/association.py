@@ -256,7 +256,7 @@ def _weight_columns(settings: dict[str, Any], project: dict[str, Any]) -> list[s
     from .weighting import WeightingError, weight_columns
 
     if settings.get("weight_variable"):
-        return [settings["weight_variable"]]
+        return _ready_weight_columns(settings, project)
     if settings.get("calculated_weight_id"):
         definition = next(
             (
@@ -273,6 +273,16 @@ def _weight_columns(settings: dict[str, Any], project: dict[str, Any]) -> list[s
         except WeightingError as exc:
             raise AssociationError(str(exc)) from exc
     return []
+
+
+def _ready_weight_columns(settings: dict[str, Any], project: dict[str, Any]) -> list[str]:
+    """Готовый вес и, если у волн свой, их переменные вместе с переменной волны."""
+    from .report_settings import wave_weight_variables
+    from .waves import wave_variable_of
+
+    names = wave_weight_variables(settings)
+    wave = wave_variable_of(project) if settings.get("wave_weights") else None
+    return [*names, wave] if wave and wave not in names else names
 
 
 def _report_weight_series(

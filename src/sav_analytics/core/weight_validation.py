@@ -310,11 +310,122 @@ def ensure_project_weight_usable(
     path: str | Path,
     variable: str,
     project: dict[str, Any],
+    settings: dict[str, Any] | None = None,
 ) -> WeightAssessment:
+    """Готовый вес отчёта пригоден, или `WeightNotUsableError`.
+
+    Если у волн свой вес (`settings["wave_weights"]`), каждая переменная
+    проверяется на строках, которые она взвешивает: у волны со своим весом
+    общей переменной может не быть вовсе, и её пропуски не ошибка.
+    """
+    if settings and settings.get("wave_weights"):
+        from .formulas import read_project_frame
+        from .report_settings import wave_weight_variables
+        from .waves import wave_variable_of
+
+        wave = wave_variable_of(project)
+        columns = [*([wave] if wave else []), *wave_weight_variables(settings)]
+        frame = read_project_frame(path, project, columns, all_waves=True)
+        assessments = assess_weight_parts(frame, settings, project)
+        for assessment in assessments:
+            if not assessment.usable:
+                raise WeightNotUsableError(assessment)
+        # Наружу — оценка веса отчёта на его строках, если такие есть.
+        return next(
+            (item for item in assessments if item.variable == variable), assessments[0]
+        )
     assessment = assess_project_weight(path, variable, project)
     if not assessment.usable:
         raise WeightNotUsableError(assessment)
     return assessment
+
+
+@dataclass(frozen=True, slots=True)
+class WeightPart:
+    """Строки массива и готовый вес, которым они взвешиваются."""
+
+    variable: str
+    mask: pd.Series
+    #: Подпись волны со своим весом; None — волны с весом отчёта.
+    wave: str | None
+    #: Подписи волн, которые взвешивает эта часть (для сообщений).
+    waves: tuple[str, ...] = ()
+
+
+def ready_weight_parts(
+    frame: pd.DataFrame, settings: dict[str, Any], project: dict[str, Any]
+) -> list[WeightPart]:
+    """Разбить массив на части с одним готовым весом.
+
+    Без своих весов у волн часть одна — весь массив и вес отчёта. Со своими:
+    строки каждой такой волны отдельно, остальные — с весом отчёта.
+    """
+    variable = settings["weight_variable"]
+    overrides = settings.get("wave_weights") or []
+    everything = pd.Series(True, index=frame.index)
+    if not overrides:
+        return [WeightPart(variable, everything, None)]
+    from .questionnaire import value_key
+    from .waves import wave_values, wave_variable_of
+
+    wave = wave_variable_of(project)
+    if wave is None or wave not in frame.columns:
+        raise KeyError(wave or "переменная волны")
+    labels = {value_key(item["value"]): item["label"] for item in wave_values(project)}
+    keys = frame[wave].map(value_key)
+    rest = everything.copy()
+    parts = []
+    for item in overrides:
+        key = value_key(item["wave"])
+        mask = keys == key
+        rest &= ~mask
+        if mask.any():
+            parts.append(WeightPart(item["variable"], mask, labels.get(key, str(item["wave"]))))
+    if rest.any():
+        rest_waves = tuple(
+            labels.get(key, str(key)) for key in dict.fromkeys(keys[rest].tolist())
+        )
+        parts.insert(0, WeightPart(variable, rest, None, rest_waves))
+    return parts
+
+
+def assess_weight_parts(
+    frame: pd.DataFrame, settings: dict[str, Any], project: dict[str, Any]
+) -> list[WeightAssessment]:
+    """Пригодность готового веса по частям массива; у волны — с её подписью."""
+    result = []
+    for part in ready_weight_parts(frame, settings, project):
+        if part.variable not in frame.columns:
+            result.append(WeightAssessment(part.variable, weight_role(part.variable, project), [
+                WeightProblem(
+                    "WEIGHT_VARIABLE_NOT_FOUND",
+                    f"Весовая переменная {part.variable} не найдена в SAV.",
+                )
+            ]))
+            continue
+        assessment = assess_ready_weight(
+            frame.loc[part.mask, part.variable],
+            variable=part.variable,
+            role=weight_role(part.variable, project),
+        )
+        where = (
+            f"Волна «{part.wave}»"
+            if part.wave is not None
+            else "Волны " + ", ".join(f"«{name}»" for name in part.waves) if part.waves else None
+        )
+        if where and assessment.problems:
+            assessment = WeightAssessment(
+                assessment.variable,
+                assessment.role,
+                [
+                    WeightProblem(problem.code, f"{where}: {problem.message}")
+                    for problem in assessment.problems
+                ],
+                assessment.diagnostics,
+                assessment.notes,
+            )
+        result.append(assessment)
+    return result
 
 
 def _role_title(role: str | None) -> str:

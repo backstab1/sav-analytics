@@ -146,7 +146,9 @@ def _blocking(project: dict[str, Any], available: set[str]) -> list[str]:
                 f"Формула {formula['name']} опирается на переменные, которых в новом "
                 f"файле нет: {', '.join(missing)}."
             )
-    weight = (configuration.get("report_settings") or {}).get("weight_variable")
-    if weight and weight not in available:
-        problems.append(f"Вес отчёта {weight} в новом файле отсутствует.")
+    from .report_settings import wave_weight_variables
+
+    for weight in wave_weight_variables(configuration.get("report_settings") or {}):
+        if weight not in available:
+            problems.append(f"Вес отчёта {weight} в новом файле отсутствует.")
     return problems

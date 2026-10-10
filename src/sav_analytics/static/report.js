@@ -146,7 +146,8 @@ function reportWeightRow(settings) {
     action = `<button type="button" class="prop-act" data-edit="weight" data-id="${escapeAttribute(calculated.id)}">Изменить</button>`;
   } else if (ready) {
     action = '<button type="button" class="prop-act" data-open-sheet="report-settings">Настроить</button>';
-    value = escapeHtml(ready);
+    const own = (settings.wave_weights || []).length;
+    value = escapeHtml(ready) + (own ? ` · свой у ${plural(own, "волны", "волн", "волн")}` : "");
     const diagnostics = readyWeightCache.get(ready)?.diagnostics;
     meta = diagnostics
       ? `Готовый из массива · эфф. база <b>${formatWeightNumber(diagnostics.effective_base)}</b> · DEFF <b>${formatWeightNumber(diagnostics.design_effect)}</b>`
@@ -441,6 +442,7 @@ function reportSettingsPayload(settings) {
     correlations: settings.correlations,
     counts_sheet: settings.counts_sheet,
     presentation: settings.presentation,
+    wave_weights: settings.weight_variable ? settings.wave_weights || [] : [],
   };
 }
 
@@ -600,6 +602,45 @@ function renderReportWeightSelect(selectedWeight) {
     : "Ни одна переменная не объявлена весом.";
   renderWeightCandidates();
   loadReportWeightDiagnostics();
+  renderWaveWeights();
+}
+
+// Свой готовый вес у волны — рядом с готовым весом отчёта и только при двух
+// и более волнах. В списке те же объявленные весом переменные, что выше.
+function renderWaveWeights() {
+  const box = document.querySelector("#report-wave-weights");
+  const rows = document.querySelector("#report-wave-weights-rows");
+  const selection = document.querySelector("#report-weight").value;
+  const waves = projectWaveValues();
+  if (!selection.startsWith("ready:") || waves.length < 2) {
+    box.hidden = true;
+    rows.innerHTML = "";
+    return;
+  }
+  const main = selection.slice(6);
+  const settings = configuredReportSettings();
+  // Сохранённые свои веса относятся к сохранённому весу отчёта: при смене
+  // общего веса список начинается заново.
+  const saved = settings.weight_variable === main ? settings.wave_weights || [] : [];
+  const others = declaredWeightVariables().filter(variable => variable.name !== main);
+  rows.innerHTML = waves.map(wave => {
+    const own = saved.find(item => String(item.wave) === String(wave.value))?.variable || "";
+    const options = `<option value="">Как у отчёта — ${escapeHtml(main)}</option>` + others
+      .map(variable => `<option value="${escapeAttribute(variable.name)}" ${variable.name === own ? "selected" : ""}>${escapeHtml(variable.name)} — ${escapeHtml(variable.label)}</option>`)
+      .join("");
+    return `<label class="f wave-weight-row"><span>${escapeHtml(wave.label)}</span><select data-wave="${escapeAttribute(String(wave.value))}">${options}</select></label>`;
+  }).join("") + (others.length ? "" : `<p class="muted">Другой переменной с ролью «Вес» нет. Объявите весом вес волны — он появится здесь.</p>`);
+  box.hidden = false;
+}
+
+function waveWeightsPayload() {
+  if (document.querySelector("#report-wave-weights").hidden) return [];
+  return [...document.querySelectorAll("#report-wave-weights-rows select[data-wave]")]
+    .filter(select => select.value)
+    .map(select => {
+      const number = Number(select.dataset.wave);
+      return { wave: Number.isNaN(number) ? select.dataset.wave : number, variable: select.value };
+    });
 }
 
 function renderWeightCandidates() {
@@ -692,5 +733,8 @@ function renderWeightAssessment(assessment) {
 
 /* ---------------- Вес отчёта: поля ---------------- */
 
-document.querySelector("#report-weight").addEventListener("change", loadReportWeightDiagnostics);
+document.querySelector("#report-weight").addEventListener("change", () => {
+  loadReportWeightDiagnostics();
+  renderWaveWeights();
+});
 document.querySelector("#report-weight-declare-button").addEventListener("click", declareSelectedWeight);
