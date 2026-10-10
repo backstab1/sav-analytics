@@ -351,31 +351,16 @@
                 </div>
               </div>
 
-              <!-- Ряд действий над окном: слева сводка, она же фильтр по
-                   статусу (наполняется из app.js, renderSummary), справа —
-                   разовое действие раздела и выгрузка. Всё одной толщины,
-                   чтобы ряд читался как один. -->
+              <!-- Ряд действий над окном: только выгрузка и фоновые задачи.
+                   Фильтр по статусу и «Инструменты» живут в шапке панели. -->
               <div class="canvas-tools">
-                <div id="summary" class="summary"></div>
                 <div class="canvas-tools-actions">
                   <button id="ai-jobs" class="pill ai-jobs" type="button" hidden aria-live="polite" title="Фоновые задачи ИИ"></button>
                   <!-- Разовые действия «Данных» собраны в одну капсулу: по
                        отдельности три пилюли перегружали ряд. -->
-                  <div id="tools-menu" class="export-menu">
-                    <button class="menu-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false">
-                      Инструменты<span class="export-caret" aria-hidden="true"></span>
-                    </button>
-                    <div class="export-list" role="menu" hidden>
-                      <button id="recognize-open-data" class="export-item" type="button" role="menuitem" title="Найти открытые вопросы и закодировать ответы с ИИ">Распознать открытые</button>
-                      <label id="load-questionnaire" class="export-item" role="menuitem" title="ИИ сопоставит анкету с массивом и предложит подписи вопросов и кодов">
-                        Загрузить анкету<input id="questionnaire-file" type="file" accept=".docx,.pdf,.txt,.md" hidden />
-                      </label>
-                      <button id="find-not-applicable" class="export-item" type="button" role="menuitem" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">Пропуски по анкете</button>
-                    </div>
-                  </div>
                   <label class="pill pill-select"><select id="logic-variables" aria-label="Логические переменные"></select></label>
 
-                  <div class="history-buttons" role="group" aria-label="История изменений">
+                  <div class="history-buttons" role="group" aria-label="История изменений" hidden>
                     <button id="undo-change" class="pill history-button" type="button" disabled aria-label="Отменить" title="Отменить (Ctrl+Z)">↶</button>
                     <button id="redo-change" class="pill history-button" type="button" disabled aria-label="Вернуть" title="Вернуть (Ctrl+Shift+Z)">↷</button>
                   </div>
@@ -403,8 +388,12 @@
               <!-- Один ряд действий вместо «шапка панели + тулбар». -->
               <div class="pane-bar">
                 <div id="structure-toolbar" class="toolbar">
-                  <h2>Вопросы</h2>
-                  <span id="structure-search-count" class="toolbar-count" aria-live="polite"></span>
+                  <div class="structure-view-switch">
+                    <button type="button" data-structure-mode="questions" class="active">Вопросы</button>
+                    <button type="button" data-structure-mode="variables">Столбцы SAV</button>
+                    <button type="button" data-structure-mode="rows" hidden>Строки</button>
+                  </div>
+                  <span id="structure-search-count" class="toolbar-count" aria-live="polite" hidden></span>
                   <!-- Режим выбора: полоса заменяет собой ряд панели, а не
                        втискивается между заголовком и поиском. Действия
                        разложены группами — состав отчёта, порядок, свойства. -->
@@ -452,6 +441,13 @@
                     </span>
                     <button type="button" class="bulk-btn bulk-undo" data-bulk="undo" id="bulk-undo" hidden>Отменить</button>
                   </div>
+                  <div class="search-field">
+                    <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+                    <input id="structure-search" type="text" placeholder="Код или название" autocomplete="off" aria-label="Поиск по структуре массива" />
+                    <button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button>
+                  </div>
+                  <!-- Фильтр по статусу — иконка у поиска (наполняется из app.js, renderSummary). -->
+                  <div id="summary" class="summary"></div>
                   <div class="toolbar-grow"></div>
                   <div id="row-view-controls" class="row-view-controls" hidden>
                     <label>Фильтр <select id="row-filter" aria-label="Фильтр строк массива"><option value="">Все строки</option></select></label>
@@ -459,17 +455,19 @@
                     <span id="row-page" class="toolbar-count"></span>
                     <button id="row-next" type="button" class="icon-button" aria-label="Следующая страница">→</button>
                   </div>
-                  <div class="search-field">
-                    <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.4" stroke="currentColor" stroke-width="1.6" /><path d="m13.4 13.4 3.1 3.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
-                    <input id="structure-search" type="text" placeholder="Код или название" autocomplete="off" aria-label="Поиск по структуре массива" />
-                    <button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button>
+                  <div id="tools-menu" class="export-menu">
+                    <button class="menu-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false">
+                      Инструменты<span class="export-caret" aria-hidden="true"></span>
+                    </button>
+                    <div class="export-list" role="menu" hidden>
+                      <button id="recognize-open-data" class="export-item" type="button" role="menuitem" title="Найти открытые вопросы и закодировать ответы с ИИ">Распознать открытые</button>
+                      <label id="load-questionnaire" class="export-item" role="menuitem" title="ИИ сопоставит анкету с массивом и предложит подписи вопросов и кодов">
+                        Загрузить анкету<input id="questionnaire-file" type="file" accept=".docx,.pdf,.txt,.md" hidden />
+                      </label>
+                      <button id="find-not-applicable" class="export-item" type="button" role="menuitem" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">Пропуски по анкете</button>
+                    </div>
                   </div>
                   <button id="new-variable" class="secondary compact-button" type="button" title="Новая переменная: по условиям, группировкой, формулой или сегментацией">+ Переменная</button>
-                  <div class="structure-view-switch">
-                    <button type="button" data-structure-mode="questions" class="active">Вопросы</button>
-                    <button type="button" data-structure-mode="variables">Столбцы SAV</button>
-                    <button type="button" data-structure-mode="rows" hidden>Строки</button>
-                  </div>
                 </div>
 
                 <!-- Раздел «Отчёт»: колонки, база, вес, статистика и состав —
