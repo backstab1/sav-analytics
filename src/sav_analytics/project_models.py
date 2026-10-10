@@ -91,6 +91,7 @@ class StoredReportSettings(_StoredModel):
     overall_tests: bool = False
     correlations: bool = False
     counts_sheet: bool = False
+    presentation: bool = False
 
 
 class StoredConfiguration(_StoredModel):

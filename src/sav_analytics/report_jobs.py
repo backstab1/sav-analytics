@@ -8,7 +8,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from .report_cache import get_cached_report, prepare_report, report_cache_key
+from .report_cache import (
+    PreparedReport,
+    get_cached_report,
+    prepare_report,
+    report_cache_key,
+    report_downloads,
+)
 from .repository import ProjectRepository
 
 JobStatus = Literal["queued", "running", "complete", "failed"]
@@ -33,15 +39,13 @@ class ReportJob:
     error_code: str | None = None
     cached: bool = False
     artifact_id: str | None = None
+    prepared: PreparedReport | None = None
 
     def payload(self) -> dict[str, Any]:
         downloads = None
         if self.artifact_id is not None:
             base = f"/api/projects/{self.project_id}/reports/artifacts/{self.artifact_id}"
-            downloads = {
-                "topline": f"{base}/topline.xlsx",
-                "statistics": f"{base}/statistics.txt",
-            }
+            downloads = report_downloads(base, self.prepared)
         return {
             "job_id": self.id,
             "project_id": self.project_id,
@@ -83,6 +87,7 @@ def start_report_job(
             stage="Готово",
             cached=True,
             artifact_id=cached.artifact_id,
+            prepared=cached,
         )
         with _guard:
             _jobs[job.id] = job
@@ -152,6 +157,7 @@ def _run_report_job(
             job.stage = "Готово"
             job.cached = prepared.cached
             job.artifact_id = prepared.artifact_id
+            job.prepared = prepared
     except Exception:
         logger.exception(
             "Report build failed",

@@ -25,6 +25,7 @@ REPORT_CACHE_VERSION = 7
 # различаются в пределах одного проекта, где их десятки, а не миллиарды: 64 бит
 # хватает с колоссальным запасом.
 _ARTIFACT_ID_LENGTH = 16
+PRESENTATION = "presentation.pptx"
 _ARTIFACT_ID = re.compile(rf"^[0-9a-f]{{{_ARTIFACT_ID_LENGTH}}}$")
 _locks_guard = threading.Lock()
 _locks: dict[str, threading.Lock] = {}
@@ -44,6 +45,8 @@ class PreparedReport:
     configuration_revision: int
     # Название книги, которая собрана; у сборок до книг его нет.
     book: str | None = None
+    # Презентация есть, только если она была включена в книге.
+    presentation_path: Path | None = None
 
 
 def prepare_report(
@@ -70,6 +73,8 @@ def prepare_report(
         topline_temporary = artifact_dir / ".topline.xlsx.tmp"
         statistics_temporary = artifact_dir / ".statistics.txt.tmp"
         manifest_temporary = artifact_dir / ".manifest.json.tmp"
+        presentation_path = artifact_dir / PRESENTATION
+        presentation_temporary = artifact_dir / f".{PRESENTATION}.tmp"
         revision = _configuration_revision(project)
 
         try:
@@ -81,6 +86,13 @@ def prepare_report(
                     progress_callback=progress_callback,
                 )
             topline_temporary.write_bytes(artifacts.xlsx)
+            files = {
+                "topline.xlsx": _file_metadata(topline_temporary),
+                "statistics.txt": _file_metadata(statistics_temporary),
+            }
+            if artifacts.pptx is not None:
+                presentation_temporary.write_bytes(artifacts.pptx)
+                files[PRESENTATION] = _file_metadata(presentation_temporary)
             manifest = {
                 "artifact_id": cache_key,
                 "cache_key": cache_key,
@@ -91,10 +103,7 @@ def prepare_report(
                 # — это только хэши, по которым не понять, что в какой книге.
                 "created_at": _now(),
                 "summary": _run_summary(project),
-                "files": {
-                    "topline.xlsx": _file_metadata(topline_temporary),
-                    "statistics.txt": _file_metadata(statistics_temporary),
-                },
+                "files": files,
             }
             manifest_temporary.write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2),
@@ -102,12 +111,15 @@ def prepare_report(
             )
             replace_file(topline_temporary, topline_path)
             replace_file(statistics_temporary, statistics_path)
+            if artifacts.pptx is not None:
+                replace_file(presentation_temporary, presentation_path)
             # The manifest is the commit marker and is always installed last.
             replace_file(manifest_temporary, manifest_path)
         finally:
             topline_temporary.unlink(missing_ok=True)
             statistics_temporary.unlink(missing_ok=True)
             manifest_temporary.unlink(missing_ok=True)
+            presentation_temporary.unlink(missing_ok=True)
 
         return PreparedReport(
             topline_path=topline_path,
@@ -117,6 +129,7 @@ def prepare_report(
             artifact_id=cache_key,
             configuration_revision=revision,
             book=manifest["summary"]["book"],
+            presentation_path=presentation_path if artifacts.pptx is not None else None,
         )
 
 
@@ -184,14 +197,22 @@ def list_report_runs(
                 },
                 "kind": "report",
                 "current": directory.name == current,
-                "downloads": {
-                    "topline": f"{base}/topline.xlsx",
-                    "statistics": f"{base}/statistics.txt",
-                },
+                "downloads": report_downloads(base, prepared),
             }
         )
     runs.extend(list_table_exports(repository, project_id))
     return sorted(runs, key=lambda run: run["created_at"] or "", reverse=True)
+
+
+def report_downloads(base: str, prepared: PreparedReport | None) -> dict[str, str]:
+    """Ссылки на файлы сборки: книга, аудит и, если собрана, презентация."""
+    downloads = {
+        "topline": f"{base}/topline.xlsx",
+        "statistics": f"{base}/statistics.txt",
+    }
+    if prepared is not None and prepared.presentation_path is not None:
+        downloads["presentation"] = f"{base}/{PRESENTATION}"
+    return downloads
 
 
 def report_cache_key(project: dict[str, Any]) -> str:
@@ -237,6 +258,10 @@ def _cached_report(
         artifact_id=cache_key,
         configuration_revision=revision,
         book=(manifest.get("summary") or {}).get("book"),
+        # Файл сверен с манифестом выше вместе с остальными.
+        presentation_path=artifact_dir / PRESENTATION
+        if PRESENTATION in (manifest.get("files") or {})
+        else None,
     )
 
 

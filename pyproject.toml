@@ -79,8 +79,9 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-# Шаблоны XML WordprocessingML и DrawingML: разрыв строки внутри них хуже читается.
+# Шаблоны XML WordprocessingML, PresentationML и DrawingML: разрыв строки внутри них хуже читается.
 "src/sav_analytics/core/docx_report.py" = ["E501"]
+"src/sav_analytics/core/reporting/presentation.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

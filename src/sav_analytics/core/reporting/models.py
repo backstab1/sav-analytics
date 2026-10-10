@@ -22,6 +22,8 @@ class ReportError(ValueError):
 class ToplineArtifacts:
     xlsx: bytes
     statistics_txt: str
+    # Презентация — только если она включена в книге.
+    pptx: bytes | None = None
 
 
 @dataclass(frozen=True)

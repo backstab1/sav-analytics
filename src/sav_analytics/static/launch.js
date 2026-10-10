@@ -68,7 +68,7 @@ function renderRunHistory(runs) {
     const current = run.current ? '<span class="run-current">текущие настройки</span>' : "";
     const links = table
       ? `<a href="${escapeAttribute(run.downloads.table)}">Excel</a>`
-      : `<a href="${escapeAttribute(run.downloads.topline)}">Excel</a><a href="${escapeAttribute(run.downloads.statistics)}">statistics.txt</a>`;
+      : downloadLinks(run.downloads, "");
     return `<div class="run">
       <time datetime="${escapeAttribute(run.created_at)}">${escapeHtml(when)}${current}</time>
       <span class="run-meta">${parts.join(" · ")}</span>
@@ -91,9 +91,20 @@ function renderLaunchStatus(report) {
 
 /* ---------------- Кнопки выгрузки ---------------- */
 
+const DOWNLOAD_LABELS = { topline: "Excel", statistics: "statistics.txt", presentation: "PPTX" };
+
+// Ссылки на файлы сборки в одном порядке везде: книга, аудит, презентация.
+function downloadLinks(downloads, separator, className = "") {
+  const attribute = className ? ` class="${className}"` : "";
+  return Object.keys(DOWNLOAD_LABELS)
+    .filter(kind => downloads[kind])
+    .map(kind => `<a href="${escapeAttribute(downloads[kind])}"${attribute}>${DOWNLOAD_LABELS[kind]}</a>`)
+    .join(separator);
+}
+
 // Одна и та же процедура на два входа: меню выгрузки и полоса запуска
 // раздела «Отчёт». Вид артефакта берётся из data-report-kind.
-document.querySelectorAll("#download-report, #download-statistics, #launch-report, #launch-statistics")
+document.querySelectorAll("#download-report, #download-statistics, #launch-report, #launch-statistics, #launch-presentation")
   .forEach(link => {
     link.dataset.defaultLabel = link.textContent;
     link.addEventListener("click", downloadPreparedReport);
@@ -158,9 +169,7 @@ async function resumeReportJob() {
     status.classList.add("error");
     return;
   }
-  const links = Object.entries(result.downloads || {})
-    .map(([kind, url]) => `<a href="${escapeAttribute(url)}" class="report-ready-link">${kind === "statistics" ? "statistics.txt" : "Excel"}</a>`)
-    .join(" · ");
+  const links = downloadLinks(result.downloads || {}, " · ", "report-ready-link");
   status.innerHTML = `Отчёт, собиравшийся до перезагрузки, готов: ${links}`;
   if (currentView === "reports") void loadRunHistory(true);
 }
@@ -196,7 +205,7 @@ function reportFeedbackParts() {
   return { feedback, status, progress, findings };
 }
 
-const REPORT_BUTTONS = "#download-report, #download-statistics, #launch-report, #launch-statistics, #launch-all-books";
+const REPORT_BUTTONS = "#download-report, #download-statistics, #launch-report, #launch-statistics, #launch-presentation, #launch-all-books";
 
 async function downloadPreparedReport(event) {
   event.preventDefault();
@@ -381,7 +390,7 @@ function renderBookRuns(container, books) {
       return `<li class="finding finding-error"><b>Ошибка</b><span>${name}: ${escapeHtml(book.error || "сборка не удалась")}</span></li>`;
     }
     if (book.status === "complete") {
-      const links = `<a href="${escapeAttribute(book.downloads.topline)}">Excel</a> · <a href="${escapeAttribute(book.downloads.statistics)}">statistics.txt</a>`;
+      const links = downloadLinks(book.downloads, " · ");
       return `<li class="finding finding-warning"><b>Готово</b><span>${name} — ${links}</span></li>`;
     }
     const stage = book.status === "queued" ? "в очереди" : `${escapeHtml(book.stage)} · ${book.progress || 0}%`;

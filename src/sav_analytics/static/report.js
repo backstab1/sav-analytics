@@ -173,7 +173,9 @@ function reportSheetsRow(settings) {
     + statToggle("counts-sheet", "Счётчики", settings.counts_sheet,
       "Отдельный лист книги: те же строки числами ответивших, без долей и тестов")
     + statToggle("correlations", "Корреляции", settings.correlations,
-      "Отдельный лист книги: связи числовых вопросов между собой, с поправкой на множественность");
+      "Отдельный лист книги: связи числовых вопросов между собой, с поправкой на множественность")
+    + statToggle("presentation", "PPTX", settings.presentation,
+      "Презентация рядом с книгой: слайд на вопрос — Total полосами и числа по всему баннеру со значимостью");
   return `<div class="prop prop-sheets" data-block="sheets">
     <span class="prop-key">Листы</span>
     <span class="prop-val">
@@ -382,6 +384,8 @@ function renderReportBlocks() {
   document.querySelector("#report-revision").textContent =
     `${plural(included, "вопрос", "вопроса", "вопросов")} · ${plural(columns, "колонка", "колонки", "колонок")}`;
   renderBookSwitch();
+  // Презентация собирается вместе с книгой, только если она включена.
+  document.querySelector("#launch-presentation").hidden = !settings.presentation;
   const filters = configuredFilters();
   if (filters.length) void hydrateFilterCards(filters);
   if (settings.weight_variable) void hydrateReadyWeight(settings.weight_variable);
@@ -436,6 +440,7 @@ function reportSettingsPayload(settings) {
     overall_tests: settings.overall_tests,
     correlations: settings.correlations,
     counts_sheet: settings.counts_sheet,
+    presentation: settings.presentation,
   };
 }
 
@@ -474,6 +479,7 @@ function statPatch(name, value) {
   if (name === "overall") return { overall_tests: value === "on" };
   if (name === "correlations") return { correlations: value === "on" };
   if (name === "counts-sheet") return { counts_sheet: value === "on" };
+  if (name === "presentation") return { presentation: value === "on" };
   if (name === "pairwise") return { compare_pairwise: value === "on" };
   if (name === "bonferroni") return { bonferroni: value === "on" };
   if (name === "pvalues") return { show_p_values: value === "on" };

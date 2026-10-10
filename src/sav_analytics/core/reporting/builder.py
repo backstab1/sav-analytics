@@ -14,6 +14,7 @@ from .data import prepare_report_data
 from .excel_layout import write_charts, write_contents, write_parameters, write_topline
 from .models import StatisticalAuditEntry, ToplineArtifacts
 from .parameters import report_parameters
+from .presentation import build_pptx, presentation_from_data
 from .statistics import StatisticsAuditWriter
 from .styles import report_formats
 
@@ -160,5 +161,12 @@ def build_topline_artifacts(
     audit_writer.finish()
     advance("Запись статистики")
     statistics_txt = statistics_buffer.getvalue() if isinstance(statistics_buffer, StringIO) else ""
-    return ToplineArtifacts(xlsx=output.getvalue(), statistics_txt=statistics_txt)
+    pptx = None
+    if data.statistical_settings.get("presentation"):
+        # Те же данные, тот же write_topline — только в память: слайд читает
+        # числа и значимость с записи листа, а не считает их заново.
+        if progress_callback is not None:
+            progress_callback(completed_steps, total_steps, "Запись презентации")
+        pptx = build_pptx(presentation_from_data(data, project))
+    return ToplineArtifacts(xlsx=output.getvalue(), statistics_txt=statistics_txt, pptx=pptx)
 

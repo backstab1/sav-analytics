@@ -96,6 +96,10 @@ def report_parameters(project: dict[str, Any], data: ReportData) -> list[tuple[s
             "тот же топлайн числами" if settings.get("counts_sheet") else "не выводится",
         ),
         (
+            "Презентация",
+            "PPTX: слайд на вопрос" if settings.get("presentation") else "не собирается",
+        ),
+        (
             "Лист Correlations",
             "связи числовых вопросов, без веса"
             if settings.get("correlations")

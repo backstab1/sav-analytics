@@ -63,6 +63,7 @@ const defaultReportSettings = Object.freeze({
   overall_tests: false,
   correlations: false,
   counts_sheet: false,
+  presentation: false,
 });
 
 const scaleMetricOptions = [

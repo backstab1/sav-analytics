@@ -441,6 +441,9 @@ class ReportSettingsDefinition(BaseModel):
     correlations: bool = False
     # Лист «Счётчики»: тот же топлайн числами ответивших.
     counts_sheet: bool = False
+    # Презентация PPTX рядом с книгой: слайд на вопрос — график и значимые
+    # различия, числа из записи листа topline_main.
+    presentation: bool = False
 
     @model_validator(mode="after")
     def normalize_output_metrics(self) -> Self:

@@ -127,6 +127,8 @@ def download_report_bundle(
             used.add(stem)
             archive.write(item.topline_path, f"{stem}_topline.xlsx")
             archive.write(item.statistics_path, f"{stem}_statistics.txt")
+            if item.presentation_path is not None:
+                archive.write(item.presentation_path, f"{stem}.pptx")
     filename = f"{_safe_name(str(project['name']))}_книги.zip"
     return Response(
         buffer.getvalue(),
@@ -159,6 +161,25 @@ def download_current_statistics(
 ) -> FileResponse:
     project, prepared = _current_prepared_report(repository, project_id)
     return _statistics_response(project, prepared)
+
+
+@router.get("/presentation.pptx")
+def download_current_presentation(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    project, prepared = _current_prepared_report(repository, project_id)
+    return _presentation_response(project, prepared)
+
+
+@router.get("/artifacts/{artifact_id}/presentation.pptx")
+def download_artifact_presentation(
+    project_id: UUID,
+    artifact_id: str,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> FileResponse:
+    project, prepared = _prepared_artifact(repository, project_id, artifact_id)
+    return _presentation_response(project, prepared)
 
 
 @router.get("/artifacts/{artifact_id}/topline.xlsx")
@@ -238,6 +259,19 @@ def _topline_response(project: dict, prepared: PreparedReport) -> FileResponse:
         prepared.topline_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=f"{_file_stem(project, prepared)}_topline.xlsx",
+    )
+
+
+def _presentation_response(project: dict, prepared: PreparedReport) -> FileResponse:
+    if prepared.presentation_path is None:
+        raise HTTPException(
+            status_code=404,
+            detail="В этой сборке презентации нет: она включается в книге галочкой «PPTX».",
+        )
+    return FileResponse(
+        prepared.presentation_path,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=f"{_file_stem(project, prepared)}.pptx",
     )
 
 

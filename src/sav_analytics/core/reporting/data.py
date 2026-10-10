@@ -285,6 +285,7 @@ def _statistical_settings(
         "overall_tests": report_settings["overall_tests"],
         "correlations": report_settings["correlations"],
         "counts_sheet": report_settings["counts_sheet"],
+        "presentation": report_settings["presentation"],
     }
 
 
