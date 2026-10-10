@@ -105,6 +105,7 @@
     /* Вызывается из app.js: проект открыли или закрыли. */
     setProjectOpen(open) {
       projectChrome.hidden = !open;
+      document.querySelector("#project-actions").hidden = !open;
       if (!open) {
         TablesSection.setVariables([], {});
         closeMenus();

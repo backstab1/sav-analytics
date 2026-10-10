@@ -351,8 +351,8 @@
                 </div>
               </div>
 
-              <!-- Ряд действий над окном: только выгрузка и фоновые задачи.
-                   Фильтр по статусу и «Инструменты» живут в шапке панели. -->
+              <!-- Ряд действий над окном: фоновые задачи и логические переменные.
+                   Фильтр, «Инструменты» и выгрузка — в шапке панели. -->
               <div class="canvas-tools">
                 <div class="canvas-tools-actions">
                   <button id="ai-jobs" class="pill ai-jobs" type="button" hidden aria-live="polite" title="Фоновые задачи ИИ"></button>
@@ -363,23 +363,6 @@
                   <div class="history-buttons" role="group" aria-label="История изменений" hidden>
                     <button id="undo-change" class="pill history-button" type="button" disabled aria-label="Отменить" title="Отменить (Ctrl+Z)">↶</button>
                     <button id="redo-change" class="pill history-button" type="button" disabled aria-label="Вернуть" title="Вернуть (Ctrl+Shift+Z)">↷</button>
-                  </div>
-                  <div id="project-actions" class="export-menu">
-                    <button id="export-toggle" class="export-toggle menu-toggle pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
-                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                      Выгрузка<span class="export-caret" aria-hidden="true"></span>
-                    </button>
-                    <div id="export-list" class="export-list" role="menu" hidden>
-                      <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
-                      <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
-                      <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
-                      <a id="download-derived-sav" class="export-item" href="#" role="menuitem" title="Исходный массив плюс формулы, перекодировки и рассчитанные веса проекта">Скачать SAV с производными</a>
-                      <div class="export-sep" role="separator"></div>
-                      <label class="export-item" role="menuitem" title="Заменить файл проекта, сохранив настройки: прежние данные уйдут">Заменить данные<input id="wave-file" type="file" accept=".sav,.csv,.tsv,.xlsx" hidden /></label>
-                      <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
-                      <div class="export-sep" role="separator"></div>
-                      <button id="ai-toggle" class="export-item" type="button" role="menuitem">ИИ в проекте: включён</button>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -465,9 +448,26 @@
                         Загрузить анкету<input id="questionnaire-file" type="file" accept=".docx,.pdf,.txt,.md" hidden />
                       </label>
                       <button id="find-not-applicable" class="export-item" type="button" role="menuitem" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">Пропуски по анкете</button>
+                      <div class="export-sep" role="separator"></div>
+                      <label class="export-item" role="menuitem" title="Заменить файл проекта, сохранив настройки: прежние данные уйдут">Заменить данные<input id="wave-file" type="file" accept=".sav,.csv,.tsv,.xlsx" hidden /></label>
+                      <button id="refresh-structure" class="export-item" type="button" role="menuitem" title="Заново найти multiple и matrix, сохранив ручные настройки">Перераспознать структуру</button>
+                      <div class="export-sep" role="separator"></div>
+                      <button id="ai-toggle" class="export-item" type="button" role="menuitem">ИИ в проекте: включён</button>
                     </div>
                   </div>
                   <button id="new-variable" class="secondary compact-button" type="button" title="Новая переменная: по условиям, группировкой, формулой или сегментацией">+ Переменная</button>
+                  <!-- Выгрузка — одна заметная иконка в правом углу шапки панели. -->
+                  <div id="project-actions" class="export-menu" hidden>
+                    <button id="export-toggle" class="export-toggle menu-toggle" type="button" aria-label="Выгрузка" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                    </button>
+                    <div id="export-list" class="export-list" role="menu" hidden>
+                      <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
+                      <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
+                      <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
+                      <a id="download-derived-sav" class="export-item" href="#" role="menuitem" title="Исходный массив плюс формулы, перекодировки и рассчитанные веса проекта">Скачать SAV с производными</a>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Раздел «Отчёт»: колонки, база, вес, статистика и состав —

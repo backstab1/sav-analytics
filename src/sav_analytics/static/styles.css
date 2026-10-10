@@ -3969,25 +3969,32 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 }
 .ar-actions .ar-source { font-size: var(--t-xs); }
 
-/* Шапка «Данных» и «Выгрузка» — один язык кнопок: высота 30px, радиус 9px,
+/* Шапка «Данных» — один язык кнопок: высота 30px, радиус 9px,
    серый фон без рамки, как у переключателя «Вопросы / Столбцы SAV». */
 #structure-toolbar .search-field input,
 #structure-toolbar .filter-toggle,
 #structure-toolbar #tools-menu .menu-toggle,
-#structure-toolbar #new-variable,
-#export-toggle {
+#structure-toolbar #new-variable {
   height: 30px; border: 0; border-radius: 9px;
   background: var(--c-surface-soft); font-size: var(--t-xs); font-weight: 500;
 }
 #structure-toolbar .search-field input { padding-block: 0; }
 #structure-toolbar #tools-menu .menu-toggle,
-#structure-toolbar #new-variable,
-#export-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; color: var(--c-ink-2); }
+#structure-toolbar #new-variable { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; color: var(--c-ink-2); }
 #structure-toolbar #new-variable { color: var(--c-brand); font-weight: 600; }
 #structure-toolbar .filter-toggle { width: 30px; padding: 0; color: var(--c-ink-3); }
-#structure-toolbar :is(.filter-toggle, #tools-menu .menu-toggle, #new-variable):hover,
-#export-toggle:hover { background: #ececef; color: var(--c-ink); }
+#structure-toolbar :is(.filter-toggle, #tools-menu .menu-toggle, #new-variable):hover { background: #ececef; color: var(--c-ink); }
 #structure-toolbar #new-variable:hover { color: var(--c-brand); }
 #structure-toolbar .filter-toggle.active { background: var(--c-brand-tint); color: var(--c-brand); }
 #structure-toolbar .filter-toggle.warn.active { background: var(--c-warn-tint); color: var(--c-warn-ink); }
 #structure-toolbar .filter-toggle.off.active { background: var(--c-danger-tint); color: var(--c-danger); }
+
+/* Выгрузка в правом углу шапки панели: одна иконка, залитая фирменным
+   цветом, — главное действие ряда. */
+#export-toggle {
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 9px; background: var(--c-brand); color: #fff;
+}
+#export-toggle svg { width: 17px; height: 17px; }
+#export-toggle:hover,
+#export-toggle[aria-expanded="true"] { background: var(--c-brand-hover); color: #fff; }
