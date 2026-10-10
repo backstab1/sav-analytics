@@ -3259,6 +3259,17 @@ body.is-landing { background: #050807; }
 .menu-toggle[aria-expanded="true"]:not(.export-toggle) { border-color: var(--c-border-strong); }
 /* Фильтр по статусу: капсула слева и тот же список, что у «Выгрузки». */
 .status-menu .export-list { left: 0; right: auto; min-width: 180px; }
+/* Иконка фильтра рядом с поиском: та же высота, что у поля. */
+.filter-toggle {
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 1px solid transparent; border-radius: 9px;
+  background: transparent; color: var(--c-ink-3);
+}
+.filter-toggle svg { width: 16px; height: 16px; }
+.filter-toggle:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
+.filter-toggle.active { background: var(--c-brand-tint); color: var(--c-brand); }
+.filter-toggle.warn.active { background: var(--c-warn-tint); color: var(--c-warn-ink); }
+#structure-toolbar .summary { flex-wrap: nowrap; }
 .status-item { display: flex; align-items: center; gap: 8px; }
 .status-item b { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
 .status-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-ink-4); flex: 0 0 auto; }

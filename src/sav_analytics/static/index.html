@@ -351,12 +351,9 @@
                 </div>
               </div>
 
-              <!-- Ряд действий над окном: слева сводка, она же фильтр по
-                   статусу (наполняется из app.js, renderSummary), справа —
-                   разовое действие раздела и выгрузка. Всё одной толщины,
-                   чтобы ряд читался как один. -->
+              <!-- Ряд действий над окном: только выгрузка и фоновые задачи.
+                   Фильтр по статусу и «Инструменты» живут в шапке панели. -->
               <div class="canvas-tools">
-                <div id="summary" class="summary"></div>
                 <div class="canvas-tools-actions">
                   <button id="ai-jobs" class="pill ai-jobs" type="button" hidden aria-live="polite" title="Фоновые задачи ИИ"></button>
                   <!-- Разовые действия «Данных» собраны в одну капсулу: по
@@ -449,6 +446,8 @@
                     <input id="structure-search" type="text" placeholder="Код или название" autocomplete="off" aria-label="Поиск по структуре массива" />
                     <button id="structure-search-clear" class="search-clear" type="button" hidden aria-label="Очистить поиск">×</button>
                   </div>
+                  <!-- Фильтр по статусу — иконка у поиска (наполняется из app.js, renderSummary). -->
+                  <div id="summary" class="summary"></div>
                   <div class="toolbar-grow"></div>
                   <div id="row-view-controls" class="row-view-controls" hidden>
                     <label>Фильтр <select id="row-filter" aria-label="Фильтр строк массива"><option value="">Все строки</option></select></label>

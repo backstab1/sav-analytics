@@ -1013,8 +1013,8 @@ function renderSummary(inspection, questions) {
   const ready = questions.filter(item => questionStatus(item) === "ready");
   const review = questions.filter(item => questionStatus(item) === "review");
   const excluded = questions.filter(item => questionStatus(item) === "excluded");
-  // Одна капсула «Фильтр: …» с выпадающим списком статусов вместо ряда
-  // чипов: ряд не переносится на вторую строку. Открывает меню shell.js.
+  // Иконка фильтра у поиска с выпадающим списком статусов; активный
+  // фильтр подсвечивает иконку. Открывает меню shell.js.
   const chips = [
     { value: questions.length, label: "Все", key: null },
     { value: review.length, label: "Проверить", key: "review", tone: "warn" },
@@ -1023,10 +1023,11 @@ function renderSummary(inspection, questions) {
   ];
   const current = chips.find(chip => chip.key === (structureStatusFilter || null)) || chips[0];
   const number = chip => chip.value.toLocaleString("ru-RU");
+  const filterTitle = current.key ? `Фильтр: ${current.label} (${number(current)})` : "Фильтр вопросов по статусу";
   document.querySelector("#summary").innerHTML = `<div class="export-menu status-menu">
-    <button type="button" class="menu-toggle stat ${current.tone || ""} ${current.key ? "active" : ""}"
-      aria-haspopup="menu" aria-expanded="false" title="Фильтр вопросов по статусу"
-      ><span class="dot" aria-hidden="true"></span>Фильтр: ${current.label}<b>${number(current)}</b><span class="export-caret" aria-hidden="true"></span></button>
+    <button type="button" class="menu-toggle filter-toggle ${current.tone || ""} ${current.key ? "active" : ""}"
+      aria-haspopup="menu" aria-expanded="false" title="${filterTitle}" aria-label="${filterTitle}"
+      ><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 5h13M6 10h8M8.5 15h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg></button>
     <div class="export-list" role="menu" hidden>${chips.map(chip => {
       const active = chip === current;
       return `<button type="button" class="export-item status-item ${chip.tone || ""} ${active ? "active" : ""}" role="menuitemradio"
