@@ -3269,6 +3269,7 @@ body.is-landing { background: #050807; }
 .filter-toggle:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
 .filter-toggle.active { background: var(--c-brand-tint); color: var(--c-brand); }
 .filter-toggle.warn.active { background: var(--c-warn-tint); color: var(--c-warn-ink); }
+.filter-toggle.off.active { background: var(--c-danger-tint); color: var(--c-danger); }
 #structure-toolbar .summary { flex-wrap: nowrap; }
 .status-item { display: flex; align-items: center; gap: 8px; }
 .status-item b { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -3276,6 +3277,9 @@ body.is-landing { background: #050807; }
 .status-item.warn .dot { background: #e0a32e; }
 .status-item.ok .dot { background: var(--c-brand-2); }
 .status-item.active { background: var(--c-brand-tint); color: var(--c-brand); }
+.status-item.off .dot { background: var(--c-danger); }
+.status-item.warn.active { background: var(--c-warn-tint); color: var(--c-warn-ink); }
+.status-item.off.active { background: var(--c-danger-tint); color: var(--c-danger); }
 
 /* Предупреждающая подпись под выбором схемы сравнения. */
 .warning-hint { color: var(--c-warn-ink); font-weight: 500; }
@@ -3964,3 +3968,26 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
   .bld-side { grid-template-rows: repeat(2, 150px); min-height: 308px; }
 }
 .ar-actions .ar-source { font-size: var(--t-xs); }
+
+/* Шапка «Данных» и «Выгрузка» — один язык кнопок: высота 30px, радиус 9px,
+   серый фон без рамки, как у переключателя «Вопросы / Столбцы SAV». */
+#structure-toolbar .search-field input,
+#structure-toolbar .filter-toggle,
+#structure-toolbar #tools-menu .menu-toggle,
+#structure-toolbar #new-variable,
+#export-toggle {
+  height: 30px; border: 0; border-radius: 9px;
+  background: var(--c-surface-soft); font-size: var(--t-xs); font-weight: 500;
+}
+#structure-toolbar .search-field input { padding-block: 0; }
+#structure-toolbar #tools-menu .menu-toggle,
+#structure-toolbar #new-variable,
+#export-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; color: var(--c-ink-2); }
+#structure-toolbar #new-variable { color: var(--c-brand); font-weight: 600; }
+#structure-toolbar .filter-toggle { width: 30px; padding: 0; color: var(--c-ink-3); }
+#structure-toolbar :is(.filter-toggle, #tools-menu .menu-toggle, #new-variable):hover,
+#export-toggle:hover { background: #ececef; color: var(--c-ink); }
+#structure-toolbar #new-variable:hover { color: var(--c-brand); }
+#structure-toolbar .filter-toggle.active { background: var(--c-brand-tint); color: var(--c-brand); }
+#structure-toolbar .filter-toggle.warn.active { background: var(--c-warn-tint); color: var(--c-warn-ink); }
+#structure-toolbar .filter-toggle.off.active { background: var(--c-danger-tint); color: var(--c-danger); }
