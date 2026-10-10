@@ -716,7 +716,12 @@ p.library-empty { margin: 0; }
   box-shadow: var(--shadow-card); overflow: clip;
 }
 
-.pane-bar { flex: 0 0 auto; border-bottom: 1px solid var(--c-border); }
+.pane-bar {
+  flex: 0 0 auto; border-bottom: 1px solid var(--c-border);
+  display: flex; align-items: center;
+}
+.pane-bar > .toolbar { flex: 1 1 auto; min-width: 0; }
+.pane-bar > #project-actions { margin-right: 9px; }
 
 /* ================================================================
    ТЕЛО ПАНЕЛИ — содержимое и редактор
@@ -838,14 +843,16 @@ p.library-empty { margin: 0; }
    книги слева и история сборок справа; «Настройка показателей» — все
    группы открыты в две колонки. Если колонке не хватает высоты,
    прокручивается она сама, а полоса запуска остаётся на месте.
+   «Данные» устроены так же: заголовок и ряд действий — одной строкой,
+   без пустого яруса между заголовком и таблицей.
    ================================================================ */
-.canvas[data-section="reports"] .canvas-inner {
+.canvas:is([data-section="reports"], [data-section="data"]) .canvas-inner {
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto minmax(0, 1fr); align-items: end;
 }
-.canvas[data-section="reports"] .canvas-head { grid-column: 1; grid-row: 1; }
-.canvas[data-section="reports"] .canvas-tools { grid-column: 2; grid-row: 1; }
-.canvas[data-section="reports"] .pane { grid-column: 1 / -1; grid-row: 2; align-self: stretch; }
+.canvas:is([data-section="reports"], [data-section="data"]) .canvas-head { grid-column: 1; grid-row: 1; }
+.canvas:is([data-section="reports"], [data-section="data"]) .canvas-tools { grid-column: 2; grid-row: 1; }
+.canvas:is([data-section="reports"], [data-section="data"]) .pane { grid-column: 1 / -1; grid-row: 2; align-self: stretch; }
 .canvas-head .lead:empty { display: none; }
 
 .rep-tabs {
@@ -2083,26 +2090,22 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .tgl { position: relative; display: inline-flex; width: 42px; height: 25px; flex-shrink: 0; cursor: pointer; }
 .tgl input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; z-index: 2; width: 100%; height: 100%; }
 .tgl .track {
-  position: absolute; inset: 0; border-radius: 9px;
+  position: absolute; inset: 0; border-radius: 999px;
   background: #e7e7ea; box-shadow: inset 0 1px 2px rgba(0,0,0,.06);
   transition: background 240ms var(--ease);
 }
 .tgl .knob {
   position: absolute; top: 3px; left: 3px; width: 19px; height: 19px;
-  border-radius: 7px; background: #fff;
+  border-radius: 50%; background: #fff;
   box-shadow: 0 1px 2px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.10);
   display: grid; place-items: center;
-  transition: transform 260ms var(--spring), border-radius 260ms var(--spring);
+  transition: transform 260ms var(--spring);
   pointer-events: none;
 }
-.tgl .knob svg {
-  width: 11px; height: 11px; color: var(--c-brand);
-  opacity: 0; transform: scale(.4) rotate(-30deg);
-  transition: opacity 180ms var(--ease), transform 260ms var(--spring);
-}
+/* Галочка на бегунке не нужна: включённость видна по цвету и положению. */
+.tgl .knob svg { display: none; }
 .tgl input:checked ~ .track { background: linear-gradient(135deg, var(--c-brand-2), var(--c-brand)); }
-.tgl input:checked ~ .knob { transform: translateX(17px); border-radius: 9px; }
-.tgl input:checked ~ .knob svg { opacity: 1; transform: scale(1) rotate(0); }
+.tgl input:checked ~ .knob { transform: translateX(17px); }
 .tgl input:focus-visible ~ .track { outline: 2px solid var(--c-brand); outline-offset: 2px; }
 
 /* Строка с toggle (для settings-блоков) */

@@ -1349,7 +1349,10 @@ def test_own_simultaneous_writes_do_not_raise_a_conflict(
 def test_change_is_undone_with_the_button_and_ctrl_z(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
-    """Отмена и возврат правки проекта кнопками и Ctrl+Z (GAP-006)."""
+    """Отмена и возврат правки проекта Ctrl+Z / Ctrl+Shift+Z (GAP-006).
+
+    Кнопки истории скрыты из шапки, но их состояние по-прежнему ведётся:
+    по нему видно, что отменять есть что."""
     source = tmp_path / "survey.sav"
     _write_survey(source)
     _open_project(page, live_server, source)
@@ -1366,11 +1369,11 @@ def test_change_is_undone_with_the_button_and_ctrl_z(
     expect(undo).to_be_enabled(timeout=UI_TIMEOUT)
     expect(undo).to_have_attribute("title", re.compile("структура вопросов"))
 
-    undo.click()
+    page.locator("body").click(position={"x": 5, "y": 5})
+    page.keyboard.press("Control+Z")
     expect(row).to_contain_text("Какой маркой пользуетесь", timeout=UI_TIMEOUT)
     expect(redo).to_be_enabled(timeout=UI_TIMEOUT)
 
-    page.locator("body").click(position={"x": 5, "y": 5})
     page.keyboard.press("Control+Shift+Z")
     expect(row).to_contain_text("Марка, которую отменят", timeout=UI_TIMEOUT)
     page.keyboard.press("Control+Z")

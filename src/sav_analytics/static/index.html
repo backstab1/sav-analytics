@@ -456,18 +456,6 @@
                     </div>
                   </div>
                   <button id="new-variable" class="secondary compact-button" type="button" title="Новая переменная: по условиям, группировкой, формулой или сегментацией">+ Переменная</button>
-                  <!-- Выгрузка — одна заметная иконка в правом углу шапки панели. -->
-                  <div id="project-actions" class="export-menu" hidden>
-                    <button id="export-toggle" class="export-toggle menu-toggle" type="button" aria-label="Выгрузка" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
-                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                    </button>
-                    <div id="export-list" class="export-list" role="menu" hidden>
-                      <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
-                      <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
-                      <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
-                      <a id="download-derived-sav" class="export-item" href="#" role="menuitem" title="Исходный массив плюс формулы, перекодировки и рассчитанные веса проекта">Скачать SAV с производными</a>
-                    </div>
-                  </div>
                 </div>
 
                 <!-- Раздел «Отчёт»: колонки, база, вес, статистика и состав —
@@ -488,6 +476,20 @@
                   <span id="report-revision" class="toolbar-count"></span>
                 </div>
 
+                <!-- Выгрузка — одна заметная иконка в правом углу ряда панели. Стоит
+                 после обоих тулбаров, а не внутри: так она видна и в «Данных»
+                 (справа от «+ Переменная»), и в «Отчёте». -->
+                <div id="project-actions" class="export-menu" hidden>
+                  <button id="export-toggle" class="export-toggle menu-toggle" type="button" aria-label="Выгрузка" aria-haspopup="menu" aria-expanded="false" aria-controls="export-list">
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5v8m0 0 3-3m-3 3-3-3M4.5 13v1.5a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  </button>
+                  <div id="export-list" class="export-list" role="menu" hidden>
+                    <a id="download-report" class="export-item" href="#" role="menuitem">Скачать Excel</a>
+                    <a id="download-statistics" class="export-item" href="#" role="menuitem">Скачать статистику</a>
+                    <a id="download-source" class="export-item" href="#" role="menuitem">Скачать исходный SAV</a>
+                    <a id="download-derived-sav" class="export-item" href="#" role="menuitem" title="Исходный массив плюс формулы, перекодировки и рассчитанные веса проекта">Скачать SAV с производными</a>
+                  </div>
+                </div>
               </div>
 
               <div id="report-feedback" class="report-feedback" aria-live="polite" hidden></div>
