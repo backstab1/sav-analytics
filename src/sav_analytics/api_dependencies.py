@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import threading
 from functools import lru_cache
 from typing import Annotated
 
@@ -7,6 +9,7 @@ from fastapi import Depends
 
 from .assistant.models import ChatModel, OpenAICompatibleModel
 from .repository import ProjectRepository
+from .repository.legacy_import import import_legacy
 from .settings import Settings
 
 
@@ -15,13 +18,27 @@ def get_settings() -> Settings:
     return Settings()
 
 
+_imported: set[tuple[str, str]] = set()
+_import_guard = threading.Lock()
+logger = logging.getLogger(__name__)
+
+
 def get_repository(settings: Annotated[Settings, Depends(get_settings)]) -> ProjectRepository:
-    return ProjectRepository(
+    repository = ProjectRepository(
         settings.projects_dir,
         settings.max_upload_bytes,
         settings.resolved_database_url,
         migrate=settings.auto_migrate,
     )
+    if settings.auto_import_legacy:
+        key = (str(settings.projects_dir.resolve()), settings.resolved_database_url)
+        with _import_guard:
+            if key not in _imported:
+                report = import_legacy(repository)
+                if report.imported or report.failed:
+                    logger.info("Legacy projects imported: %s", report.as_dict())
+                _imported.add(key)
+    return repository
 
 
 @lru_cache
