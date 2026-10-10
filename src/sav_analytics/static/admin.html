@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Пользователи — sav-analytics</title>
+    <link rel="stylesheet" href="/fonts.css?v=20261010-p4" />
+    <link rel="stylesheet" href="/auth.css?v=20261010-p4" />
+  </head>
+  <body class="admin-page">
+    <main>
+      <a class="back" href="/">← К проектам</a>
+      <h1>Пользователи и журнал</h1>
+
+      <h2>Пользователи</h2>
+      <section>
+        <table>
+          <thead>
+            <tr><th>Имя входа</th><th>Имя</th><th>Роль</th><th>Статус</th><th>Последний вход</th><th></th></tr>
+          </thead>
+          <tbody id="users"></tbody>
+        </table>
+        <form class="inline" id="user-form">
+          <input name="username" placeholder="Имя входа" required maxlength="64" />
+          <input name="display_name" placeholder="Как называть" maxlength="200" />
+          <input name="password" type="password" placeholder="Пароль, от 10 символов" required autocomplete="new-password" />
+          <select name="role">
+            <option value="user">Аналитик</option>
+            <option value="admin">Администратор</option>
+          </select>
+          <button class="primary" type="submit">Добавить</button>
+        </form>
+        <div class="status" id="users-status" role="status"></div>
+      </section>
+
+      <h2>Журнал действий</h2>
+      <section>
+        <form class="inline" id="audit-filter">
+          <select name="action">
+            <option value="">Все действия</option>
+            <option value="change">Изменения</option>
+            <option value="download">Скачивания и чтение исходников</option>
+            <option value="auth.login">Входы</option>
+            <option value="auth.login_failed">Неудачные входы</option>
+          </select>
+          <input name="project_id" placeholder="id проекта" maxlength="36" />
+          <button type="submit">Показать</button>
+        </form>
+        <table>
+          <thead>
+            <tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Адрес</th><th>Ответ</th><th>IP</th></tr>
+          </thead>
+          <tbody id="audit"></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="/auth.js?v=20261010-p4" defer></script>
+    <script src="/admin.js?v=20261010-p4" defer></script>
+  </body>
+</html>

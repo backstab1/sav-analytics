@@ -143,3 +143,60 @@ report_versions = sa.Table(
     sa.Column("files", sa.Text, nullable=False),
     sa.UniqueConstraint("project_id", "artifact_id", name="uq_report_versions_artifact"),
 )
+
+# Пользователи (P4). Регистрации нет: учётные записи заводит администратор,
+# все аналитики видят все проекты (`architecture.md` §5).
+users = sa.Table(
+    "users",
+    metadata,
+    sa.Column("id", sa.String(36), primary_key=True),
+    # Имя входа в нижнем регистре: «Ivanov» и «ivanov» — один человек.
+    sa.Column("username", sa.String(64), nullable=False, unique=True),
+    sa.Column("display_name", sa.Text, nullable=False),
+    sa.Column("password_hash", sa.Text, nullable=False),
+    sa.Column("role", sa.String(16), nullable=False),
+    sa.Column("active", sa.Boolean, nullable=False, server_default=sa.true()),
+    sa.Column("created_at", Timestamp, nullable=False),
+    sa.Column("updated_at", Timestamp, nullable=False),
+    sa.Column("last_login_at", Timestamp, nullable=True),
+)
+
+# Серверные сессии: в cookie лежит случайный токен, в базе — его SHA-256,
+# поэтому утечка базы не даёт войти чужой сессией.
+sessions = sa.Table(
+    "sessions",
+    metadata,
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column(
+        "user_id",
+        sa.String(36),
+        sa.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    sa.Column("csrf_token", sa.String(64), nullable=False),
+    sa.Column("created_at", Timestamp, nullable=False),
+    sa.Column("expires_at", Timestamp, nullable=False, index=True),
+    sa.Column("last_seen_at", Timestamp, nullable=False),
+    sa.Column("ip", sa.String(64), nullable=True),
+    sa.Column("user_agent", sa.Text, nullable=True),
+)
+
+# Журнал аудита: входы, изменения, чтение исходников и скачивание отчётов.
+# Без содержимого данных — только кто, что, когда и над каким проектом.
+audit_log = sa.Table(
+    "audit_log",
+    metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("at", Timestamp, nullable=False, index=True),
+    sa.Column("user_id", sa.String(36), nullable=True, index=True),
+    sa.Column("username", sa.String(64), nullable=True),
+    sa.Column("action", sa.String(64), nullable=False, index=True),
+    sa.Column("method", sa.String(8), nullable=True),
+    sa.Column("path", sa.Text, nullable=True),
+    sa.Column("status", sa.Integer, nullable=True),
+    sa.Column("project_id", sa.String(36), nullable=True, index=True),
+    sa.Column("request_id", sa.String(128), nullable=True),
+    sa.Column("ip", sa.String(64), nullable=True),
+    sa.Column("details", sa.Text, nullable=True),
+)

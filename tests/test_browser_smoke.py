@@ -27,7 +27,7 @@ import pandas as pd
 import pyreadstat
 import pytest
 import uvicorn
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Browser, Page, expect
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from sav_analytics.api import app, get_repository
@@ -1446,11 +1446,15 @@ def test_report_build_is_picked_up_after_reload(
 
 
 def test_sections_have_no_serious_accessibility_violations(
-    page: Page, live_server: str, tmp_path: Path
+    browser: Browser, live_server: str, tmp_path: Path
 ) -> None:
     """axe-core по всем разделам и открытому редактору: без serious и critical (P2)."""
     from axe_playwright_python.sync_playwright import Axe
 
+    # axe-core внедряется в страницу через evaluate, а строгая CSP (P4)
+    # запрещает выполнять строки как код. Обходим её только здесь.
+    context = browser.new_context(bypass_csp=True)
+    page = context.new_page()
     source = tmp_path / "survey.sav"
     _write_survey(source)
     _open_project(page, live_server, source)

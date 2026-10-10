@@ -21,6 +21,11 @@ from sav_analytics.repository import store
 
 POSTGRES_URL = os.environ.get("SAV_ANALYTICS_TEST_DATABASE_URL")
 
+# Сотни сценариев API проверяют предметную логику, а не вход: авторизация
+# в них выключена. Её собственные проверки — `test_auth.py`, где она
+# включается явно.
+os.environ.setdefault("SAV_ANALYTICS_AUTH_ENABLED", "false")
+
 
 @pytest.fixture(autouse=True)
 def _postgres_per_test(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:

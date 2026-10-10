@@ -3,13 +3,18 @@
 - `migrate` — привести схему базы к версии приложения;
 - `import-legacy [--dry-run]` — перенести проекты из файлового хранилища;
 - `purge-trash` — окончательно удалить проекты, пролежавшие в корзине
-  дольше `SAV_ANALYTICS_TRASH_RETENTION_DAYS`.
+  дольше `SAV_ANALYTICS_TRASH_RETENTION_DAYS`;
+- `create-user <имя> [--admin]`, `set-password <имя>`, `list-users` —
+  учётные записи (P4). Пароль спрашивается в терминале или берётся из
+  `SAV_ANALYTICS_NEW_PASSWORD` для скриптов развёртывания.
 """
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
+import os
 import sys
 from collections.abc import Sequence
 
@@ -59,10 +64,65 @@ def cmd_purge_trash(settings: Settings, _args: argparse.Namespace) -> int:
     return 0
 
 
+def _auth(settings: Settings):  # type: ignore[no-untyped-def]
+    from .auth.store import AuthStore
+    from .db import get_engine
+
+    return AuthStore(get_engine(settings.resolved_database_url, migrate=settings.auto_migrate))
+
+
+def _password() -> str:
+    supplied = os.environ.get("SAV_ANALYTICS_NEW_PASSWORD")
+    if supplied:
+        return supplied
+    first = getpass.getpass("Пароль: ")
+    if first != getpass.getpass("Ещё раз: "):
+        raise SystemExit("Пароли не совпали.")
+    return first
+
+
+def cmd_create_user(settings: Settings, args: argparse.Namespace) -> int:
+    from .auth.store import AuthError
+
+    try:
+        user = _auth(settings).create_user(
+            args.username, _password(),
+            role="admin" if args.admin else "user", display_name=args.display_name or "",
+        )
+    except AuthError as exc:
+        raise SystemExit(str(exc)) from exc
+    _print(user)
+    return 0
+
+
+def cmd_set_password(settings: Settings, args: argparse.Namespace) -> int:
+    from .auth.store import AuthError, normalize_username
+
+    store = _auth(settings)
+    name = normalize_username(args.username)
+    user = next((item for item in store.list_users() if item["username"] == name), None)
+    if user is None:
+        raise SystemExit("Пользователь не найден.")
+    try:
+        store.update_user(user["id"], password=_password(), active=True)
+    except AuthError as exc:
+        raise SystemExit(str(exc)) from exc
+    _print({"username": name, "status": "password_set"})
+    return 0
+
+
+def cmd_list_users(settings: Settings, _args: argparse.Namespace) -> int:
+    _print(_auth(settings).list_users())
+    return 0
+
+
 COMMANDS = {
     "migrate": (cmd_migrate, "привести схему базы к версии приложения"),
     "import-legacy": (cmd_import_legacy, "перенести проекты из файлового хранилища"),
     "purge-trash": (cmd_purge_trash, "удалить проекты с истёкшим сроком в корзине"),
+    "create-user": (cmd_create_user, "завести пользователя"),
+    "set-password": (cmd_set_password, "задать пароль пользователю"),
+    "list-users": (cmd_list_users, "список пользователей"),
 }
 
 
@@ -77,6 +137,11 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="проверить перенос на копии данных, ничего не меняя",
             )
+        if name in ("create-user", "set-password"):
+            command.add_argument("username")
+        if name == "create-user":
+            command.add_argument("--admin", action="store_true", help="роль администратора")
+            command.add_argument("--display-name", default="")
     return parser
 
 

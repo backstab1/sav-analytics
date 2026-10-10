@@ -331,6 +331,11 @@ class ProjectLifecycle(ProjectStore):
         """
         if self.metadata.load(str(project_id), trashed=True) is None:
             raise ProjectNotFoundError(str(project_id))
+        from .. import report_versions
+        from ..jobs.queue import JobQueue
+
+        JobQueue(self.engine).delete_for_project(str(project_id))
+        report_versions.delete_for_project(self.engine, str(project_id))
         self.metadata.delete(str(project_id))
         directory = self.project_dir(project_id)
         if directory.exists():

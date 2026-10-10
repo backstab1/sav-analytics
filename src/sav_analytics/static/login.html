@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Вход — sav-analytics</title>
+    <link rel="stylesheet" href="/fonts.css?v=20261010-p4" />
+    <link rel="stylesheet" href="/auth.css?v=20261010-p4" />
+  </head>
+  <body class="auth-page">
+    <form class="auth-card" id="login-form" novalidate>
+      <h1 id="login-title">Вход</h1>
+      <p id="login-lead">Учётную запись выдаёт администратор.</p>
+      <div class="auth-error" id="login-error" role="alert" hidden></div>
+      <label id="display-name-field" hidden>Как вас называть
+        <input name="display_name" autocomplete="name" maxlength="200" />
+      </label>
+      <label>Имя входа
+        <input name="username" autocomplete="username" required maxlength="64" autofocus />
+      </label>
+      <label>Пароль
+        <input name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit" id="login-submit">Войти</button>
+    </form>
+    <script src="/login.js?v=20261010-p4" defer></script>
+  </body>
+</html>

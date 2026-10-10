@@ -60,6 +60,8 @@ jobs:
           src/sav_analytics/import_jobs.py
           src/sav_analytics/routers/imports.py
           src/sav_analytics/logging_setup.py
+          src/sav_analytics/auth
+          src/sav_analytics/readiness.py
           src/sav_analytics/core/weight_validation.py
           src/sav_analytics/core/review.py
           src/sav_analytics/api_presentation.py

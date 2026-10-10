@@ -16,6 +16,9 @@ from starlette.responses import Response
 
 from .api_dependencies import get_repository, get_settings
 from .api_errors import REQUEST_ID_HEADER, error_response, http_error_code, request_id_from
+from .auth.middleware import security_middleware
+from .auth.routes import admin as admin_router
+from .auth.routes import router as auth_router
 from .configuration_revision import (
     ConfigurationConflictError,
     bind_expected_revision,
@@ -52,6 +55,10 @@ from .routers import (
 app = FastAPI(title="sav-analytics API", version="0.1.0")
 logger = logging.getLogger(__name__)
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+# Добавленный раньше middleware оказывается внутри: проверка доступа идёт
+# после того, как `request_context` присвоил запросу идентификатор.
+app.middleware("http")(security_middleware)
 
 
 @app.middleware("http")
@@ -205,10 +212,23 @@ async def unexpected_error_handler(request: Request, exc: Exception) -> JSONResp
 
 @app.get("/api/health", tags=["health"])
 def health() -> dict[str, str]:
+    """Процесс жив и отвечает — для restart policy контейнера."""
     return {"status": "ok"}
 
 
+@app.get("/api/ready", tags=["health"])
+def ready() -> JSONResponse:
+    """Готов принимать запросы: база отвечает и на последней миграции,
+    том данных доступен на запись — для балансировщика и развёртывания."""
+    from .readiness import readiness
+
+    report = readiness(get_settings())
+    return JSONResponse(report, status_code=200 if report["ready"] else 503)
+
+
 for router in (
+    auth_router,
+    admin_router,
     projects.router,
     imports.router,
     analysis.router,

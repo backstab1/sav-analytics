@@ -41,6 +41,23 @@ class Settings(BaseSettings):
     import_timeout_seconds: int = 900
     # Сколько дней хранить строки завершённых заданий.
     job_ttl_days: int = 30
+    # Авторизация (P4, `auth/`). Без неё к данным пускает любого — только
+    # для локального прототипа на своей машине.
+    auth_enabled: bool = True
+    session_ttl_hours: int = 12
+    session_idle_minutes: int = 120
+    session_cookie: str = "sav_session"
+    # Cookie с флагом Secure ставится на любой запрос по HTTPS (в том числе
+    # пришедший через прокси с X-Forwarded-Proto). `true` — всегда, даже по
+    # http: так браузер не вернёт cookie, и локальный вход не удержится.
+    cookie_secure: bool = False
+    # Первого администратора можно завести со страницы входа, пока
+    # пользователей нет, — только с самой машины сервера (127.0.0.1).
+    allow_remote_setup: bool = False
+    login_max_failures: int = 10
+    login_lockout_minutes: int = 15
+    # Strict-Transport-Security; включать, когда сервер доступен только по HTTPS.
+    hsts: bool = False
     log_format: Literal["text", "json"] = "text"
     log_level: str = "INFO"
     # Сколько дней проект лежит в корзине до окончательного удаления.
