@@ -871,7 +871,14 @@ def test_tables_section_shows_the_numbers_of_the_workbook(
     page.click('.bld-seg[data-for="bld-measure"] button[data-value="index"]')
     expect(first.first).to_have_text("100")
     expect(page.locator("#bld-view-value")).to_have_text("индекс")
+    # Числа — лист «Счётчики» на экране: 160 человек вместо 67%, и выбор
+    # «Доли от» к ним не относится.
+    page.click('.bld-seg[data-for="bld-measure"] button[data-value="counts"]')
+    expect(first.first).to_have_text("160", timeout=UI_TIMEOUT)
+    expect(page.locator("#bld-view-value")).to_have_text("числа")
+    expect(page.locator('.bld-seg[data-for="bld-sheet"]')).to_be_hidden()
     page.click('.bld-seg[data-for="bld-measure"] button[data-value="value"]')
+    expect(first.first).to_have_text("67", timeout=UI_TIMEOUT)
     expect(page.locator("#bld-view-value")).to_be_hidden()
     page.keyboard.press("Escape")
 

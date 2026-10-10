@@ -120,7 +120,7 @@ Ollama. Провайдер выбирается переменными окру�
 | `table.use_banner` / `clear_columns` | `banner_id` / — | Нет |
 | `table.set_filter` | `filter_id` или `null` | Нет |
 | `table.set_base` | `base: main \| filter` | Нет |
-| `table.set_measure` | `measure: value \| index` | Нет |
+| `table.set_measure` | `measure: value \| counts \| index` | Нет |
 | `table.set_scale_box` | `scale_box: 1..3 \| null` | Нет |
 | `table.set_nets` | `code`, `nets` | Нет |
 | `table.create` / `copy` / `rename` | раскладка / — / `name` | Нет |

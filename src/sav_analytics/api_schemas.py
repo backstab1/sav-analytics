@@ -303,7 +303,8 @@ class TablePreviewRequest(BaseModel):
     banner_id: UUID | None = None
     blocks: list[BannerBlock] | None = Field(default=None, max_length=20)
     filter_id: UUID | None = None
-    sheet: Literal["main", "filter"] = "main"
+    # «counts» — числа ответивших, как лист «Счётчики».
+    sheet: Literal["main", "filter", "counts"] = "main"
     # NET-группы и размер Top/Bottom «на лету»: считаются, но не сохраняются.
     overrides: dict[str, TableQuestionOverride] | None = Field(default=None, max_length=50)
 
@@ -343,7 +344,9 @@ class TableReportLayout(BaseModel):
     cols: list[TableColumnBlock] = Field(default_factory=list, max_length=20)
     filter_id: UUID | None = None
     sheet: Literal["main", "filter"] = "main"
-    measure: Literal["value", "index"] = "value"
+    # «counts» — числа ответивших вместо долей; выбор «Доли от» (`sheet`)
+    # при этом остаётся и возвращается вместе с долями.
+    measure: Literal["value", "counts", "index"] = "value"
     # Размер Top/Bottom всей таблицы и свой у отдельных вопросов: свой
     # размер вопроса сильнее общего.
     scale_box: int | None = Field(default=None, ge=1, le=3)

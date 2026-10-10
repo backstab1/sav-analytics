@@ -51,6 +51,7 @@ const TablesSection = (() => {
   const wrap = document.querySelector("#bld-grid-wrap");
   const note = document.querySelector("#bld-stage-note");
   const sheetSelect = document.querySelector("#bld-sheet");
+  const sheetRow = sheetSelect.closest(".bld-menu-row");
   const measureSelect = document.querySelector("#bld-measure");
   const boxSelect = document.querySelector("#bld-box");
   const questionBoxSelect = document.querySelector("#bld-qbox");
@@ -1085,8 +1086,12 @@ const TablesSection = (() => {
   function renderViewValue() {
     const slot = document.querySelector("#bld-view-value");
     const parts = [];
+    const counts = measureSelect.value === "counts";
     if (measureSelect.value === "index") parts.push("индекс");
-    if (sheetSelect.value === "filter") parts.push("от ответивших");
+    if (counts) parts.push("числа");
+    else if (sheetSelect.value === "filter") parts.push("от ответивших");
+    // У чисел нет знаменателя: выбор «Доли от» к ним не относится.
+    sheetRow.hidden = counts;
     if (boxSelect.value) parts.push(`Top/Bottom ${boxSelect.value}`);
     slot.textContent = parts.join(" · ");
     slot.hidden = !parts.length;
@@ -1398,7 +1403,10 @@ const TablesSection = (() => {
   boxSelect.addEventListener("change", () => { renderNetControl(); void renderGrid(); });
 
   function tableRequest() {
-    const request = { questions: layout.rows, sheet: sheetSelect.value };
+    // Числа считает сервер листом «Счётчики»: из долей их не получить, у
+    // долей на весе другая база.
+    const sheet = measureSelect.value === "counts" ? "counts" : sheetSelect.value;
+    const request = { questions: layout.rows, sheet };
     if (bannerId) {
       request.banner_id = bannerId;
     } else if (layout.cols.length) {
@@ -1752,8 +1760,13 @@ const TablesSection = (() => {
 
   search.addEventListener("input", renderPalette);
   sheetSelect.addEventListener("change", () => { renderViewValue(); void renderGrid(); });
-  // Показатель меняет только вид уже посчитанного.
-  measureSelect.addEventListener("change", () => { renderViewValue(); if (lastTable) renderTable(lastTable); });
+  // Индекс меняет только вид уже посчитанного, числа — другая таблица.
+  measureSelect.addEventListener("change", () => {
+    renderViewValue();
+    const counted = lastTable?.sheet === "counts";
+    if (counted !== (measureSelect.value === "counts")) void renderGrid();
+    else if (lastTable) renderTable(lastTable);
+  });
   window.addEventListener("resize", activate);
 
   /* Ассистент. Заранее записанные сценарии: каждый меняет раскладку,

@@ -25,7 +25,7 @@ from ..filtering import FilterError, filter_columns
 from ..multiple_response import is_multiple, response_options
 from ..report_settings import resolved_report_settings
 from ..waves import wave_view
-from .builder import build_topline_artifacts
+from .builder import build_topline_artifacts, counts_report_data
 from .data import prepare_report_data
 from .excel_layout import banner_blocks, excel_column_name, write_topline
 from .models import ReportError, StatisticalAuditEntry
@@ -109,12 +109,16 @@ def build_live_table(
     """Посчитать таблицу для экрана.
 
     `sheet="main"` — доли от полной базы, как `topline_main`; `"filter"` —
-    от валидной базы вопроса, как `topline_filter`. `overrides` — разовые
+    от валидной базы вопроса, как `topline_filter`; `"counts"` — числа
+    ответивших, как лист «Счётчики», без долей и тестов. `overrides` — разовые
     настройки вопроса на этом экране (NET-группы и размер Top/Bottom): они
     не сохраняются в проект, но считаются тем же кодом, что книга.
     """
     live = _live_project(project, questions, banner_id, blocks, filter_id, overrides=overrides)
     data = prepare_report_data(path, live, columns=_needed_columns(live))
+    counts = sheet == "counts"
+    if counts:
+        data = counts_report_data(data)
     recording = _RecordingSheet()
     valid = sheet == "filter"
     chosen = data.filter_questions if valid else data.questions
@@ -126,7 +130,7 @@ def build_live_table(
         chosen,
         report_formats(_Workbook(), data.statistical_settings),
         entries,
-        "topline_filter" if valid else "topline_main",
+        "Счётчики" if counts else "topline_filter" if valid else "topline_main",
         valid_denominator=valid,
     )
     settings = resolved_report_settings(data.configuration, data.active_banner)
@@ -137,9 +141,10 @@ def build_live_table(
             "confidence_level": settings["confidence_level"],
             "bonferroni": settings["bonferroni"],
             "minimum_base": settings["minimum_base"],
-            "compare_to_total": settings["compare_to_total"],
+            # Числа с колонками не сравниваются: схема отчёта к ним не относится.
+            "compare_to_total": settings["compare_to_total"] and not counts,
             "compare_target": settings["compare_target"],
-            "compare_pairwise": settings["compare_pairwise"],
+            "compare_pairwise": settings["compare_pairwise"] and not counts,
             "secondary_confidence_level": settings.get("secondary_confidence_level"),
             "weight": data.statistical_settings["weight_label"],
         },
@@ -164,6 +169,7 @@ def export_live_table(
     blocks: list[dict[str, Any]] | None = None,
     filter_id: str | None = None,
     overrides: dict[str, dict[str, Any]] | None = None,
+    counts_sheet: bool = False,
 ) -> tuple[bytes, str]:
     """Книга по раскладке экрана — тем же сборщиком и в том же стиле.
 
@@ -175,10 +181,14 @@ def export_live_table(
     `questions=None` — все вопросы, включённые в отчёт, в порядке структуры:
     полный отчёт с разрезом и фильтром экрана. Тогда состав не сужается до
     типов экрана — книга выводит те же вопросы, что вывела бы полная сборка.
+    `counts_sheet` добавляет лист «Счётчики», даже если в книге он выключен:
+    экран показывал числа, и выгрузка их не теряет.
     """
     live = _live_project(
         project, questions, banner_id, blocks, filter_id, show_protocol=False, overrides=overrides
     )
+    if counts_sheet:
+        live["configuration"]["report_settings"]["counts_sheet"] = True
     artifacts = build_topline_artifacts(path, live)
     return artifacts.xlsx, artifacts.statistics_txt
 

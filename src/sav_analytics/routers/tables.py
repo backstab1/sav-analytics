@@ -68,6 +68,7 @@ def export_table(
             else None,
             filter_id=str(request.filter_id) if request.filter_id else None,
             overrides=_overrides(request),
+            counts_sheet=request.sheet == "counts",
         )
     except ReportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

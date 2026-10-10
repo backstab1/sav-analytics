@@ -18,6 +18,29 @@ from .statistics import StatisticsAuditWriter
 from .styles import report_formats
 
 
+def counts_report_data(data: Any) -> Any:
+    """Те же данные для топлайна числами: лист «Счётчики» и «Числа» на экране.
+
+    Колонки без сравнений, строки долей — числом ответивших. Одна функция
+    на книгу и экран, чтобы таблица счётчиков не разошлась с листом.
+    """
+    return replace(
+        data,
+        columns=[
+            {**column, "compare_to_total": False, "compare_pairwise": False}
+            for column in data.columns
+        ],
+        statistical_settings={
+            **data.statistical_settings,
+            "counts_only": True,
+            "show_counts": False,
+            "row_percents": False,
+            "table_percents": False,
+            "overall_tests": False,
+        },
+    )
+
+
 def build_topline_xlsx(path: str | Path, project: dict[str, Any]) -> bytes:
     return build_topline_artifacts(path, project).xlsx
 
@@ -100,22 +123,7 @@ def build_topline_artifacts(
         advance=advance,
     )
     if counts_sheet is not None:
-        # Тот же топлайн числами: колонки без сравнений, строки долей — счётчиками.
-        counts_data = replace(
-            data,
-            columns=[
-                {**column, "compare_to_total": False, "compare_pairwise": False}
-                for column in data.columns
-            ],
-            statistical_settings={
-                **data.statistical_settings,
-                "counts_only": True,
-                "show_counts": False,
-                "row_percents": False,
-                "table_percents": False,
-                "overall_tests": False,
-            },
-        )
+        counts_data = counts_report_data(data)
         write_topline(
             counts_sheet,
             counts_data,

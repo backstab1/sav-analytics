@@ -24,10 +24,12 @@ from tests.test_sav_reader import write_fixture
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
-def _numeric_cells(content: bytes) -> dict[str, float]:
-    """Числовые ячейки первого листа книги по адресу, например `C7`."""
+def _numeric_cells(content: bytes, sheet_index: int = 1) -> dict[str, float]:
+    """Числовые ячейки листа книги по адресу, например `C7`."""
     with ZipFile(BytesIO(content)) as archive:
-        sheet = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        sheet = ElementTree.fromstring(
+            archive.read(f"xl/worksheets/sheet{sheet_index}.xml")
+        )
     return {
         cell.attrib["r"]: float(cell.find("m:v", NS).text)
         for cell in sheet.findall(".//m:c", NS)
@@ -281,6 +283,13 @@ def test_export_endpoint_returns_a_named_workbook(tmp_path: Path) -> None:
             assert response.content.startswith(b"PK")
             assert "filename*=UTF-8''" in response.headers["content-disposition"]
             assert response.headers["content-disposition"].endswith("%D1%86%D0%B0.xlsx")
+
+            counted = client.post(
+                f"/api/projects/{project_id}/tables/export",
+                json={"questions": ["Q1"], "sheet": "counts"},
+            )
+            with ZipFile(BytesIO(counted.content)) as archive:
+                assert "Счётчики" in archive.read("xl/workbook.xml").decode("utf-8")
     finally:
         app.dependency_overrides.clear()
 
@@ -330,6 +339,57 @@ def test_count_rows_reach_the_table_as_bases(tmp_path: Path) -> None:
     assert counts["kind"] == "base"
     assert [cell["value"] for cell in counts["cells"]] == [62, 42, 20]
     assert all("index" not in cell for cell in counts["cells"])
+
+
+def test_counts_table_is_the_counts_sheet_of_the_workbook(tmp_path: Path) -> None:
+    """«Числа» на экране — запись листа «Счётчики», без долей и тестов."""
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source, counts_sheet=True)
+    codes, blocks = _layout(project)
+
+    table = build_live_table(source, project, questions=codes, blocks=blocks, sheet="counts")
+    # Листы книги по порядку: topline_main, topline_filter, Содержание,
+    # Параметры, Счётчики.
+    workbook = _numeric_cells(build_topline_xlsx(source, project), sheet_index=5)
+
+    outcome = next(item for item in table["questions"] if item["code"] == "OUTCOME")
+    rows = {row["label"]: row for row in outcome["rows"]}
+    assert rows["Да"]["kind"] == "value"
+    assert [cell["value"] for cell in rows["Да"]["cells"]] == [62, 42, 20]
+    assert all(cell["decimals"] == 0 for cell in rows["Да"]["cells"])
+    assert table["tests"] == 0
+    assert not table["settings"]["compare_to_total"]
+    assert not table["settings"]["compare_pairwise"]
+    shown = {
+        f"{_column_letter(index)}{row['sheet_row']}": cell["value"]
+        for question in table["questions"]
+        for row in question["rows"]
+        for index, cell in enumerate(row["cells"], start=2)
+        if cell["value"] is not None
+    }
+    assert shown
+    for ref, value in shown.items():
+        assert workbook[ref] == pytest.approx(value), ref
+
+
+def test_counts_export_adds_the_counts_sheet(tmp_path: Path) -> None:
+    """Выгрузка из «Чисел» несёт лист «Счётчики», даже если в книге он выключен."""
+    source = tmp_path / "significance.sav"
+    project = _significance_project(source)
+    _, blocks = _layout(project)
+
+    def sheets(content: bytes) -> str:
+        with ZipFile(BytesIO(content)) as archive:
+            return archive.read("xl/workbook.xml").decode("utf-8")
+
+    plain, _ = export_live_table(source, project, questions=["OUTCOME"], blocks=blocks)
+    counted, _ = export_live_table(
+        source, project, questions=["OUTCOME"], blocks=blocks, counts_sheet=True
+    )
+
+    assert "Счётчики" not in sheets(plain)
+    assert "Счётчики" in sheets(counted)
+    assert project["configuration"]["report_settings"].get("counts_sheet") is not True
 
 
 def test_row_percents_reach_the_table_without_index(tmp_path: Path) -> None:

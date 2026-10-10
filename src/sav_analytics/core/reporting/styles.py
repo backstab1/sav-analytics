@@ -213,6 +213,18 @@ class ReportFormats:
             properties["bold"] = direction in {"higher", "lower"}
         return self.get(**properties)
 
+    def count(self, *, separated: bool = False) -> Any:
+        """Число ответивших на листе «Счётчики»: значение, а не база.
+
+        Стоит на той же вертикали, что доли, с разделителем тысяч. От формата
+        базы отличается намеренно: живая таблица узнаёт строку базы по нему.
+        """
+        return self.get(
+            num_format=f"_{UP}_ #,##0",
+            font_color=INK,
+            **self._frame(separated=separated, derived=False),
+        )
+
     def overall_value(self, *, significant: bool, separated: bool = False) -> Any:
         """p-value общего теста: три знака, значимое — полужирным."""
         return self.get(

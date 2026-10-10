@@ -89,7 +89,7 @@ PROPOSE_TOOL = ToolSpec(
                         "banner_id": {"type": "string"},
                         "filter_id": {"type": "string"},
                         "base": {"type": "string", "enum": ["main", "filter"]},
-                        "measure": {"type": "string", "enum": ["value", "index"]},
+                        "measure": {"type": "string", "enum": ["value", "counts", "index"]},
                         "scale_box": {"type": "integer", "minimum": 1, "maximum": 3},
                         "code": {"type": "string"},
                         "nets": {

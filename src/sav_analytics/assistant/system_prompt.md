@@ -89,7 +89,7 @@ propose_plan. Любое изменение — только через propose_
 - table.clear_columns {} — только Total
 - table.set_filter {filter_id} — фильтр таблицы; filter_id: null снимает
 - table.set_base {base: "main"|"filter"} — доли от всех / от ответивших
-- table.set_measure {measure: "value"|"index"} — проценты / индекс к Total
+- table.set_measure {measure: "value"|"counts"|"index"} — проценты / числа ответивших / индекс к Total
 - table.set_scale_box {scale_box: 1|2|3|null} — топ/боттом-N для шкал
 - table.set_nets {code, nets: [{label, values: [значение, …]}]} — NET-ы
   вопроса только в этой таблице; nets: [] убирает

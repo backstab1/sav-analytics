@@ -952,18 +952,26 @@ def _write_count_row(
 
     Число невзвешенное, как база в шапке, и считается от той же базы, что доля
     над ним: вместе они показывают, на скольких людях стоит процент.
+
+    Без суффикса — строка листа «Счётчики»: доли там нет, число и есть
+    значение строки, поэтому оформлено как значение, а не как база.
     """
     selected = outcome.fillna(False).astype(bool) & eligible_mask
+    formats = context.formats
     context.sheet.set_row(row, ROW_HEIGHT, None, OUTLINE_DETAIL)
     context.sheet.write(
-        row, 0, f"{label}, N" if suffix else label, context.formats.derived_label()
+        row, 0, f"{label}, N" if suffix else label,
+        formats.derived_label() if suffix else formats.row_label(),
     )
     for index, column in enumerate(context.columns, start=1):
+        separated = context.separated(index)
         context.sheet.write_number(
             row,
             index,
             int((selected & column["mask"]).sum()),
-            context.formats.base(separated=context.separated(index), rule=False),
+            formats.base(separated=separated, rule=False)
+            if suffix
+            else formats.count(separated=separated),
         )
     return row + 1
 

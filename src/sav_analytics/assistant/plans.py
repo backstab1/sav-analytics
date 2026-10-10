@@ -104,7 +104,7 @@ class SetBase(_TableStep):
 
 class SetMeasure(_TableStep):
     op: Literal["table.set_measure"]
-    measure: Literal["value", "index"]
+    measure: Literal["value", "counts", "index"]
 
 
 class SetScaleBox(_TableStep):
@@ -126,7 +126,7 @@ class CreateTable(_Step):
     banner_id: str | None = None
     filter_id: str | None = None
     base: Literal["main", "filter"] = "main"
-    measure: Literal["value", "index"] = "value"
+    measure: Literal["value", "counts", "index"] = "value"
     scale_box: int | None = Field(default=None, ge=1, le=3)
 
 
@@ -390,9 +390,11 @@ class _Run:
             text = "доли от всей выборки" if step.base == "main" else "доли от ответивших на вопрос"
         elif isinstance(step, SetMeasure):
             self._write_layout(report, lambda layout: layout.update(measure=step.measure))
-            text = "показатель — " + (
-                "проценты" if step.measure == "value" else "индекс к Total"
-            )
+            text = "показатель — " + {
+                "value": "проценты",
+                "counts": "числа ответивших",
+                "index": "индекс к Total",
+            }[step.measure]
         elif isinstance(step, SetScaleBox):
             self._write_layout(report, lambda layout: layout.update(scale_box=step.scale_box))
             text = (
