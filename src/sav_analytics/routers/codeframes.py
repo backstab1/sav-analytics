@@ -119,6 +119,7 @@ def _start_coding(
     codeframe_id = UUID(codeframe["id"])
     titles = {"new": "Кодирование", "keep_edits": "Перекодирование", "reset": "Кодирование заново"}
     return ai_jobs.start_job(
+        repository,
         str(project_id),
         "coding",
         f"{titles[mode]}: {codeframe['question_code']} — {question_label[:60]}",
@@ -209,6 +210,7 @@ def revise_codebook(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail=_NOT_FOUND) from exc
     return ai_jobs.start_job(
+        repository,
         str(project_id),
         "codebook_revision",
         f"Правка справочника: {codeframe['question_code']}",

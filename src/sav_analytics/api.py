@@ -36,6 +36,7 @@ from .routers import (
     demo_requests,
     filters,
     formulas,
+    imports,
     projects,
     questions,
     recodings,
@@ -209,6 +210,7 @@ def health() -> dict[str, str]:
 
 for router in (
     projects.router,
+    imports.router,
     analysis.router,
     codeframes.router,
     data_rows.router,

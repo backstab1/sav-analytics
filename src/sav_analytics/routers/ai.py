@@ -116,20 +116,34 @@ def list_jobs(
     project_id: UUID, repository: Annotated[ProjectRepository, Depends(get_repository)]
 ) -> dict:
     _project(repository, project_id)
-    return {"jobs": ai_jobs.list_jobs(str(project_id))}
+    return {"jobs": ai_jobs.list_jobs(repository, str(project_id))}
 
 
 @router.get("/jobs/{job_id}")
-def get_job(project_id: UUID, job_id: UUID) -> dict:
-    job = ai_jobs.get_job(str(project_id), str(job_id))
+def get_job(
+    project_id: UUID,
+    job_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    job = ai_jobs.get_job(repository, str(project_id), str(job_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Задача не найдена.")
     return job
 
 
 @router.post("/jobs/{job_id}/retry")
-def retry_job(project_id: UUID, job_id: UUID) -> dict:
-    job = ai_jobs.retry_job(str(project_id), str(job_id))
+def retry_job(
+    project_id: UUID,
+    job_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    try:
+        job = ai_jobs.retry_job(repository, str(project_id), str(job_id))
+    except ai_jobs.RetryUnavailableError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Задача прервана перезапуском сервера: запустите её заново.",
+        ) from exc
     if job is None:
         raise HTTPException(status_code=404, detail="Задача не найдена.")
     return job
@@ -182,7 +196,9 @@ async def upload_questionnaire(
             "notes": str(proposal.get("notes") or "")[:2000],
         }
 
-    return ai_jobs.start_job(str(project_id), "questionnaire", f"Анкета «{filename}»", run)
+    return ai_jobs.start_job(
+        repository, str(project_id), "questionnaire", f"Анкета «{filename}»", run
+    )
 
 
 @router.post("/questionnaire/apply")
@@ -193,7 +209,9 @@ def apply_questionnaire(
 ) -> dict:
     """Применить выбранные строки разбора одной ревизией — одним шагом отмены."""
     _project(repository, project_id)
-    result = ai_jobs.job_result(str(project_id), str(body.job_id), "questionnaire")
+    result = ai_jobs.job_result(
+        repository, str(project_id), str(body.job_id), "questionnaire"
+    )
     if result is None:
         raise HTTPException(
             status_code=404, detail="Разбор анкеты не найден: загрузите анкету заново."

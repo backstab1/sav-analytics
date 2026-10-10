@@ -128,6 +128,7 @@ def start_plan(
         return refusal
     assert model is not None
     return ai_jobs.start_job(
+        repository,
         str(project_id),
         "autoreport_plan",
         "План автоотчёта",
@@ -181,6 +182,7 @@ def start_build(
     if not (autoreport.load(directory).get("plan") or {}).get("sections"):
         raise HTTPException(status_code=422, detail="Сначала составьте план отчёта.")
     return ai_jobs.start_job(
+        repository,
         str(project_id),
         "autoreport_build",
         "Сборка автоотчёта",

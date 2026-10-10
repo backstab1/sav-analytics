@@ -152,6 +152,7 @@ def ai_match(
         return {"pairs": pairs}
 
     return ai_jobs.start_job(
+        repository,
         str(project_id), "wave_match", "Сопоставление переменных волны", run, subject=staging_id
     )
 

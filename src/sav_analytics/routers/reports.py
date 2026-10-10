@@ -10,10 +10,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 
+from .. import report_versions
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
 from ..core import report_books
 from ..core.preflight import PreflightBlockedError, run_preflight
+from ..jobs import dispatch
 from ..report_cache import (
     PreparedReport,
     ReportArtifactNotFoundError,
@@ -21,7 +23,7 @@ from ..report_cache import (
     get_report_artifact,
     list_report_runs,
 )
-from ..report_jobs import get_report_job, start_report_job
+from ..report_jobs import get_report_job, job_payload, start_report_job
 from ..repository import ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(
@@ -138,11 +140,42 @@ def download_report_bundle(
 
 
 @router.get("/jobs/{job_id}")
-def report_job_status(project_id: UUID, job_id: UUID) -> dict:
-    job = get_report_job(job_id, project_id)
+def report_job_status(
+    project_id: UUID,
+    job_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    job = get_report_job(repository, job_id, project_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Задача формирования отчёта не найдена.")
     return job
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_report_job(
+    project_id: UUID,
+    job_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Отменить сборку: из очереди — сразу, идущую — на ближайшем шаге."""
+    if get_report_job(repository, job_id, project_id) is None:
+        raise HTTPException(status_code=404, detail="Задача формирования отчёта не найдена.")
+    dispatch.queue_for(repository).cancel(str(job_id))
+    return get_report_job(repository, job_id, project_id) or {}
+
+
+@router.post("/jobs/{job_id}/retry")
+def retry_report_job(
+    project_id: UUID,
+    job_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Повторить провалившуюся или отменённую сборку с тем же снимком."""
+    if get_report_job(repository, job_id, project_id) is None:
+        raise HTTPException(status_code=404, detail="Задача формирования отчёта не найдена.")
+    job = dispatch.queue_for(repository).retry(str(job_id))
+    dispatch.submit(repository, job)
+    return job_payload(repository, job)
 
 
 @router.get("/topline.xlsx")
@@ -180,6 +213,22 @@ def download_artifact_presentation(
 ) -> FileResponse:
     project, prepared = _prepared_artifact(repository, project_id, artifact_id)
     return _presentation_response(project, prepared)
+
+
+@router.get("/artifacts/{artifact_id}/version")
+def report_artifact_version(
+    project_id: UUID,
+    artifact_id: str,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Из чего и чем собрана сборка: исходник, конфигурация, версии, суммы."""
+    _prepared_artifact(repository, project_id, artifact_id)
+    version = report_versions.get(repository.engine, str(project_id), artifact_id)
+    if version is None:
+        raise HTTPException(
+            status_code=404, detail="Сборка сделана до учёта версий: записи о ней нет."
+        )
+    return version
 
 
 @router.get("/artifacts/{artifact_id}/topline.xlsx")

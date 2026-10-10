@@ -1,9 +1,12 @@
-"""Фоновые задачи ИИ: разбор анкеты, позже — кодирование и автоотчёт.
+"""Фоновые задачи ИИ: разбор анкеты, кодирование, автоотчёт, сопоставление волны.
 
-Задача живёт в памяти процесса, как сборка отчёта в `report_jobs.py`:
-надёжной очереди с переживанием перезапуска пока нет (P5). Задача знает
-проект, вид, прогресс, результат или ошибку и умеет повториться с теми же
-входными данными — для этого она держит функцию и её аргументы.
+Статус, прогресс, результат и ошибка задачи живут в общей очереди в базе
+(`jobs/queue.py`, исполнитель `local`): их видит любой экземпляр API, и
+после перезапуска колокольчик показывает, чем задача кончилась. Функция
+задачи держит модель и аргументы в памяти процесса, поэтому исполняет её
+тот процесс API, что поставил: задача, оборванная перезапуском, помечается
+прерванной (`JOB_INTERRUPTED`) и запускается заново с экрана, а повтор
+упавшей — пока процесс жив — идёт с теми же входными данными.
 
 Функция задачи получает `progress(completed, total, stage)` и возвращает
 словарь результата. `JobFailure` — ожидаемая ошибка с текстом для человека;
@@ -12,209 +15,139 @@
 
 from __future__ import annotations
 
-import logging
 import threading
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Any, Literal
-from uuid import uuid4
+from typing import Any
 
-JobStatus = Literal["queued", "running", "complete", "failed"]
+from .actor import current_actor_id
+from .jobs import dispatch
+from .jobs.runtime import JobContext
+from .jobs.runtime import JobFailure as _JobFailure
+
 Progress = Callable[[int, int, str], None]
 JobFunction = Callable[[Progress], dict[str, Any]]
 
-# Две задачи сразу: разбор анкеты не должен ждать кодирования большого массива.
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ai-job")
-_guard = threading.Lock()
-_jobs: dict[str, AiJob] = {}
-# Сколько завершённых задач проекта помнить для колокольчика.
+PREFIX = "ai."
+# Сколько последних задач проекта показывать в колокольчике.
 _KEEP_FINISHED = 20
-logger = logging.getLogger(__name__)
+FAILURE = "Задача не выполнилась из-за внутренней ошибки. Повторите попытку."
+
+_guard = threading.Lock()
+_functions: dict[str, JobFunction] = {}
 
 
-class JobFailure(RuntimeError):
+class JobFailure(_JobFailure):
     """Ожидаемая ошибка задачи: текст показывается человеку как есть."""
 
     def __init__(self, message: str, code: str = "AI_JOB_FAILED") -> None:
-        super().__init__(message)
-        self.code = code
+        super().__init__(message, code)
 
 
-@dataclass
-class AiJob:
-    id: str
-    project_id: str
-    kind: str
-    title: str
-    function: JobFunction = field(repr=False)
-    # Объект задачи, например id кодификатора: по нему экран показывает
-    # прогресс в строке этого объекта.
-    subject: str | None = None
-    status: JobStatus = "queued"
-    completed: int = 0
-    total: int = 1
-    stage: str = "В очереди"
-    result: dict[str, Any] | None = None
-    error: str | None = None
-    error_code: str | None = None
-    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
-    finished_at: str | None = None
-    attempts: int = 0
-
-    def payload(self, *, with_result: bool = True) -> dict[str, Any]:
-        return {
-            "job_id": self.id,
-            "project_id": self.project_id,
-            "kind": self.kind,
-            "title": self.title,
-            "subject": self.subject,
-            "status": self.status,
-            "completed": self.completed,
-            "total": self.total,
-            "progress": round(self.completed / self.total * 100) if self.total else 0,
-            "stage": self.stage,
-            "error": self.error,
-            "error_code": self.error_code,
-            "created_at": self.created_at,
-            "finished_at": self.finished_at,
-            "attempts": self.attempts,
-            "result": self.result if with_result else None,
-        }
+class RetryUnavailableError(LookupError):
+    """Функция задачи осталась в памяти прежнего процесса."""
 
 
 def start_job(
+    repository: Any,
     project_id: str,
     kind: str,
     title: str,
     function: JobFunction,
     subject: str | None = None,
 ) -> dict[str, Any]:
-    job = AiJob(
-        id=str(uuid4()),
+    queue = dispatch.queue_for(repository)
+    job = queue.enqueue(
+        PREFIX + kind,
+        {},
         project_id=project_id,
-        kind=kind,
         title=title,
-        function=function,
         subject=subject,
+        max_attempts=1,
+        timeout_seconds=dispatch._settings().report_timeout_seconds,
+        runner="local",
+        created_by=current_actor_id(),
     )
     with _guard:
-        _jobs[job.id] = job
-        _forget_old(project_id)
-    _submit(job)
-    return job.payload()
+        _functions[job["id"]] = function
+    dispatch.submit_local(repository, job, _runner(job["id"]))
+    return payload(job)
 
 
-def retry_job(project_id: str, job_id: str) -> dict[str, Any] | None:
-    """Повторить упавшую задачу с теми же входными данными."""
-    with _guard:
-        job = _jobs.get(job_id)
-        if job is None or job.project_id != project_id:
-            return None
-        if job.status != "failed":
-            return job.payload()
-        job.status = "queued"
-        job.stage = "В очереди"
-        job.completed = 0
-        job.error = None
-        job.error_code = None
-        job.finished_at = None
-    _submit(job)
-    return job.payload()
-
-
-def get_job(project_id: str, job_id: str) -> dict[str, Any] | None:
-    with _guard:
-        job = _jobs.get(job_id)
-        if job is None or job.project_id != project_id:
-            return None
-        return job.payload()
-
-
-def job_result(project_id: str, job_id: str, kind: str) -> dict[str, Any] | None:
-    """Результат завершённой задачи нужного вида или None."""
-    with _guard:
-        job = _jobs.get(job_id)
-        if job is None or job.project_id != project_id or job.kind != kind:
-            return None
-        return job.result if job.status == "complete" else None
-
-
-def list_jobs(project_id: str) -> list[dict[str, Any]]:
-    """Задачи проекта, новые первыми, без тяжёлых результатов."""
-    with _guard:
-        jobs = [job for job in _jobs.values() if job.project_id == project_id]
-        return [
-            job.payload(with_result=False)
-            for job in sorted(jobs, key=lambda item: item.created_at, reverse=True)
-        ]
-
-
-def _submit(job: AiJob) -> None:
-    _executor.submit(_run, job.id)
-
-
-def _run(job_id: str) -> None:
-    with _guard:
-        job = _jobs[job_id]
-        job.status = "running"
-        job.stage = "Начинаем"
-        job.attempts += 1
-        function = job.function
-
-    def progress(completed: int, total: int, stage: str) -> None:
+def _runner(job_id: str) -> Callable[[JobContext], dict[str, Any]]:
+    def run(context: JobContext) -> dict[str, Any]:
         with _guard:
-            current = _jobs[job_id]
-            current.completed = completed
-            current.total = max(1, total)
-            current.stage = stage
+            function = _functions[job_id]
+        return function(context.progress)
 
-    try:
-        result = function(progress)
-    except JobFailure as exc:
-        _finish(job_id, error=str(exc), code=exc.code)
-    except Exception:
-        logger.exception("AI job failed", extra={"job_id": job_id})
-        _finish(
-            job_id,
-            error="Задача не выполнилась из-за внутренней ошибки. Повторите попытку.",
-            code="AI_JOB_FAILED",
-        )
-    else:
-        _finish(job_id, result=result)
+    return run
 
 
-def _finish(
-    job_id: str,
-    *,
-    result: dict[str, Any] | None = None,
-    error: str | None = None,
-    code: str | None = None,
-) -> None:
+def retry_job(repository: Any, project_id: str, job_id: str) -> dict[str, Any] | None:
+    """Повторить упавшую задачу с теми же входными данными."""
+    queue = dispatch.queue_for(repository)
+    job = _own(queue, project_id, job_id)
+    if job is None:
+        return None
+    if job["status"] not in ("failed", "cancelled"):
+        return payload(job)
     with _guard:
-        job = _jobs[job_id]
-        job.finished_at = datetime.now(UTC).isoformat()
-        if error is not None:
-            job.status = "failed"
-            job.stage = "Ошибка"
-            job.error = error
-            job.error_code = code
-        else:
-            job.status = "complete"
-            job.completed = job.total
-            job.stage = "Готово"
-            job.result = result
+        known = job_id in _functions
+    if not known:
+        raise RetryUnavailableError(job_id)
+    job = queue.retry(job_id)
+    dispatch.submit_local(repository, job, _runner(job_id))
+    return payload(job)
 
 
-def _forget_old(project_id: str) -> None:
-    finished = sorted(
-        (
-            job
-            for job in _jobs.values()
-            if job.project_id == project_id and job.status in {"complete", "failed"}
-        ),
-        key=lambda item: item.created_at,
-    )
-    for job in finished[: max(0, len(finished) - _KEEP_FINISHED)]:
-        _jobs.pop(job.id, None)
+def get_job(repository: Any, project_id: str, job_id: str) -> dict[str, Any] | None:
+    job = _own(dispatch.queue_for(repository), project_id, job_id)
+    return None if job is None else payload(job)
+
+
+def job_result(repository: Any, project_id: str, job_id: str, kind: str) -> dict[str, Any] | None:
+    """Результат завершённой задачи нужного вида или None."""
+    job = _own(dispatch.queue_for(repository), project_id, job_id)
+    if job is None or job["kind"] != PREFIX + kind or job["status"] != "complete":
+        return None
+    return job["result"]
+
+
+def list_jobs(repository: Any, project_id: str) -> list[dict[str, Any]]:
+    """Задачи проекта, новые первыми, без тяжёлых результатов."""
+    jobs = dispatch.queue_for(repository).list(project_id=project_id, limit=200)
+    jobs = [job for job in jobs if job["kind"].startswith(PREFIX)]
+    active = [job for job in jobs if job["status"] in ("queued", "running")]
+    finished = [job for job in jobs if job["status"] not in ("queued", "running")]
+    return [payload(job, with_result=False) for job in active + finished[:_KEEP_FINISHED]]
+
+
+def _own(queue: Any, project_id: str, job_id: str) -> dict[str, Any] | None:
+    job = queue.find(job_id)
+    if job is None or job["project_id"] != project_id or not job["kind"].startswith(PREFIX):
+        return None
+    return job
+
+
+def payload(job: dict[str, Any], *, with_result: bool = True) -> dict[str, Any]:
+    error = job["error"]
+    # Непредвиденная ошибка показывается общим текстом, без подробностей.
+    if job["status"] == "failed" and job["error_code"] == "JOB_FAILED":
+        error = FAILURE
+    return {
+        "job_id": job["id"],
+        "project_id": job["project_id"],
+        "kind": job["kind"].removeprefix(PREFIX),
+        "title": job["title"],
+        "subject": job["subject"],
+        "status": job["status"],
+        "completed": job["completed"],
+        "total": job["total"],
+        "progress": round(job["completed"] / job["total"] * 100) if job["total"] else 0,
+        "stage": job["stage"],
+        "error": error,
+        "error_code": "AI_JOB_FAILED" if job["error_code"] == "JOB_FAILED" else job["error_code"],
+        "created_at": job["created_at"],
+        "finished_at": job["finished_at"],
+        "attempts": job["attempts"],
+        "result": job["result"] if with_result else None,
+    }

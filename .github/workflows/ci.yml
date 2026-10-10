@@ -54,6 +54,12 @@ jobs:
           src/sav_analytics/actor.py
           src/sav_analytics/manage.py
           src/sav_analytics/project_history.py
+          src/sav_analytics/jobs
+          src/sav_analytics/worker.py
+          src/sav_analytics/report_versions.py
+          src/sav_analytics/import_jobs.py
+          src/sav_analytics/routers/imports.py
+          src/sav_analytics/logging_setup.py
           src/sav_analytics/core/weight_validation.py
           src/sav_analytics/core/review.py
           src/sav_analytics/api_presentation.py

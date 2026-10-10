@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from . import report_versions
 from .atomic_file import replace_file
 from .core.report import build_topline_artifacts
 from .core.report_books import active_book_name
@@ -121,6 +122,14 @@ def prepare_report(
             manifest_temporary.unlink(missing_ok=True)
             presentation_temporary.unlink(missing_ok=True)
 
+        report_versions.record(
+            repository.engine,
+            project_id=str(project_id),
+            artifact_id=cache_key,
+            kind="report",
+            project=project,
+            files=manifest["files"],
+        )
         return PreparedReport(
             topline_path=topline_path,
             statistics_path=statistics_path,
@@ -167,6 +176,7 @@ def list_report_runs(
     """
     root = repository.report_cache_dir(project_id) / "artifacts"
     current = report_cache_key(project)
+    authors = report_versions.authors(repository.engine, str(project_id))
     runs = []
     # Выгрузки «Таблиц» бывают и до первой сборки отчёта.
     for directory in root.iterdir() if root.is_dir() else []:
@@ -197,6 +207,7 @@ def list_report_runs(
                 },
                 "kind": "report",
                 "current": directory.name == current,
+                "author": authors.get(directory.name),
                 "downloads": report_downloads(base, prepared),
             }
         )
@@ -384,6 +395,14 @@ def store_table_export(
     }
     (artifact_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    report_versions.record(
+        repository.engine,
+        project_id=str(project_id),
+        artifact_id=artifact_dir.name,
+        kind="table",
+        project=project,
+        files=manifest["files"],
     )
     return artifact_dir.name
 

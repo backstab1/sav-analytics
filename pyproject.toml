@@ -28,6 +28,7 @@ dependencies = [
 
 [project.scripts]
 sav-analytics = "sav_analytics.manage:main"
+sav-analytics-worker = "sav_analytics.worker:main"
 
 [project.optional-dependencies]
 dev = [

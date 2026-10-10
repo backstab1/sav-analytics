@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shutil
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import BinaryIO
@@ -22,7 +23,7 @@ from ..core.report_books import ensure_books
 from ..core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
 )
-from ..core.sav_reader import SavReadError, inspect_sav
+from ..core.sav_reader import inspect_sav
 from ..core.tabular_import import TabularImportError, convert_to_sav, is_tabular
 from ..core.wave_import import WaveDiff, compare_structures
 from ..project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
@@ -40,19 +41,27 @@ class ProjectLifecycle(ProjectStore):
     """
 
     def create(self, name: str, original_filename: str, source: BinaryIO) -> dict:
+        """Создать проект из файла за один вызов: приём, разбор, запись."""
+        staged = self.stage_upload(original_filename, source)
+        return self.create_from_staged(name, staged)
+
+    def stage_upload(self, original_filename: str, source: BinaryIO) -> dict:
+        """Принять файл во временный каталог: размер и SHA-256 по ходу записи.
+
+        Это единственная часть импорта внутри HTTP-запроса; разбор идёт
+        отдельно (`create_from_staged`), в том числе фоновым заданием.
+        """
         tabular = is_tabular(original_filename)
         if not original_filename.lower().endswith(".sav") and not tabular:
             raise InvalidUploadError("Допускаются файлы SAV, CSV, TSV и XLSX.")
         project_id = uuid4()
         temporary = self.root / f".{project_id}.uploading"
-        destination = self.root / str(project_id)
         temporary.mkdir()
-        source_path = temporary / "source.sav"
         # CSV хранится неизменным оригиналом, а расчёт идёт по SAV из него.
         upload_path = (
             temporary / f"original{Path(original_filename).suffix.lower()}"
             if tabular
-            else source_path
+            else temporary / "source.sav"
         )
         digest = hashlib.sha256()
         size = 0
@@ -64,22 +73,59 @@ class ProjectLifecycle(ProjectStore):
                         raise InvalidUploadError("Размер SAV превышает допустимый лимит.")
                     digest.update(chunk)
                     output.write(chunk)
-
             if size == 0:
                 raise InvalidUploadError("Загружен пустой файл.")
-            if tabular:
+        except Exception:
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
+        return {
+            "project_id": str(project_id),
+            "original_filename": Path(original_filename).name,
+            "upload": upload_path.name,
+            "tabular": tabular,
+            "size": size,
+            "sha256": digest.hexdigest(),
+        }
+
+    def discard_staged(self, staged: dict) -> None:
+        shutil.rmtree(self.root / f".{staged['project_id']}.uploading", ignore_errors=True)
+
+    def create_from_staged(
+        self,
+        name: str,
+        staged: dict,
+        progress: Callable[[int, int, str], None] | None = None,
+    ) -> dict:
+        """Разобрать принятый файл и записать проект; временный каталог уходит."""
+
+        def step(index: int, stage: str) -> None:
+            if progress is not None:
+                progress(index, 4, stage)
+
+        project_id = staged["project_id"]
+        temporary = self.root / f".{project_id}.uploading"
+        destination = self.root / project_id
+        source_path = temporary / "source.sav"
+        if not temporary.is_dir():
+            raise InvalidUploadError("Загруженный файл не найден, загрузите его заново.")
+        original_filename = staged["original_filename"]
+        try:
+            if staged["tabular"]:
+                step(0, "Переводим таблицу в SAV")
                 try:
-                    convert_to_sav(upload_path, source_path)
+                    convert_to_sav(temporary / staged["upload"], source_path)
                 except TabularImportError as exc:
                     raise InvalidUploadError(str(exc)) from exc
+            step(1, "Читаем метаданные")
             inspection = inspect_sav(source_path)
+            step(2, "Распознаём структуру анкеты")
             created_at = datetime.now(UTC).isoformat()
             project = {
-                "id": str(project_id),
+                "id": project_id,
                 "name": name.strip() or Path(original_filename).stem,
                 "created_at": created_at,
-                "original_filename": Path(original_filename).name,
-                "source": {"size": size, "sha256": digest.hexdigest()},
+                "original_filename": original_filename,
+                "source": {"size": staged["size"], "sha256": staged["sha256"]},
                 "inspection": inspection.to_dict(),
                 "configuration": {
                     "schema_version": CONFIGURATION_SCHEMA_VERSION,
@@ -98,10 +144,8 @@ class ProjectLifecycle(ProjectStore):
             }
             ensure_books(project["configuration"])
             validate_stored_project(project)
+            step(3, "Сохраняем проект")
             os.replace(temporary, destination)
-        except (InvalidUploadError, SavReadError):
-            shutil.rmtree(temporary, ignore_errors=True)
-            raise
         except Exception:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
@@ -303,9 +347,13 @@ class ProjectLifecycle(ProjectStore):
         for identifier in self.metadata.trashed_before(moment):
             self.purge(UUID(identifier))
             purged.append(identifier)
-        # Остатки прерванных удалений.
+        # Остатки прерванных удалений и загрузок, брошенных больше суток назад.
         for leftover in self.root.glob(".*.purging"):
             shutil.rmtree(leftover, ignore_errors=True)
+        day_ago = (datetime.now(UTC) - timedelta(days=1)).timestamp()
+        for leftover in self.root.glob(".*.uploading"):
+            if leftover.stat().st_mtime < day_ago:
+                shutil.rmtree(leftover, ignore_errors=True)
         return purged
 
     def history(self, project_id: UUID) -> dict:

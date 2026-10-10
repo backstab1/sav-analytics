@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +23,26 @@ class Settings(BaseSettings):
     # процесса к базе. Перенос не трогает project.json и пропускает уже
     # перенесённые, поэтому повторы безопасны.
     auto_import_legacy: bool = True
+    # Задания (P5, `jobs/dispatch.py`): `embedded` — процесс API исполняет
+    # очередь сам; `external` — только ставит, исполняет `sav-analytics-worker`.
+    job_runner: Literal["embedded", "external"] = "embedded"
+    # Сколько тяжёлых заданий одновременно в одном процессе.
+    worker_concurrency: int = 2
+    # `process` — каждое задание в своём процессе: timeout и отмена его
+    # убивают, предел памяти ограничивает его одного. `thread` — в потоке.
+    worker_isolation: Literal["process", "thread"] = "process"
+    # Предел памяти процесса задания, МБ (0 — без предела; только Linux).
+    job_memory_limit_mb: int = 0
+    # Не брать задания, пока на томе данных свободно меньше, МБ.
+    min_free_disk_mb: int = 1024
+    job_lease_seconds: int = 60
+    job_poll_seconds: float = 2.0
+    report_timeout_seconds: int = 1800
+    import_timeout_seconds: int = 900
+    # Сколько дней хранить строки завершённых заданий.
+    job_ttl_days: int = 30
+    log_format: Literal["text", "json"] = "text"
+    log_level: str = "INFO"
     # Сколько дней проект лежит в корзине до окончательного удаления.
     trash_retention_days: int = 30
 

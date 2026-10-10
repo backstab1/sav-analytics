@@ -35,7 +35,7 @@ def test_background_report_job_exposes_progress(tmp_path: Path, monkeypatch) -> 
     status = started
     while status["status"] != "complete" and time.monotonic() < deadline:
         time.sleep(0.01)
-        status = get_report_job(UUID(started["job_id"]), project_id)
+        status = get_report_job(repository, UUID(started["job_id"]), project_id)
 
     assert status is not None
     assert status["status"] == "complete"
@@ -65,7 +65,7 @@ def test_background_report_job_does_not_expose_internal_error(
     status = started
     while status["status"] not in {"complete", "failed"} and time.monotonic() < deadline:
         time.sleep(0.01)
-        status = get_report_job(UUID(started["job_id"]), project_id)
+        status = get_report_job(repository, UUID(started["job_id"]), project_id)
 
     assert status is not None
     assert status["status"] == "failed"

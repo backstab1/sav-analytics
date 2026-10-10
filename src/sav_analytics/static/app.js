@@ -183,9 +183,20 @@ dropZone.addEventListener("drop", event => {
 form.addEventListener("submit", async event => {
   event.preventDefault();
   errorBox.hidden = true;
-  setBusy(submit, true, "Читаем структуру…");
+  setBusy(submit, true, "Загружаем файл…");
   try {
-    const project = await api("/api/projects", { method: "POST", body: new FormData(form) });
+    // Сервер принимает файл и разбирает его фоновым заданием (P5): кнопка
+    // показывает стадию и прогресс, пока задание не закончится.
+    let job = await api("/api/imports", { method: "POST", body: new FormData(form) });
+    while (job.status === "queued" || job.status === "running") {
+      setBusy(submit, true, `${job.stage || "В очереди"}… ${job.progress}%`);
+      await new Promise(resolve => setTimeout(resolve, 400));
+      job = await api(`/api/imports/${job.job_id}`);
+    }
+    if (job.status !== "complete") {
+      throw new Error(job.error || "Файл не удалось разобрать.");
+    }
+    const project = await api(`/api/projects/${job.project_id}`);
     showProject(project);
     showToast("Проект создан");
   } catch (error) {
