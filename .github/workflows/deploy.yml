@@ -1,0 +1,80 @@
+name: Развёртывание
+
+# Образ собирается на каждый коммит в main и публикуется в GHCR с тегом
+# коммита. Развёртывание — вручную: сначала staging, затем production тем
+# же тегом. Откат — запуск с прежним тегом (docs/operations.md).
+#
+# Нужно в настройках репозитория, для каждого окружения (staging,
+# production): секреты DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY и
+# DEPLOY_KNOWN_HOSTS; на сервере — каталог /opt/sav-analytics с compose.yaml,
+# .env и deploy/deploy.sh из этого репозитория.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Куда развернуть
+        type: choice
+        options: [staging, production]
+        default: staging
+      tag:
+        description: Тег образа (sha коммита); пусто — текущий коммит
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    name: Образ в GHCR
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Развернуть ${{ inputs.environment }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - name: Ключ SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Развернуть и проверить готовность
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          TAG: ${{ inputs.tag || github.sha }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$USER@$HOST" \
+            "cd /opt/sav-analytics && ./deploy/deploy.sh '$IMAGE:$TAG'"

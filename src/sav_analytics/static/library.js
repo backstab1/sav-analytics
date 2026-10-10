@@ -90,6 +90,9 @@ function trashCard(project) {
     </span>
     <span class="project-actions">
       <button type="button" class="project-restore" data-project-restore="${escapeAttribute(project.id)}">Восстановить</button>
+      ${window.SavAuth?.state?.user?.role === "admin"
+        ? `<button type="button" class="project-action danger" data-project-purge="${escapeAttribute(project.id)}" title="Удалить навсегда" aria-label="Удалить навсегда">${PROJECT_ICONS.trash}</button>`
+        : ""}
     </span>
   </div>`;
 }
@@ -135,6 +138,23 @@ document.querySelector("#project-list").addEventListener("click", async event =>
   const copy = event.target.closest("[data-project-copy]");
   const trash = event.target.closest("[data-project-trash]");
   const restore = event.target.closest("[data-project-restore]");
+  const purge = event.target.closest("[data-project-purge]");
+  if (purge) {
+    // Окончательное удаление — только администратору (P4), без возврата:
+    // SAV, книги и история уходят вместе с проектом.
+    if (!confirm("Удалить проект навсегда? Исходный файл, книги и история будут стёрты без возможности восстановления.")) return;
+    purge.disabled = true;
+    try {
+      await api(`/api/admin/trash/${purge.dataset.projectPurge}`, { method: "DELETE" });
+      showToast("Проект удалён навсегда");
+      await loadProjects();
+    } catch (error) {
+      showError(errorBox, error);
+    } finally {
+      purge.disabled = false;
+    }
+    return;
+  }
   if (rename) {
     startProjectRename(rename.dataset.projectRename);
     return;

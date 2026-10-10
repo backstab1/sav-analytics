@@ -1,0 +1,27 @@
+# HTTPS-прокси (P4/P6). Для публичного домена Caddy сам выпускает и
+# продлевает сертификат Let's Encrypt; для внутреннего DNS-имени без выхода
+# в интернет раскомментируйте `tls internal` и раздайте корневой сертификат
+# Caddy пользователям. Открытый HTTP только перенаправляет на HTTPS.
+{$SAV_DOMAIN} {
+	# tls internal
+	encode zstd gzip
+
+	request_body {
+		max_size {$SAV_MAX_UPLOAD}
+	}
+
+	# Метрики собирает Prometheus изнутри сети, наружу они не отдаются.
+	@metrics path /metrics
+	respond @metrics 404
+
+	reverse_proxy api:8000 {
+		health_uri /api/ready
+		health_interval 15s
+	}
+
+	header -Server
+	log {
+		output stdout
+		format json
+	}
+}

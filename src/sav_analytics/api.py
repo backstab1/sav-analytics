@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hmac
+import ipaddress
 import logging
 import re
+import time
 from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any
@@ -10,10 +13,11 @@ from uuid import uuid4
 from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
+from . import metrics
 from .api_dependencies import get_repository, get_settings
 from .api_errors import REQUEST_ID_HEADER, error_response, http_error_code, request_id_from
 from .auth.middleware import security_middleware
@@ -27,6 +31,7 @@ from .configuration_revision import (
 from .core.not_applicable import NotApplicableConfirmationRequired
 from .core.preflight import PreflightBlockedError
 from .core.weight_validation import WeightNotUsableError
+from .logging_setup import configure_logging
 from .project_models import InvalidStoredProjectError
 from .routers import (
     ai,
@@ -91,9 +96,14 @@ async def request_context(request: Request, call_next):
                 detail="Номер ревизии должен быть положительным.",
             )
     token = bind_expected_revision(expected_revision)
+    started = time.perf_counter()
     try:
         response = await call_next(request)
         response.headers[REQUEST_ID_HEADER] = request_id_from(request)
+        if request.url.path.startswith("/api/"):
+            metrics.observe_request(
+                request.method, response.status_code, time.perf_counter() - started
+            )
         return response
     finally:
         reset_expected_revision(token)
@@ -214,6 +224,35 @@ async def unexpected_error_handler(request: Request, exc: Exception) -> JSONResp
 def health() -> dict[str, str]:
     """Процесс жив и отвечает — для restart policy контейнера."""
     return {"status": "ok"}
+
+
+@app.get("/metrics", tags=["health"], include_in_schema=False)
+def prometheus_metrics(request: Request) -> PlainTextResponse:
+    settings = get_settings()
+    expected = settings.metrics_token.get_secret_value() if settings.metrics_token else None
+    supplied = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if expected:
+        allowed = hmac.compare_digest(expected, supplied)
+    else:
+        host = request.client.host if request.client else ""
+        try:
+            allowed = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            allowed = host == "testclient"
+    if not allowed:
+        return PlainTextResponse("forbidden", status_code=403)
+    from .db import get_engine
+
+    engine = get_engine(settings.resolved_database_url, migrate=settings.auto_migrate)
+    return PlainTextResponse(
+        metrics.render(engine, settings.data_dir),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+@app.on_event("startup")
+def configure_application_logging() -> None:
+    configure_logging(get_settings())
 
 
 @app.get("/api/ready", tags=["health"])

@@ -111,6 +111,71 @@ jobs:
             junit.xml
           retention-days: 14
 
+  postgres:
+    name: Тесты на PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Каждое хранилище в тестах получает свою базу на этом сервере
+      # (tests/conftest.py): проверяется production-диалект — SKIP LOCKED,
+      # транзакции записи и миграции.
+      SAV_ANALYTICS_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          version: "0.12.3"
+
+      - name: Установить зафиксированные зависимости
+        run: uv sync --locked --extra dev
+
+      - name: Миграции по цепочке на пустой базе
+        env:
+          SAV_ANALYTICS_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+        run: uv run sav-analytics migrate
+
+      - name: Pytest на PostgreSQL
+        run: uv run pytest
+
+  security:
+    name: Зависимости, скрипты и compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.3"
+
+      - name: Известные уязвимости в зафиксированных зависимостях
+        run: |
+          uv export --locked --no-dev --no-emit-project --output-file requirements.lock
+          uvx pip-audit==2.9.0 --strict --disable-pip --requirement requirements.lock
+
+      - name: Shellcheck скриптов эксплуатации
+        run: shellcheck scripts/*.sh deploy/*.sh
+
+      - name: Compose-файл собирается
+        run: |
+          mkdir -p secrets && echo dummy > secrets/backup_passphrase && touch .env
+          POSTGRES_PASSWORD=x SAV_DOMAIN=example.test docker compose config --quiet
+
   browser:
     name: Браузерный сценарий
     runs-on: ubuntu-latest
@@ -160,6 +225,17 @@ jobs:
           tags: sav-analytics:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Процесс в образе — не root
+        run: test "$(docker run --rm sav-analytics:ci id -u)" != "0"
+
+      - name: Сканирование образа на уязвимости
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: sav-analytics:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
 
       - name: Проверить, что контейнер поднимается
         run: |

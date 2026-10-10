@@ -15,7 +15,7 @@ def readiness(settings: Any) -> dict[str, Any]:
     try:
         from .db.engine import _create_engine, current_revision, head_revision
 
-        engine = _create_engine(settings.resolved_database_url)
+        engine = _create_engine(settings.resolved_database_url, connect_timeout=3)
         try:
             with engine.connect() as connection:
                 connection.execute(sa.text("SELECT 1"))

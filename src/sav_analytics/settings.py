@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     login_lockout_minutes: int = 15
     # Strict-Transport-Security; включать, когда сервер доступен только по HTTPS.
     hsts: bool = False
+    # Токен для `GET /metrics` (Prometheus); без него метрики только с 127.0.0.1.
+    metrics_token: SecretStr | None = None
     log_format: Literal["text", "json"] = "text"
     log_level: str = "INFO"
     # Сколько дней проект лежит в корзине до окончательного удаления.

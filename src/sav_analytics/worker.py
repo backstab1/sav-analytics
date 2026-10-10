@@ -21,10 +21,12 @@ import shutil
 import signal
 import socket
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
 from multiprocessing.process import BaseProcess
+from pathlib import Path
 from typing import Any
 
 from .jobs.queue import JobQueue
@@ -32,6 +34,7 @@ from .jobs.runtime import run_job
 from .settings import Settings
 
 logger = logging.getLogger("sav_analytics.worker")
+ALIVE_FILE = Path(tempfile.gettempdir()) / "sav-analytics-worker.alive"
 
 
 def _repository(settings: Settings):  # type: ignore[no-untyped-def]
@@ -100,6 +103,7 @@ class Worker:
         logger.info("Worker stopped", extra={"worker_id": self.id})
 
     def tick(self) -> None:
+        self._beat()
         self._reap()
         self.queue.recover()
         if self.stopping.is_set():
@@ -111,6 +115,13 @@ class Worker:
             if job is None:
                 break
             self._start(job)
+
+    def _beat(self) -> None:
+        """Отметка жизни для healthcheck контейнера (`sav-analytics-worker --check`)."""
+        try:
+            ALIVE_FILE.write_text(str(time.time()), encoding="utf-8")
+        except OSError:
+            logger.warning("Cannot write worker heartbeat file", exc_info=True)
 
     def _disk_ok(self) -> bool:
         free = shutil.disk_usage(self.settings.data_dir).free // (1024 * 1024)
@@ -183,7 +194,18 @@ class Worker:
         self.stopping.set()
 
 
+def check(max_age_seconds: float = 120) -> int:
+    """Код 0, если цикл worker отмечался недавно — для healthcheck."""
+    try:
+        age = time.time() - float(ALIVE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 1
+    return 0 if age < max_age_seconds else 1
+
+
 def main() -> int:
+    if "--check" in sys.argv[1:]:
+        return check()
     settings = Settings()
     from .logging_setup import configure_logging
 

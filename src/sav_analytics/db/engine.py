@@ -68,7 +68,7 @@ def is_sqlite(engine: Engine) -> bool:
     return engine.dialect.name == "sqlite"
 
 
-def _create_engine(url: str) -> Engine:
+def _create_engine(url: str, *, connect_timeout: int = 10) -> Engine:
     if url.startswith("sqlite"):
         # Пул не держит файл открытым между запросами: тесты создают сотни
         # временных баз, а Windows не даёт удалить открытый файл.
@@ -77,7 +77,15 @@ def _create_engine(url: str) -> Engine:
         if url.startswith("sqlite:///") and ":memory:" not in url:
             Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
         return engine
-    return sa.create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=5)
+    # Недоступная база должна давать ошибку за секунды, а не висеть минутами:
+    # иначе проверка готовности и запросы стоят, пока не сработает таймаут ОС.
+    return sa.create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=5,
+        connect_args={"connect_timeout": connect_timeout},
+    )
 
 
 def _configure_sqlite(engine: Engine) -> None:

@@ -1,13 +1,136 @@
+# Production-контур (P6, docs/operations.md): HTTPS-прокси, API в двух
+# процессах, отдельный worker, PostgreSQL, миграции отдельным шагом и
+# резервное копирование. Секреты — в .env рядом (см. .env.example), не в git.
+#
+#   docker compose up -d                        # запуск
+#   docker compose --profile backup run --rm backup   # резервная копия
+#
+# Для разработки без контейнеров достаточно `uvicorn sav_analytics.api:app`:
+# SQLite, встроенный worker и выключенная авторизация задаются переменными.
+
+x-app: &app
+  image: ${SAV_IMAGE:-ghcr.io/backstab1/sav-analytics:main}
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  environment: &app-environment
+    SAV_ANALYTICS_DATA_DIR: /data
+    SAV_ANALYTICS_DATABASE_URL: postgresql+psycopg://sav:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}@postgres:5432/sav
+    SAV_ANALYTICS_AUTO_MIGRATE: "false"
+    SAV_ANALYTICS_AUTO_IMPORT_LEGACY: "false"
+    SAV_ANALYTICS_JOB_RUNNER: external
+    SAV_ANALYTICS_AUTH_ENABLED: "true"
+    SAV_ANALYTICS_HSTS: "true"
+    SAV_ANALYTICS_LOG_FORMAT: json
+  volumes:
+    - sav_data:/data
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+
 services:
-  app:
-    build: .
-    ports:
-      - "8000:8000"
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      SAV_ANALYTICS_DATA_DIR: /data
+      POSTGRES_DB: sav
+      POSTGRES_USER: sav
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
     volumes:
-      - sav_data:/data
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sav -d sav"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 4g }
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["sav-analytics", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+  api:
+    <<: *app
+    command: ["uvicorn", "sav_analytics.api:app", "--host", "0.0.0.0", "--port", "8000",
+              "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    expose: ["8000"]
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 4g }
+
+  worker:
+    <<: *app
+    command: ["sav-analytics-worker"]
+    environment:
+      <<: *app-environment
+      SAV_ANALYTICS_WORKER_CONCURRENCY: "2"
+      SAV_ANALYTICS_WORKER_ISOLATION: process
+      SAV_ANALYTICS_JOB_MEMORY_LIMIT_MB: "12000"
+    # Даём доделать текущие задания: worker на SIGTERM перестаёт брать новые.
+    stop_grace_period: 10m
+    healthcheck:
+      test: ["CMD", "sav-analytics-worker", "--check"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits: { cpus: "6", memory: 26g }
+
+  proxy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    environment:
+      SAV_DOMAIN: ${SAV_DOMAIN:?задайте SAV_DOMAIN}
+      SAV_MAX_UPLOAD: ${SAV_MAX_UPLOAD:-260MB}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+
+  backup:
+    build:
+      context: .
+      dockerfile: deploy/backup.Dockerfile
+    profiles: ["backup"]
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: sav
+      PGDATABASE: sav
+      PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
+      BACKUP_PASSPHRASE_FILE: /run/secrets/backup_passphrase
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - sav_data:/data:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    secrets: [backup_passphrase]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+secrets:
+  backup_passphrase:
+    file: ${BACKUP_PASSPHRASE_FILE:-./secrets/backup_passphrase}
 
 volumes:
   sav_data:
-
+  pg_data:
+  caddy_data:
+  caddy_config:

@@ -3,3 +3,9 @@
 # Скрипты в блоках `run:` ломаются, если в них попадут CRLF
 *.yml text eol=lf
 *.yaml text eol=lf
+
+# Скрипты и конфигурация, которые исполняются в Linux-контейнерах и на сервере
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+Caddyfile text eol=lf

@@ -28,6 +28,22 @@ os.environ.setdefault("SAV_ANALYTICS_AUTH_ENABLED", "false")
 
 
 @pytest.fixture(autouse=True)
+def _fresh_settings() -> Iterator[None]:
+    """Настройки читаются заново в каждом тесте.
+
+    Автоматическая фикстура разбирается последней — после того как
+    monkeypatch вернул переменные окружения. Иначе фоновый поток очереди
+    мог закэшировать настройки теста с подменённой базой, и следующие тесты
+    шли бы в уже удалённую базу.
+    """
+    from sav_analytics.api_dependencies import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def _postgres_per_test(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     if not POSTGRES_URL:
         yield
