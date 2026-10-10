@@ -21,7 +21,6 @@ from threading import Lock
 from typing import Any
 from uuid import UUID, uuid4
 
-from .. import project_history
 from ..atomic_file import replace_file
 from . import plans
 from .catalog import READ_TOOLS, Catalog, ToolInputError, table_report
@@ -376,7 +375,7 @@ class AssistantService:
             if plan["status"] != "applied":
                 raise AssistantError("Откатить можно только применённый план.")
             key = f"assistant:{plan['id']}"
-            undo = project_history.load(self.project_dir)["undo"]
+            undo = self.repository.history_stacks(self.project_id)["undo"]
             if undo and undo[-1].get("coalesce") == key:
                 project = self.repository.undo(self.project_id)
             else:

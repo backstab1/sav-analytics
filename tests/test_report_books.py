@@ -1,7 +1,6 @@
 """Несколько книг отчёта в проекте (PQ.7): у каждой свои баннер, фильтр и настройки."""
 
 import io
-import json
 import time
 import zipfile
 from collections.abc import Iterator
@@ -194,13 +193,12 @@ def test_schema_3_project_gets_its_configured_book(tmp_path: Path) -> None:
     write_fixture(source)
     with source.open("rb") as stream:
         created = repository.create("Схема 3", "fixture.sav", stream)
-    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
-    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy = repository.stored_document(created["id"])
     legacy["configuration"]["schema_version"] = 3
     legacy["configuration"].pop("reports")
     legacy["configuration"].pop("active_report_id")
     legacy["configuration"]["report_settings"]["confidence_level"] = 0.9
-    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    repository.overwrite_stored_document(created["id"], legacy)
 
     configuration = repository.get(UUID(created["id"]))["configuration"]
 
@@ -208,7 +206,7 @@ def test_schema_3_project_gets_its_configured_book(tmp_path: Path) -> None:
     assert [book["name"] for book in configuration["reports"]] == ["Отчёт"]
     assert configuration["active_report_id"] == configuration["reports"][0]["id"]
     assert configuration["report_settings"]["confidence_level"] == 0.9
-    assert metadata_path.with_suffix(".v3.bak").is_file()
+    assert [item["schema_version"] for item in repository.metadata.backups(created["id"])] == [3]
     # Идентификатор книги записан: повторное чтение его не меняет.
     again = repository.get(UUID(created["id"]))["configuration"]
     assert again["active_report_id"] == configuration["active_report_id"]

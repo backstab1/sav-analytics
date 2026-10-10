@@ -1,4 +1,3 @@
-import json
 import time
 from pathlib import Path
 from uuid import UUID
@@ -493,8 +492,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
         created = repository.create("Legacy", "grouped.sav", stream)
 
     project_id = UUID(created["id"])
-    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
-    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy = repository.stored_document(created["id"])
     legacy["configuration"].pop("structure_version")
     legacy["configuration"].pop("report_settings")
     legacy["configuration"]["questions"] = [
@@ -512,7 +510,7 @@ def test_legacy_project_structure_is_refreshed_on_open(tmp_path: Path) -> None:
         }
         for variable in legacy["inspection"]["variables"]
     ]
-    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    repository.overwrite_stored_document(created["id"], legacy)
 
     migrated = repository.get(project_id)
 
@@ -536,8 +534,7 @@ def test_legacy_banner_settings_are_exposed_as_report_settings(tmp_path: Path) -
         created = repository.create("Legacy banner", "fixture.sav", stream)
 
     banner_id = "00000000-0000-0000-0000-000000000001"
-    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
-    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy = repository.stored_document(created["id"])
     legacy["configuration"].pop("report_settings")
     legacy["configuration"]["report_banner_id"] = banner_id
     legacy["configuration"]["banners"] = [
@@ -558,7 +555,7 @@ def test_legacy_banner_settings_are_exposed_as_report_settings(tmp_path: Path) -
             "minimum_base": 25,
         }
     ]
-    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    repository.overwrite_stored_document(created["id"], legacy)
 
     migrated = repository.get(UUID(created["id"]))
 
@@ -781,8 +778,7 @@ def test_schema_1_settings_move_off_the_banner_and_leave_a_backup(
         created = repository.create("Схема 1", "fixture.sav", stream)
 
     project_id = UUID(created["id"])
-    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
-    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy = repository.stored_document(created["id"])
     legacy["configuration"]["schema_version"] = 1
     legacy["configuration"].pop("report_settings")
     legacy["configuration"]["banners"] = [
@@ -804,7 +800,7 @@ def test_schema_1_settings_move_off_the_banner_and_leave_a_backup(
         },
     ]
     legacy["configuration"]["report_banner_id"] = "22222222-2222-2222-2222-222222222222"
-    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    repository.overwrite_stored_document(created["id"], legacy)
 
     migrated = repository.get(project_id)
     configuration = migrated["configuration"]
@@ -818,14 +814,14 @@ def test_schema_1_settings_move_off_the_banner_and_leave_a_backup(
     for banner in configuration["banners"]:
         assert set(banner) == {"id", "name", "blocks"}
 
-    backup = metadata_path.with_suffix(".v1.bak")
-    assert backup.is_file()
-    saved = json.loads(backup.read_text(encoding="utf-8"))
+    backups = repository.metadata.backups(created["id"])
+    assert [item["schema_version"] for item in backups] == [1]
+    saved = backups[0]["document"]
     assert saved["configuration"]["schema_version"] == 1
     assert saved["configuration"]["banners"][1]["confidence_level"] == 0.9
 
-    # Файл на диске переписан, повторное открытие ничего не меняет и копию не трогает.
-    stored = json.loads(metadata_path.read_text(encoding="utf-8"))
+    # Документ в базе переписан, повторное открытие ничего не меняет и копию не трогает.
+    stored = repository.stored_document(created["id"])
     assert stored["configuration"]["schema_version"] == 4
     revision = stored["configuration"]["revision"]
     assert repository.get(project_id)["configuration"]["revision"] == revision

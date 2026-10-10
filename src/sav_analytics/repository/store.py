@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import copy
-import json
-import shutil
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Lock
+from typing import Any
 from uuid import UUID
 
 from .. import project_history
-from ..atomic_file import read_text, replace_file
 from ..configuration_revision import (
     ConfigurationConflictError,
     current_expected_revision,
@@ -25,9 +22,14 @@ from ..core.report_settings import (
 )
 from ..core.review import CONFIRMED_RECOGNITIONS
 from ..core.sav_reader import inspect_sav
+from ..db import get_engine, sqlite_url
 from ..project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
+from .metadata import ProjectMetadata, RevisionMismatchError
 
 STRUCTURE_VERSION = 6
+
+# Внутри класса имя `list` занято методом библиотеки проектов.
+HistoryStacks = dict[str, list[dict[str, Any]]]
 
 
 ANALYSIS_QUESTION_TYPES = {"single_choice", "scale", "numeric"}
@@ -41,19 +43,36 @@ class InvalidUploadError(ValueError):
     pass
 
 
+def default_database_url(root: Path) -> str:
+    """База по умолчанию — файл SQLite рядом с каталогом проектов."""
+    return sqlite_url(root.parent / "sav-analytics.db")
+
+
 class ProjectStore:
-    """Хранение проекта на диске: чтение, миграция, запись ревизией, блокировки
-    и пересборка структуры. Остальные части `ProjectRepository` работают
-    через эти методы.
+    """Хранение проекта: документ и история — в базе, файлы — на томе под
+    `root/<id>/`. Чтение, миграция схемы, запись ревизией и пересборка
+    структуры. Остальные части `ProjectRepository` работают через эти методы.
     """
 
-    def __init__(self, root: Path, max_upload_bytes: int) -> None:
+    def __init__(
+        self,
+        root: Path,
+        max_upload_bytes: int,
+        database_url: str | None = None,
+        *,
+        migrate: bool = True,
+    ) -> None:
         self.root = root
         self.max_upload_bytes = max_upload_bytes
-        self._project_locks: dict[str, Lock] = {}
-        self._project_locks_guard = Lock()
         self._drafts: dict[str, dict] = {}
         self.root.mkdir(parents=True, exist_ok=True)
+        self.database_url = database_url or default_database_url(root)
+        self.engine = get_engine(self.database_url, migrate=migrate)
+        self.metadata = ProjectMetadata(self.engine)
+
+    def project_dir(self, project_id: UUID | str) -> Path:
+        """Каталог файлов проекта на защищённом томе."""
+        return self.root / str(project_id)
 
     @contextmanager
     def draft(self, project_id: UUID) -> Iterator[Callable[[], dict]]:
@@ -73,33 +92,42 @@ class ProjectStore:
             self._drafts.pop(identifier, None)
 
     def list(self) -> list[dict]:
-        projects = []
-        for metadata_path in self.root.glob("*/project.json"):
-            project = self._read(metadata_path)
-            summary_keys = ("id", "name", "created_at", "original_filename")
-            projects.append({key: project[key] for key in summary_keys})
-        return sorted(projects, key=lambda item: item["created_at"], reverse=True)
+        return self.metadata.summaries()
 
     def get(self, project_id: UUID) -> dict:
         if str(project_id) in self._drafts:
             return copy.deepcopy(self._drafts[str(project_id)])
-        metadata_path = self.root / str(project_id) / "project.json"
-        if not metadata_path.is_file():
+        project = self.metadata.load(str(project_id))
+        if project is None:
             raise ProjectNotFoundError(str(project_id))
-        project = self._read(metadata_path)
         stored_schema = int(project.get("configuration", {}).get("schema_version", 1))
+        original = (
+            copy.deepcopy(project) if stored_schema < CONFIGURATION_SCHEMA_VERSION else None
+        )
         self._ensure_configuration(project)
-        if stored_schema < CONFIGURATION_SCHEMA_VERSION:
-            project = self._migrate_configuration(
-                project_id, project, metadata_path, stored_schema
-            )
+        if original is not None:
+            project = self._migrate_configuration(project_id, project, original, stored_schema)
         if project["configuration"].get("structure_version", 0) < STRUCTURE_VERSION:
             project = self._refresh_structure_data(project_id, project, history="reset")
         validate_stored_project(project)
         return project
 
+    def stored_document(self, project_id: UUID | str) -> dict:
+        """Документ как он лежит в базе — без миграции и пересборки."""
+        project = self.metadata.load(str(project_id))
+        if project is None:
+            raise ProjectNotFoundError(str(project_id))
+        return project
+
+    def overwrite_stored_document(self, project_id: UUID | str, document: dict) -> None:
+        """Записать документ мимо ревизии и истории (мигратор, тесты старых схем)."""
+        self.metadata.overwrite(str(project_id), document)
+
+    def history_stacks(self, project_id: UUID | str) -> HistoryStacks:
+        return self.metadata.history(str(project_id))
+
     def _migrate_configuration(
-        self, project_id: UUID, project: dict, metadata_path: Path, stored_schema: int
+        self, project_id: UUID, project: dict, original: dict, stored_schema: int
     ) -> dict:
         """Перевести проект на текущую схему и записать результат.
 
@@ -108,13 +136,11 @@ class ProjectStore:
         чтобы у настройки было одно место, перевести колонки таблиц в блоки
         (схема 3) и зафиксировать версию.
 
-        Перед первой перезаписью рядом кладётся копия исходного файла: если
-        приложение придётся откатить на версию, которая новую схему не читает,
-        восстанавливать будет откуда.
+        Перед первой перезаписью в `project_backups` кладётся копия исходного
+        документа: если приложение придётся откатить на версию, которая новую
+        схему не читает, восстанавливать будет откуда.
         """
-        backup = metadata_path.with_suffix(f".v{stored_schema}.bak")
-        if not backup.exists():
-            shutil.copy2(metadata_path, backup)
+        self.metadata.keep_backup(str(project_id), stored_schema, original)
         for banner in project["configuration"]["banners"]:
             for key in REPORT_SETTING_KEYS:
                 banner.pop(key, None)
@@ -241,10 +267,6 @@ class ProjectStore:
         return self.root / str(project_id) / "reports"
 
     @staticmethod
-    def _read(path: Path) -> dict:
-        return json.loads(read_text(path))
-
-    @staticmethod
     def _ensure_configuration(project: dict) -> None:
         if "configuration" not in project:
             project["configuration"] = {
@@ -324,67 +346,61 @@ class ProjectStore:
             validate_stored_project(project)
             self._drafts[str(project_id)] = copy.deepcopy(project)
             return
-        project_dir = self.root / str(project_id)
-        target = project_dir / "project.json"
-        temporary = project_dir / ".project.json.tmp"
-        with self._project_lock(project_id):
-            current = self._read(target)
+        conflict = ConfigurationConflictError(
+            "Проект уже изменён в другой вкладке или запросе. "
+            "Обновите проект и повторите действие."
+        )
+        with self.metadata.writing(str(project_id)) as write:
+            current = write.current()
+            if current is None:
+                raise ProjectNotFoundError(str(project_id))
             current_revision = int(current.get("configuration", {}).get("revision", 1))
             expected_revision = current_expected_revision()
             if expected_revision is None:
                 expected_revision = int(project["configuration"].get("revision", 1))
-            if (
-                expected_revision != current_revision
-            ):
-                raise ConfigurationConflictError(
-                    "Проект уже изменён в другой вкладке или запросе. "
-                    "Обновите проект и повторите действие."
-                )
+            if expected_revision != current_revision:
+                raise conflict
             project["configuration"]["revision"] = current_revision + 1
             project["configuration"]["updated_at"] = datetime.now(UTC).isoformat()
             validate_stored_project(project)
-            temporary.write_text(
-                json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
+            try:
+                write.replace(project, current_revision)
+            except RevisionMismatchError as exc:
+                raise conflict from exc
+            write.update_history(
+                lambda stacks: _next_history(stacks, current, project, history, coalesce)
             )
-            replace_file(temporary, target)
-            self._record_history(project_dir, current, project, history, coalesce)
 
-    @staticmethod
-    def _record_history(
-        project_dir: Path,
-        before: dict,
-        after: dict,
-        history: str,
-        coalesce: str | None = None,
-    ) -> None:
-        if history == "reset":
-            project_history.reset(project_dir)
-            return
-        stacks = project_history.load(project_dir)
-        step = project_history.snapshot(before, after)
-        if history == "record":
-            if step is None:
-                return
-            if coalesce and stacks["undo"] and stacks["undo"][-1].get("coalesce") == coalesce:
-                # Серия продолжается: шаг до её начала уже лежит в отмене.
-                stacks["redo"] = []
-            else:
-                if coalesce:
-                    step["coalesce"] = coalesce
-                stacks["undo"].append(step)
-                stacks["redo"] = []
+
+def _next_history(
+    stacks: dict[str, list[dict[str, Any]]],
+    before: dict,
+    after: dict,
+    history: str,
+    coalesce: str | None,
+) -> dict[str, list[dict[str, Any]]] | None:
+    """Стеки отмены после записи; None — история начинается заново."""
+    if history == "reset":
+        return None
+    step = project_history.snapshot(before, after)
+    if history == "record":
+        if step is None:
+            return stacks
+        if coalesce and stacks["undo"] and stacks["undo"][-1].get("coalesce") == coalesce:
+            # Серия продолжается: шаг до её начала уже лежит в отмене.
+            stacks["redo"] = []
         else:
-            back = "redo" if history == "undo" else "undo"
-            if stacks[history]:
-                stacks[history].pop()
-            if step is not None:
-                stacks[back].append(step)
-        project_history.save(project_dir, stacks)
-
-    def _project_lock(self, project_id: UUID) -> Lock:
-        identifier = str(project_id)
-        with self._project_locks_guard:
-            return self._project_locks.setdefault(identifier, Lock())
+            if coalesce:
+                step["coalesce"] = coalesce
+            stacks["undo"].append(step)
+            stacks["redo"] = []
+    else:
+        back = "redo" if history == "undo" else "undo"
+        if stacks[history]:
+            stacks[history].pop()
+        if step is not None:
+            stacks[back].append(step)
+    return project_history.trimmed(stacks)
 
 
 def _column_blocks(cols: list[dict], nested: bool) -> list[dict]:

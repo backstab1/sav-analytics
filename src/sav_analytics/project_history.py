@@ -3,9 +3,10 @@
 Каждая запись проекта кладёт в историю состояние до неё, поэтому отмена —
 это запись прежнего состояния новой ревизией: ревизии только растут, а
 optimistic locking, проверка целостности и кэш отчётов работают как при
-любой правке. История хранится рядом с проектом в `history.json`, а не в
-`project.json`: тот хэшируется в ключ кэша отчёта, и шаг отмены стал бы
-частью конфигурации.
+любой правке. История хранится в базе отдельно от документа проекта
+(`project_history`): документ хэшируется в ключ кэша отчёта, и шаг отмены
+стал бы частью конфигурации. Здесь — только вычисление шагов; читает и
+пишет их `repository.metadata` в транзакции записи проекта.
 
 Снимок хранит конфигурацию целиком, а описание структуры (`inspection`) —
 только если шаг её менял. Отмена идёт строго с конца, поэтому к моменту
@@ -15,13 +16,8 @@ optimistic locking, проверка целостности и кэш отчёт
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
-from .atomic_file import read_text, replace_file
-
-HISTORY_FILE = "history.json"
 MAX_STEPS = 20
 
 SECTION_LABELS = {
@@ -47,33 +43,8 @@ SECTION_LABELS = {
 _IGNORED = {"revision", "updated_at"}
 
 
-def load(project_dir: Path) -> dict[str, list[dict[str, Any]]]:
-    path = project_dir / HISTORY_FILE
-    if not path.is_file():
-        return {"undo": [], "redo": []}
-    try:
-        data = json.loads(read_text(path))
-    except (OSError, ValueError):
-        # Испорченная история не мешает работать с проектом — она просто пуста.
-        return {"undo": [], "redo": []}
-    return {"undo": list(data.get("undo", [])), "redo": list(data.get("redo", []))}
-
-
-def save(project_dir: Path, stacks: dict[str, list[dict[str, Any]]]) -> None:
-    path = project_dir / HISTORY_FILE
-    temporary = project_dir / f".{HISTORY_FILE}.tmp"
-    temporary.write_text(
-        json.dumps(
-            {"undo": stacks["undo"][-MAX_STEPS:], "redo": stacks["redo"][-MAX_STEPS:]},
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    replace_file(temporary, path)
-
-
-def reset(project_dir: Path) -> None:
-    (project_dir / HISTORY_FILE).unlink(missing_ok=True)
+def trimmed(stacks: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    return {"undo": stacks["undo"][-MAX_STEPS:], "redo": stacks["redo"][-MAX_STEPS:]}
 
 
 def snapshot(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
@@ -119,8 +90,7 @@ def restored(current: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
     return project
 
 
-def summary(project_dir: Path) -> dict[str, Any]:
-    stacks = load(project_dir)
+def summary(stacks: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     return {
         "undo": len(stacks["undo"]),
         "redo": len(stacks["redo"]),

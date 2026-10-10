@@ -1,6 +1,5 @@
 """Несколько сохранённых таблиц в разделе «Таблицы» (PQ.7 для экрана кросстаба)."""
 
-import json
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -207,8 +206,7 @@ def test_schema_2_columns_become_explicit_blocks(tmp_path: Path) -> None:
     write_fixture(source)
     with source.open("rb") as stream:
         created = repository.create("Схема 2", "fixture.sav", stream)
-    metadata_path = tmp_path / "projects" / created["id"] / "project.json"
-    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    legacy = repository.stored_document(created["id"])
     legacy["configuration"]["schema_version"] = 2
     q1, q2 = ({"kind": "question", "ref": code} for code in ("Q1", "Q2"))
     legacy["configuration"]["table_reports"] = [
@@ -216,7 +214,7 @@ def test_schema_2_columns_become_explicit_blocks(tmp_path: Path) -> None:
         {"id": str(uuid4()), "name": "Пары", "rows": [], "cols": [q1, q2, q1], "nested": True},
         {"id": str(uuid4()), "name": "Пустая", "rows": []},
     ]
-    metadata_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    repository.overwrite_stored_document(created["id"], legacy)
 
     reports = repository.get(UUID(created["id"]))["configuration"]["table_reports"]
 
@@ -225,4 +223,4 @@ def test_schema_2_columns_become_explicit_blocks(tmp_path: Path) -> None:
     assert reports[1]["cols"] == [{"sources": [q1, q2]}, {"sources": [q1]}]
     assert reports[2]["cols"] == []
     assert all("nested" not in report for report in reports)
-    assert metadata_path.with_suffix(".v2.bak").is_file()
+    assert [item["schema_version"] for item in repository.metadata.backups(created["id"])] == [2]

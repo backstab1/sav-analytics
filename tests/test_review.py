@@ -8,7 +8,6 @@ preflight и подтверждение теперь читают один пр�
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -97,9 +96,7 @@ def test_heuristic_scale_is_pending_until_saved_and_stays_confirmed(tmp_path: Pa
 
         # Признак вычисляется на выходе API и в хранилище не попадает: иначе он
         # стал бы второй правдой рядом с `recognition` и сдвинул ключ кэша.
-        stored = json.loads(
-            (tmp_path / "projects" / project_id / "project.json").read_text(encoding="utf-8")
-        )
+        stored = repository.stored_document(project_id)
         assert all("needs_review" not in item for item in stored["configuration"]["questions"])
     finally:
         app.dependency_overrides.clear()
@@ -146,10 +143,9 @@ def test_new_warning_after_refresh_asks_for_review_again(tmp_path: Path) -> None
     assert question_needs_review(_question(confirmed, "SCORE")) is False
 
     # Имитируем подтверждение, сделанное до появления нынешнего предупреждения.
-    metadata_path = tmp_path / "projects" / project_id / "project.json"
-    stored = json.loads(metadata_path.read_text(encoding="utf-8"))
+    stored = repository.stored_document(project_id)
     _question(stored, "SCORE")["warnings"] = []
-    metadata_path.write_text(json.dumps(stored, ensure_ascii=False), encoding="utf-8")
+    repository.overwrite_stored_document(project_id, stored)
 
     refreshed = repository.refresh_structure(project_id)
     assert question_needs_review(_question(refreshed, "SCORE")) is True

@@ -4,12 +4,13 @@ import hashlib
 import json
 import os
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
 from .. import project_history
+from ..actor import current_actor_id
 from ..core.configuration_integrity import (
     ConfigurationIntegrityError,
     validate_configuration_references,
@@ -97,17 +98,21 @@ class ProjectLifecycle(ProjectStore):
             }
             ensure_books(project["configuration"])
             validate_stored_project(project)
-            (temporary / "project.json").write_text(
-                json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
             os.replace(temporary, destination)
-            return project
         except (InvalidUploadError, SavReadError):
             shutil.rmtree(temporary, ignore_errors=True)
             raise
         except Exception:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
+        # Файлы на месте раньше записи в базе: проект без файлов не появится
+        # в библиотеке, а файлы без записи уберёт повторная попытка.
+        try:
+            self.metadata.insert(project, created_by=current_actor_id())
+        except Exception:
+            shutil.rmtree(destination, ignore_errors=True)
+            raise
+        return project
 
     def inspect_new_wave(
         self, project_id: UUID, original_filename: str, source: BinaryIO
@@ -242,75 +247,70 @@ class ProjectLifecycle(ProjectStore):
             copied["configuration"]["revision"] = 1
             copied["configuration"]["updated_at"] = created_at
             validate_stored_project(copied)
-            (temporary / "project.json").write_text(
-                json.dumps(copied, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
             os.replace(temporary, self.root / str(copy_id))
         except Exception:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
+        try:
+            self.metadata.insert(copied, created_by=current_actor_id())
+        except Exception:
+            shutil.rmtree(self.root / str(copy_id), ignore_errors=True)
+            raise
+        # История отмены у копии своя и пустая, но шаги исходного проекта
+        # относились бы к его ревизиям.
         return copied
 
     def trash(self, project_id: UUID) -> None:
-        """Убрать проект в корзину: каталог целиком, вместе с отчётами.
+        """Убрать проект в корзину: он пропадает из библиотеки и не открывается.
 
-        Безвозвратного удаления здесь нет — проект восстанавливается тем же
-        каталогом, с теми же ревизиями и собранными книгами.
+        Файлы и собранные книги остаются на месте до окончательного удаления
+        (`purge`), поэтому восстановление возвращает проект целиком — с теми
+        же ревизиями и сборками.
         """
         self.get(project_id)
-        trash_root = self.root / ".trash"
-        trash_root.mkdir(exist_ok=True)
-        target = trash_root / str(project_id)
-        with self._project_lock(project_id):
-            try:
-                os.replace(self.root / str(project_id), target)
-            except OSError as exc:
-                raise InvalidUploadError(
-                    "Проект сейчас используется, например собирается отчёт. Повторите позже."
-                ) from exc
-            (target / "trashed.json").write_text(
-                json.dumps({"trashed_at": datetime.now(UTC).isoformat()}), encoding="utf-8"
-            )
+        if not self.metadata.set_trashed(str(project_id), datetime.now(UTC)):
+            raise ProjectNotFoundError(str(project_id))
 
     def list_trash(self) -> list[dict]:
-        items = []
-        for metadata_path in (self.root / ".trash").glob("*/project.json"):
-            project = self._read(metadata_path)
-            marker = metadata_path.parent / "trashed.json"
-            trashed_at = (
-                self._read(marker)["trashed_at"] if marker.is_file() else project["created_at"]
-            )
-            items.append(
-                {
-                    **{
-                        key: project[key]
-                        for key in ("id", "name", "created_at", "original_filename")
-                    },
-                    "trashed_at": trashed_at,
-                }
-            )
-        return sorted(items, key=lambda item: item["trashed_at"], reverse=True)
+        return self.metadata.summaries(trashed=True)
 
     def restore(self, project_id: UUID) -> dict:
-        source = self.root / ".trash" / str(project_id)
-        if not (source / "project.json").is_file():
+        if not self.metadata.set_trashed(str(project_id), None):
             raise ProjectNotFoundError(str(project_id))
-        target = self.root / str(project_id)
-        if target.exists():
-            raise InvalidUploadError("Проект с тем же идентификатором уже есть в библиотеке.")
-        with self._project_lock(project_id):
-            try:
-                os.replace(source, target)
-            except OSError as exc:
-                raise InvalidUploadError(
-                    "Проект сейчас не удаётся восстановить. Повторите позже."
-                ) from exc
-            (target / "trashed.json").unlink(missing_ok=True)
         return self.get(project_id)
+
+    def purge(self, project_id: UUID) -> None:
+        """Окончательно удалить проект из корзины: запись, историю, файлы.
+
+        Только из корзины: проект в библиотеке сначала туда попадает и
+        какое-то время восстанавливается (`architecture.md` §6).
+        """
+        if self.metadata.load(str(project_id), trashed=True) is None:
+            raise ProjectNotFoundError(str(project_id))
+        self.metadata.delete(str(project_id))
+        directory = self.project_dir(project_id)
+        if directory.exists():
+            # Каталог сначала переименовывается: если удаление прервётся,
+            # остаток не примут за живой проект и повторная очистка его найдёт.
+            doomed = self.root / f".{project_id}.purging"
+            os.replace(directory, doomed)
+            shutil.rmtree(doomed, ignore_errors=True)
+
+    def purge_expired(self, retention_days: int) -> list[str]:
+        """Удалить проекты, пролежавшие в корзине дольше срока хранения."""
+        moment = datetime.now(UTC) - timedelta(days=retention_days)
+        purged = []
+        for identifier in self.metadata.trashed_before(moment):
+            self.purge(UUID(identifier))
+            purged.append(identifier)
+        # Остатки прерванных удалений.
+        for leftover in self.root.glob(".*.purging"):
+            shutil.rmtree(leftover, ignore_errors=True)
+        return purged
 
     def history(self, project_id: UUID) -> dict:
         self.get(project_id)
-        return project_history.summary(self.root / str(project_id))
+        return project_history.summary(self.history_stacks(project_id))
 
     def undo(self, project_id: UUID) -> dict:
         """Отменить последний шаг: записать прежнюю конфигурацию новой ревизией."""
@@ -321,7 +321,7 @@ class ProjectLifecycle(ProjectStore):
 
     def _step_back(self, project_id: UUID, direction: str) -> dict:
         project = self.get(project_id)
-        stacks = project_history.load(self.root / str(project_id))
+        stacks = self.history_stacks(project_id)
         if not stacks[direction]:
             raise InvalidUploadError(
                 "Отменять нечего." if direction == "undo" else "Возвращать нечего."
@@ -332,7 +332,7 @@ class ProjectLifecycle(ProjectStore):
         try:
             validate_configuration_references(restored["configuration"])
         except ConfigurationIntegrityError as exc:
-            project_history.reset(self.root / str(project_id))
+            self.metadata.reset_history(str(project_id))
             raise InvalidUploadError(
                 f"Шаг нельзя вернуть: {exc} История отмены очищена."
             ) from exc

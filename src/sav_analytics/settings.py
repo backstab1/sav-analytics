@@ -12,6 +12,15 @@ class Settings(BaseSettings):
     data_dir: Path = Path(".data")
     max_upload_bytes: int = 250 * 1024 * 1024
 
+    # База метаданных (P3). Пусто — файл SQLite `data_dir/sav-analytics.db`;
+    # в production — PostgreSQL: postgresql+psycopg://user:pass@host/db.
+    database_url: str | None = None
+    # Приводить схему базы к версии приложения при старте. В production
+    # выключено: миграции идут отдельным шагом `sav-analytics migrate`.
+    auto_migrate: bool = True
+    # Сколько дней проект лежит в корзине до окончательного удаления.
+    trash_retention_days: int = 30
+
     # Ассистент «Таблиц» (`docs/assistant.md`). Любой провайдер с
     # OpenAI-совместимым chat completions и вызовом функций: адрес вида
     # https://api.deepseek.com или
@@ -41,6 +50,16 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     smtp_ssl: bool = False
     smtp_timeout_seconds: float = 15.0
+
+    @property
+    def projects_dir(self) -> Path:
+        return self.data_dir / "projects"
+
+    @property
+    def resolved_database_url(self) -> str:
+        from .db import sqlite_url
+
+        return self.database_url or sqlite_url(self.data_dir / "sav-analytics.db")
 
     @property
     def assistant_enabled(self) -> bool:

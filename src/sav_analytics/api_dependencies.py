@@ -16,7 +16,12 @@ def get_settings() -> Settings:
 
 
 def get_repository(settings: Annotated[Settings, Depends(get_settings)]) -> ProjectRepository:
-    return ProjectRepository(settings.data_dir / "projects", settings.max_upload_bytes)
+    return ProjectRepository(
+        settings.projects_dir,
+        settings.max_upload_bytes,
+        settings.resolved_database_url,
+        migrate=settings.auto_migrate,
+    )
 
 
 @lru_cache
