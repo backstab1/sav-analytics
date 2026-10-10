@@ -825,6 +825,8 @@ p.library-empty { margin: 0; }
 .report-findings .finding-error b { color: var(--c-danger); }
 .report-findings .finding-warning { background: var(--c-surface-soft); }
 .report-findings .finding-warning b { color: var(--c-ink-3); }
+.report-feedback a { color: var(--c-brand); font-weight: 600; text-decoration: none; }
+.report-feedback a:hover { text-decoration: underline; }
 
 /* Сводка проекта живёт на холсте (.summary / .stat), а сетка
    «таблица + дровер» — в .shell выше. Здесь раньше лежали четыре

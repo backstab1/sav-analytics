@@ -38,6 +38,7 @@ function renderBookSwitch() {
   const book = activeReportBook();
   document.querySelector("#book-name").textContent = book?.name || "Отчёт";
   bookSwitch.title = book ? `Книга «${book.name}» — книги отчёта проекта` : "Книги отчёта проекта";
+  document.querySelector("#launch-all-books").hidden = reportBooks().length < 2;
   if (bookMenu.hidden) return;
   const books = reportBooks();
   bookList.innerHTML = books.map(item =>

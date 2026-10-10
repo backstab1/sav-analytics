@@ -597,6 +597,23 @@ def test_report_books_are_created_switched_and_renamed(
     other = next(book for book in configuration["reports"] if book["name"] == "Для клиента")
     assert other["settings"]["confidence_level"] == 0.95
 
+    # Обе книги собираются одним действием и скачиваются одним архивом;
+    # выбранная книга при этом не меняется.
+    page.keyboard.press("Escape")
+    with page.expect_download(timeout=REPORT_TIMEOUT) as download:
+        page.click("#launch-all-books")
+    archive_path = tmp_path / "books.zip"
+    download.value.save_as(archive_path)
+    with ZipFile(archive_path) as archive:
+        assert sorted(archive.namelist()) == [
+            "Для клиента_statistics.txt",
+            "Для клиента_topline.xlsx",
+            "Отчёт_statistics.txt",
+            "Отчёт_topline.xlsx",
+        ]
+    expect(page.locator("#report-findings .finding")).to_have_count(2)
+    expect(page.locator("#book-name")).to_have_text("Отчёт")
+
 
 def test_raking_dimension_can_be_a_saved_recoding(
     page: Page, live_server: str, tmp_path: Path

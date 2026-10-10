@@ -59,6 +59,7 @@ function renderRunHistory(runs) {
     const summary = run.summary;
     if (summary) {
       if (table) parts.unshift(summary.scope === "table" ? "выгрузка таблицы" : "отчёт по разрезу «Таблиц»");
+      else if (summary.book && reportBooks().length > 1) parts.unshift(`книга «${escapeHtml(summary.book)}»`);
       parts.push(escapeHtml(plural(summary.questions, "вопрос", "вопроса", "вопросов")));
       parts.push(summary.banner ? `разрез «${escapeHtml(summary.banner)}»` : "только Total");
       if (summary.filter) parts.push(`фильтр «${escapeHtml(summary.filter)}»`);
@@ -127,16 +128,8 @@ async function resumeReportJob() {
     saved = null;
   }
   if (!saved || !currentProject || saved.project !== currentProject.id) return;
-  const feedback = document.querySelector("#report-feedback");
-  let status = document.querySelector("#report-status");
-  if (!status) {
-    status = document.createElement("span");
-    status.id = "report-status";
-    status.className = "report-status";
-    status.setAttribute("role", "status");
-    feedback.append(status);
-  }
-  feedback.hidden = false;
+  const { status, progress } = reportFeedbackParts();
+  progress.hidden = true;
   status.classList.remove("error");
   const projectId = currentProject.id;
   let result;
@@ -172,11 +165,9 @@ async function resumeReportJob() {
   if (currentView === "reports") void loadRunHistory(true);
 }
 
-async function downloadPreparedReport(event) {
-  event.preventDefault();
-  const link = event.currentTarget;
-  if (!currentProject || link.getAttribute("aria-disabled") === "true") return;
-  const downloads = [...document.querySelectorAll("#download-report, #download-statistics, #launch-report, #launch-statistics")];
+// Панель под шапкой: статус, полоса прогресса и список находок. Элементы
+// создаются при первой сборке и дальше переиспользуются.
+function reportFeedbackParts() {
   const feedback = document.querySelector("#report-feedback");
   feedback.hidden = false;
   let status = document.querySelector("#report-status");
@@ -202,6 +193,17 @@ async function downloadPreparedReport(event) {
     findings.className = "report-findings";
     feedback.append(findings);
   }
+  return { feedback, status, progress, findings };
+}
+
+const REPORT_BUTTONS = "#download-report, #download-statistics, #launch-report, #launch-statistics, #launch-all-books";
+
+async function downloadPreparedReport(event) {
+  event.preventDefault();
+  const link = event.currentTarget;
+  if (!currentProject || link.getAttribute("aria-disabled") === "true") return;
+  const downloads = [...document.querySelectorAll(REPORT_BUTTONS)];
+  const { feedback, status, progress, findings } = reportFeedbackParts();
   findings.innerHTML = "";
   findings.hidden = true;
   progress.hidden = false;
@@ -291,3 +293,100 @@ function renderPreflightFindings(container, preflight) {
   }).join("");
   return rows.length > 0;
 }
+
+/* ---------------- Все книги разом ---------------- */
+
+// Каждая книга — своё обычное задание сборки на сервере; страница следит за
+// всеми, а готовые сборки отдаёт одним архивом. Выбранная книга не меняется.
+async function prepareAllBooks(event) {
+  event.preventDefault();
+  const button = event.currentTarget;
+  if (!currentProject || button.getAttribute("aria-disabled") === "true") return;
+  const projectId = currentProject.id;
+  const buttons = [...document.querySelectorAll(REPORT_BUTTONS)];
+  const { feedback, status, progress, findings } = reportFeedbackParts();
+  buttons.forEach(item => item.setAttribute("aria-disabled", "true"));
+  button.textContent = "Собираются…";
+  status.classList.remove("error");
+  status.textContent = "Проверяем настройки каждой книги…";
+  findings.innerHTML = "";
+  findings.hidden = true;
+  progress.hidden = false;
+  progress.value = 0;
+  let keepOpen = false;
+  try {
+    let { books } = await api(`/api/projects/${projectId}/reports/prepare-all`, { method: "POST" });
+    renderBookRuns(findings, books);
+    while (books.some(book => book.status === "queued" || book.status === "running")) {
+      const done = books.reduce((sum, book) => sum + bookProgress(book), 0);
+      progress.value = Math.round(done / books.length);
+      status.textContent = `Собираем ${plural(books.length, "книгу", "книги", "книг")} · ${progress.value}%`;
+      await new Promise(resolve => window.setTimeout(resolve, 600));
+      books = await Promise.all(books.map(async book => {
+        if (book.status !== "queued" && book.status !== "running") return book;
+        const job = await api(`/api/projects/${projectId}/reports/jobs/${book.job_id}`);
+        return { ...book, ...job };
+      }));
+      if (currentProject?.id !== projectId) return;
+      renderBookRuns(findings, books);
+    }
+    progress.value = 100;
+    const ready = books.filter(book => book.status === "complete");
+    const missed = books.length - ready.length;
+    if (!ready.length) throw new Error("Ни одна книга не собрана: исправьте ошибки в настройках книг.");
+    const bundle = `/api/projects/${projectId}/reports/bundle.zip?`
+      + ready.map(book => `artifact=${encodeURIComponent(book.artifact_id)}`).join("&");
+    if (missed) {
+      // Неполный архив без спроса не скачивается: его легко принять за все книги.
+      keepOpen = true;
+      status.innerHTML = `Собрано ${ready.length} из ${books.length}. `
+        + `<a href="${escapeAttribute(bundle)}" class="report-ready-link">Скачать собранные архивом</a>`;
+    } else {
+      const archive = document.createElement("a");
+      archive.href = bundle;
+      document.body.append(archive);
+      archive.click();
+      archive.remove();
+      status.textContent = `Все ${plural(books.length, "книга собрана", "книги собраны", "книг собраны")}, архив скачивается.`;
+    }
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add("error");
+    keepOpen = true;
+  } finally {
+    buttons.forEach(item => item.setAttribute("aria-disabled", "false"));
+    button.textContent = "Собрать все книги";
+    progress.hidden = true;
+    if (currentProject) runHistoryCache.delete(currentProject.id);
+    if (currentView === "reports") void loadRunHistory(true);
+    if (!keepOpen) window.setTimeout(() => { feedback.hidden = true; }, 6000);
+  }
+}
+
+function bookProgress(book) {
+  if (book.status === "blocked" || book.status === "failed" || book.status === "complete") return 100;
+  return book.progress || 0;
+}
+
+// Строка на книгу: что с ней, а у готовой — её файлы, у непропущенной — причины.
+function renderBookRuns(container, books) {
+  container.hidden = false;
+  container.innerHTML = books.map(book => {
+    const name = `«${escapeHtml(book.book)}»${book.active ? " · выбрана" : ""}`;
+    if (book.status === "blocked") {
+      const reasons = (book.preflight?.errors || []).map(item => escapeHtml(item.message)).join(" ");
+      return `<li class="finding finding-error"><b>Не собрана</b><span>${name}: ${reasons}</span></li>`;
+    }
+    if (book.status === "failed") {
+      return `<li class="finding finding-error"><b>Ошибка</b><span>${name}: ${escapeHtml(book.error || "сборка не удалась")}</span></li>`;
+    }
+    if (book.status === "complete") {
+      const links = `<a href="${escapeAttribute(book.downloads.topline)}">Excel</a> · <a href="${escapeAttribute(book.downloads.statistics)}">statistics.txt</a>`;
+      return `<li class="finding finding-warning"><b>Готово</b><span>${name} — ${links}</span></li>`;
+    }
+    const stage = book.status === "queued" ? "в очереди" : `${escapeHtml(book.stage)} · ${book.progress || 0}%`;
+    return `<li class="finding finding-warning"><b>Собирается</b><span>${name} — ${stage}</span></li>`;
+  }).join("");
+}
+
+document.querySelector("#launch-all-books").addEventListener("click", prepareAllBooks);

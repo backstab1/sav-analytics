@@ -13,6 +13,7 @@ from uuid import UUID
 
 from .atomic_file import replace_file
 from .core.report import build_topline_artifacts
+from .core.report_books import active_book_name
 from .repository import ProjectRepository
 
 REPORT_CACHE_VERSION = 7
@@ -41,6 +42,8 @@ class PreparedReport:
     cache_key: str
     artifact_id: str
     configuration_revision: int
+    # Название книги, которая собрана; у сборок до книг его нет.
+    book: str | None = None
 
 
 def prepare_report(
@@ -113,6 +116,7 @@ def prepare_report(
             cache_key=cache_key,
             artifact_id=cache_key,
             configuration_revision=revision,
+            book=manifest["summary"]["book"],
         )
 
 
@@ -232,6 +236,7 @@ def _cached_report(
         cache_key=cache_key,
         artifact_id=cache_key,
         configuration_revision=revision,
+        book=(manifest.get("summary") or {}).get("book"),
     )
 
 
@@ -302,6 +307,7 @@ def _run_summary(project: dict[str, Any]) -> dict[str, Any]:
         None,
     )
     return {
+        "book": active_book_name(configuration),
         "questions": sum(
             1 for item in configuration.get("questions", []) if item.get("included_in_report")
         ),
@@ -381,9 +387,7 @@ def table_export_path(
     return path
 
 
-def list_table_exports(
-    repository: ProjectRepository, project_id: UUID
-) -> list[dict[str, Any]]:
+def list_table_exports(repository: ProjectRepository, project_id: UUID) -> list[dict[str, Any]]:
     root = repository.report_cache_dir(project_id) / TABLE_EXPORTS
     if not root.is_dir():
         return []
@@ -410,4 +414,3 @@ def list_table_exports(
             }
         )
     return runs
-

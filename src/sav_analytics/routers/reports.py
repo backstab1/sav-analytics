@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import io
+import re
+import zipfile
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 
 from ..api_dependencies import get_repository
 from ..api_presentation import ProjectRoute
+from ..core import report_books
 from ..core.preflight import PreflightBlockedError, run_preflight
 from ..report_cache import (
     PreparedReport,
@@ -65,6 +70,69 @@ def prepare_project_report(
         if not report.can_prepare:
             raise PreflightBlockedError(report)
     return start_report_job(repository, project_id, project)
+
+
+@router.post("/prepare-all")
+def prepare_all_report_books(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+) -> dict:
+    """Собрать все книги проекта одним действием, не меняя выбранную.
+
+    Каждая книга — своё обычное задание на копии проекта, где она выбрана, и
+    свой артефакт; задания идут друг за другом в той же очереди сборки. Книга,
+    которую не пропускает проверка, не собирается и возвращается со своими
+    ошибками — остальные от неё не зависят.
+    """
+    try:
+        project = repository.get(project_id)
+        source = repository.source_path(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    result = []
+    for book in report_books.books(project["configuration"]):
+        book_project = report_books.project_for_book(project, book["id"])
+        entry: dict = {"book_id": book["id"], "book": book["name"], "active": book["active"]}
+        if get_cached_report(repository, project_id, book_project) is None:
+            preflight = run_preflight(source, book_project)
+            if not preflight.can_prepare:
+                result.append({**entry, "status": "blocked", "preflight": preflight.to_dict()})
+                continue
+        result.append({**entry, **start_report_job(repository, project_id, book_project)})
+    return {"books": result}
+
+
+@router.get("/bundle.zip")
+def download_report_bundle(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+    artifact: Annotated[list[str], Query()],
+) -> Response:
+    """Готовые сборки одним архивом: Excel и statistics.txt каждой книги."""
+    try:
+        project = repository.get(project_id)
+        prepared = [get_report_artifact(repository, project_id, item) for item in artifact]
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except ReportArtifactNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Артефакт отчёта не найден.") from exc
+    buffer = io.BytesIO()
+    used: set[str] = set()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for index, item in enumerate(prepared, start=1):
+            stem = _safe_name(item.book or f"Отчёт {index}")
+            # Названия книг не обязаны быть разными.
+            if stem in used:
+                stem = f"{stem} ({index})"
+            used.add(stem)
+            archive.write(item.topline_path, f"{stem}_topline.xlsx")
+            archive.write(item.statistics_path, f"{stem}_statistics.txt")
+    filename = f"{_safe_name(str(project['name']))}_книги.zip"
+    return Response(
+        buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.get("/jobs/{job_id}")
@@ -145,24 +213,31 @@ def _prepared_artifact(
     return project, prepared
 
 
-def _file_stem(project: dict) -> str:
-    """Имя файла книги: при нескольких книгах к проекту добавляется выбранная."""
+_UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+
+
+def _safe_name(name: str) -> str:
+    return _UNSAFE_FILENAME.sub("_", name).strip(" .") or "Отчёт"
+
+
+def _file_stem(project: dict, prepared: PreparedReport) -> str:
+    """Имя файла книги: при нескольких книгах к проекту добавляется собранная.
+
+    Название берётся из манифеста сборки, а не из выбранной сейчас книги:
+    из истории и после «Собрать все книги» скачивают и не выбранные.
+    """
     configuration = project["configuration"]
-    books = configuration.get("reports") or []
-    if len(books) < 2:
+    if len(configuration.get("reports") or []) < 2:
         return str(project["name"])
-    active = next(
-        (book["name"] for book in books if book["id"] == configuration.get("active_report_id")),
-        None,
-    )
-    return f"{project['name']}_{active}" if active else str(project["name"])
+    book = prepared.book or report_books.active_book_name(configuration)
+    return f"{project['name']}_{book}" if book else str(project["name"])
 
 
 def _topline_response(project: dict, prepared: PreparedReport) -> FileResponse:
     return FileResponse(
         prepared.topline_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=f"{_file_stem(project)}_topline.xlsx",
+        filename=f"{_file_stem(project, prepared)}_topline.xlsx",
     )
 
 
@@ -170,5 +245,5 @@ def _statistics_response(project: dict, prepared: PreparedReport) -> FileRespons
     return FileResponse(
         prepared.statistics_path,
         media_type="text/plain; charset=utf-8",
-        filename=f"{_file_stem(project)}_statistics.txt",
+        filename=f"{_file_stem(project, prepared)}_statistics.txt",
     )

@@ -1,6 +1,9 @@
 """Несколько книг отчёта в проекте (PQ.7): у каждой свои баннер, фильтр и настройки."""
 
+import io
 import json
+import time
+import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
@@ -209,3 +212,103 @@ def test_schema_3_project_gets_its_configured_book(tmp_path: Path) -> None:
     # Идентификатор книги записан: повторное чтение его не меняет.
     again = repository.get(UUID(created["id"]))["configuration"]
     assert again["active_report_id"] == configuration["active_report_id"]
+
+
+EMPTY_FILTER = {
+    "name": "Никто",
+    "rule": {
+        "operator": "and",
+        "items": [
+            {"source": {"kind": "question", "ref": "Q1"}, "operator": "eq", "values": [1]},
+            {"source": {"kind": "question", "ref": "Q1"}, "operator": "eq", "values": [2]},
+        ],
+    },
+}
+
+
+def _wait(client: TestClient, project_id: str, job: dict) -> dict:
+    deadline = time.monotonic() + 30
+    while job["status"] in {"queued", "running"} and time.monotonic() < deadline:
+        time.sleep(0.05)
+        job = client.get(f"/api/projects/{project_id}/reports/jobs/{job['job_id']}").json()
+    return job
+
+
+def test_all_books_build_at_once_without_changing_the_selected_one(project) -> None:
+    client, project_id, _ = project
+    base = f"/api/projects/{project_id}/report-books"
+    _settings(client, project_id, confidence_level=0.9)
+    _configuration(client.post(base, json={"name": "Строгая"}))
+    _settings(client, project_id, confidence_level=0.99)
+    filter_id = _configuration(
+        client.post(f"/api/projects/{project_id}/filters", json=EMPTY_FILTER)
+    )["filters"][0]["id"]
+    _configuration(client.post(base, json={"name": "Пустая"}))
+    _configuration(
+        client.put(f"/api/projects/{project_id}/report-filter", json={"filter_id": filter_id})
+    )
+    strict_id = next(
+        book["id"]
+        for book in client.get(f"/api/projects/{project_id}").json()["configuration"]["reports"]
+        if book["name"] == "Строгая"
+    )
+    selected = _configuration(client.post(f"{base}/{strict_id}/activate"))
+
+    response = client.post(f"/api/projects/{project_id}/reports/prepare-all")
+    assert response.status_code == 200, response.text
+    books = {book["book"]: book for book in response.json()["books"]}
+
+    assert list(books) == ["Отчёт", "Строгая", "Пустая"]
+    assert books["Пустая"]["status"] == "blocked"
+    assert books["Пустая"]["preflight"]["can_prepare"] is False
+    assert books["Строгая"]["active"] is True
+    done = {name: _wait(client, project_id, books[name]) for name in ("Отчёт", "Строгая")}
+    assert {job["status"] for job in done.values()} == {"complete"}
+    assert done["Отчёт"]["artifact_id"] != done["Строгая"]["artifact_id"]
+
+    # Выбранная книга и ревизия не изменились: сборка шла на копиях.
+    after = client.get(f"/api/projects/{project_id}").json()["configuration"]
+    assert after["active_report_id"] == strict_id
+    assert after["revision"] == selected["revision"]
+    # Сборка выбранной книги совпадает с обычной и берётся из кэша.
+    again = client.post(f"/api/projects/{project_id}/reports/prepare").json()
+    assert again["cached"] is True
+    assert again["artifact_id"] == done["Строгая"]["artifact_id"]
+
+    # Файл не выбранной книги называется по ней, а не по выбранной.
+    loose = client.get(done["Отчёт"]["downloads"]["topline"])
+    assert "_%D0%9E%D1%82%D1%87%D1%91%D1%82_topline.xlsx" in loose.headers["content-disposition"]
+
+    bundle = client.get(
+        f"/api/projects/{project_id}/reports/bundle.zip",
+        params=[("artifact", done[name]["artifact_id"]) for name in ("Отчёт", "Строгая")],
+    )
+    assert bundle.status_code == 200
+    assert bundle.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+        assert sorted(archive.namelist()) == [
+            "Отчёт_statistics.txt",
+            "Отчёт_topline.xlsx",
+            "Строгая_statistics.txt",
+            "Строгая_topline.xlsx",
+        ]
+        from sav_analytics.core.reporting.statistics import audit_number
+
+        loose_text = archive.read("Отчёт_statistics.txt").decode("utf-8")
+        strict_text = archive.read("Строгая_statistics.txt").decode("utf-8")
+    assert f"Уровень доверия: {audit_number(90.0)}%" in loose_text
+    assert f"Уровень доверия: {audit_number(99.0)}%" in strict_text
+
+    history = client.get(f"/api/projects/{project_id}/reports/history").json()["runs"]
+    assert {run["summary"]["book"] for run in history if run["kind"] == "report"} == {
+        "Отчёт",
+        "Строгая",
+    }
+
+
+def test_bundle_rejects_unknown_artifacts(project) -> None:
+    client, project_id, _ = project
+    url = f"/api/projects/{project_id}/reports/bundle.zip"
+    assert client.get(url, params={"artifact": "0123456789abcdef"}).status_code == 404
+    assert client.get(url, params={"artifact": "../../etc"}).status_code == 404
+    assert client.get(url).status_code == 422

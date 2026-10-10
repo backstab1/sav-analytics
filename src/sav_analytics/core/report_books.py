@@ -88,6 +88,18 @@ def configuration_for_book(configuration: dict[str, Any], book_id: str | None) -
     return result
 
 
+def project_for_book(project: dict[str, Any], book_id: str) -> dict[str, Any]:
+    """Проект, у которого книга `book_id` выбрана, — для сборки без записи."""
+    return {**project, "configuration": configuration_for_book(project["configuration"], book_id)}
+
+
+def active_book_name(configuration: dict[str, Any]) -> str | None:
+    active = configuration.get("active_report_id")
+    return next(
+        (book["name"] for book in configuration.get("reports", []) if book["id"] == active), None
+    )
+
+
 def activate(configuration: dict[str, Any], book_id: str) -> None:
     """Сделать книгу активной: значения прежней уходят в её запись."""
     target = find_book(configuration, book_id)
