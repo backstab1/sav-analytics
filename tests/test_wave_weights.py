@@ -151,3 +151,14 @@ def test_wave_weight_keeps_its_weight_role(context) -> None:
     _put_settings(context, weight_variable="W", wave_weights=[{"wave": 2, "variable": "W2"}])
     refused = context["client"].patch(f"{context['base']}/questions/W2", json={"role": "question"})
     assert refused.status_code in {409, 422}, refused.text
+
+def test_diagnostics_skip_waves_with_their_own_weight(context) -> None:
+    client = context["client"]
+    url = f"{context['base']}/weights/ready/W/diagnostics"
+
+    whole = client.get(url).json()
+    without_autumn = client.get(url, params={"own_wave": "2"}).json()
+
+    assert whole["usable"] is False
+    assert without_autumn["usable"] is True
+    assert without_autumn["diagnostics"]["count"] == 20

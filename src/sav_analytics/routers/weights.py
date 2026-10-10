@@ -4,7 +4,7 @@ from typing import Annotated
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from ..api_dependencies import get_repository
@@ -12,7 +12,7 @@ from ..api_presentation import ProjectRoute
 from ..api_schemas import CalculatedWeightDefinition, WeightTargetTemplateRequest
 from ..core.configuration_integrity import ConfigurationIntegrityError
 from ..core.weight_targets import WeightTargetError, build_target_template, read_target_file
-from ..core.weight_validation import assess_project_weight
+from ..core.weight_validation import assess_project_weight, assess_weight_without_waves
 from ..core.weighting import WeightingError, build_raking_export, calculate_raking_preview
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
@@ -26,11 +26,14 @@ def ready_weight_diagnostics(
     project_id: UUID,
     variable: str,
     repository: Annotated[ProjectRepository, Depends(get_repository)],
+    own_wave: Annotated[list[str] | None, Query()] = None,
 ) -> dict:
     """Разбор готового веса до его применения.
 
     Отдаёт и вердикт, и числа: `requirements.md` §8 требует показывать
     распределение веса перед применением, а не только сообщать об отказе.
+    `own_wave` — волны со своим весом: их строки этот вес не взвешивает, и
+    разбор идёт без них, как проверка при сохранении.
     """
 
     try:
@@ -38,6 +41,8 @@ def ready_weight_diagnostics(
         source = repository.source_path(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    if own_wave:
+        return assess_weight_without_waves(source, variable, project, own_wave).to_dict()
     return assess_project_weight(source, variable, project).to_dict()
 
 

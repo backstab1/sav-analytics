@@ -340,6 +340,27 @@ def ensure_project_weight_usable(
     return assessment
 
 
+def assess_weight_without_waves(
+    path: str | Path, variable: str, project: dict[str, Any], waves: list[str]
+) -> WeightAssessment:
+    """Разбор готового веса на строках всех волн, кроме перечисленных."""
+    from .formulas import read_project_frame
+    from .questionnaire import value_key
+    from .waves import wave_variable_of
+
+    wave = wave_variable_of(project)
+    if wave is None:
+        return assess_project_weight(path, variable, project)
+    frame = read_project_frame(path, project, [wave, variable], all_waves=True)
+    if variable not in frame.columns:
+        return assess_project_weight(path, variable, project)
+    excluded = {value_key(item) for item in waves}
+    rows = ~frame[wave].map(value_key).isin(excluded)
+    return assess_ready_weight(
+        frame.loc[rows, variable], variable=variable, role=weight_role(variable, project)
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class WeightPart:
     """Строки массива и готовый вес, которым они взвешиваются."""

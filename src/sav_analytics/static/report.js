@@ -601,8 +601,8 @@ function renderReportWeightSelect(selectedWeight) {
     ? `Объявлено весом переменных: ${declared.length}`
     : "Ни одна переменная не объявлена весом.";
   renderWeightCandidates();
-  loadReportWeightDiagnostics();
   renderWaveWeights();
+  loadReportWeightDiagnostics();
 }
 
 // Свой готовый вес у волны — рядом с готовым весом отчёта и только при двух
@@ -685,7 +685,10 @@ async function declareSelectedWeight() {
 
 // Разбор распределения показывается до применения веса, а не после отказа
 // сборки: `requirements.md` §8 требует именно этого порядка.
+let weightDiagnosticsRequest = 0;
+
 async function loadReportWeightDiagnostics() {
+  const request = ++weightDiagnosticsRequest;
   const container = document.querySelector("#report-weight-diagnostics");
   const saveButton = document.querySelector("#save-report-settings");
   const selection = document.querySelector("#report-weight").value;
@@ -699,10 +702,14 @@ async function loadReportWeightDiagnostics() {
   container.hidden = false;
   container.innerHTML = '<p class="muted">Считаем распределение веса…</p>';
   try {
+    // Волны со своим весом этот вес не взвешивает: разбор идёт без них.
+    const own = waveWeightsPayload().map(item => `own_wave=${encodeURIComponent(item.wave)}`).join("&");
     const assessment = await api(
-      `/api/projects/${currentProject.id}/weights/ready/${encodeURIComponent(variable)}/diagnostics`
+      `/api/projects/${currentProject.id}/weights/ready/${encodeURIComponent(variable)}/diagnostics${own ? `?${own}` : ""}`
     );
-    if (document.querySelector("#report-weight").value !== selection) return;
+    // Устаревший ответ — после него уже ушёл запрос с другим весом или
+    // другим набором волн со своим весом.
+    if (request !== weightDiagnosticsRequest) return;
     container.innerHTML = renderWeightAssessment(assessment);
     saveButton.disabled = !assessment.usable;
   } catch (error) {
@@ -734,7 +741,9 @@ function renderWeightAssessment(assessment) {
 /* ---------------- Вес отчёта: поля ---------------- */
 
 document.querySelector("#report-weight").addEventListener("change", () => {
-  loadReportWeightDiagnostics();
   renderWaveWeights();
+  loadReportWeightDiagnostics();
 });
+// Свой вес у волны меняет строки, которые взвешивает вес отчёта.
+document.querySelector("#report-wave-weights-rows").addEventListener("change", loadReportWeightDiagnostics);
 document.querySelector("#report-weight-declare-button").addEventListener("click", declareSelectedWeight);

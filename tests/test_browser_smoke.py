@@ -501,6 +501,63 @@ def test_identifier_cannot_be_chosen_as_a_report_weight(
     expect(page.locator("#save-report-settings")).to_be_enabled()
 
 
+def test_wave_gets_its_own_ready_weight(page: Page, live_server: str, tmp_path: Path) -> None:
+    """Свой готовый вес у волны (PQ.19): выбор в листе веса и защита пропусков.
+
+    У осени общий вес W пуст, поэтому без своего веса отчёт на W не собрать;
+    с весом W2 у осени настройка сохраняется, а плитка веса называет это.
+    """
+    source = tmp_path / "waves.sav"
+    pyreadstat.write_sav(
+        pd.DataFrame(
+            {
+                "WAVE": [1.0] * 20 + [2.0] * 30,
+                "YES": [1.0, 0.0] * 25,
+                "W": [0.8, 1.2] * 10 + [None] * 30,
+                "W2": [None] * 20 + [5.0, 15.0] * 15,
+            }
+        ),
+        source,
+        column_labels={"WAVE": "Волна", "YES": "Согласие", "W": "Вес", "W2": "Вес осени"},
+        variable_value_labels={
+            "WAVE": {1.0: "Весна", 2.0: "Осень"},
+            "YES": {0.0: "Нет", 1.0: "Да"},
+        },
+        variable_measure={"WAVE": "nominal", "YES": "nominal", "W": "scale", "W2": "scale"},
+    )
+    _open_project(page, live_server, source)
+    project_id = page.url.split("#/projects/")[1].split("/")[0]
+    base = f"{live_server}/api/projects/{project_id}"
+    for code, role in (("WAVE", "wave"), ("W", "weight"), ("W2", "weight")):
+        assert page.request.patch(f"{base}/questions/{code}", data={"role": role}).ok
+    page.reload()
+    expect(page.locator("#workspace")).to_be_visible(timeout=UI_TIMEOUT)
+
+    _open_weight_sheet(page)
+    page.select_option("#report-weight", "ready:W")
+    rows = page.locator("#report-wave-weights-rows select[data-wave]")
+    expect(rows).to_have_count(2, timeout=UI_TIMEOUT)
+    expect(page.locator("#report-wave-weights")).to_contain_text("Осень")
+
+    # Без своего веса у осени W не годится: у её анкет он пуст.
+    expect(page.locator("#report-weight-diagnostics")).to_contain_text(
+        "пропусков 30", timeout=UI_TIMEOUT
+    )
+    expect(page.locator("#save-report-settings")).to_be_disabled()
+
+    # Осень взвешивается своим W2 — разбор W идёт уже без её анкет.
+    page.select_option('#report-wave-weights-rows select[data-wave="2"]', "W2")
+    expect(page.locator("#report-weight-diagnostics")).to_contain_text(
+        "Вес пригоден", timeout=UI_TIMEOUT
+    )
+    page.click("#save-report-settings")
+    expect(page.locator('[data-block="weight"]')).to_contain_text(
+        "свой у 1 волны", timeout=UI_TIMEOUT
+    )
+    settings = page.request.get(base).json()["configuration"]["report_settings"]
+    assert settings["weight_variable"] == "W"
+    assert settings["wave_weights"] == [{"wave": 2, "variable": "W2"}]
+
 def test_cell_weight_is_built_from_combinations(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:
