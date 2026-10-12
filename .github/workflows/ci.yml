@@ -230,7 +230,7 @@ jobs:
         run: test "$(docker run --rm sav-analytics:ci id -u)" != "0"
 
       - name: Сканирование образа на уязвимости
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: sav-analytics:ci
           severity: CRITICAL,HIGH
