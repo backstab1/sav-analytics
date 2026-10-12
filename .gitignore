@@ -5,6 +5,8 @@
 *.xlsx
 *.xls
 *.csv
+# Синтетические эталонные данные тестов — часть репозитория.
+!tests/golden/*.csv
 *.tsv
 
 # Local application data

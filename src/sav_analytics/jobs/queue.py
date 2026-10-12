@@ -67,8 +67,9 @@ class JobQueue:
             existing = self._active_by_key(idempotency_key)
             if existing is not None:
                 return existing
-        values = {
-            "id": str(uuid4()),
+        job_id = str(uuid4())
+        values: dict[str, Any] = {
+            "id": job_id,
             "kind": kind,
             "project_id": project_id,
             "title": title,
@@ -94,7 +95,7 @@ class JobQueue:
                 if existing is not None:
                     return existing
             raise
-        return self.get(values["id"])
+        return self.get(job_id)
 
     def record_complete(self, job_id: str, result: dict[str, Any]) -> dict[str, Any]:
         """Отметить только что поставленное задание выполненным без исполнения —

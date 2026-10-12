@@ -69,8 +69,9 @@ class AuthStore:
             raise AuthError("Роль — admin или user.")
         name = normalize_username(username)
         now = utcnow()
-        values = {
-            "id": str(uuid4()),
+        user_id = str(uuid4())
+        values: dict[str, Any] = {
+            "id": user_id,
             "username": name,
             "display_name": display_name.strip() or name,
             "password_hash": hash_password(password),
@@ -84,7 +85,7 @@ class AuthStore:
                 connection.execute(users.insert().values(**values))
         except IntegrityError as exc:
             raise AuthError("Пользователь с таким именем уже есть.") from exc
-        return self.get_user(values["id"]) or {}
+        return self.get_user(user_id) or {}
 
     def get_user(self, user_id: str) -> dict[str, Any] | None:
         with self.engine.connect() as connection:
