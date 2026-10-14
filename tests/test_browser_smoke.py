@@ -1037,6 +1037,46 @@ def test_net_group_set_on_a_question_reaches_the_table(
     expect(row.locator("td.bld-val").first).to_have_text("67")
 
 
+def test_quick_setting_clicks_keep_both_values_when_responses_lag(
+    page: Page, live_server: str, tmp_path: Path
+) -> None:
+    """Два быстрых щелчка по настройкам отчёта: оба значения сохраняются.
+
+    Первый ответ сервера задерживается, чтобы гонка воспроизводилась всегда:
+    раньше второй запрос уходил с прежним значением первой настройки, а
+    поздний первый ответ перерисовывал экран старым состоянием.
+    """
+    source = tmp_path / "survey.sav"
+    _write_survey(source)
+    _open_project(page, live_server, source)
+    _open_view(page, "reports")
+    _open_report_tab(page, "metrics")
+
+    delayed = {"done": False}
+
+    def slow_first(route) -> None:  # type: ignore[no-untyped-def]
+        if route.request.method == "PUT" and not delayed["done"]:
+            delayed["done"] = True
+            time.sleep(0.8)
+        route.continue_()
+
+    page.route("**/report-settings", slow_first)
+    page.click('[data-stat="scheme"][data-value="rest"]')
+    page.click('[data-stat="scale-box"][data-value="3"]')
+    expect(page.locator('[data-stat="scale:top2"]')).to_have_text("Top-3", timeout=UI_TIMEOUT)
+    expect(page.locator('[data-stat="scheme"][data-value="rest"]')).to_have_attribute(
+        "aria-checked", "true", timeout=UI_TIMEOUT
+    )
+    page.unroute("**/report-settings")
+    page.reload()
+    _open_view(page, "reports")
+    _open_report_tab(page, "metrics")
+    expect(page.locator('[data-stat="scale:top2"]')).to_have_text("Top-3", timeout=UI_TIMEOUT)
+    expect(page.locator('[data-stat="scheme"][data-value="rest"]')).to_have_attribute(
+        "aria-checked", "true", timeout=UI_TIMEOUT
+    )
+
+
 def test_top_bottom_size_renames_the_scale_toggles(
     page: Page, live_server: str, tmp_path: Path
 ) -> None:

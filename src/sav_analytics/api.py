@@ -5,7 +5,8 @@ import ipaddress
 import logging
 import re
 import time
-from collections.abc import MutableMapping
+from collections.abc import AsyncIterator, MutableMapping
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -57,7 +58,14 @@ from .routers import (
     weights,
 )
 
-app = FastAPI(title="sav-analytics API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    configure_logging(get_settings())
+    yield
+
+
+app = FastAPI(title="sav-analytics API", version="0.1.0", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
@@ -248,11 +256,6 @@ def prometheus_metrics(request: Request) -> PlainTextResponse:
         metrics.render(engine, settings.data_dir),
         media_type="text/plain; version=0.0.4; charset=utf-8",
     )
-
-
-@app.on_event("startup")
-def configure_application_logging() -> None:
-    configure_logging(get_settings())
 
 
 @app.get("/api/ready", tags=["health"])

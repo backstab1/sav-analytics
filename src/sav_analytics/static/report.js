@@ -446,7 +446,19 @@ function reportSettingsPayload(settings) {
   };
 }
 
-async function patchReportSettings(partial, { toast = null } = {}) {
+// Правки настроек идут строго по очереди. Запрос несёт настройки целиком,
+// собранные из currentProject: два быстрых щелчка отправляли второй запрос
+// с ещё не сохранённым первым значением, а ответ первого, пришедший позже,
+// перерисовывал экран прежним состоянием (Top-2 после выбора Top-3).
+let reportSettingsQueue = Promise.resolve();
+
+function patchReportSettings(partial, options = {}) {
+  const run = reportSettingsQueue.then(() => sendReportSettings(partial, options));
+  reportSettingsQueue = run.catch(() => {});
+  return run;
+}
+
+async function sendReportSettings(partial, { toast = null } = {}) {
   const payload = reportSettingsPayload({ ...configuredReportSettings(), ...partial });
   currentProject = await api(`/api/projects/${currentProject.id}/report-settings`, {
     method: "PUT",
