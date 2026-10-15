@@ -170,11 +170,8 @@ code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
   color: var(--c-ink-3); font-size: var(--t-xs); letter-spacing: .01em;
 }
 
-.avatar {
-  display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0;
-  border-radius: 50%; background: var(--c-brand-tint); color: var(--c-brand);
-  font: 700 10px/1 var(--font-display); cursor: default;
-}
+/* Круг с инициалами (.avatar и кнопка аккаунта) оформлен в auth.css. */
+.avatar { cursor: default; }
 
 /* Отступы переехали с main на .screen-pad: конструктору и рабочей области
    нужна вся ширина, а лендингу и стартовому экрану — прежняя колонка. */

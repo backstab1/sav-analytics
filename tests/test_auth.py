@@ -133,10 +133,22 @@ def test_permission_matrix(secured: ProjectRepository, tmp_path: Path) -> None:
         assert disabled.status_code == 200 and disabled.json()["active"] is False
         boss = next(user for user in users if user["username"] == "boss")
         last_admin = admin.patch(
-            f"/api/admin/users/{boss['id']}", json={"role": "user"},
+            f"/api/admin/users/{boss['id']}", json={"active": False},
             headers={"X-CSRF-Token": csrf},
         )
         assert last_admin.status_code == 422
+        # Роли через API не назначаются: поле игнорируется, новый — аналитик.
+        created = admin.post(
+            "/api/admin/users",
+            json={"username": "newbie", "password": PASSWORD, "role": "admin"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        assert created.status_code == 201 and created.json()["role"] == "user"
+        promoted = admin.patch(
+            f"/api/admin/users/{created.json()['id']}", json={"role": "admin"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        assert promoted.status_code == 200 and promoted.json()["role"] == "user"
 
 
 def test_download_and_logout_are_audited(secured: ProjectRepository, tmp_path: Path) -> None:
@@ -224,3 +236,68 @@ def test_security_headers_and_body_limit(secured: ProjectRepository) -> None:
         assert "fonts.googleapis.com" not in page.text
         huge = client.post("/api/projects", headers={"content-length": str(10**12)}, content=b"")
         assert huge.status_code == 413
+
+
+def test_account_profile_sessions_and_activity(secured: ProjectRepository) -> None:
+    _store().create_user("analyst", PASSWORD, display_name="Анна")
+    with TestClient(app) as first, TestClient(app) as second:
+        csrf = _login(first, "analyst")
+        _login(second, "analyst")
+        account = first.get("/api/auth/account").json()
+        assert account["user"]["display_name"] == "Анна"
+        assert "password_hash" not in account["user"]
+        assert account["min_password_length"] == 10
+
+        renamed = first.patch(
+            "/api/auth/account", json={"display_name": "  Анна Иванова "},
+            headers={"X-CSRF-Token": csrf},
+        )
+        assert renamed.status_code == 200
+        assert renamed.json()["user"]["display_name"] == "Анна Иванова"
+        blank = first.patch(
+            "/api/auth/account", json={"display_name": "   "}, headers={"X-CSRF-Token": csrf}
+        )
+        assert blank.status_code == 422
+
+        sessions = first.get("/api/auth/sessions").json()["sessions"]
+        assert len(sessions) == 2 and sum(item["current"] for item in sessions) == 1
+        current = next(item for item in sessions if item["current"])
+        other = next(item for item in sessions if not item["current"])
+        own = first.delete(f"/api/auth/sessions/{current['id']}", headers={"X-CSRF-Token": csrf})
+        assert own.status_code == 422
+        closed = first.delete(f"/api/auth/sessions/{other['id']}", headers={"X-CSRF-Token": csrf})
+        assert closed.status_code == 200
+        assert second.get("/api/projects").status_code == 401
+        assert first.get("/api/projects").status_code == 200
+
+        same = first.post(
+            "/api/auth/password", json={"current": PASSWORD, "new": PASSWORD},
+            headers={"X-CSRF-Token": csrf},
+        )
+        assert same.status_code == 422
+
+        _login(second, "analyst")
+        others = first.post("/api/auth/sessions/close-others", headers={"X-CSRF-Token": csrf})
+        assert others.json() == {"closed": 1}
+        assert second.get("/api/projects").status_code == 401
+
+        second.post("/api/auth/login", json={"username": "analyst", "password": "wrong"})
+        actions = [entry["action"] for entry in first.get("/api/auth/activity").json()["entries"]]
+        assert actions[0] == "auth.login_failed"
+        assert {"auth.login", "auth.account", "auth.sessions_closed"} <= set(actions)
+        assert not any(action.startswith("auth.") and len(action) > 40 for action in actions)
+
+
+def test_sessions_of_another_user_cannot_be_closed(secured: ProjectRepository) -> None:
+    store = _store()
+    store.create_user("anna", PASSWORD)
+    store.create_user("boris", PASSWORD)
+    with TestClient(app) as anna, TestClient(app) as boris:
+        csrf = _login(anna, "anna")
+        _login(boris, "boris")
+        boris_session = boris.get("/api/auth/sessions").json()["sessions"][0]["id"]
+        refused = anna.delete(
+            f"/api/auth/sessions/{boris_session}", headers={"X-CSRF-Token": csrf}
+        )
+        assert refused.status_code == 404
+        assert boris.get("/api/projects").status_code == 200

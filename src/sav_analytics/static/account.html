@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Личный кабинет — sav-analytics</title>
+    <link rel="stylesheet" href="/fonts.css?v=20261015-account" />
+    <link rel="stylesheet" href="/auth.css?v=20261015-account" />
+  </head>
+  <!-- Личный кабинет: профиль, безопасность, настройки; администратору —
+       пользователи и журнал. Разделы переключает account.js по адресу
+       #profile, #security, #settings, #users, #audit. -->
+  <body class="account-page">
+    <header class="acc-top">
+      <a class="acc-brand" href="/" aria-label="sav analytics — к проектам">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <path fill="#1d7a4f" opacity=".1" d="M300 56C196 56 126 80 86 151 58 201 52 273 52 512s6 311 34 361c40 71 110 95 214 95h424c104 0 174-24 214-95 28-50 34-122 34-361s-6-311-34-361c-40-71-110-95-214-95H300Z" />
+          <g fill="none" stroke="#1d1d1f" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M416 222H262c-44 0-74 27-74 65s30 65 74 65h78c44 0 74 27 74 65s-30 65-74 65H186" />
+            <path d="M544 482 654 232c8-18 18-18 26 0l110 250M598 374h138" />
+            <path d="m190 574 108 246c8 18 18 18 26 0l108-246" />
+          </g>
+          <path fill="none" stroke="#1d7a4f" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" d="m544 832 110-250c8-18 18-18 26 0l110 250M598 724h138" />
+        </svg>
+        sav<span>analytics</span>
+      </a>
+      <a class="acc-back" href="/">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        К проектам
+      </a>
+    </header>
+
+    <div class="acc-layout">
+      <aside class="acc-side">
+        <div class="acc-who">
+          <span class="acc-avatar acc-avatar-lg" id="side-avatar" aria-hidden="true"></span>
+          <div class="acc-who-text">
+            <strong id="side-name">…</strong>
+            <span id="side-login"></span>
+          </div>
+        </div>
+        <nav class="acc-nav" aria-label="Разделы кабинета">
+          <a href="#profile" data-section="profile">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="7" r="3.2" stroke="currentColor" stroke-width="1.5" /><path d="M3.8 16.5c1.2-2.7 3.4-4 6.2-4s5 1.3 6.2 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+            Профиль
+          </a>
+          <a href="#security" data-section="security">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="8.5" width="12" height="8.5" rx="2" stroke="currentColor" stroke-width="1.5" /><path d="M7 8.5V6.3a3 3 0 0 1 6 0v2.2" stroke="currentColor" stroke-width="1.5" /></svg>
+            Безопасность
+          </a>
+          <a href="#settings" data-section="settings">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 6h7M15 6h1M4 14h1M9 14h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /><circle cx="13" cy="6" r="2" stroke="currentColor" stroke-width="1.5" /><circle cx="7" cy="14" r="2" stroke="currentColor" stroke-width="1.5" /></svg>
+            Настройки
+          </a>
+          <div class="acc-nav-group" id="admin-nav" hidden>
+            <span class="acc-nav-label">Администрирование</span>
+            <a href="#users" data-section="users">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="7.5" cy="7.5" r="2.7" stroke="currentColor" stroke-width="1.5" /><path d="M2.5 16c.9-2.3 2.7-3.5 5-3.5s4.1 1.2 5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /><path d="M13 5a2.5 2.5 0 0 1 0 5M14.5 12.6c1.5.4 2.5 1.5 3 3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+              Пользователи
+            </a>
+            <a href="#audit" data-section="audit">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5.5 3.5h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" /><path d="M7.5 7.5h5M7.5 10.5h5M7.5 13.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+              Журнал действий
+            </a>
+          </div>
+        </nav>
+        <button type="button" class="acc-logout" id="logout">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 4H5.5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1H8M12 6.5 15.5 10 12 13.5M15.5 10H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          Выйти
+        </button>
+      </aside>
+
+      <main class="acc-main">
+        <div class="acc-off" id="auth-off" hidden>
+          <h1>Личный кабинет недоступен</h1>
+          <p>Приложение запущено без учётных записей (<code>SAV_ANALYTICS_AUTH_ENABLED=false</code>): входить, менять пароль и управлять пользователями не нужно.</p>
+          <a class="acc-btn primary" href="/">К проектам</a>
+        </div>
+
+        <!-- ================= Профиль ================= -->
+        <section class="acc-section" id="section-profile" data-section="profile" hidden>
+          <header class="acc-head">
+            <h1>Профиль</h1>
+            <p>Как вас видят коллеги в журнале и в проектах.</p>
+          </header>
+
+          <div class="acc-card">
+            <form id="profile-form" class="acc-form" novalidate>
+              <div class="acc-profile-row">
+                <span class="acc-avatar acc-avatar-xl" id="profile-avatar" aria-hidden="true"></span>
+                <label class="acc-field">
+                  <span>Отображаемое имя</span>
+                  <input name="display_name" id="display-name" maxlength="200" autocomplete="name" required />
+                  <small>Инициалы из него — на кнопке аккаунта в шапке.</small>
+                </label>
+              </div>
+              <div class="acc-actions">
+                <button type="submit" class="acc-btn primary" id="profile-save" disabled>Сохранить</button>
+                <span class="acc-note" id="profile-status" role="status"></span>
+              </div>
+            </form>
+          </div>
+
+          <div class="acc-card">
+            <h2>Учётная запись</h2>
+            <dl class="acc-facts">
+              <div><dt>Имя входа</dt><dd id="fact-login">—</dd></div>
+              <div><dt>Доступ</dt><dd id="fact-access">—</dd></div>
+              <div><dt>Создана</dt><dd id="fact-created">—</dd></div>
+              <div><dt>Предыдущий вход</dt><dd id="fact-last-login">—</dd></div>
+            </dl>
+            <p class="acc-hint">Имя входа и доступ меняет администратор.</p>
+          </div>
+        </section>
+
+        <!-- ================= Безопасность ================= -->
+        <section class="acc-section" id="section-security" data-section="security" hidden>
+          <header class="acc-head">
+            <h1>Безопасность</h1>
+            <p>Пароль, открытые сеансы и история входов.</p>
+          </header>
+
+          <div class="acc-card">
+            <h2>Смена пароля</h2>
+            <form id="password-form" class="acc-form acc-narrow" novalidate>
+              <label class="acc-field">
+                <span>Текущий пароль</span>
+                <span class="acc-secret">
+                  <input name="current" type="password" autocomplete="current-password" required />
+                  <button type="button" class="acc-eye" aria-label="Показать пароль" aria-pressed="false"></button>
+                </span>
+              </label>
+              <label class="acc-field">
+                <span>Новый пароль</span>
+                <span class="acc-secret">
+                  <input name="new" type="password" autocomplete="new-password" required aria-describedby="password-rules" />
+                  <button type="button" class="acc-eye" aria-label="Показать пароль" aria-pressed="false"></button>
+                </span>
+              </label>
+              <label class="acc-field">
+                <span>Повторите новый пароль</span>
+                <span class="acc-secret">
+                  <input name="repeat" type="password" autocomplete="new-password" required />
+                  <button type="button" class="acc-eye" aria-label="Показать пароль" aria-pressed="false"></button>
+                </span>
+              </label>
+              <ul class="acc-rules" id="password-rules">
+                <li data-rule="length"><span>Не короче <b id="min-length">10</b> символов</span></li>
+                <li data-rule="differs">Отличается от текущего</li>
+                <li data-rule="match">Пароли совпадают</li>
+              </ul>
+              <div class="acc-error" id="password-error" role="alert" hidden></div>
+              <div class="acc-actions">
+                <button type="submit" class="acc-btn primary" id="password-save" disabled>Сменить пароль</button>
+                <span class="acc-note" id="password-status" role="status"></span>
+              </div>
+              <p class="acc-hint">После смены пароля другие сеансы закроются, этот останется открытым.</p>
+            </form>
+          </div>
+
+          <div class="acc-card">
+            <div class="acc-card-head">
+              <h2>Открытые сеансы</h2>
+              <button type="button" class="acc-btn" id="close-others" hidden>Завершить все, кроме этого</button>
+            </div>
+            <ul class="acc-sessions" id="sessions"></ul>
+            <p class="acc-hint" id="session-rules"></p>
+          </div>
+
+          <div class="acc-card">
+            <h2>История входов</h2>
+            <ul class="acc-activity" id="activity"></ul>
+          </div>
+        </section>
+
+        <!-- ================= Настройки ================= -->
+        <section class="acc-section" id="section-settings" data-section="settings" hidden>
+          <header class="acc-head">
+            <h1>Настройки</h1>
+            <p>Хранятся в этом браузере и применяются сразу.</p>
+          </header>
+
+          <div class="acc-card">
+            <h2>Что открывать после входа</h2>
+            <div class="acc-choices" role="radiogroup" aria-label="Что открывать после входа">
+              <label class="acc-choice">
+                <input type="radio" name="start-screen" value="projects" />
+                <span><strong>Список проектов</strong><small>Начинать со стартового экрана с библиотекой проектов.</small></span>
+              </label>
+              <label class="acc-choice">
+                <input type="radio" name="start-screen" value="last-project" />
+                <span><strong>Последний проект</strong><small>Сразу продолжить с проекта и раздела, где вы остановились.</small></span>
+              </label>
+            </div>
+            <span class="acc-note" id="settings-status" role="status"></span>
+          </div>
+
+          <div class="acc-card">
+            <h2>Запомненное в браузере</h2>
+            <p class="acc-text">Приложение помнит выбранные вкладки отчёта, раскладки таблиц и последний проект. Сброс вернёт их к исходным, проекты и данные не затрагиваются.</p>
+            <div class="acc-actions">
+              <button type="button" class="acc-btn" id="forget-local">Сбросить запомненное</button>
+              <span class="acc-note" id="forget-status" role="status"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= Пользователи (администратор) ================= -->
+        <section class="acc-section" id="section-users" data-section="users" hidden>
+          <header class="acc-head acc-head-row">
+            <div>
+              <h1>Пользователи</h1>
+              <p>Новые учётные записи получают доступ аналитика ко всем проектам.</p>
+            </div>
+            <button type="button" class="acc-btn primary" id="add-user-open">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
+              Добавить
+            </button>
+          </header>
+
+          <div class="acc-card" id="add-user-card" hidden>
+            <h2>Новый пользователь</h2>
+            <form id="user-form" class="acc-form acc-grid" novalidate>
+              <label class="acc-field"><span>Имя входа</span>
+                <input name="username" required maxlength="64" autocomplete="off" placeholder="ivanova" />
+                <small>Латиница, цифры, точка, дефис, @ и _</small>
+              </label>
+              <label class="acc-field"><span>Отображаемое имя</span>
+                <input name="display_name" maxlength="200" autocomplete="off" placeholder="Анна Иванова" />
+              </label>
+              <label class="acc-field"><span>Временный пароль</span>
+                <span class="acc-secret">
+                  <input name="password" type="password" required autocomplete="new-password" />
+                  <button type="button" class="acc-eye" aria-label="Показать пароль" aria-pressed="false"></button>
+                </span>
+                <small>Не короче 10 символов; передайте его человеку лично</small>
+              </label>
+              <div class="acc-error" id="user-error" role="alert" hidden></div>
+              <div class="acc-actions">
+                <button type="submit" class="acc-btn primary">Создать</button>
+                <button type="button" class="acc-btn" id="add-user-cancel">Отмена</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="acc-card acc-flush">
+            <table class="acc-table">
+              <thead>
+                <tr><th>Пользователь</th><th>Статус</th><th>Последний вход</th><th><span class="sr-only">Действия</span></th></tr>
+              </thead>
+              <tbody id="users"></tbody>
+            </table>
+          </div>
+          <span class="acc-note" id="users-status" role="status"></span>
+        </section>
+
+        <!-- ================= Журнал (администратор) ================= -->
+        <section class="acc-section" id="section-audit" data-section="audit" hidden>
+          <header class="acc-head">
+            <h1>Журнал действий</h1>
+            <p>Изменения, скачивания, чтение исходников и входы — последние 200 записей.</p>
+          </header>
+          <form class="acc-filter" id="audit-filter">
+            <select name="action" aria-label="Вид действий">
+              <option value="">Все действия</option>
+              <option value="change">Изменения</option>
+              <option value="download">Скачивания и чтение исходников</option>
+              <option value="auth.login">Входы</option>
+              <option value="auth.login_failed">Неудачные входы</option>
+            </select>
+            <input name="project_id" placeholder="id проекта" maxlength="36" aria-label="id проекта" />
+            <button type="submit" class="acc-btn">Показать</button>
+          </form>
+          <div class="acc-card acc-flush">
+            <table class="acc-table">
+              <thead>
+                <tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Адрес</th><th>Ответ</th><th>IP</th></tr>
+              </thead>
+              <tbody id="audit"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="acc-dialog" id="reset-dialog" aria-labelledby="reset-title">
+      <form method="dialog" id="reset-form" novalidate>
+        <h2 id="reset-title">Новый пароль</h2>
+        <p class="acc-text" id="reset-lead"></p>
+        <label class="acc-field"><span>Временный пароль</span>
+          <span class="acc-secret">
+            <input name="password" type="password" autocomplete="new-password" required />
+            <button type="button" class="acc-eye" aria-label="Показать пароль" aria-pressed="false"></button>
+          </span>
+        </label>
+        <div class="acc-error" id="reset-error" role="alert" hidden></div>
+        <div class="acc-actions acc-end">
+          <button type="button" class="acc-btn" value="cancel" id="reset-cancel">Отмена</button>
+          <button type="submit" class="acc-btn primary" value="ok">Задать пароль</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/auth.js?v=20261015-account" defer></script>
+    <script src="/account.js?v=20261015-account" defer></script>
+  </body>
+</html>

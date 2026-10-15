@@ -2,4 +2,5 @@
    раздел, а функции разделов объявлены в файлах, загруженных до этого. */
 
 loadProjects();
+restoreStartRoute();
 void applyRoute();

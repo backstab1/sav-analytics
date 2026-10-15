@@ -1,10 +1,10 @@
-"""Вход, выход, первичная настройка и управление пользователями (P4)."""
+"""Вход, выход, первичная настройка, личный кабинет и управление пользователями (P4)."""
 
 from __future__ import annotations
 
 import ipaddress
 from datetime import timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ from ..api_errors import request_id_from
 from ..repository import ProjectNotFoundError, ProjectRepository
 from ..settings import Settings
 from .middleware import auth_store, client_ip
-from .store import AuthError
+from .store import MIN_PASSWORD_LENGTH, AuthError
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 admin = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -34,12 +34,17 @@ class PasswordChange(BaseModel):
     new: str = Field(min_length=1, max_length=256)
 
 
+class ProfileUpdate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=200)
+
+
+# Роли через интерфейс не назначаются: новые пользователи — аналитики,
+# администратора заводят на сервере (`sav-analytics create-user --admin`).
 class UserCreate(Setup):
-    role: Literal["admin", "user"] = "user"
+    pass
 
 
 class UserUpdate(BaseModel):
-    role: Literal["admin", "user"] | None = None
     active: bool | None = None
     display_name: str | None = Field(default=None, max_length=200)
     password: str | None = Field(default=None, min_length=1, max_length=256)
@@ -191,6 +196,79 @@ def change_password(
     return _start_session(request, response, settings, user)
 
 
+# Личный кабинет ---------------------------------------------------------------
+
+
+def _current(request: Request) -> tuple[dict[str, Any], dict[str, Any]]:
+    user = getattr(request.state, "user", None)
+    session = getattr(request.state, "session", None)
+    if user is None or session is None:
+        raise HTTPException(status_code=404, detail="Авторизация выключена.")
+    return user, session
+
+
+@router.get("/account")
+def account(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+    """Профиль и правила сеанса для личного кабинета."""
+    user, _ = _current(request)
+    profile = auth_store(settings).get_user(user["id"]) or {}
+    profile.pop("active", None)
+    return {
+        "user": profile,
+        "session_idle_minutes": settings.session_idle_minutes,
+        "session_ttl_hours": settings.session_ttl_hours,
+        "min_password_length": MIN_PASSWORD_LENGTH,
+    }
+
+
+@router.patch("/account")
+def update_account(
+    body: ProfileUpdate, request: Request, settings: Annotated[Settings, Depends(get_settings)]
+) -> dict:
+    user, _ = _current(request)
+    try:
+        profile = auth_store(settings).update_profile(user["id"], display_name=body.display_name)
+    except AuthError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    profile.pop("active", None)
+    return {"user": profile}
+
+
+@router.get("/sessions")
+def own_sessions(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+    user, session = _current(request)
+    entries = auth_store(settings).list_sessions(user["id"])
+    for entry in entries:
+        entry["current"] = entry["id"] == session["id"]
+    return {"sessions": entries}
+
+
+@router.delete("/sessions/{session_id}")
+def close_session(
+    session_id: str, request: Request, settings: Annotated[Settings, Depends(get_settings)]
+) -> dict:
+    user, session = _current(request)
+    if session_id == session["id"]:
+        raise HTTPException(status_code=422, detail="Текущий сеанс закрывается выходом.")
+    if not auth_store(settings).revoke_session(user["id"], session_id):
+        raise HTTPException(status_code=404, detail="Сеанс уже закрыт.")
+    return {"status": "closed"}
+
+
+@router.post("/sessions/close-others")
+def close_other_sessions(
+    request: Request, settings: Annotated[Settings, Depends(get_settings)]
+) -> dict:
+    user, session = _current(request)
+    return {"closed": auth_store(settings).revoke_other_sessions(user["id"], session["id"])}
+
+
+@router.get("/activity")
+def own_activity(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+    user, _ = _current(request)
+    return {"entries": auth_store(settings).account_activity(user)}
+
+
 def _setup_allowed(request: Request, settings: Settings) -> bool:
     if settings.allow_remote_setup:
         return True
@@ -215,7 +293,7 @@ def list_users(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
 def create_user(body: UserCreate, settings: Annotated[Settings, Depends(get_settings)]) -> dict:
     try:
         return auth_store(settings).create_user(
-            body.username, body.password, role=body.role, display_name=body.display_name
+            body.username, body.password, display_name=body.display_name
         )
     except AuthError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -228,7 +306,6 @@ def update_user(
     try:
         return auth_store(settings).update_user(
             user_id,
-            role=body.role,
             active=body.active,
             display_name=body.display_name,
             password=body.password,

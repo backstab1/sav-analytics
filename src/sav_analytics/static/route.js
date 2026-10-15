@@ -16,10 +16,29 @@ function currentRoute() {
   return "#/";
 }
 
+// Последний открытый проект — для настройки кабинета «Открывать после входа».
+const LAST_ROUTE_KEY = "sav-analytics:last-route";
+const START_SCREEN_KEY = "sav-analytics:start-screen";
+
 function writeRoute() {
   if (applyingRoute) return;
   const hash = currentRoute();
   if (location.hash !== hash) history.pushState(null, "", hash);
+  if (hash.startsWith("#/projects/")) {
+    try { localStorage.setItem(LAST_ROUTE_KEY, hash); } catch { /* без хранилища не запоминаем */ }
+  }
+}
+
+/* Пустой адрес при загрузке ведёт туда, что выбрано в личном кабинете:
+   к последнему проекту или к списку проектов (по умолчанию). */
+function restoreStartRoute() {
+  if (location.hash && location.hash !== "#/") return;
+  try {
+    const last = localStorage.getItem(LAST_ROUTE_KEY);
+    if (localStorage.getItem(START_SCREEN_KEY) === "last-project" && last) {
+      history.replaceState(null, "", last);
+    }
+  } catch { /* без хранилища — стартовый экран */ }
 }
 
 async function applyRoute() {
@@ -44,6 +63,7 @@ async function applyRoute() {
       showProject(await api(`/api/projects/${match[1]}`), view);
     } catch (error) {
       history.replaceState(null, "", "#/");
+      try { localStorage.removeItem(LAST_ROUTE_KEY); } catch { /* нечего чистить */ }
       showError(errorBox, error);
     }
   } finally {

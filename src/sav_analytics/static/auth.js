@@ -6,8 +6,8 @@
      Если токен ещё не получен, запрос ждёт ответа /api/auth/state.
    - Ответ 401 уводит на страницу входа, а после входа человек вернётся
      на тот же адрес.
-   - Аватар в шапке открывает меню: имя, пользователи (администратору),
-     смена пароля и выход.
+   - Кнопка аккаунта в шапке открывает меню: кто вошёл, личный кабинет
+     (account.html), пользователи администратору и выход.
    С выключенной авторизацией (локальный прототип) модуль ничего не меняет. */
 
 (() => {
@@ -73,79 +73,139 @@
   }
 
   function initials(user) {
-    const words = (user.display_name || user.username).split(/\s+/).filter(Boolean);
+    const words = (user.display_name || user.username).split(/[\s._@-]+/).filter(Boolean);
     return words.slice(0, 2).map(word => word[0]).join("").toUpperCase() || "?";
   }
 
+  const ICONS = {
+    account: '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="7" r="3.2" stroke="currentColor" stroke-width="1.5"/><path d="M3.8 16.5c1.2-2.7 3.4-4 6.2-4s5 1.3 6.2 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    security: '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="8.5" width="12" height="8.5" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 8.5V6.3a3 3 0 0 1 6 0v2.2" stroke="currentColor" stroke-width="1.5"/></svg>',
+    users: '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="7.5" cy="7.5" r="2.7" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 16c.9-2.3 2.7-3.5 5-3.5s4.1 1.2 5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 5a2.5 2.5 0 0 1 0 5M14.5 12.6c1.5.4 2.5 1.5 3 3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    logout: '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 4H5.5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1H8M12 6.5 15.5 10 12 13.5M15.5 10H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
+
+  /* Кнопка аккаунта в шапке: круг с инициалами. Меню — кто вошёл, личный
+     кабинет, безопасность, пользователи (администратору) и выход. */
   function mountMenu(user) {
     const avatar = document.querySelector(".bar .avatar");
     if (!avatar) return;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "avatar avatar-button";
-    button.textContent = initials(user);
-    button.title = `${user.display_name} — меню учётной записи`;
+    button.className = "account-button";
+    button.setAttribute("aria-label", `${user.display_name || user.username} — меню учётной записи`);
     button.setAttribute("aria-haspopup", "menu");
     button.setAttribute("aria-expanded", "false");
+    const face = document.createElement("span");
+    face.className = "account-initials";
+    face.textContent = initials(user);
+    button.append(face);
     avatar.replaceWith(button);
 
     const menu = document.createElement("div");
     menu.className = "account-menu";
     menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Учётная запись");
     menu.hidden = true;
     const who = document.createElement("div");
     who.className = "account-who";
-    who.textContent = `${user.display_name} · ${user.role === "admin" ? "администратор" : "аналитик"}`;
+    const whoFace = document.createElement("span");
+    whoFace.className = "account-initials large";
+    whoFace.textContent = face.textContent;
+    const whoText = document.createElement("span");
+    whoText.className = "account-who-text";
+    const whoName = document.createElement("strong");
+    whoName.textContent = user.display_name || user.username;
+    const whoLogin = document.createElement("small");
+    whoLogin.textContent = user.role === "admin" ? `${user.username} · администратор` : user.username;
+    whoText.append(whoName, whoLogin);
+    who.append(whoFace, whoText);
     menu.append(who);
-    const item = (label, action) => {
-      const entry = document.createElement("button");
-      entry.type = "button";
+
+    const item = (label, icon, action, className = "") => {
+      const entry = document.createElement(typeof action === "string" ? "a" : "button");
+      if (typeof action === "string") entry.href = action;
+      else {
+        entry.type = "button";
+        entry.addEventListener("click", action);
+      }
       entry.setAttribute("role", "menuitem");
-      entry.textContent = label;
-      entry.addEventListener("click", action);
+      entry.tabIndex = -1;
+      entry.className = className;
+      entry.innerHTML = ICONS[icon];
+      entry.append(label);
       menu.append(entry);
     };
-    if (user.role === "admin") item("Пользователи и журнал", () => location.assign("/admin.html"));
-    item("Сменить пароль", async () => {
-      const current = prompt("Текущий пароль");
-      if (!current) return;
-      const fresh = prompt("Новый пароль, не короче 10 символов");
-      if (!fresh) return;
-      try {
-        const payload = await post("/api/auth/password", { current, new: fresh });
-        csrfToken = payload.csrf_token;
-        alert("Пароль изменён. Другие сессии завершены.");
-      } catch (error) {
-        alert(error.message);
-      }
-    });
-    item("Выйти", async () => {
+    item("Личный кабинет", "account", "/account.html#profile");
+    item("Пароль и сеансы", "security", "/account.html#security");
+    if (user.role === "admin") item("Пользователи", "users", "/account.html#users");
+    menu.append(Object.assign(document.createElement("hr"), { role: "separator" }));
+    item("Выйти", "logout", async () => {
       await post("/api/auth/logout").catch(() => {});
       location.assign("/login.html");
-    });
+    }, "danger");
     document.body.append(menu);
 
-    const close = () => {
+    const entries = () => [...menu.querySelectorAll('[role="menuitem"]')];
+    const open = () => {
+      const rect = button.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 8}px`;
+      menu.style.right = `${Math.max(8, innerWidth - rect.right)}px`;
+      menu.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+      entries()[0]?.focus();
+    };
+    const close = (restoreFocus = false) => {
+      if (menu.hidden) return;
       menu.hidden = true;
       button.setAttribute("aria-expanded", "false");
+      if (restoreFocus) button.focus();
     };
     button.addEventListener("click", event => {
       event.stopPropagation();
-      const rect = button.getBoundingClientRect();
-      menu.style.top = `${rect.bottom + 6}px`;
-      menu.style.right = `${Math.max(8, innerWidth - rect.right)}px`;
-      menu.hidden = !menu.hidden;
-      button.setAttribute("aria-expanded", String(!menu.hidden));
+      if (menu.hidden) open();
+      else close();
+    });
+    button.addEventListener("keydown", event => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        open();
+      }
+    });
+    menu.addEventListener("keydown", event => {
+      const list = entries();
+      const index = list.indexOf(document.activeElement);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        list[(index + step + list.length) % list.length].focus();
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        list[event.key === "Home" ? 0 : list.length - 1].focus();
+      } else if (event.key === "Tab") {
+        close();
+      }
     });
     document.addEventListener("click", event => {
       if (!menu.contains(event.target)) close();
     });
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") close(true);
     });
+    window.addEventListener("resize", () => close());
   }
 
-  window.SavAuth = { state: null, ready: state, post };
+  window.SavAuth = {
+    state: null,
+    ready: state,
+    post,
+    // Кабинет меняет пароль (новая сессия — новый CSRF) и имя.
+    setCsrf(token) {
+      if (token) csrfToken = token;
+    },
+    updateUser(change) {
+      if (window.SavAuth.state?.user) Object.assign(window.SavAuth.state.user, change);
+    },
+  };
   document.addEventListener("DOMContentLoaded", async () => {
     const payload = await state;
     if (payload?.auth_enabled && payload.user) mountMenu(payload.user);

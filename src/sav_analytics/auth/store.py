@@ -160,6 +160,21 @@ class AuthStore:
                 connection.execute(sessions.delete().where(sessions.c.user_id == user_id))
         return self.get_user(user_id) or {}
 
+    def update_profile(self, user_id: str, *, display_name: str) -> dict[str, Any]:
+        """Правка своего профиля: только имя, которое видят коллеги."""
+        cleaned = display_name.strip()
+        if not cleaned:
+            raise AuthError("Имя не может быть пустым.")
+        with self.engine.begin() as connection:
+            updated = connection.execute(
+                users.update()
+                .where(users.c.id == user_id)
+                .values(display_name=cleaned, updated_at=utcnow())
+            ).rowcount
+        if not updated:
+            raise LookupError(user_id)
+        return self.get_user(user_id) or {}
+
     def change_password(self, user_id: str, current: str, new: str) -> None:
         with self.engine.connect() as connection:
             row = connection.execute(sa.select(users).where(users.c.id == user_id)).first()
@@ -169,6 +184,8 @@ class AuthStore:
             _hasher.verify(row.password_hash, current)
         except (VerifyMismatchError, VerificationError, InvalidHashError) as exc:
             raise AuthError("Текущий пароль неверен.") from exc
+        if new == current:
+            raise AuthError("Новый пароль совпадает с текущим.")
         self.update_user(user_id, password=new)
 
     # Сессии ---------------------------------------------------------------------
@@ -240,6 +257,51 @@ class AuthStore:
             "role": row.role,
         }
         return session, user
+
+    def list_sessions(self, user_id: str) -> list[dict[str, Any]]:
+        """Открытые сеансы человека, свежие первыми."""
+        now = utcnow()
+        query = (
+            sa.select(sessions)
+            .where(sessions.c.user_id == user_id)
+            .where(sessions.c.expires_at >= now)
+            .order_by(sessions.c.last_seen_at.desc())
+        )
+        with self.engine.connect() as connection:
+            rows = connection.execute(query).all()
+        result = []
+        for row in rows:
+            entry = {
+                "id": row.id,
+                "ip": row.ip,
+                "user_agent": row.user_agent or "",
+            }
+            for key in ("created_at", "last_seen_at", "expires_at"):
+                value = aware(getattr(row, key))
+                entry[key] = value.isoformat() if value else None
+            result.append(entry)
+        return result
+
+    def revoke_session(self, user_id: str, session_id: str) -> bool:
+        """Закрыть один свой сеанс; чужой по id закрыть нельзя."""
+        with self.engine.begin() as connection:
+            return bool(
+                connection.execute(
+                    sessions.delete()
+                    .where(sessions.c.id == session_id)
+                    .where(sessions.c.user_id == user_id)
+                ).rowcount
+            )
+
+    def revoke_other_sessions(self, user_id: str, keep_id: str) -> int:
+        with self.engine.begin() as connection:
+            return int(
+                connection.execute(
+                    sessions.delete()
+                    .where(sessions.c.user_id == user_id)
+                    .where(sessions.c.id != keep_id)
+                ).rowcount
+            )
 
     def revoke(self, token: str) -> None:
         with self.engine.begin() as connection:
@@ -321,6 +383,32 @@ class AuthStore:
             entry["at"] = at.isoformat() if at else None
             entry["details"] = json.loads(entry["details"]) if entry["details"] else None
             entries.append(entry)
+        return entries
+
+
+    def account_activity(self, user: dict[str, Any], limit: int = 30) -> list[dict[str, Any]]:
+        """Входы, выходы и смены пароля человека — включая неудачные входы
+        под его именем, у которых нет user_id."""
+        query = (
+            sa.select(audit_log.c.at, audit_log.c.action, audit_log.c.ip, audit_log.c.status)
+            .where(audit_log.c.action.like("auth.%"))
+            .where(
+                sa.or_(
+                    audit_log.c.user_id == user["id"],
+                    sa.and_(audit_log.c.user_id.is_(None),
+                            audit_log.c.username == user["username"]),
+                )
+            )
+            .order_by(audit_log.c.id.desc())
+            .limit(min(limit, 200))
+        )
+        with self.engine.connect() as connection:
+            rows = connection.execute(query).all()
+        entries = []
+        for row in rows:
+            at = aware(row.at)
+            entries.append({"at": at.isoformat() if at else None, "action": row.action,
+                            "ip": row.ip, "status": row.status})
         return entries
 
 

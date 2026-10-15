@@ -141,7 +141,9 @@ async def security_middleware(
     if method not in SAFE_METHODS or _DOWNLOAD.search(path):
         match = _PROJECT.match(path)
         action = "download" if method in SAFE_METHODS else "change"
-        if path.startswith("/api/auth/"):
+        if path.startswith("/api/auth/sessions"):
+            action = "auth.sessions_closed"
+        elif path.startswith("/api/auth/"):
             action = "auth." + path.rsplit("/", 1)[-1]
         store.audit(
             action,
