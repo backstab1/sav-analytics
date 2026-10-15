@@ -17,7 +17,21 @@ from .core.report import build_topline_artifacts
 from .core.report_books import active_book_name
 from .repository import ProjectRepository
 
-REPORT_CACHE_VERSION = 7
+REPORT_CACHE_VERSION = 8
+
+#: Части конфигурации, от которых книга не зависит. Ревизия и время правки
+#: меняются при любой правке проекта, а остальное — настройки других книг,
+#: раскладки «Таблиц», карточки и модели «Анализа» — в книгу не попадает.
+#: С ними в ключе правка одной книги пересобирала бы все остальные.
+_OUTSIDE_THE_BOOK = (
+    "revision",
+    "updated_at",
+    "reports",
+    "active_report_id",
+    "table_reports",
+    "analysis_cards",
+    "analysis_models",
+)
 
 # Идентификатор артефакта становится именем каталога внутри
 # projects/<uuid>/reports/artifacts/, поэтому его длина попадает в путь. Полные
@@ -227,10 +241,22 @@ def report_downloads(base: str, prepared: PreparedReport | None) -> dict[str, st
 
 
 def report_cache_key(project: dict[str, Any]) -> str:
+    """Ключ сборки выбранной книги: всё, от чего зависит её содержимое.
+
+    Ревизии в ключе нет, поэтому книга, собранная на ревизии 100, берётся из
+    кэша и на ревизии 105, если между ними менялось только то, что в неё не
+    входит. Её `statistics.txt` и лист «Параметры» называют ревизию сборки —
+    ту, на которой содержимое было получено. Название книги в ключе: оно
+    в имени файла и на титуле презентации.
+    """
+    configuration = project["configuration"]
     payload = {
         "version": REPORT_CACHE_VERSION,
         "source_sha256": project.get("source", {}).get("sha256"),
-        "configuration": project["configuration"],
+        "book": active_book_name(configuration),
+        "configuration": {
+            key: value for key, value in configuration.items() if key not in _OUTSIDE_THE_BOOK
+        },
     }
     encoded = json.dumps(
         payload,

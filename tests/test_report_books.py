@@ -310,3 +310,39 @@ def test_bundle_rejects_unknown_artifacts(project) -> None:
     assert client.get(url, params={"artifact": "0123456789abcdef"}).status_code == 404
     assert client.get(url, params={"artifact": "../../etc"}).status_code == 404
     assert client.get(url).status_code == 422
+
+def test_editing_one_book_keeps_the_other_book_cached(project) -> None:
+    """Ключ сборки книги — только то, от чего зависит её содержимое."""
+    from sav_analytics.report_cache import report_cache_key
+
+    client, project_id, _ = project
+    base = f"/api/projects/{project_id}/report-books"
+
+    def key() -> str:
+        return report_cache_key(client.get(f"/api/projects/{project_id}").json())
+
+    first_id = client.get(f"/api/projects/{project_id}").json()["configuration"][
+        "active_report_id"
+    ]
+    second_id = _configuration(client.post(base, json={"name": "Вторая"}))["active_report_id"]
+    _configuration(client.post(f"{base}/{first_id}/activate"))
+    first = key()
+
+    # Другая книга, таблица на экране «Таблицы» — первая книга та же.
+    _configuration(client.post(f"{base}/{second_id}/activate"))
+    _settings(client, project_id, confidence_level=0.9)
+    second = key()
+    _configuration(client.post(f"{base}/{first_id}/activate"))
+    assert client.post(
+        f"/api/projects/{project_id}/tables/reports", json={"rows": ["Q1"]}
+    ).status_code in {200, 201}
+    assert key() == first
+
+    # Своя правка и переименование меняют ключ; вторая книга при этом своя.
+    _settings(client, project_id, confidence_level=0.99)
+    changed = key()
+    assert changed != first
+    _configuration(client.patch(f"{base}/{first_id}", json={"name": "Первая"}))
+    assert key() != changed
+    _configuration(client.post(f"{base}/{second_id}/activate"))
+    assert key() == second
