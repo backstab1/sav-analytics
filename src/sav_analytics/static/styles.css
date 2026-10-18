@@ -62,6 +62,10 @@
 
   --font-display: "Inter Tight", -apple-system, "SF Pro Display", Inter, sans-serif;
   --font-body: Inter, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+  /* Коды вопросов, формулы, протоколы тестов. Шрифт уже лежит в /fonts для
+     кабинета и лендинга; рабочие экраны раньше брали «SF Mono», которого
+     на Windows нет, и показывали Consolas. */
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
   /* Effects */
   /* Единственный ярус хрома. Раньше их было четыре подряд — appbar,
@@ -110,7 +114,7 @@ h1 { font-size: var(--t-3xl); font-weight: 800; letter-spacing: -0.035em; line-h
 h2 { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.025em; }
 h3 { font-size: var(--t-md); font-weight: 700; letter-spacing: -0.015em; }
 code { padding: 2px 6px; color: var(--c-brand); background: var(--c-brand-tint);
-       border-radius: 6px; font: 500 var(--t-sm)/1.4 "SF Mono", Menlo, Consolas, monospace; }
+       border-radius: 6px; font: 500 var(--t-sm)/1.4 var(--font-mono); }
 
 /* ================================================================
    ЯРУС 1 — глобальный
@@ -197,7 +201,7 @@ button, .link-button {
 button:hover { background: var(--c-brand-hover); }
 button:active { transform: scale(.97); }
 button:disabled { cursor: not-allowed; opacity: 0.45; transform: none; }
-button:focus-visible, .link-button:focus-visible, .project-open:focus-visible,
+button:focus-visible, a[href]:focus-visible, .link-button:focus-visible, .project-open:focus-visible,
 .drop-zone:focus-within, summary:focus-visible {
   outline: 2px solid var(--c-brand); outline-offset: 2px;
 }
@@ -207,6 +211,13 @@ button:focus-visible, .link-button:focus-visible, .project-open:focus-visible,
 
 .text-button { padding: 7px 10px; background: transparent; color: var(--c-brand); font-weight: 600; }
 .text-button:hover { background: var(--c-brand-tint); }
+/* Подпись-кнопка (label вокруг input[type=file]) выглядит как соседние
+   кнопки-ссылки: общая грамматика полей красила её в цвет подписи. */
+.insp label.text-button:not(.checkbox):not(.tgl-row), .sheet label.text-button:not(.checkbox):not(.tgl-row) {
+  display: inline-flex; align-items: center; border-radius: var(--r-pill);
+  color: var(--c-brand); font-weight: 600; letter-spacing: 0; cursor: pointer;
+  transition: background 140ms var(--ease);
+}
 
 .icon-button {
   padding: 0; width: 24px; height: 24px; border-radius: 50%;
@@ -240,6 +251,15 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
+/* Одна стрелка на все селекты, не только на компактные: нативная стрелка
+   Windows в формах инспектора и окон анализа читалась как чужой элемент
+   рядом с --caret в тулбарах. Специфичность — один тег, поэтому любое
+   правило с классом её переопределяет; правила, которые задают селекту
+   `background` или `padding` сокращённой записью, поправлены в конце файла. */
+select { appearance: none; -webkit-appearance: none; padding-right: 26px; cursor: pointer;
+         background-image: var(--caret); background-repeat: no-repeat;
+         background-position: right 10px center; background-size: 8px 5px; }
+select[multiple], select[size] { padding-right: 10px; background-image: none; }
 
 /* ================================================================
    СТАРТ — «Новый проект»
@@ -327,8 +347,13 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 }
 
 /* ---------- Правая колонка: библиотека ---------- */
+/* Карточка по высоте содержимого, но не выше экрана: при восьми проектах
+   она не стоит пустой коробкой до низа окна, при сотне — прокручивает
+   только список. Пустая библиотека держит минимум, чтобы подсказка
+   не прилипала к шапке. */
 .project-library {
-  display: flex; flex-direction: column; min-height: 0;
+  display: flex; flex-direction: column; min-height: min(360px, 100%);
+  align-self: start; max-height: 100%;
   background: var(--c-surface); border-radius: var(--r-3); box-shadow: var(--shadow-card);
   overflow: hidden;
 }
@@ -447,6 +472,27 @@ textarea { resize: vertical; min-height: 46px; line-height: 1.45; }
 .library-empty strong { font: 700 var(--t-md)/1.2 var(--font-display); color: var(--c-ink); }
 .library-empty span { max-width: 300px; color: var(--c-ink-3); font-size: var(--t-sm); line-height: 1.5; }
 p.library-empty { margin: 0; }
+
+/* Скелетон списка повторяет геометрию карточки проекта — значок 38px и
+   две строки, — чтобы при приходе данных ничего не прыгало. */
+.project-skel {
+  display: grid; grid-template-columns: 38px minmax(0, 1fr) 72px; align-items: center; gap: 14px;
+  padding: 10px 14px 10px 12px;
+}
+.project-skel i, .project-skel b {
+  display: block; border-radius: 6px;
+  background: linear-gradient(90deg, var(--c-surface-soft) 0 40%, #ececef 50%, var(--c-surface-soft) 60% 100%) 0 0 / 300% 100%;
+  animation: skel-sheen 1.4s var(--ease) infinite;
+}
+.project-skel i { width: 38px; height: 38px; border-radius: 10px; }
+.project-skel span { display: grid; gap: 7px; }
+.project-skel span b { height: 11px; width: 62%; }
+.project-skel span b + b { height: 9px; width: 38%; }
+.project-skel > b { height: 9px; }
+.project-skel:nth-child(2n) span b:first-child { width: 48%; }
+.project-skel:nth-child(3n) span b:first-child { width: 71%; }
+@keyframes skel-sheen { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .project-skel i, .project-skel b { animation: none; } }
 
 /* Узкое окно: колонки встают друг под друга, страница снова прокручивается. */
 @media (max-width: 860px) {
@@ -636,7 +682,7 @@ p.library-empty { margin: 0; }
 .rail-item svg { width: 17px; height: 17px; flex: 0 0 auto; color: currentColor; }
 .rail-item > span { min-width: 0; }
 .rail-item em {
-  font-style: normal; font-size: 10px; font-weight: 600;
+  font-style: normal; font-size: var(--t-micro); font-weight: 600;
   color: var(--c-ink-3); font-variant-numeric: tabular-nums;
 }
 .rail-item:hover { background: var(--c-surface-soft); color: var(--c-ink-2); transform: none; }
@@ -920,11 +966,18 @@ p.library-empty { margin: 0; }
 .run-meta b { color: var(--c-ink); font-weight: 600; }
 .run-current {
   margin-left: 8px; padding: 1px 7px; border-radius: 999px;
-  background: var(--c-brand-tint); color: var(--c-brand); font-size: 10px; font-weight: 700;
+  background: var(--c-brand-tint); color: var(--c-brand); font-size: var(--t-micro); font-weight: 700;
 }
-.run-links { display: flex; gap: 12px; }
-.run-links a { color: var(--c-brand); font-weight: 600; text-decoration: none; }
-.run-links a:hover { text-decoration: underline; }
+/* Ссылка — цель щелчка, а не голый текст в 14px: поле вокруг слова
+   съедается отрицательным отступом, чтобы строка не сдвинулась. */
+.run-links { display: flex; gap: 4px; margin: -4px -6px; }
+.run-links a {
+  padding: 4px 6px; border-radius: 6px;
+  color: var(--c-brand); font-weight: 600; text-decoration: none;
+  transition: background 140ms var(--ease);
+}
+.run-links a:hover { background: var(--c-brand-tint); }
+.run-links a:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 1px; }
 .runs-empty { margin: 0; padding: 10px 16px; color: var(--c-ink-3); font-size: var(--t-xs); }
 
 /* Строка свойства: имя, значение с метриками, действие. Значение — оно
@@ -1343,7 +1396,7 @@ td .q-sub.warning { color: var(--c-warn-ink); }
 
 .owner-link {
   padding: 4px 10px; background: var(--c-brand-tint); color: var(--c-brand);
-  border-radius: var(--r-pill); font: 600 var(--t-xs) "SF Mono", Menlo, Consolas, monospace;
+  border-radius: var(--r-pill); font: 600 var(--t-xs) var(--font-mono);
 }
 .owner-link:hover { background: var(--c-brand); color: #fff; }
 
@@ -1395,8 +1448,12 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c-brand-2); }
 .status.review { color: var(--c-warn-ink); background: transparent; }
 .status.review::before { background: #e0a800; }
-.status.excluded { color: var(--c-danger); background: transparent; }
-.status.excluded::before { background: var(--c-danger); }
+/* Исключение — решение аналитика, а не ошибка: красный оставлен ошибкам.
+   Строка исключённого вопроса приглушается целиком, чтобы список читался
+   по тому, что войдёт в отчёт. */
+.status.excluded { color: var(--c-ink-3); background: transparent; }
+.status.excluded::before { background: var(--c-ink-4); }
+.question-row:has(.status.excluded) .q-title { color: var(--c-ink-3); font-weight: 500; }
 
 .empty-state { padding: var(--s-7) var(--s-4); color: var(--c-ink-3); text-align: center; font-size: var(--t-base); }
 
@@ -1436,7 +1493,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .insp-head > div { flex: 1 1 auto; min-width: 0; }
 .insp-head .kicker {
   margin: 0 0 1px; color: var(--c-brand);
-  font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  font-size: var(--t-micro); font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
 }
 /* Длинный вопрос — две строки, а не многоточие посреди формулировки:
    по заголовку сверяют, тот ли вопрос открыт. */
@@ -1505,8 +1562,19 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .insp small, .sheet small { color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500; line-height: 1.4; }
 .grp-cap { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.grp-cap strong { font-size: var(--t-sm); font-weight: 600; color: var(--c-ink-2); letter-spacing: -0.005em; }
+.grp-cap strong { font-family: var(--font-display); font-size: var(--t-md); font-weight: 650; color: var(--c-ink); letter-spacing: -0.015em; }
 .grp-cap small { text-align: right; }
+
+/* Группа инспектора — смысловой блок формы с заголовком и линией сверху.
+   Заголовки групп — единственный второй уровень иерархии внутри панели:
+   подписи полей остаются мелкими, а капслоком не пишется ничего. */
+.insp-group { grid-column: 1 / -1; display: grid; gap: 10px; min-width: 0; padding-top: 14px; margin-top: 2px; border-top: 1px solid var(--c-border); }
+.insp-group[hidden] { display: none; }
+.insp-group.weight-limit-card { margin-top: 4px; }
+.insp-group-title {
+  margin: 0; color: var(--c-ink); font-family: var(--font-display);
+  font-size: var(--t-md); font-weight: 650; letter-spacing: -0.015em;
+}
 
 .form-row { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 12px; align-items: end; }
 .form-row > *, .range-row > *, .filter-condition > *,
@@ -1602,7 +1670,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 /* Range editor */
 .range-heading { display: grid; gap: 2px; margin-top: var(--s-1); }
-.range-heading strong { font-size: var(--t-sm); font-weight: 600; color: var(--c-ink-2); letter-spacing: -0.005em; }
+.range-heading strong { font-family: var(--font-display); font-size: var(--t-md); font-weight: 650; color: var(--c-ink); letter-spacing: -0.015em; }
 .range-heading small { color: var(--c-ink-3); font-size: var(--t-xs); }
 .range-list { display: grid; gap: 6px; }
 .range-row, .range-columns { display: grid; grid-template-columns: minmax(100px, 1fr) 72px 12px 72px 26px; gap: 6px; align-items: center; }
@@ -1671,7 +1739,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .variable-editor .insp-body > label small { font-weight: 400; }
 .variable-section { display: grid; gap: 8px; min-width: 0; margin-top: 6px; }
 .variable-section h4 {
-  margin: 0; color: var(--c-ink-2); font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.005em;
+  margin: 0; color: var(--c-ink); font-family: var(--font-display); font-size: var(--t-md); font-weight: 650; letter-spacing: -0.015em;
 }
 .section-note { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.45; }
 .variable-editor .add-dashed {
@@ -1751,7 +1819,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .formula-help dt { color: var(--c-ink-3); }
 .formula-help dd { margin: 0; color: var(--c-ink-2); }
-.formula-editor textarea { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-xs); }
+.formula-editor textarea { font-family: var(--font-mono); font-size: var(--t-xs); }
 
 /* Список сохранённых логических переменных не нужен, пока их нет. */
 .pill-select.is-empty { display: none; }
@@ -1825,7 +1893,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .banner-editor .banner-block-head input:focus { padding: 4px 8px; background: var(--c-surface); }
 .banner-editor .block-lvls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .banner-editor .block-lvls label { gap: 4px; }
-.banner-editor .block-lvls select { padding: 9px 11px; background: var(--c-surface-soft); }
+.banner-editor .block-lvls select { padding: 9px 11px; background-color: var(--c-surface-soft); }
 .banner-editor .add-block {
   padding: 10px; border: 1.5px dashed var(--c-border-strong); border-radius: 10px;
   background: transparent; color: var(--c-brand);
@@ -1884,7 +1952,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 
 /* Weight editor */
 /* Оболочку задаёт .insp — здесь остались только внутренности. */
-.formula-editor textarea { width: 100%; min-height: 88px; resize: vertical; font-family: var(--f-mono, ui-monospace, monospace); font-size: var(--t-sm, 13px); }
+.formula-editor textarea { width: 100%; min-height: 88px; resize: vertical; font-family: var(--font-mono); font-size: var(--t-sm, 13px); }
 .formula-variables { display: flex; flex-wrap: wrap; gap: 6px; }
 .formula-variables button { border: 1px solid var(--c-line, #d9dfdc); border-radius: 999px; background: transparent; color: var(--c-ink-2); padding: 2px 8px; font: inherit; font-size: var(--t-xs); cursor: pointer; }
 .formula-variables button:hover { background: var(--c-brand-tint); color: var(--c-brand); transform: none; }
@@ -1892,42 +1960,56 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .formula-missing { display: grid; gap: 4px; margin-top: 8px; }
 .formula-missing div { display: flex; justify-content: space-between; gap: 10px; font-size: var(--t-xs); }
 .weight-editor .insp-foot .link-button { min-height: 34px; display: inline-flex; align-items: center; }
-.weight-limit-card { padding: 3px 14px 12px; background: var(--c-surface-soft); border-radius: 11px; }
-.weight-limit-card .weight-toggle-setting { padding: 9px 0; }
+.weight-editor .insp-group > label.f { display: grid; }
+/* Ограничение — единственная карточка формы: тумблер и границы читаются
+   как одна настройка. Границы — множители к среднему весу, поэтому «×»
+   стоит перед числом: справа он выглядел как кнопка очистки поля. */
+.weight-limit-card { padding: 4px 14px 12px; background: var(--c-surface-soft); border: 0; border-radius: var(--r-2); }
+.weight-limit-card .weight-toggle-setting { padding: 8px 0; }
 .weight-bound-fields {
   display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 10px; align-items: end; padding-top: 10px; border-top: 1px solid var(--c-border);
 }
 .weight-bound-fields[hidden] { display: none; }
-.weight-bound-fields label > span:first-child { color: var(--c-ink-3); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
-.weight-bound-separator { padding-bottom: 9px; color: var(--c-ink-3); }
+.weight-bound-separator { padding-bottom: 8px; color: var(--c-ink-4); }
 .weight-bound-input { position: relative; display: block; }
-.weight-bound-input input { padding-right: 28px; background: var(--c-surface); font-weight: 600; font-variant-numeric: tabular-nums; }
-.weight-bound-input em { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--c-ink-3); font-style: normal; font-size: var(--t-xs); }
-.weight-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: -5px; }
-.weight-section-heading small { text-align: right; }
-.weight-dimension-list { display: grid; gap: 0; }
-.weight-dimension { display: grid; gap: 8px; background: transparent; border: 0; border-radius: 0; }
-.weight-dimension-source-field { flex: 1; min-width: 0; display: grid; gap: 4px; }
-.weight-dimension-source-field > span { color: var(--c-ink-3); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.weight-dimension-source-field select { padding: 7px 10px; background: var(--c-surface-soft); font-size: var(--t-xs); font-weight: 600; }
+.weight-bound-input input { padding-left: 26px; background: var(--c-surface); font-weight: 600; font-variant-numeric: tabular-nums; }
+.weight-bound-input em {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none;
+  color: var(--c-ink-3); font-style: normal; font-size: var(--t-sm); font-weight: 500;
+}
+.weight-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.weight-section-heading h4 { margin: 0; font: inherit; }
+.weight-section-heading small { text-align: right; font-weight: 500; }
+.weight-dimension-list { display: grid; gap: 10px; }
+.weight-dimension-list:empty { display: none; }
+.weight-dimension { display: grid; gap: 6px; padding: 10px 12px 8px; background: var(--c-surface-soft); border: 0; border-radius: var(--r-2); }
+.weight-dimension .dim-head { margin-bottom: 0; align-items: end; }
+.weight-dimension-source-field { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.weight-dimension-source-field > span { color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
+.weight-dimension-source-field select { padding: 7px 10px; background-color: var(--c-surface); font-size: var(--t-sm); font-weight: 600; }
+.weight-dimension .dim-head .sum { margin-bottom: 6px; }
+.weight-dimension .dim-head .del { margin-bottom: 3px; }
+.weight-dimension .t-row input { background: var(--c-surface); }
 .weight-targets { display: grid; gap: 0; }
 @container insp (min-width: 400px) {
   .weight-targets { grid-template-columns: 1fr 1fr; column-gap: 16px; }
   .t-row { grid-template-columns: 72px minmax(0, 1fr) 44px; gap: 8px; }
 }
-.weight-preview-section { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--c-border); }
+.weight-preview-section { display: grid; gap: 10px; }
+.weight-preview-section .preview-title { margin-bottom: 0; }
+.weight-preview-section .preview-title h4 { margin: 0; font: inherit; }
 .weight-preview-section[hidden] { display: none; }
 .weight-preview-section .preview-title > div { display: grid; gap: 2px; }
 .weight-preview-section .preview-title small { font-size: 11px; }
 .weight-distribution { display: grid; gap: 0; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--c-border); }
 .weight-distribution-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .weight-distribution-head strong { color: var(--c-ink); font-size: var(--t-sm); }
-.weight-distribution-head span { color: var(--c-ink-3); font-size: 10px; }
+.weight-distribution-head span { color: var(--c-ink-3); font-size: var(--t-xs); }
 .weight-result-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 6px 0; font-size: var(--t-xs); }
 .weight-result-row > span { overflow: hidden; color: var(--c-ink-2); text-overflow: ellipsis; white-space: nowrap; }
 .weight-result-row em { color: var(--c-ink-3); font-style: normal; font-variant-numeric: tabular-nums; }
-.weight-result-row em b { color: var(--c-brand); font-weight: 700; }
+.weight-result-row em b { color: var(--c-ink); font-weight: 700; }
 
 /* Filter editor */
 /* Оболочку задаёт .insp — здесь остались только внутренности. */
@@ -1960,8 +2042,8 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 .filter-range label { display: grid; gap: 3px; }
 .filter-range span, .filter-hint { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); }
 .filter-rule-text { display: grid; gap: 2px; margin: var(--s-2) 0 0; color: var(--c-ink); font-size: var(--t-xs); }
-.filter-rule-text span { color: var(--c-ink-3); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.filter-condition-details select, .filter-condition-details input { padding: 7px 9px; background: var(--c-surface); font-size: var(--t-xs); }
+.filter-rule-text span { color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 600; }
+.filter-condition-details select, .filter-condition-details input { padding: 7px 9px; background-color: var(--c-surface); font-size: var(--t-xs); }
 .filter-condition button { width: 26px; height: 26px; padding: 0; background: transparent; color: var(--c-ink-3); border-radius: 50%; font-size: 16px; font-weight: 400; }
 .filter-condition > button { grid-column: 2; grid-row: 1 / 3; }
 .filter-condition button:hover { background: var(--c-surface); color: var(--c-ink-2); }
@@ -1984,7 +2066,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .filter-group-head label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; }
 .filter-group-head label > span { color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500; }
-.filter-group-head select { padding: 7px 9px; background: var(--c-surface); color: var(--c-ink); font-size: var(--t-xs); font-weight: 600; }
+.filter-group-head select { padding: 7px 9px; background-color: var(--c-surface); color: var(--c-ink); font-size: var(--t-xs); font-weight: 600; }
 .filter-group-head button {
   width: 26px; height: 26px; padding: 0; background: transparent; color: var(--c-ink-3);
   border-radius: 50%; font-size: 16px; font-weight: 400;
@@ -2032,13 +2114,13 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .preview-rows div:last-child { border-bottom: 0; }
 .preview-rows em { color: var(--c-brand); font-style: normal; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-.preview-rows .preview-row-head { background: var(--c-surface-soft); color: var(--c-ink-3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.preview-rows .preview-row-head { background: var(--c-surface-soft); color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 600; }
 .preview-row-head strong { font-weight: 600; }
 .preview-rows .special-row { background: var(--c-warn-tint); }
 
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-2); margin-top: var(--s-2); }
 .stats div { padding: 10px 14px; background: var(--c-surface-soft); border: 0; border-radius: 10px; }
-.stats dt { color: var(--c-ink-3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 3px; }
+.stats dt { color: var(--c-ink-3); font-size: var(--t-xs); font-weight: 500; margin: 0 0 3px; }
 .stats dd { margin: 0; font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 
 .filter-result { display: flex; align-items: baseline; gap: 10px; margin: 0; }
@@ -2233,7 +2315,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .block-row-head .del:hover { background: var(--c-danger-tint); color: var(--c-danger); }
 .block-lvls { display: grid; grid-template-columns: 1fr; gap: 10px; }
-.block-lvls select { padding: 7px 11px; font-size: var(--t-xs); background: var(--c-surface); }
+.block-lvls select { padding: 7px 11px; font-size: var(--t-xs); background-color: var(--c-surface); }
 .add-block {
   padding: 10px; border: 1.5px dashed var(--c-border-strong); border-radius: 10px;
   background: transparent; color: var(--c-brand);
@@ -2252,8 +2334,11 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 }
 .col-line span { color: var(--c-ink-2); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .col-line em { font-style: normal; font-weight: 600; color: var(--c-brand); font-variant-numeric: tabular-nums; }
-.col-line.total { background: var(--c-ink); }
-.col-line.total span, .col-line.total em { color: #fff; }
+/* Total выделен рамкой бренда, а не чёрной плашкой: тёмный блок посреди
+   светлой панели читался как другой элемент, а не первая колонка. */
+.col-line.total { background: var(--c-brand-tint); }
+.col-line.total span { color: var(--c-ink); font-weight: 600; }
+.col-line.total em { color: var(--c-brand); }
 .col-line.small-base em { color: var(--c-warn-ink); }
 .col-line.small-base span::after { content: " ⚠"; color: var(--c-warn-ink); }
 
@@ -2307,7 +2392,7 @@ tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--c-brand); }
 /* Диагностика веса — сетка метрик */
 .diag-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .diag-grid div { padding: 10px 14px; background: var(--c-surface-soft); border-radius: 10px; display: grid; gap: 2px; }
-.diag-grid dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-ink-3); }
+.diag-grid dt { font-size: var(--t-xs); font-weight: 500; color: var(--c-ink-3); }
 .diag-grid dd { margin: 0; font-family: var(--font-display); font-size: var(--t-md); font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .diag-grid dd.ok { color: var(--c-brand); }
 
@@ -2372,7 +2457,7 @@ body.is-landing { background: #050807; }
   --lp-bright: #e6fff0;
   --lp-hot: #ff7358;
   --lp-on-signal: #03130b;
-  --lp-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --lp-mono: var(--font-mono);
   --lp-display: "Unbounded", var(--font-display);
   --lp-r-panel: 24px;
   overflow: hidden; color: var(--lp-ink); background: var(--lp-bg); color-scheme: dark;
@@ -2812,7 +2897,7 @@ body.is-landing { background: #050807; }
 .bld-tree { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 8px; }
 .bld-tree-caption {
   margin: 10px 0 3px; padding: 0 8px; color: var(--c-ink-3);
-  font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  font-size: var(--t-micro); font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
 }
 .bld-tree-empty { margin: 0; padding: 12px 8px; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
 
@@ -2839,7 +2924,7 @@ body.is-landing { background: #050807; }
 .bld-check { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; padding: 0; accent-color: var(--c-brand); cursor: pointer; }
 .bld-node-code {
   flex: 0 0 auto; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--c-ink-3); font: 500 11px/1.4 "SF Mono", Menlo, Consolas, monospace;
+  color: var(--c-ink-3); font: 500 11px/1.4 var(--font-mono);
 }
 .bld-node-code:empty { display: none; }
 .bld-node-name {
@@ -2881,7 +2966,7 @@ body.is-landing { background: #050807; }
 .bld-kids li { display: flex; align-items: baseline; gap: 8px; min-height: 21px; padding: 2px 4px; font-size: 11.5px; color: var(--c-ink-2); }
 .bld-kid-code {
   flex: 0 0 auto; min-width: 20px; color: var(--c-ink-3);
-  font: 500 10.5px/1.4 "SF Mono", Menlo, Consolas, monospace; text-align: right;
+  font: 500 10.5px/1.4 var(--font-mono); text-align: right;
 }
 .bld-kid-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -2963,7 +3048,7 @@ body.is-landing { background: #050807; }
 }
 .bld-grid .bld-cathead .bld-letter {
   display: block; color: var(--c-ink-3);
-  font: 700 9px/1.5 "SF Mono", Menlo, Consolas, monospace;
+  font: 700 10px/1.5 var(--font-mono);
 }
 .bld-grid th.bld-basecell {
   background: var(--c-surface); color: var(--c-ink-3);
@@ -3001,7 +3086,7 @@ body.is-landing { background: #050807; }
 .bld-grid td.bld-val.bld-absent { color: var(--c-ink-3); }
 .bld-grid td.bld-val .bld-sig {
   margin-left: 3px; color: var(--c-brand);
-  font: 700 9px/1 "SF Mono", Menlo, Consolas, monospace; vertical-align: super;
+  font: 700 9px/1 var(--font-mono); vertical-align: super;
 }
 .bld-grid td.bld-val .bld-sig.bld-sig-weak { color: var(--c-ink-3); font-weight: 600; }
 .bld-grid td.bld-val .bld-wave { margin-right: 3px; color: var(--c-ink-3); font-size: 10px; }
@@ -3034,7 +3119,7 @@ body.is-landing { background: #050807; }
 .bld-protocol-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: var(--t-xs); }
 .bld-protocol-close { padding: 0 6px; background: transparent; color: var(--c-ink-3); font-size: 16px; }
 .bld-protocol-close:hover { background: var(--c-surface-soft); color: var(--c-ink); transform: none; }
-.bld-protocol pre { margin: 0 0 6px; white-space: pre-wrap; color: var(--c-ink-2); font: 11px/1.5 "SF Mono", Menlo, Consolas, monospace; }
+.bld-protocol pre { margin: 0 0 6px; white-space: pre-wrap; color: var(--c-ink-2); font: 11px/1.5 var(--font-mono); }
 
 /* ---- Поповер переменных ----
    Бывшая колонка «Переменные» целиком: поиск, список, счётчик.
@@ -3106,7 +3191,7 @@ body.is-landing { background: #050807; }
 .bld-groups-cap { margin: 0; color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; }
 .bld-net-list { display: grid; gap: 6px; justify-items: start; }
 .bld-net-empty { margin: 0; color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.5; }
-.bld-net-q-code { flex: 0 0 auto; color: var(--c-ink-3); font: 500 11px/1.4 "SF Mono", Menlo, Consolas, monospace; }
+.bld-net-q-code { flex: 0 0 auto; color: var(--c-ink-3); font: 500 11px/1.4 var(--font-mono); }
 .bld-net-q-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); color: var(--c-ink); }
 .bld-net-open { flex: 0 0 auto; height: 24px; padding: 0 8px; border: 1px solid var(--c-border); border-radius: 6px;
   background: var(--c-surface); color: var(--c-brand); font-size: var(--t-xs); font-weight: 600; }
@@ -3164,7 +3249,7 @@ body.is-landing { background: #050807; }
 }
 .bld-log.has-messages { display: grid; }
 .bld-msg { display: grid; gap: 4px; }
-.bld-who { color: var(--c-ink-3); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.bld-who { color: var(--c-ink-3); font-size: var(--t-micro); font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .bld-bubble { padding: 7px 11px; border-radius: var(--r-1); font-size: var(--t-xs); line-height: 1.55; }
 .bld-msg.user { justify-items: end; }
 .bld-msg.user .bld-bubble { background: var(--c-brand); color: #fff; border-bottom-right-radius: 4px; }
@@ -3184,7 +3269,7 @@ body.is-landing { background: #050807; }
 }
 .bld-plan:not([data-status="pending"]):not([data-status="applied"]) { opacity: .7; border-left-color: var(--c-border-strong); }
 .bld-plan-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.bld-plan-head span { color: var(--c-ink-3); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.bld-plan-head span { color: var(--c-ink-3); font-size: var(--t-micro); font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .bld-plan-head em { font-style: normal; color: var(--c-ink-3); font-size: var(--t-micro); }
 .bld-plan ol, .bld-plan ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; color: var(--c-ink-2); }
 .bld-plan li.warn { color: var(--c-warn-ink); }
@@ -3331,7 +3416,9 @@ body.is-landing { background: #050807; }
 .weight-cell { display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 8px; }
 .weight-cell .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-xs); }
 .weight-cell input { padding: 5px 8px; font-size: var(--t-xs); }
-.weight-target-file { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; font-size: var(--t-xs); }
+.weight-target-file { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -2px -10px 0; font-size: var(--t-xs); }
+.weight-target-file .text-button { padding: 6px 10px; font-size: var(--t-xs); }
+.weight-target-file .muted { padding-left: 6px; }
 .weight-target-file label { cursor: pointer; }
 .analysis-posthoc tr.significant td { font-weight: 600; }
 /* Поиск над длинным списком переменных: та же ширина, что у списка. */
@@ -3420,7 +3507,10 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 }
 .aw-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
 .aw-tile {
+  /* align-items: start — общий стиль кнопок центрирует детей, и текст
+     плитки с описанием в три строки вставал выше соседних. */
   display: grid; grid-template-rows: auto 1fr auto; gap: 12px; align-content: start;
+  align-items: start; justify-items: start;
   min-height: 172px; padding: 18px; text-align: left; white-space: normal;
   background: var(--c-surface); color: var(--c-ink); font-weight: 400;
   border: 1px solid var(--c-border); border-radius: var(--r-3); box-shadow: var(--shadow-card);
@@ -3501,10 +3591,17 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
   padding: 8px 12px; border-radius: var(--r-1); background: var(--c-warn-tint); color: var(--c-warn-ink); font-size: var(--t-xs); font-weight: 600;
 }
 .aw-empty {
-  display: grid; place-items: center; min-height: 200px; padding: 32px; text-align: center;
+  display: grid; justify-items: center; align-content: center; gap: 14px;
+  min-height: min(420px, 60vh); padding: 32px; text-align: center;
   color: var(--c-ink-3); font-size: var(--t-sm);
-  border: 1px dashed var(--c-border-strong); border-radius: var(--r-3); background: var(--c-surface);
 }
+.aw-empty p { max-width: 34ch; margin: 0; line-height: 1.5; text-wrap: balance; }
+.aw-empty-icon {
+  display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px;
+  background: var(--c-surface); color: var(--c-brand); box-shadow: inset 0 0 0 1px var(--c-border);
+}
+.aw-empty-icon:empty { display: none; }
+.aw-empty-icon svg { width: 26px; height: 26px; }
 .analysis-card header button { width: 26px; height: 26px; padding: 0; border-radius: 50%; background: transparent; color: var(--c-ink-3); font-size: 15px; }
 .analysis-card header button:hover { background: var(--c-danger-tint); color: var(--c-danger); transform: none; }
 
@@ -3738,10 +3835,23 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .wave-extra { display: grid; gap: 4px; }
 .wave-extra h4 { margin: 0; font-size: var(--t-sm); }
 .wave-extra p { margin: 0 0 4px; font-size: var(--t-xs); }
-.waves-list { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
-.waves-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; }
-.waves-list li small { grid-column: 1; }
-.waves-list li button { grid-column: 2; grid-row: 1; }
+/* Номер волны — значок слева: маркеры списка были выключены общим
+   сбросом, и строки стояли с пустым отступом без видимой причины. */
+.waves-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: wave; }
+.waves-list li {
+  counter-increment: wave;
+  display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 3px 10px; align-items: center;
+  padding: 8px 8px 8px 10px; border-radius: var(--r-2); background: var(--c-surface-soft);
+}
+.waves-list li::before {
+  content: counter(wave); grid-row: 1 / 3; align-self: center;
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px;
+  background: var(--c-surface); color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.waves-list li input { grid-column: 2; background: var(--c-surface); }
+.waves-list li small { grid-column: 2; }
+.waves-list li button { grid-column: 3; grid-row: 1 / 3; }
 
 /* Просмотр 6 октября: коды читаются целиком, ряд действий в одну строку. */
 .answers-table th:nth-child(1) { width: 40%; }
@@ -3821,10 +3931,10 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .wave-weight-row { display: grid; grid-template-columns: minmax(96px, 30%) 1fr; align-items: center; gap: var(--s-2); }
 .weight-compare-body { overflow-x: auto; border: 1px solid var(--c-border); border-radius: var(--r-2); }
 .weight-compare-table { width: 100%; border-collapse: collapse; font-size: var(--t-xs); }
-.weight-compare-table th { padding: 6px 8px; text-align: left; color: var(--c-ink-3); font-weight: 600; background: var(--c-surface-soft); white-space: nowrap; }
+.weight-compare-table th { padding: 7px 8px; text-align: left; color: var(--c-ink-3); font-weight: 600; letter-spacing: 0; text-transform: none; background: var(--c-surface-soft); white-space: nowrap; }
 .weight-compare-table td { padding: 6px 8px; border-top: 1px solid var(--c-border); vertical-align: top; }
 .weight-compare-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.weight-compare-table td small { display: block; color: var(--c-ink-3); }
+.weight-compare-table td small { display: block; color: var(--c-ink-3); white-space: normal; overflow: visible; text-overflow: clip; }
 .weight-compare-table td small.error { color: var(--c-danger); }
 .wc-name { font-weight: 600; color: var(--c-ink); }
 .weight-compare-table tr.is-applied td { background: var(--c-brand-tint); }
@@ -3833,10 +3943,10 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .wc-act { text-align: right; white-space: nowrap; }
 .wc-applied { color: var(--c-brand); font-weight: 600; }
 .weight-compare-table { table-layout: fixed; }
-.weight-compare-table th:nth-child(2) { width: 70px; }
+.weight-compare-table th:nth-child(2) { width: 78px; }
 .weight-compare-table th:nth-child(3) { width: 50px; }
-.weight-compare-table th:nth-child(4) { width: 76px; }
-.weight-compare-table th:nth-child(5) { width: 46px; }
+.weight-compare-table th:nth-child(4) { width: 92px; }
+.weight-compare-table th:nth-child(5) { width: 50px; }
 .weight-compare-table th:nth-child(6) { width: 84px; }
 .weight-compare-table td:first-child { overflow-wrap: anywhere; }
 .weight-compare-table .wc-act .text-button { padding: 0; }
@@ -3916,11 +4026,14 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 .q-absent { display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: var(--r-pill); background: var(--c-surface-soft); color: var(--c-ink-3); font-size: var(--t-micro); font-weight: 600; vertical-align: middle; white-space: nowrap; }
 
 /* Чьи цели правятся: общие или свои у выбранной волны. */
-.weight-wave-scope { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--r-2); background: var(--c-brand-tint); }
+.weight-wave-scope { display: grid; gap: 6px; padding: 0; border-radius: 0; background: transparent; }
 .weight-wave-scope[hidden] { display: none; }
 .weight-wave-scope small { color: var(--c-ink-2); font-size: var(--t-xs); line-height: 1.4; }
-.weight-wave-scope .seg { background: var(--c-surface); justify-self: start; }
-.weight-own-mode [data-remove-weight-dimension], .weight-own-mode #add-weight-dimension { visibility: hidden; }
+.weight-wave-scope .seg { justify-self: start; }
+/* Кнопка добавления убирается из потока: visibility оставляла на её
+   месте пустую полосу между списком и ссылками шаблона. */
+.weight-own-mode [data-remove-weight-dimension] { visibility: hidden; }
+.weight-own-mode #add-weight-dimension { display: none; }
 /* По какой волне считается раздел — после надзаголовка (waves.js). */
 #workspace .eyebrow::after { content: var(--wave-context, ""); color: var(--c-brand); }
 
@@ -3998,3 +4111,26 @@ td .q-title:focus-visible, .drag-handle:focus-visible { outline: 2px solid var(-
 #export-toggle svg { width: 17px; height: 17px; }
 #export-toggle:hover,
 #export-toggle[aria-expanded="true"] { background: var(--c-brand-hover); color: #fff; }
+
+/* Поле под общую стрелку селекта: эти правила задают padding сокращённой
+   записью и иначе прятали бы --caret под текстом. */
+.code-row select, .coding-filter select, .range-suggest select, .banner-block select,
+.banner-editor .block-lvls select, .weight-dimension-source-field select,
+.filter-condition-details select, .filter-group-head select, .block-lvls select,
+.ar-chips select, .wave-map select { padding-right: 24px; background-position: right 8px center; }
+
+
+/* Заголовки секций в инспекторе и листах — один уровень: «Распределение»,
+   «Проверка», «Колонки и базы» и «Получающаяся выборка» были набраны тремя
+   разными размерами и цветами. */
+.insp .preview-title h3, .insp .preview-title h4, .sheet .preview-title h3 {
+  margin: 0; color: var(--c-ink); font-family: var(--font-display);
+  font-size: var(--t-md); font-weight: 650; letter-spacing: -0.015em;
+}
+/* Одиночное поле названия не делит ряд с пустотой: в фильтре и баннере
+   рядом с ним нет пары. */
+.insp-body > label:has(> #filter-name), .insp-body > label:has(> #banner-name) { grid-column: 1 / -1; }
+/* Поиск по вопросам внутри серой карточки условия — на белом, иначе он
+   сливался с фоном и читался как подпись. */
+.filter-condition .select-search, .condition-category .select-search { background-color: var(--c-surface); }
+#report-settings-form.sheet.wide { width: min(680px, 100%); }

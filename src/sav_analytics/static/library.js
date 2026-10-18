@@ -18,6 +18,7 @@ async function loadProjects() {
   } catch (error) {
     list.innerHTML = `<p class="error library-empty">${escapeHtml(error.message)}</p>`;
   }
+  list.removeAttribute("aria-busy");
 }
 
 function renderLibrary() {

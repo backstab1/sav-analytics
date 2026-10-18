@@ -39,8 +39,11 @@ const METHOD_HINTS = {
 const analysisWindow = document.querySelector("#analysis-window");
 let analysisTool = null;
 
+// Пустой результат повторяет значок открытого инструмента: окно сразу
+// говорит, что здесь появится, а не показывает рамку с одной строкой.
 function analysisEmpty(text) {
-  return `<div class="aw-empty">${escapeHtml(text)}</div>`;
+  const icon = document.querySelector("#analysis-window .aw-head .aw-tile-icon")?.innerHTML || "";
+  return `<div class="aw-empty"><span class="aw-empty-icon" aria-hidden="true">${icon}</span><p>${escapeHtml(text)}</p></div>`;
 }
 
 function fillSourceSelect(select, options, fallbackIndex = 0) {

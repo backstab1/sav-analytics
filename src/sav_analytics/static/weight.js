@@ -405,10 +405,10 @@ function renderWeightPreview(preview) {
     [preview.efficiency_percent, "Эффективность, %"], [preview.iterations, "Итераций"],
   ];
   if (preview.method === "cells") metrics.pop();
-  const metricGrid = `<dl class="diag-grid">${metrics.map(([value, label]) => `<div><dt>${escapeHtml(label)}</dt><dd class="${label === "Среднее" || label === "Эффективность, %" ? "ok" : ""}">${formatWeightNumber(value)}</dd></div>`).join("")}</dl>`;
-  const distributions = preview.distributions.map(dimension => `<section class="weight-distribution"><div class="weight-distribution-head"><strong>${escapeHtml(dimension.label)}</strong><span>До → после · цель</span></div>${dimension.categories.map(category => `<div class="weight-result-row"><span title="${escapeAttribute(category.label)}">${escapeHtml(category.label)}</span><em>${category.before_percent.toFixed(1)} → <b>${category.after_percent.toFixed(1)}</b> · ${category.target_percent.toFixed(1)}%</em></div>`).join("")}</section>`).join("");
+  const metricGrid = `<dl class="diag-grid">${metrics.map(([value, label]) => `<div><dt>${escapeHtml(label)}</dt><dd>${formatWeightNumber(value)}</dd></div>`).join("")}</dl>`;
+  const distributions = preview.distributions.map(dimension => `<section class="weight-distribution"><div class="weight-distribution-head"><strong>${escapeHtml(dimension.label)}</strong><span>До → после · цель</span></div>${dimension.categories.map(category => `<div class="weight-result-row"><span title="${escapeAttribute(category.label)}">${escapeHtml(category.label)}</span><em>${formatWeightPercent(category.before_percent)} → <b>${formatWeightPercent(category.after_percent)}</b> · ${formatWeightPercent(category.target_percent)}%</em></div>`).join("")}</section>`).join("");
   const cells = preview.cells
-    ? `<section class="weight-distribution"><div class="weight-distribution-head"><strong>Ячейки</strong><span>Доля в выборке → цель · вес</span></div>${preview.cells.map(cell => `<div class="weight-result-row"><span title="${escapeAttribute(cell.label)}">${escapeHtml(cell.label)}</span><em>${cell.before_percent.toFixed(1)} → <b>${cell.target_percent.toFixed(1)}%</b> · ${formatWeightNumber(cell.weight)}</em></div>`).join("")}</section>`
+    ? `<section class="weight-distribution"><div class="weight-distribution-head"><strong>Ячейки</strong><span>Доля в выборке → цель · вес</span></div>${preview.cells.map(cell => `<div class="weight-result-row"><span title="${escapeAttribute(cell.label)}">${escapeHtml(cell.label)}</span><em>${formatWeightPercent(cell.before_percent)} → <b>${formatWeightPercent(cell.target_percent)}%</b> · ${formatWeightNumber(cell.weight)}</em></div>`).join("")}</section>`
     : "";
   // Вес считается внутри каждой волны: у каждой свои база и design effect.
   const waves = preview.waves
@@ -427,6 +427,12 @@ function renderWeightPreview(preview) {
     ? `<p class="weight-start-note">Проекция на генсовокупность <b>${formatWeightNumber(preview.projection.population_size)}</b>${preview.projection.per_wave ? " у каждой волны" : ""}: сумма весов равна численности. Минимум, максимум и среднее выше — до проекции.</p>`
     : "";
   return metricGrid + projection + own + start + waves + cells + distributions;
+}
+
+// Доли в разборе — с одним знаком и запятой, как числа диагностики выше:
+// toFixed давал «44.7» рядом с «0,896».
+function formatWeightPercent(value) {
+  return Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 function formatWeightNumber(value) {

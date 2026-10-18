@@ -182,7 +182,7 @@ function reportSheetsRow(settings) {
     <span class="prop-val">
       <strong>Содержание и топлайн${partial ? " · топлайн по ответившим" : ""}</strong>
       <small>${partial
-        ? `По ответившим — для <b>${partial}</b> ${plural(partial, "вопроса", "вопросов", "вопросов")}, заданных не всем`
+        ? `По ответившим — для <b>${plural(partial, "вопроса", "вопросов", "вопросов")}</b>, заданных не всем`
         : "Все вопросы заданы всем — листа «по ответившим» не будет"}</small>
       <span class="prop-opts" aria-label="Дополнительные листы">${extras}</span>
     </span>

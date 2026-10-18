@@ -308,7 +308,13 @@
 .acc-person-text small { color: var(--acc-ink-3); font-size: 12.5px; }
 
 .acc-filter { display: flex; align-items: center; gap: 8px; }
-.acc-filter select { width: auto; padding: 8px 12px; }
+/* Та же стрелка, что у селектов рабочих экранов (--caret в styles.css):
+   кабинет грузит только этот файл, поэтому картинка повторена здесь. */
+.acc-filter select {
+  width: auto; padding: 8px 30px 8px 12px; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0h8L4 5z' fill='%236e6e73'/%3E%3C/svg%3E") right 12px center / 8px 5px no-repeat;
+}
 .acc-filter input { width: 240px; padding: 8px 12px; }
 
 .acc-dialog {
