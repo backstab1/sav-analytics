@@ -126,6 +126,9 @@ def test_xlsx_first_sheet_becomes_a_project(tmp_path: Path) -> None:
         ["Женщина", 31, None, "Долго ждал"],
         [None, None, None, None],
         ["Женщина", 44, 3, ""],
+        # Категории — значения, которые повторяются: на трёх ответах «Пол»
+        # с двумя вариантами не отличить от открытого текста.
+        ["Мужчина", 52, 4, "Нормально"],
     ]
     for row_index, row in enumerate(rows):
         for column_index, value in enumerate(row):
@@ -147,7 +150,7 @@ def test_xlsx_first_sheet_becomes_a_project(tmp_path: Path) -> None:
                 "Мужчина",
                 "Женщина",
             ]
-            assert project["inspection"]["row_count"] == 3
+            assert project["inspection"]["row_count"] == 4
 
             original = client.get(f"/api/projects/{project['id']}/source")
             assert original.status_code == 200

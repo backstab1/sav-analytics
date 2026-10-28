@@ -332,6 +332,17 @@ select[multiple], select[size] { padding-right: 10px; background-image: none; }
 .name-field { display: grid; gap: 6px;
               color: var(--c-ink-2); font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.01em; }
 .name-field input { padding: 9px 12px; font-size: var(--t-base); font-weight: 400; }
+.schema-field {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px 8px;
+  padding: 10px 12px; border: 1px dashed var(--c-border); border-radius: 10px;
+}
+.schema-field.has-file { border-style: solid; border-color: rgba(29,122,79,.35); background: var(--c-brand-tint); }
+.schema-text { display: grid; gap: 2px; min-width: 0; }
+.schema-text strong { font-size: var(--t-sm); font-weight: 600;
+                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schema-text em { color: var(--c-ink-3); font-style: normal; font-weight: 400; }
+.schema-text small { color: var(--c-ink-3); font-size: var(--t-xs); line-height: 1.35; }
+.schema-field .text-button { white-space: nowrap; }
 #upload-form > button { width: 100%; padding: 11px 18px; font-size: var(--t-base); }
 #upload-form .error { margin: -6px 0 0; }
 

@@ -19,12 +19,23 @@ from ..core.configuration_integrity import (
 from ..core.formulas import (
     formula_variable,
 )
+from ..core.questionnaire import apply_label_overrides, value_key
 from ..core.report_books import ensure_books
 from ..core.report_settings import (
     DEFAULT_REPORT_SETTINGS,
 )
 from ..core.sav_reader import inspect_sav
-from ..core.tabular_import import TabularImportError, convert_to_sav, is_tabular
+from ..core.survey_schema import (
+    MAX_SCHEMA_BYTES,
+    SCHEMA_EXTENSIONS,
+    SCHEMA_FILE,
+    SurveySchema,
+    SurveySchemaError,
+    completes,
+    label_overrides,
+    parse_schema,
+)
+from ..core.tabular_import import TabularImportError, convert_to_sav, enrich_sav, is_tabular
 from ..core.wave_import import WaveDiff, compare_structures
 from ..project_models import CONFIGURATION_SCHEMA_VERSION, validate_stored_project
 from .store import (
@@ -40,17 +51,31 @@ class ProjectLifecycle(ProjectStore):
     и отмена шагов.
     """
 
-    def create(self, name: str, original_filename: str, source: BinaryIO) -> dict:
+    def create(
+        self,
+        name: str,
+        original_filename: str,
+        source: BinaryIO,
+        questionnaire: tuple[str, BinaryIO] | None = None,
+    ) -> dict:
         """Создать проект из файла за один вызов: приём, разбор, запись."""
-        staged = self.stage_upload(original_filename, source)
+        staged = self.stage_upload(original_filename, source, questionnaire)
         return self.create_from_staged(name, staged)
 
-    def stage_upload(self, original_filename: str, source: BinaryIO) -> dict:
+    def stage_upload(
+        self,
+        original_filename: str,
+        source: BinaryIO,
+        questionnaire: tuple[str, BinaryIO] | None = None,
+    ) -> dict:
         """Принять файл во временный каталог: размер и SHA-256 по ходу записи.
 
         Это единственная часть импорта внутри HTTP-запроса; разбор идёт
         отдельно (`create_from_staged`), в том числе фоновым заданием.
+        Анкета JSON необязательна и проверяется сразу: непонятный файл
+        лучше отклонить до очереди, чем после разбора массива.
         """
+        schema_data = _read_schema_upload(questionnaire) if questionnaire else None
         tabular = is_tabular(original_filename)
         if not original_filename.lower().endswith(".sav") and not tabular:
             raise InvalidUploadError("Допускаются файлы SAV, CSV, TSV и XLSX.")
@@ -75,10 +100,13 @@ class ProjectLifecycle(ProjectStore):
                     output.write(chunk)
             if size == 0:
                 raise InvalidUploadError("Загружен пустой файл.")
+            if schema_data is not None:
+                (temporary / SCHEMA_FILE).write_bytes(schema_data)
         except Exception:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
         return {
+            "schema_filename": Path(questionnaire[0]).name if questionnaire else None,
             "project_id": str(project_id),
             "original_filename": Path(original_filename).name,
             "upload": upload_path.name,
@@ -110,12 +138,17 @@ class ProjectLifecycle(ProjectStore):
             raise InvalidUploadError("Загруженный файл не найден, загрузите его заново.")
         original_filename = staged["original_filename"]
         try:
+            schema = _stored_schema(temporary)
+            matched = 0
             if staged["tabular"]:
                 step(0, "Переводим таблицу в SAV")
                 try:
-                    convert_to_sav(temporary / staged["upload"], source_path)
+                    matched = convert_to_sav(temporary / staged["upload"], source_path, schema)
                 except TabularImportError as exc:
                     raise InvalidUploadError(str(exc)) from exc
+            elif schema is not None:
+                step(0, "Дополняем SAV по анкете")
+                matched = _enrich_source(temporary, schema)
             step(1, "Читаем метаданные")
             inspection = inspect_sav(source_path)
             step(2, "Распознаём структуру анкеты")
@@ -126,6 +159,17 @@ class ProjectLifecycle(ProjectStore):
                 "created_at": created_at,
                 "original_filename": original_filename,
                 "source": {"size": staged["size"], "sha256": staged["sha256"]},
+                **(
+                    {
+                        "survey_schema": {
+                            "filename": staged.get("schema_filename") or SCHEMA_FILE,
+                            "title": schema.title,
+                            "matched": matched,
+                        }
+                    }
+                    if schema is not None
+                    else {}
+                ),
                 "inspection": inspection.to_dict(),
                 "configuration": {
                     "schema_version": CONFIGURATION_SCHEMA_VERSION,
@@ -142,6 +186,15 @@ class ProjectLifecycle(ProjectStore):
                     "updated_at": created_at,
                 },
             }
+            if schema is not None:
+                completed = _apply_schema_labels(
+                    project, schema, authoritative=staged["tabular"]
+                )
+                # Для таблицы важно, сколько столбцов описала анкета; для SAV —
+                # сколько переменных она дополнила.
+                project["survey_schema"]["completed"] = (
+                    matched if staged["tabular"] else max(matched, completed)
+                )
             ensure_books(project["configuration"])
             validate_stored_project(project)
             step(3, "Сохраняем проект")
@@ -187,16 +240,79 @@ class ProjectLifecycle(ProjectStore):
                     output.write(chunk)
             if size == 0:
                 raise InvalidUploadError("Загружен пустой файл.")
+            # Анкета проекта подходит и новой волне: Excel волны получает те же
+            # подписи, что получил первый.
+            schema = _stored_schema(self.root / str(project_id))
             if tabular:
                 try:
-                    convert_to_sav(upload_path, source_path)
+                    convert_to_sav(upload_path, source_path, schema)
                 except TabularImportError as exc:
                     raise InvalidUploadError(str(exc)) from exc
+            elif schema is not None:
+                _enrich_source(staging, schema)
             inspection = inspect_sav(source_path).to_dict()
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
             raise
         return compare_structures(project, inspection), staging, digest.hexdigest(), size
+
+    def apply_survey_schema(self, project_id: UUID, filename: str, data: bytes) -> dict:
+        """Наложить анкету JSON на готовый проект, сохранив его настройки.
+
+        Рабочий SAV собирается заново из загруженного файла: Excel или CSV —
+        с подписями и кодами анкеты, SAV — с дополненными пробелами. Затем
+        структура перечитывается тем же слиянием, что «Перераспознать
+        структуру». Анкета остаётся у проекта, и новые волны получают её же.
+        """
+        if not filename.lower().endswith(SCHEMA_EXTENSIONS):
+            raise InvalidUploadError("Анкета к массиву принимается в JSON.")
+        try:
+            schema = parse_schema(data)
+        except SurveySchemaError as exc:
+            raise InvalidUploadError(str(exc)) from exc
+        project = self.get(project_id)
+        project_dir = self.root / str(project_id)
+        original = next(project_dir.glob("original.*"), None)
+        staging = project_dir / f".schema-{uuid4()}"
+        staging.mkdir()
+        try:
+            tabular = original is not None and is_tabular(original.name)
+            # Расчёт всегда из того, что загрузил аналитик: повторная анкета
+            # не накладывается на SAV, уже дополненный прежней.
+            base = original if original is not None else project_dir / "source.sav"
+            if tabular:
+                try:
+                    matched = convert_to_sav(base, staging / "source.sav", schema)
+                except TabularImportError as exc:
+                    raise InvalidUploadError(str(exc)) from exc
+            else:
+                shutil.copy2(base, staging / "original.sav")
+                matched = _enrich_source_from(staging, schema)
+            (staging / SCHEMA_FILE).write_bytes(data)
+            diff = compare_structures(project, inspect_sav(staging / "source.sav").to_dict())
+            if diff.blocking:
+                raise InvalidUploadError(
+                    "Анкета меняет структуру так, что рвутся связи проекта: "
+                    + " ".join(diff.blocking)
+                )
+            if not tabular and not (staging / "original.sav").exists():
+                # Анкете нечего дописать в SAV: исходник снова сам рабочий файл.
+                for stale in project_dir.glob("original.*"):
+                    stale.unlink()
+            for item in staging.iterdir():
+                os.replace(item, project_dir / item.name)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+        project = self._merged_structure(project_id, project)
+        completed = _apply_schema_labels(project, schema, authoritative=tabular)
+        project["survey_schema"] = {
+            "filename": Path(filename).name,
+            "title": schema.title,
+            "matched": matched,
+            "completed": matched if tabular else max(matched, completed),
+        }
+        self._write_project(project_id, project)
+        return project
 
     def replace_source(
         self, project_id: UUID, original_filename: str, source: BinaryIO
@@ -272,6 +388,8 @@ class ProjectLifecycle(ProjectStore):
             )
             for original in (self.root / str(project_id)).glob("original.*"):
                 shutil.copy2(original, temporary / original.name)
+            if (self.root / str(project_id) / SCHEMA_FILE).is_file():
+                shutil.copy2(self.root / str(project_id) / SCHEMA_FILE, temporary / SCHEMA_FILE)
             # Результаты кодирования открытых ответов — файлы по ссылкам из
             # конфигурации: без них копия потеряла бы коды.
             for folder in ("coding", "waves"):
@@ -391,3 +509,114 @@ class ProjectLifecycle(ProjectStore):
             ) from exc
         self._write_project(project_id, restored, history=direction)
         return self.get(project_id)
+
+
+def _read_schema_upload(questionnaire: tuple[str, BinaryIO]) -> bytes:
+    filename, stream = questionnaire
+    if not filename.lower().endswith(SCHEMA_EXTENSIONS):
+        raise InvalidUploadError("Анкета к массиву принимается в JSON.")
+    data = stream.read(MAX_SCHEMA_BYTES + 1)
+    try:
+        parse_schema(data)
+    except SurveySchemaError as exc:
+        raise InvalidUploadError(str(exc)) from exc
+    return data
+
+
+def _stored_schema(directory: Path) -> SurveySchema | None:
+    path = directory / SCHEMA_FILE
+    if not path.is_file():
+        return None
+    try:
+        return parse_schema(path.read_bytes())
+    except SurveySchemaError as exc:
+        raise InvalidUploadError(str(exc)) from exc
+
+
+def _enrich_source_from(directory: Path, schema: SurveySchema) -> int:
+    """`source.sav` из `original.sav` по анкете; без дополнений — копия.
+
+    Оригинал остаётся, только если SAV переписан: иначе рабочий файл и есть
+    загруженный, как у проекта без анкеты.
+    """
+    original = directory / "original.sav"
+    try:
+        enriched = enrich_sav(original, directory / "source.sav", schema)
+    except TabularImportError as exc:
+        raise InvalidUploadError(str(exc)) from exc
+    if not enriched:
+        os.replace(original, directory / "source.sav")
+    return enriched
+
+
+def _enrich_source(directory: Path, schema: SurveySchema) -> int:
+    """Дополнить `source.sav` по анкете; загруженный SAV остаётся `original.sav`.
+
+    Если анкете нечего добавить, файл не переписывается и оригинала нет —
+    как у проекта без анкеты.
+    """
+    source = directory / "source.sav"
+    original = directory / "original.sav"
+    os.replace(source, original)
+    try:
+        enriched = enrich_sav(original, source, schema)
+    except BaseException as exc:
+        source.unlink(missing_ok=True)
+        os.replace(original, source)
+        if isinstance(exc, TabularImportError):
+            raise InvalidUploadError(str(exc)) from exc
+        raise
+    if not enriched:
+        os.replace(original, source)
+    return enriched
+
+
+def _apply_schema_labels(project: dict, schema: SurveySchema, *, authoritative: bool) -> int:
+    """Полные тексты анкеты поверх подписей, которые SAV хранит сокращёнными.
+
+    Они живут в `label_overrides`, как подписи из анкеты DOCX: так их не
+    сотрёт перераспознавание структуры и не потеряет новая волна. Вопрос
+    получает текст анкеты сразу: группа — текст вопроса, а не общее начало
+    сокращённых подписей пунктов. Возвращает, сколько переменных получили
+    подписи из анкеты.
+
+    Правки аналитика сильнее анкеты: подпись, уже записанная в
+    `label_overrides`, и подпись вопроса, изменённая в «Данных», остаются.
+    """
+    configuration = project["configuration"]
+    existing = configuration.get("label_overrides") or {}
+    overrides = label_overrides(
+        project["inspection"]["variables"], schema, authoritative=authoritative
+    )
+
+    def full_label(question: dict) -> str | None:
+        if question["source_variables"] == [question["code"]]:
+            return (overrides.get(question["code"]) or {}).get("label")
+        return schema.question_texts.get(question["code"])
+
+    detected = {item["code"]: item["label"] for item in project["inspection"]["questions"]}
+    for question in project["inspection"]["questions"]:
+        full = full_label(question)
+        if full and completes(question["label"], full, authoritative=authoritative):
+            question["label"] = full
+    for question in configuration["questions"]:
+        full = full_label(question)
+        edited = question["code"] in detected and question["label"] != detected[question["code"]]
+        if full and not edited and completes(question["label"], full, authoritative=authoritative):
+            question["label"] = full
+    if overrides:
+        merged = {name: dict(entry) for name, entry in overrides.items()}
+        for name, entry in existing.items():
+            target = merged.setdefault(name, {})
+            if entry.get("label"):
+                target["label"] = entry["label"]
+            if entry.get("values"):
+                kept = {value_key(item["value"]) for item in entry["values"]}
+                target["values"] = [
+                    *(item for item in target.get("values") or []
+                      if value_key(item["value"]) not in kept),
+                    *entry["values"],
+                ]
+        configuration["label_overrides"] = merged
+        apply_label_overrides(project)
+    return len(overrides)

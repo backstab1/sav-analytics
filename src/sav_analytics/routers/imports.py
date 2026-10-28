@@ -30,9 +30,16 @@ def start_import(
     settings: Annotated[Settings, Depends(get_settings)],
     file: Annotated[UploadFile, File()],
     name: Annotated[str, Form()] = "",
+    questionnaire: Annotated[UploadFile | None, File()] = None,
 ) -> dict[str, Any]:
+    # Анкета JSON необязательна: браузер присылает пустое поле без имени.
+    schema = (
+        (questionnaire.filename or "questionnaire.json", questionnaire.file)
+        if questionnaire is not None and questionnaire.filename
+        else None
+    )
     try:
-        staged = repository.stage_upload(file.filename or "upload.sav", file.file)
+        staged = repository.stage_upload(file.filename or "upload.sav", file.file, schema)
     except InvalidUploadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     queue = dispatch.queue_for(repository)

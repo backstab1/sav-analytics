@@ -180,6 +180,27 @@ dropZone.addEventListener("drop", event => {
   updateFileLabel();
 });
 
+const schemaInput = document.querySelector("#schema-file");
+const schemaClear = document.querySelector("#schema-clear");
+
+function updateSchemaLabel() {
+  const file = schemaInput.files[0];
+  schemaInput.closest(".schema-field").classList.toggle("has-file", Boolean(file));
+  schemaClear.hidden = !file;
+  document.querySelector("#schema-title").innerHTML = file
+    ? escapeHtml(file.name)
+    : "Анкета JSON <em>необязательно</em>";
+  document.querySelector("#schema-caption").textContent = file
+    ? "Подписи и тексты вопросов возьмутся из анкеты"
+    : "Вернёт подписи кодов и тексты вопросов, которых нет в Excel или не хватает в SAV";
+}
+
+schemaInput.addEventListener("change", updateSchemaLabel);
+schemaClear.addEventListener("click", () => {
+  schemaInput.value = "";
+  updateSchemaLabel();
+});
+
 form.addEventListener("submit", async event => {
   event.preventDefault();
   errorBox.hidden = true;
@@ -198,7 +219,10 @@ form.addEventListener("submit", async event => {
     }
     const project = await api(`/api/projects/${job.project_id}`);
     showProject(project);
-    showToast("Проект создан");
+    const schema = project.survey_schema;
+    showToast(schema
+      ? `Проект создан · по анкете ${/\.sav$/i.test(project.original_filename) ? "дополнено" : "описано"} переменных: ${schema.completed}`
+      : "Проект создан");
   } catch (error) {
     showError(errorBox, error);
   } finally {
@@ -223,6 +247,7 @@ document.querySelector("#new-project").addEventListener("click", () => {
   window.scrollTo(0, 0);
   form.reset();
   updateFileLabel();
+  updateSchemaLabel();
   loadProjects();
 });
 

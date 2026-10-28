@@ -15,6 +15,7 @@ from ..api_presentation import ProjectRoute
 from ..api_schemas import ProjectRename
 from ..core.sav_export import SavExportError, export_project_sav
 from ..core.sav_reader import SavReadError
+from ..core.survey_schema import MAX_SCHEMA_BYTES
 from ..repository import InvalidUploadError, ProjectNotFoundError, ProjectRepository
 
 router = APIRouter(
@@ -34,9 +35,15 @@ def create_project(
     repository: Annotated[ProjectRepository, Depends(get_repository)],
     file: Annotated[UploadFile, File()],
     name: Annotated[str, Form()] = "",
+    questionnaire: Annotated[UploadFile | None, File()] = None,
 ) -> dict:
+    schema = (
+        (questionnaire.filename or "questionnaire.json", questionnaire.file)
+        if questionnaire is not None and questionnaire.filename
+        else None
+    )
     try:
-        return repository.create(name, file.filename or "upload.sav", file.file)
+        return repository.create(name, file.filename or "upload.sav", file.file, schema)
     except (InvalidUploadError, SavReadError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -186,6 +193,24 @@ def inspect_wave(
     return diff.to_dict()
 
 
+@router.post("/{project_id}/survey-schema")
+async def apply_survey_schema(
+    project_id: UUID,
+    repository: Annotated[ProjectRepository, Depends(get_repository)],
+    file: Annotated[UploadFile, File()],
+) -> dict:
+    """Наложить анкету JSON на проект: подписи и коды без ИИ, настройки на месте."""
+    data = await file.read(MAX_SCHEMA_BYTES + 1)
+    try:
+        return repository.apply_survey_schema(
+            project_id, file.filename or "questionnaire.json", data
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Проект не найден.") from exc
+    except (InvalidUploadError, SavReadError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.put("/{project_id}/source")
 def replace_source(
     project_id: UUID,
@@ -221,6 +246,7 @@ def download_source(
         # Исходник — то, что загрузили: CSV, а не SAV, собранный из него.
         media_type = {
             ".tsv": "text/tab-separated-values",
+            ".sav": "application/x-spss-sav",
             ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }.get(original.suffix, "text/csv")
         return FileResponse(original, media_type=media_type, filename=project["original_filename"])

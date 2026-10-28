@@ -393,6 +393,14 @@ def _matrix_compatible(
     ]
     if signatures[0] and all(signature == signatures[0] for signature in signatures[1:]):
         return True
+    if not any(signatures) and all(
+        (variable.measurement_level or "").lower() in {"nominal", "ordinal"}
+        and variable.question_type is QuestionType.SINGLE_CHOICE
+        for variable in inspected
+    ):
+        # Коды без подписей (выгрузка в Excel): общая шкала не видна, но
+        # строки с общим префиксом и категориями — та же матрица.
+        return True
     return all(
         (variable.measurement_level or "").lower() == "scale"
         and 2 <= variable.unique_count <= 12

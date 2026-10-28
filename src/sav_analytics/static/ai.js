@@ -213,6 +213,10 @@ document.querySelector("#questionnaire-file").addEventListener("change", async e
   const file = event.target.files?.[0];
   event.target.value = "";
   if (!file || !currentProject) return;
+  if (/\.json$/i.test(file.name)) {
+    await applySurveySchema(file);
+    return;
+  }
   try {
     if (!(await ensureAiAllowed())) return;
   } catch (error) {
@@ -244,6 +248,25 @@ document.querySelector("#questionnaire-file").addEventListener("change", async e
     body.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
   }
 });
+
+/* JSON анкеты с платформы — точное описание переменных: ИИ не нужен, и
+   предлагать строки на подтверждение нечего. Сервер пересобирает рабочий SAV
+   и перечитывает структуру, сохраняя настройки, как «Перераспознать». */
+async function applySurveySchema(file) {
+  if (!confirm(`Наложить анкету «${file.name}» на проект? Подписи кодов и тексты вопросов возьмутся из анкеты, ваши правки подписей и настройки останутся.`)) return;
+  const form = new FormData();
+  form.append("file", file, file.name);
+  try {
+    currentProject = await api(`/api/projects/${currentProject.id}/survey-schema`, { method: "POST", body: form });
+    currentQuestionCode = null;
+    editor.hidden = true;
+    renderProject();
+    const schema = currentProject.survey_schema;
+    showToast(`Анкета применена · ${/\.sav$/i.test(currentProject.original_filename) ? "дополнено" : "описано"} переменных: ${schema.completed}`);
+  } catch (error) {
+    alert(error.message);
+  }
+}
 
 function renderQuestionnaireProgress(job) {
   document.querySelector("#questionnaire-body").innerHTML = `

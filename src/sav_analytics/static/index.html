@@ -261,6 +261,16 @@
               <span class="drop-formats" aria-label="Поддерживаемые форматы"><i>SAV</i><i>CSV</i><i>TSV</i><i>XLSX</i></span>
             </label>
             <label class="name-field">Название проекта<input name="name" placeholder="Если пусто — по имени файла" autocomplete="off" /></label>
+            <!-- Анкета JSON опросной платформы необязательна: возвращает подписи
+                 кодов и тексты вопросов, которых нет в Excel или не хватает в SAV. -->
+            <div class="schema-field">
+              <span class="schema-text">
+                <strong id="schema-title">Анкета JSON <em>необязательно</em></strong>
+                <small id="schema-caption">Вернёт подписи кодов и тексты вопросов, которых нет в Excel или не хватает в SAV</small>
+              </span>
+              <label class="text-button">Выбрать<input id="schema-file" name="questionnaire" type="file" accept=".json,application/json" hidden /></label>
+              <button id="schema-clear" class="text-button" type="button" hidden>Убрать</button>
+            </div>
             <button id="submit" type="submit">Создать проект</button>
             <p id="form-error" class="error" hidden></p>
             <ul class="start-notes">
@@ -450,8 +460,8 @@
                     </button>
                     <div class="export-list" role="menu" hidden>
                       <button id="recognize-open-data" class="export-item" type="button" role="menuitem" title="Найти открытые вопросы и закодировать ответы с ИИ">Распознать открытые</button>
-                      <label id="load-questionnaire" class="export-item" role="menuitem" title="ИИ сопоставит анкету с массивом и предложит подписи вопросов и кодов">
-                        Загрузить анкету<input id="questionnaire-file" type="file" accept=".docx,.pdf,.txt,.md" hidden />
+                      <label id="load-questionnaire" class="export-item" role="menuitem" title="JSON анкеты с платформы: подписи кодов и тексты вопросов сразу, без ИИ. DOCX или PDF: ИИ сопоставит анкету с массивом и предложит подписи">
+                        Загрузить анкету<input id="questionnaire-file" type="file" accept=".json,.docx,.pdf,.txt,.md" hidden />
                       </label>
                       <button id="find-not-applicable" class="export-item" type="button" role="menuitem" title="Найти коды, которыми в массиве помечен пропуск по ветке анкеты">Пропуски по анкете</button>
                       <div class="export-sep" role="separator"></div>
